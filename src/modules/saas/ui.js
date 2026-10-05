@@ -1,5 +1,6 @@
 // Shared UI primitives for the SaaS Admin module (module-owned — see tokens.js).
 import { useEffect } from "react";
+import PickSelect from "../../components/PickSelect";
 // IcX / IcChk are used as JSX tags inside Toast. Base ESLint's no-undef does
 // NOT treat <Foo/> as a reference to Foo, so these went missing in the file
 // split, compiled clean, and threw the moment the first toast rendered.
@@ -88,11 +89,11 @@ function SelectField({ label, value, onChange, options, placeholder }) {
   return (
     <div>
       {label && <label style={{ fontSize:10.5, fontWeight:600, color:T.t3, textTransform:"uppercase", letterSpacing:"0.5px", display:"block", marginBottom:5 }}>{label}</label>}
-      <select value={value} onChange={e => onChange(e.target.value)}
+      <PickSelect value={value} onChange={e => onChange(e.target.value)}
         style={{ width:"100%", padding:"9px 12px", borderRadius:7, border:`1.5px solid ${T.b1}`, fontSize:13, color:T.t1, background:T.surfaceB, outline:"none", boxSizing:"border-box", fontFamily:"inherit", cursor:"pointer" }}>
         {placeholder && <option value="">{placeholder}</option>}
         {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-      </select>
+      </PickSelect>
     </div>
   );
 }

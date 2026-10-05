@@ -2,6 +2,7 @@
 // aur Phase 2 ke teen view (match, vendor ke paas hamara stock, cost per cum).
 // GET /rmc/reports/production · /rmc/reports/vehicles · /rmc/plants/:id/stock
 import { useState, useEffect, useCallback } from "react";
+import PickSelect from "../../components/PickSelect";
 import { t } from "../../i18n";
 import {
   T, N, cum, fmtN, fmtD, rupee, rget, dataOf, inpSm, Field, Panel, Row, Scroll, Empty,
@@ -46,9 +47,9 @@ function ProductionReport() {
     <div>
       <RangeBar value={range} onChange={setRange} right={
         <Field label={t("rmc.group_by")}>
-          <select style={{ ...inpSm, width: 150 }} value={group} onChange={(e) => setGroup(e.target.value)}>
+          <PickSelect style={{ ...inpSm, width: 150 }} value={group} onChange={(e) => setGroup(e.target.value)}>
             {GROUPS.map((g) => <option key={g} value={g}>{groupLabel(g)}</option>)}
-          </select>
+          </PickSelect>
         </Field>
       } />
       <Panel title={t("rmc.rep_production")}>
@@ -164,10 +165,10 @@ function StockReport({ meta }) {
     <div>
       <div style={{ display: "flex", gap: 8, alignItems: "flex-end", flexWrap: "wrap", marginBottom: 12 }}>
         <Field label={t("rmc.plant")}>
-          <select style={{ ...inpSm, width: 200 }} value={plantId} onChange={(e) => setPlantId(e.target.value)}>
+          <PickSelect style={{ ...inpSm, width: 200 }} value={plantId} onChange={(e) => setPlantId(e.target.value)}>
             <option value="">{t("rmc.select_plant")}</option>
             {plants.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
+          </PickSelect>
         </Field>
         <Field label={t("common.from")}>
           <input type="date" style={{ ...inpSm, width: 150 }} value={range.from} onChange={(e) => setRange({ ...range, from: e.target.value })} />

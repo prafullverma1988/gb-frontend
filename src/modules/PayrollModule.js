@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
+import PickSelect from "../components/PickSelect";
 import api from "../config/api";
 import SearchSelect from "../components/SearchSelect";
 import { t, Rich } from "../i18n";
@@ -338,10 +339,10 @@ function GeofenceAdminTab({isAdmin}){
             </div>
             <div>
               <div style={{fontSize:10,color:T.t4,fontWeight:600,marginBottom:3}}>{t("payroll.project_optional")}</div>
-              <select style={inp} value={form.project_id} onChange={e=>setForm(p=>({...p,project_id:e.target.value}))}>
+              <PickSelect style={inp} value={form.project_id} onChange={e=>setForm(p=>({...p,project_id:e.target.value}))}>
                 <option value="">{t("payroll.generic_not_project_linked")}</option>
                 {projects.map(p=><option key={p.id} value={p.id}>{p.name}{p.city?` · ${p.city}`:""}</option>)}
-              </select>
+              </PickSelect>
             </div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
               <div>
@@ -652,17 +653,17 @@ function LeaveTab({staff,month,year,isAdmin,onAttendanceChanged,holidays,setHoli
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
             <div>
               <div style={{fontSize:10,color:T.t4,fontWeight:600,marginBottom:3}}>{t("payroll.staff_member")}</div>
-              <select value={form.staff_id} onChange={e=>setForm(p=>({...p,staff_id:e.target.value}))} style={inp}>
+              <PickSelect value={form.staff_id} onChange={e=>setForm(p=>({...p,staff_id:e.target.value}))} style={inp}>
                 <option value="">{t("payroll.select")}</option>
                 {staff.map(s=><option key={s.id} value={s.id}>{s.name} ({s.role})</option>)}
-              </select>
+              </PickSelect>
             </div>
             <div>
               <div style={{fontSize:10,color:T.t4,fontWeight:600,marginBottom:3}}>{t("payroll.leave_type")}</div>
-              <select value={form.leave_type_id} onChange={e=>setForm(p=>({...p,leave_type_id:e.target.value}))} style={inp}>
+              <PickSelect value={form.leave_type_id} onChange={e=>setForm(p=>({...p,leave_type_id:e.target.value}))} style={inp}>
                 <option value="">{t("payroll.select")}</option>
                 {types.map(item=><option key={item.id} value={item.id}>{item.code} — {item.name}{item.is_unpaid?t("payroll.unpaid"):""}</option>)}
-              </select>
+              </PickSelect>
             </div>
             <div>
               <div style={{fontSize:10,color:T.t4,fontWeight:600,marginBottom:3}}>{t("common.from")}</div>
@@ -686,10 +687,10 @@ function LeaveTab({staff,month,year,isAdmin,onAttendanceChanged,holidays,setHoli
           {form.is_half_day && (
             <div style={{marginBottom:10}}>
               <div style={{fontSize:10,color:T.t4,fontWeight:600,marginBottom:3}}>{t("payroll.half_day_part")}</div>
-              <select value={form.half_day_part} onChange={e=>setForm(p=>({...p,half_day_part:e.target.value}))} style={{...inp,maxWidth:200}}>
+              <PickSelect value={form.half_day_part} onChange={e=>setForm(p=>({...p,half_day_part:e.target.value}))} style={{...inp,maxWidth:200}}>
                 <option value="first">{t("payroll.first_half_morning")}</option>
                 <option value="second">{t("payroll.second_half_afternoon")}</option>
-              </select>
+              </PickSelect>
             </div>
           )}
           <div style={{marginBottom:10}}>
@@ -1192,17 +1193,17 @@ function HolidayCalendarTab({holidays,setHolidays,month,year,isAdmin}){
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9}}>
                 <div>
                   <div style={{fontSize:10,color:T.t4,fontWeight:600,marginBottom:3}}>{t("common.type")}</div>
-                  <select value={form.type} onChange={e=>setForm(p=>({...p,type:e.target.value}))}
+                  <PickSelect value={form.type} onChange={e=>setForm(p=>({...p,type:e.target.value}))}
                     style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}>
                     {["National","Festival","Regional","Optional","Custom"].map(o=><option key={o}>{o}</option>)}
-                  </select>
+                  </PickSelect>
                 </div>
                 <div>
                   <div style={{fontSize:10,color:T.t4,fontWeight:600,marginBottom:3}}>{t("payroll.region")}</div>
-                  <select value={form.region} onChange={e=>setForm(p=>({...p,region:e.target.value}))}
+                  <PickSelect value={form.region} onChange={e=>setForm(p=>({...p,region:e.target.value}))}
                     style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}>
                     {["All-India","Chhattisgarh","Other"].map(o=><option key={o}>{o}</option>)}
-                  </select>
+                  </PickSelect>
                 </div>
               </div>
               <label style={{display:"flex",alignItems:"center",gap:7,fontSize:12,color:T.t2,cursor:"pointer"}}>
@@ -1650,14 +1651,14 @@ function StaffAttEditModal({staff,date,dateLabel,att,day,onClose,onSubmitted}){
         <div style={{padding:"14px 18px"}}>
           {rows.map((r,i)=>(
             <div key={i} style={{display:"grid",gridTemplateColumns:"1fr 90px 90px 28px",gap:8,marginBottom:8,alignItems:"center"}}>
-              <select value={r.staff_id} onChange={e=>setRows(p=>p.map((x,j)=>j===i?{...x,staff_id:e.target.value}:x))} style={inp}>
+              <PickSelect value={r.staff_id} onChange={e=>setRows(p=>p.map((x,j)=>j===i?{...x,staff_id:e.target.value}:x))} style={inp}>
                 <option value="">{t("payroll.staff")}</option>
                 {staff.map(s=><option key={s.id} value={s.id}>{s.name}{s.isAppUser?" 📱":""}</option>)}
-              </select>
+              </PickSelect>
               <div style={{fontSize:11,color:T.t3,textAlign:"center"}}>{t("payroll.abhi")} <b>{cur(r.staff_id)}</b></div>
-              <select value={r.new_status} onChange={e=>setRows(p=>p.map((x,j)=>j===i?{...x,new_status:e.target.value}:x))} style={inp}>
+              <PickSelect value={r.new_status} onChange={e=>setRows(p=>p.map((x,j)=>j===i?{...x,new_status:e.target.value}:x))} style={inp}>
                 {["P","A","H","L"].map(s=><option key={s} value={s}>{s}</option>)}
-              </select>
+              </PickSelect>
               <button onClick={()=>setRows(p=>p.length>1?p.filter((_,j)=>j!==i):p)} style={{background:"none",border:"none",cursor:"pointer",color:T.t4,fontSize:15}}>×</button>
             </div>
           ))}
@@ -2199,11 +2200,11 @@ function EditAttendanceModal({workers,att,month,year,onClose,onSubmitted}){
                         const c=cur(w.id,d), o=orig(w.id,d), changed=c!==o;
                         return(
                           <td key={d} style={{padding:"3px 2px",textAlign:"center",background:changed?T.ambL:"transparent"}}>
-                            <select value={c} onChange={e=>setCell(w.id,d,e.target.value)}
+                            <PickSelect value={c} onChange={e=>setCell(w.id,d,e.target.value)}
                               style={{padding:"3px 4px",fontSize:11,border:`1px solid ${changed?T.amb:T.b1}`,borderRadius:4,background:"white",cursor:"pointer",fontFamily:"inherit",width:54}}>
                               <option value="">—</option>
                               {STATUSES.map(([s,l])=><option key={s} value={s}>{s}</option>)}
-                            </select>
+                            </PickSelect>
                           </td>
                         );
                       })}
@@ -2373,11 +2374,11 @@ function DailyWagesTab({workers,att,setAtt,selProject,setSelProject,month,year,o
     <div>
       {/* Controls */}
       <div style={{display:"flex",gap:8,marginBottom:12,alignItems:"center",flexWrap:"wrap"}}>
-        <select value={selProject} onChange={e=>setSelProject(e.target.value)}
+        <PickSelect value={selProject} onChange={e=>setSelProject(e.target.value)}
           style={{height:32,padding:"0 10px",borderRadius:7,border:`1.5px solid ${selProject!=="All"?T.blu:T.b1}`,background:selProject!=="All"?T.bluL:T.surface,fontSize:12,color:selProject!=="All"?T.blu:T.t2,outline:"none",cursor:"pointer",fontFamily:"inherit"}}>
           <option value="All">{t("common.all_projects")}</option>
           {PROJECTS.map(p=><option key={p}>{p}</option>)}
-        </select>
+        </PickSelect>
         <div style={{display:"flex",gap:2,background:T.surfaceB,borderRadius:7,border:`1px solid ${T.b1}`,padding:3}}>
           {[["grid","List View"],["worker","Worker View"]].map(([id,lbl])=>(
             <button key={id} onClick={()=>setView(id)}
@@ -2654,11 +2655,11 @@ function EditStaffModal({emp,onClose,onSaved}){
                 ke kaam aata hai — bina bhare ye type kisi ko allocate nahi hote. */}
             {"gender" in form && (
               <F label={t("payroll.gender")}>
-                <select style={inp} value={form.gender} onChange={e=>set("gender",e.target.value)} title={t("payroll.gender_leave_hint")}>
+                <PickSelect style={inp} value={form.gender} onChange={e=>set("gender",e.target.value)} title={t("payroll.gender_leave_hint")}>
                   <option value="">{t("payroll.gender_not_set")}</option>
                   <option value="female">{t("payroll.gender_female")}</option>
                   <option value="male">{t("payroll.gender_male")}</option>
-                </select>
+                </PickSelect>
               </F>
             )}
             {/* Pehle yahan "Role / Designation" naam ka free-text tha jo
@@ -2683,17 +2684,17 @@ function EditStaffModal({emp,onClose,onSaved}){
           </Sect>
           <Sect title={t("payroll.pf_configuration")}>
             <F label={t("payroll.pf_applicable")}>
-              <select style={inp} value={form.pf_applicable?"yes":"no"} onChange={e=>set("pf_applicable",e.target.value==="yes")}>
+              <PickSelect style={inp} value={form.pf_applicable?"yes":"no"} onChange={e=>set("pf_applicable",e.target.value==="yes")}>
                 <option value="yes">{t("payroll.yes")}</option><option value="no">{t("payroll.no")}</option>
-              </select>
+              </PickSelect>
             </F>
             <F label={t("payroll.calculation_method")}>
-              <select style={inp} value={form.pf_method} onChange={e=>set("pf_method",e.target.value)} disabled={!form.pf_applicable}>
+              <PickSelect style={inp} value={form.pf_method} onChange={e=>set("pf_method",e.target.value)} disabled={!form.pf_applicable}>
                 <option value="none">{t("payroll.none_0")}</option>
                 <option value="capped_15k">{t("payroll.capped_at_15_000_12_of")}</option>
                 <option value="full_basic">{t("payroll.full_basic_12_of_full_basic")}</option>
                 <option value="custom">{t("payroll.custom_fixed_amount")}</option>
-              </select>
+              </PickSelect>
             </F>
             {form.pf_method==="custom"&&form.pf_applicable&&(
               <F label={t("payroll.custom_pf_amount")}><input style={inp} type="number" value={form.pf_custom_amount} onChange={e=>set("pf_custom_amount",Number(e.target.value)||0)}/></F>
@@ -2702,9 +2703,9 @@ function EditStaffModal({emp,onClose,onSaved}){
           </Sect>
           <Sect title={t("payroll.esic_configuration")}>
             <F label={t("payroll.esic_applicable")}>
-              <select style={inp} value={form.esic_applicable?"yes":"no"} onChange={e=>set("esic_applicable",e.target.value==="yes")}>
+              <PickSelect style={inp} value={form.esic_applicable?"yes":"no"} onChange={e=>set("esic_applicable",e.target.value==="yes")}>
                 <option value="yes">{t("payroll.yes_auto_if_gross_21k")}</option><option value="no">{t("payroll.no")}</option>
-              </select>
+              </PickSelect>
             </F>
             <F label={t("payroll.esic_number")}><input style={inp} value={form.esic_number} onChange={e=>set("esic_number",e.target.value)}/></F>
           </Sect>
@@ -2726,10 +2727,10 @@ function EditStaffModal({emp,onClose,onSaved}){
               </div>
             </F>
             {!!form.salary_enabled && <F label={t("common.type")} full>
-              <select style={inp} value={form.payment_type} onChange={e=>set("payment_type",e.target.value)}>
+              <PickSelect style={inp} value={form.payment_type} onChange={e=>set("payment_type",e.target.value)}>
                 <option value="fixed">{t("payroll.fixed_full_month_salary_regardless_of")}</option>
                 <option value="attendance">{t("payroll.attendance_based_pro_rated_by_p")}</option>
-              </select>
+              </PickSelect>
             </F>}
           </Sect>
         </div>
@@ -2786,12 +2787,12 @@ function DesigPicker({value,onChange,inp}){
   );
   return (
     <div style={{display:"flex",gap:6}}>
-      <select style={{...inp,flex:1}} value={value||""} onChange={e=>onChange(e.target.value)}>
+      <PickSelect style={{...inp,flex:1}} value={value||""} onChange={e=>onChange(e.target.value)}>
         <option value="">{t("master_library.select_designation")}</option>
         {list.map(d=><option key={d.id||d.name} value={d.name}>{d.name}</option>)}
         {/* Purana naam jo list me nahi hai — warna edit karte hi gayab ho jaata */}
         {!!value && !list.some(d=>d.name===value) && <option value={value}>{value}</option>}
-      </select>
+      </PickSelect>
       <button type="button" onClick={()=>{setFresh("");setAdding(true);}}
         style={{padding:"0 12px",borderRadius:7,border:`1.5px dashed ${T.b1}`,background:T.surface,color:T.t3,fontSize:12,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}>+ {t("common.new")}</button>
     </div>
@@ -2934,10 +2935,10 @@ function AddStaffModal({onClose,onSaved}){
               <DesigPicker value={form.designation} onChange={v=>set("designation",v)} inp={inp}/>
             </F>
             <F label={t("master_library.subtype")}>
-              <select style={inp} value={form.staff_subtype} onChange={e=>set("staff_subtype",e.target.value)} disabled={!!picked}>
+              <PickSelect style={inp} value={form.staff_subtype} onChange={e=>set("staff_subtype",e.target.value)} disabled={!!picked}>
                 <option value="office">{t("payroll.office_staff")}</option>
                 <option value="wages">{t("master_library.daily_wages_worker")}</option>
-              </select>
+              </PickSelect>
             </F>
             {/* Dropdown (not free text) — Overview ki project-wise coverage typo se na toote */}
             <F label={t("payroll.posting_project")} full><SearchSelect value={form.project} options={PROJECTS||[]} onChange={v=>set("project",v)} placeholder={t("payroll.office_koi_project_nahi")}/></F>
@@ -2953,33 +2954,33 @@ function AddStaffModal({onClose,onSaved}){
           </Sect>
           <Sect title={t("payroll.pf_esic")}>
             <F label={t("payroll.pf_applicable")}>
-              <select style={inp} value={form.pf_applicable?"yes":"no"} onChange={e=>set("pf_applicable",e.target.value==="yes")}>
+              <PickSelect style={inp} value={form.pf_applicable?"yes":"no"} onChange={e=>set("pf_applicable",e.target.value==="yes")}>
                 <option value="yes">{t("payroll.yes")}</option><option value="no">{t("payroll.no")}</option>
-              </select>
+              </PickSelect>
             </F>
             <F label={t("payroll.pf_method")}>
-              <select style={inp} value={form.pf_method} onChange={e=>set("pf_method",e.target.value)} disabled={!form.pf_applicable}>
+              <PickSelect style={inp} value={form.pf_method} onChange={e=>set("pf_method",e.target.value)} disabled={!form.pf_applicable}>
                 <option value="none">{t("common.none")}</option>
                 <option value="capped_15k">{t("payroll.capped_at_15_000")}</option>
                 <option value="full_basic">{t("payroll.full_basic_12")}</option>
                 <option value="custom">{t("payroll.custom_amount")}</option>
-              </select>
+              </PickSelect>
             </F>
             {form.pf_method==="custom"&&form.pf_applicable&&(
               <F label={t("payroll.custom_pf")}><input style={inp} type="number" value={form.pf_custom_amount} onChange={e=>set("pf_custom_amount",e.target.value)}/></F>
             )}
             <F label={t("payroll.esic_applicable")} full={form.pf_method!=="custom"}>
-              <select style={inp} value={form.esic_applicable?"yes":"no"} onChange={e=>set("esic_applicable",e.target.value==="yes")}>
+              <PickSelect style={inp} value={form.esic_applicable?"yes":"no"} onChange={e=>set("esic_applicable",e.target.value==="yes")}>
                 <option value="yes">{t("payroll.yes_auto_if_gross_21k")}</option><option value="no">{t("payroll.no")}</option>
-              </select>
+              </PickSelect>
             </F>
           </Sect>
           <Sect title={t("payroll.payment_mode")}>
             <F label={t("common.type")} full>
-              <select style={inp} value={form.payment_type} onChange={e=>set("payment_type",e.target.value)}>
+              <PickSelect style={inp} value={form.payment_type} onChange={e=>set("payment_type",e.target.value)}>
                 <option value="fixed">{t("payroll.fixed_full_month_salary")}</option>
                 <option value="attendance">{t("payroll.attendance_based_pro_rated")}</option>
-              </select>
+              </PickSelect>
             </F>
           </Sect>
         </div>
@@ -3170,12 +3171,12 @@ function MonthlySalaryTab({staff,month,year,onViewSlip,workingDays,isAdmin,isApp
           <input value={search} onChange={e=>setSearch(e.target.value)} placeholder={t("payroll.search_employee")}
             style={{height:32,padding:"0 8px 0 26px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",width:"100%"}}/>
         </div>
-        <select value={filterDesig} onChange={e=>setFilterDesig(e.target.value)}
+        <PickSelect value={filterDesig} onChange={e=>setFilterDesig(e.target.value)}
           style={{height:32,padding:"0 8px",borderRadius:7,border:`1.5px solid ${filterDesig==="All"?T.b1:T.blu}`,fontSize:12,
                   color:filterDesig==="All"?T.t1:T.blu,background:filterDesig==="All"?T.surface:T.bluL,outline:"none",fontFamily:"inherit",cursor:"pointer"}}>
           <option value="All">{t("master_library.all_designations")}</option>
           {desigOpts.map(d=><option key={d} value={d}>{d} ({desigCounts.get(d)})</option>)}
-        </select>
+        </PickSelect>
         <div style={{marginLeft:"auto",display:"flex",gap:10,alignItems:"center",flexWrap:"wrap"}}>
           <div style={{padding:"6px 13px",background:T.bluL,border:`1px solid ${T.bluM}`,borderRadius:7}}>
             <span style={{fontSize:11,color:T.blu}}>{t("payroll.total_net_payroll")} </span>
@@ -3504,11 +3505,11 @@ function AdvancesTab({advances,setAdvances,staff,isAdmin}){
         <div style={{background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`,padding:"13px 14px",marginBottom:12}}>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:9,marginBottom:9}}>
             <div><label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".3px",display:"block",marginBottom:3}}>{t("master_library.staff")}</label>
-              <select value={form.empId} onChange={e=>setForm(p=>({...p,empId:e.target.value}))}
+              <PickSelect value={form.empId} onChange={e=>setForm(p=>({...p,empId:e.target.value}))}
                 style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}>
                 <option value="">{t("payroll.select")}</option>
                 {salaryStaff.map(s=><option key={s.id} value={s.id}>{s.name}{(s.designation||s.role)?` (${s.designation||s.role})`:""}</option>)}
-              </select></div>
+              </PickSelect></div>
             {[{l:t("crm.amount"),k:"amount",ph:"Amount",type:"number"},{l:t("common.date"),k:"date",type:"date"},{l:t("common.reason"),k:"reason",ph:"Medical, personal..."}].map(f=>(
               <div key={f.k}><label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".3px",display:"block",marginBottom:3}}>{f.l}</label>
                 <input type={f.type||"text"} value={form[f.k]} onChange={e=>setForm(p=>({...p,[f.k]:e.target.value}))} placeholder={f.ph}
@@ -4400,12 +4401,12 @@ function PayrollSettingsTab({defaultDueDays,setDefaultDueDays,workingDays,setWor
                 <div style={{fontSize:11,color:T.t3,marginTop:2,lineHeight:1.5}}>{t("payroll.worker_ko_still_punched_in_notification")} <b>{t("payroll.kab_bhejni_hai")}</b> {t("payroll.choose_karo")}</div>
                 {att.reminder_enabled==="1" && (
                   <div style={{display:"flex",alignItems:"center",gap:8,marginTop:8,flexWrap:"wrap"}}>
-                    <select value={att.reminder_mode||"after_hours"} onChange={e=>setA("reminder_mode",e.target.value)}
+                    <PickSelect value={att.reminder_mode||"after_hours"} onChange={e=>setA("reminder_mode",e.target.value)}
                       style={{padding:"7px 9px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12,fontWeight:600,color:T.t1,background:T.surface,outline:"none",fontFamily:"inherit",cursor:"pointer"}}>
                       <option value="after_hours">{t("payroll.punch_in_ke_baad_ghante")}</option>
                       <option value="at_shift_end">{t("payroll.shift_end_pe_normal_shift_poori")}</option>
                       <option value="fixed_time">{t("payroll.roz_fixed_time_pe")}</option>
-                    </select>
+                    </PickSelect>
                     {(att.reminder_mode||"after_hours")==="after_hours" && (
                       <span style={{display:"flex",alignItems:"center",gap:5}}>
                         <input type="number" min={1} max={24} value={att.reminder_after_hours} onChange={e=>setA("reminder_after_hours",e.target.value)}
@@ -4930,13 +4931,13 @@ function DailyPaymentsTab({workers,isAdmin,attMonth,month,year}){
           </div>
 
           <div style={{marginLeft:"auto",display:"flex",gap:8}}>
-            <select value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}
+            <PickSelect value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}
               style={{padding:"6px 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:11.5,color:T.t1,background:T.surface,outline:"none",fontFamily:"inherit"}}>
               <option value="all">{t("payroll.all_statuses")}</option>
               <option value="pending">{t("common.pending")}</option>
               <option value="paid">{t("common.paid")}</option>
               <option value="cancelled">{t("common.cancelled")}</option>
-            </select>
+            </PickSelect>
             {isAdmin&&<button onClick={generate} disabled={generating}
               style={{padding:"7px 16px",borderRadius:7,background:generating?T.b1:T.grn,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:generating?"not-allowed":"pointer"}}>
               {generating?t("payroll.generating"):t("payroll.generate_payments")}
@@ -5777,13 +5778,13 @@ function PayrollRunWizard({month,year,isAdmin,workingDays,setTab,onChanged}){
               <input type="number" value={settleForm.amount} onChange={e=>setSettleForm(f=>({...f,amount:e.target.value}))}
                 style={{width:"100%",padding:"9px 11px",borderRadius:8,border:`1px solid ${T.b2}`,fontSize:13,fontWeight:700,boxSizing:"border-box",margin:"4px 0 10px"}}/>
               <label style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:.4}}>{t("payroll.payment_method")}</label>
-              <select value={settleForm.method} onChange={e=>setSettleForm(f=>({...f,method:e.target.value}))}
+              <PickSelect value={settleForm.method} onChange={e=>setSettleForm(f=>({...f,method:e.target.value}))}
                 style={{width:"100%",padding:"9px 11px",borderRadius:8,border:`1px solid ${T.b2}`,fontSize:12.5,boxSizing:"border-box",margin:"4px 0 10px",background:T.surface}}>
                 <option value="bank_transfer">{t("payroll.bank_transfer_neft")}</option>
                 <option value="upi">UPI</option>
                 <option value="cash">{t("common.cash")}</option>
                 <option value="cheque">{t("common.cheque")}</option>
-              </select>
+              </PickSelect>
               <label style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:.4}}>{t("payroll.tx_ref_optional")}</label>
               <input value={settleForm.txRef} onChange={e=>setSettleForm(f=>({...f,txRef:e.target.value}))} placeholder={t("payroll.utr_cheque_no")}
                 style={{width:"100%",padding:"9px 11px",borderRadius:8,border:`1px solid ${T.b2}`,fontSize:12.5,boxSizing:"border-box",margin:"4px 0 14px"}}/>
@@ -6494,14 +6495,14 @@ function PayrollModule(){
           {/* Month + Year picker */}
           <div style={{display:"flex",gap:5,padding:"6px 0",alignItems:"center"}}>
             <IcCal size={13} color="rgba(255,255,255,0.5)"/>
-            <select value={month} onChange={e=>setMonth(Number(e.target.value))}
+            <PickSelect value={month} onChange={e=>setMonth(Number(e.target.value))}
               style={{height:28,padding:"0 8px",borderRadius:6,border:"1px solid rgba(255,255,255,0.2)",background:"rgba(255,255,255,0.1)",color:"white",fontSize:11.5,outline:"none",cursor:"pointer",fontFamily:"inherit"}}>
               {MONTHS.map((m,i)=><option key={i} value={i} style={{color:T.t1,background:T.surface}}>{m}</option>)}
-            </select>
-            <select value={year} onChange={e=>setYear(Number(e.target.value))}
+            </PickSelect>
+            <PickSelect value={year} onChange={e=>setYear(Number(e.target.value))}
               style={{height:28,padding:"0 8px",borderRadius:6,border:"1px solid rgba(255,255,255,0.2)",background:"rgba(255,255,255,0.1)",color:"white",fontSize:11.5,outline:"none",cursor:"pointer",fontFamily:"inherit"}}>
               {[2025,2026,2027].map(y=><option key={y} style={{color:T.t1,background:T.surface}}>{y}</option>)}
-            </select>
+            </PickSelect>
           </div>
         </div>
       </div>

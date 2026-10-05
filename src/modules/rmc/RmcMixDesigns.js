@@ -8,6 +8,7 @@
 //              me, aur temperature + Marshall ki seema. Seema MORTH (VG-30) ke
 //              aam aankdon se pehle se bhari aati hai, har design par badal sakte.
 import { useState, useEffect, useCallback } from "react";
+import PickSelect from "../../components/PickSelect";
 import { useToast } from "../../components/Toast";
 import { t } from "../../i18n";
 import {
@@ -125,17 +126,17 @@ function DesignForm({ open, meta, design, onClose, onSaved }) {
       </>}>
       <Grid style={{ marginBottom: 14 }}>
         <Field label={t("rmc.kind")} hint={design ? t("rmc.kind_fixed_hint") : null}>
-          <select style={inp} value={v.product_kind} disabled={!!design} onChange={(e) => setKind(e.target.value)}>
+          <PickSelect style={inp} value={v.product_kind} disabled={!!design} onChange={(e) => setKind(e.target.value)}>
             <option value="concrete">{t("rmc.kind_concrete")}</option>
             <option value="bitumen">{t("rmc.kind_bitumen")}</option>
-          </select>
+          </PickSelect>
         </Field>
         {bit ? (
           <Field label={t("rmc.product")} hint={pUnit ? t("rmc.unit_from_product", { unit: pUnit }) : t("rmc.product_hint")}>
-            <select style={inp} value={v.product_material_id || ""} onChange={(e) => upd("product_material_id", e.target.value)}>
+            <PickSelect style={inp} value={v.product_material_id || ""} onChange={(e) => upd("product_material_id", e.target.value)}>
               <option value="">{t("rmc.select_product")}</option>
               {(meta.materials || []).map((m) => <option key={m.id} value={m.id}>{m.name}{m.unit ? ` (${m.unit})` : ""}</option>)}
-            </select>
+            </PickSelect>
           </Field>
         ) : <div />}
         <Field label={t("rmc.grade")} hint={bit ? t("rmc.grade_bitumen_hint") : null}>
@@ -197,14 +198,14 @@ function DesignForm({ open, meta, design, onClose, onSaved }) {
           {v.items.length === 0 && <div style={{ fontSize: 11.5, color: T.t4 }}>{t("rmc.no_items_yet")}</div>}
           {v.items.map((it, i) => (
             <div key={i} style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8, flexWrap: "wrap" }}>
-              <select style={{ ...inpSm, width: 170 }} value={it.material_id || ""}
+              <PickSelect style={{ ...inpSm, width: 170 }} value={it.material_id || ""}
                 onChange={(e) => {
                   const hit = (meta.materials || []).find((x) => String(x.id) === e.target.value);
                   updItem(i, { material_id: e.target.value, material_name: hit ? hit.name : it.material_name, unit: hit && hit.unit ? hit.unit : it.unit });
                 }}>
                 <option value="">{t("rmc.select_material")}</option>
                 {(meta.materials || []).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
-              </select>
+              </PickSelect>
               <input style={{ ...inpSm, width: 140 }} placeholder={t("rmc.material_name")} value={it.material_name}
                 onChange={(e) => updItem(i, { material_name: e.target.value })} />
               {bit ? (

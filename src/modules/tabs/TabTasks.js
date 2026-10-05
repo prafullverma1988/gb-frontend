@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
+import PickSelect from "../../components/PickSelect";
 import api from "../../config/api";
 import apiCache from "../../utils/apiCache";
 import SearchSelect from "../../components/SearchSelect";
@@ -1097,7 +1098,7 @@ function TabTasks({ projectId, isAdmin }) {
         </div>}
         {/* Gantt range synced from unified date range above */}
         {/* Level dropdown — All + L1(n) L2(n) ... */}
-        <select value={levelFilter} onChange={e=>applyLevel(e.target.value)}
+        <PickSelect value={levelFilter} onChange={e=>applyLevel(e.target.value)}
           style={{height:32,padding:"0 10px",borderRadius:6,border:`1.5px solid ${levelFilter!=="All"?T.blu:T.b1}`,background:levelFilter!=="All"?T.bluL:T.surface,color:levelFilter!=="All"?T.blu:T.t2,fontSize:11.5,fontWeight:levelFilter!=="All"?700:400,fontFamily:"inherit",cursor:"pointer",outline:"none"}}>
           <option value="All">{t("tasks.all_levels_allflat", { allFlat: allFlat.length })}</option>
           {levelMeta.levels.map(lv=>(
@@ -1106,7 +1107,7 @@ function TabTasks({ projectId, isAdmin }) {
             </option>
           ))}
           {levelFilter==="custom"&&<option value="custom">{t("budget.custom_view")}</option>}
-        </select>
+        </PickSelect>
         {/* CSV Export — Tasks → Export */}
         {canTaskCsv&&<button onClick={()=>{
           const flat=ptFlatten(tasks);
@@ -1172,10 +1173,10 @@ function TabTasks({ projectId, isAdmin }) {
             ].map(({l,v,fn,opts,def})=>(
               <div key={l}>
                 <div style={{fontSize:9.5,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".3px",marginBottom:4}}>{l}</div>
-                <select value={v} onChange={e=>fn(e.target.value)}
+                <PickSelect value={v} onChange={e=>fn(e.target.value)}
                   style={{height:30,padding:"0 10px",borderRadius:6,border:`1.5px solid ${v!=="All"?T.blu:T.b1}`,background:v!=="All"?T.bluL:T.surface,fontSize:12,color:v!=="All"?T.blu:T.t2,outline:"none",cursor:"pointer",fontFamily:"inherit"}}>
                   {opts.map(o=><option key={o} value={o}>{o==="All"?def:o}</option>)}
-                </select>
+                </PickSelect>
               </div>
             ))}
             <div>
@@ -3013,10 +3014,10 @@ function TaskMRModal({task, prefill, projectId, onClose, onSaved}){
                       <span>🔒</span>{displayUnit}
                     </div>
                   ) : (
-                    <select value={form.unit} onChange={e=>setForm(p=>({...p,unit:e.target.value}))}
+                    <PickSelect value={form.unit} onChange={e=>setForm(p=>({...p,unit:e.target.value}))}
                       style={{width:"100%",padding:"9px 11px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",fontFamily:"inherit",background:"white"}}>
                       {UNITS.map(u=><option key={u}>{u}</option>)}
-                    </select>
+                    </PickSelect>
                   )}
                 </>
               );
@@ -3277,10 +3278,10 @@ function TaskGRNModal({task, prefill, projectId, onClose, onSaved}){
                           <span>🔒</span>{displayUnit}
                         </div>
                       ) : (
-                        <select value={form.unit} onChange={e=>setForm(p=>({...p,unit:e.target.value}))}
+                        <PickSelect value={form.unit} onChange={e=>setForm(p=>({...p,unit:e.target.value}))}
                           style={{width:"100%",padding:"9px 11px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",fontFamily:"inherit",background:"white"}}>
                           {UNITS.map(u=><option key={u}>{u}</option>)}
-                        </select>
+                        </PickSelect>
                       )}
                     </>
                   );
@@ -3303,10 +3304,10 @@ function TaskGRNModal({task, prefill, projectId, onClose, onSaved}){
               </div>
               <div>
                 <label style={{fontSize:9.5,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>{t("tasks.quality")}</label>
-                <select value={form.quality} onChange={e=>setForm(p=>({...p,quality:e.target.value}))}
+                <PickSelect value={form.quality} onChange={e=>setForm(p=>({...p,quality:e.target.value}))}
                   style={{width:"100%",padding:"9px 11px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",fontFamily:"inherit",background:"white"}}>
                   {["Good","Average","Rejected"].map(q=><option key={q}>{q}</option>)}
-                </select>
+                </PickSelect>
               </div>
             </div>
             <div style={{marginBottom:14}}>
@@ -3667,11 +3668,11 @@ function QtyProgressBox({task,meIsPriv,onProgress,projectId,showMic=true,showNot
     {lines.length>=2&&(
       <div style={{marginBottom:8}}>
         <div style={{fontSize:11,color:"#64748B",marginBottom:4}}>{t("tasks.kaam_kahan_hua")}</div>
-        <select value={lineId} onChange={e=>setLineId(e.target.value)}
+        <PickSelect value={lineId} onChange={e=>setLineId(e.target.value)}
           style={{width:"100%",padding:"8px 10px",borderRadius:8,border:"1px solid #E2E8F0",fontSize:12.5,background:"white"}}>
           <option value="">{t("tasks.nahi_bataya")}</option>
           {lines.map(l=>(<option key={l.id} value={l.id}>{l.name}{l.length_m?` · ${Math.round(l.length_m)} m`:""}</option>))}
-        </select>
+        </PickSelect>
       </div>
     )}
     {/* Aaj ka kaam — Tasks Entry */}
@@ -4270,10 +4271,10 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
                             <span>🔒</span>{displayUnit}
                           </div>
                         ) : (
-                          <select value={usedLogForm.unit} onChange={e=>setUsedLogForm(f=>({...f,unit:e.target.value}))}
+                          <PickSelect value={usedLogForm.unit} onChange={e=>setUsedLogForm(f=>({...f,unit:e.target.value}))}
                             style={{width:"100%",padding:"9px 10px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",fontFamily:"inherit"}}>
                             {UNITS.map(u=><option key={u}>{u}</option>)}
-                          </select>
+                          </PickSelect>
                         )}
                       </>
                     );
@@ -4755,11 +4756,11 @@ function PTOverrideModal({task,onClose,onSaved}){
         {drift<=10&&<div style={{height:12}}/>}
 
         <label style={L}>{t("common.reason")} <span style={{color:"#DC2626"}}>*</span></label>
-        <select value={reason} onChange={e=>setReason(e.target.value)}
+        <PickSelect value={reason} onChange={e=>setReason(e.target.value)}
           style={{width:"100%",padding:"8px 10px",borderRadius:6,border:`1.5px solid ${reason?T.b1:"#FCA5A5"}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",marginBottom:12}}>
           <option value="">{t("tasks.select_reason")}</option>
           {Object.entries(PT_OVERRIDE_REASONS).map(([k,v])=><option key={k} value={k}>{v}</option>)}
-        </select>
+        </PickSelect>
 
         <label style={L}>{t("common.note")} <span style={{color:"#DC2626"}}>*</span></label>
         <textarea value={note} onChange={e=>setNote(e.target.value)} rows={3}
@@ -4866,11 +4867,11 @@ function PTDepEditor({task,allTasks,phaseCodeMap,onChanged}){
 
       {/* nayi jod — type + gap pehle chuno, phir kaam dhoondho */}
       <div style={{display:"flex",gap:6,marginBottom:5}}>
-        <select value={depType} onChange={e=>setDepType(e.target.value)}
+        <PickSelect value={depType} onChange={e=>setDepType(e.target.value)}
           style={{height:28,borderRadius:5,border:`1.5px solid ${T.b2}`,fontSize:11.5,color:T.t2,background:"white",outline:"none",fontFamily:"inherit",flex:1,padding:"0 6px"}}>
           <option value="FS">{t("tasks.dep_type_fs")}</option>
           <option value="SS">{t("tasks.dep_type_ss")}</option>
-        </select>
+        </PickSelect>
         <div style={{display:"flex",alignItems:"center",gap:4}}>
           <span style={{fontSize:10.5,color:T.t4}}>{t("tasks.dep_lag")}</span>
           <input type="number" min={0} value={lag} onChange={e=>setLag(Math.max(0,parseInt(e.target.value,10)||0))}
@@ -5018,20 +5019,20 @@ function PTEditTask({task,allTasks,projectId,team,depsMode,phaseCodeMap,onDepsCh
             <div style={{fontSize:9.5,fontWeight:700,color:T.ind,textTransform:"uppercase",letterSpacing:".4px",marginBottom:7}}>{t("tasks.tender_se_jodo_bill_aur_map")}</div>
             <div style={{marginBottom:8}}>
               <label style={{fontSize:10.5,color:T.t3,display:"block",marginBottom:3}}>{t("tasks.boq_item")}</label>
-              <select value={boqItemId} onChange={e=>setBoqItemId(e.target.value)}
+              <PickSelect value={boqItemId} onChange={e=>setBoqItemId(e.target.value)}
                 style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:boqItemId?T.t1:T.t4,background:T.surface,outline:"none",fontFamily:"inherit"}}>
                 <option value="">{t("tasks.nahi_juda")}</option>
                 {boqOpts.map(b=>(<option key={b.id} value={b.id}>{b.item_no} · {String(b.description||"").slice(0,50)} ({b.unit})</option>))}
-              </select>
+              </PickSelect>
             </div>
             {!!lineOpts.length && (
               <div>
                 <label style={{fontSize:10.5,color:T.t3,display:"block",marginBottom:3}}>{t("tasks.pipeline_line_optional")}</label>
-                <select value={alignId} onChange={e=>setAlignId(e.target.value)}
+                <PickSelect value={alignId} onChange={e=>setAlignId(e.target.value)}
                   style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:alignId?T.t1:T.t4,background:T.surface,outline:"none",fontFamily:"inherit"}}>
                   <option value="">{t("tasks.koi_nahi_2")}</option>
                   {lineOpts.map(a=>(<option key={a.id} value={a.id}>{a.name}</option>))}
-                </select>
+                </PickSelect>
               </div>
             )}
             <div style={{fontSize:10.5,color:T.t4,marginTop:7,lineHeight:1.5}}>
@@ -5061,10 +5062,10 @@ function PTEditTask({task,allTasks,projectId,team,depsMode,phaseCodeMap,onDepsCh
         {/* P4: Delay reason + note */}
         <div style={{marginBottom:10,padding:"9px 11px",background:form.delayReason?"#FFF7ED":T.surfaceB,border:`1px solid ${form.delayReason?"#FED7AA":T.b1}`,borderRadius:7}}>
           <label style={{fontSize:9.5,fontWeight:600,color:form.delayReason?"#9A3412":T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:5}}>{t("tasks.delay_ka_kaaron_agar_late")}</label>
-          <select value={form.delayReason} onChange={upd("delayReason")} style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${form.delayReason?"#FDBA74":T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",fontFamily:"inherit",marginBottom:form.delayReason?7:0}}>
+          <PickSelect value={form.delayReason} onChange={upd("delayReason")} style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${form.delayReason?"#FDBA74":T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",fontFamily:"inherit",marginBottom:form.delayReason?7:0}}>
             <option value="">{t("tasks.koi_nahi_2")}</option>
             {PT_DELAY_REASONS.map(r=><option key={r.key} value={r.key}>{r.label}</option>)}
-          </select>
+          </PickSelect>
           {form.delayReason&&<input value={form.delayNote} onChange={upd("delayNote")} placeholder={t("tasks.detail_note_optional_e_g_cement")} style={{width:"100%",padding:"7px 9px",borderRadius:6,border:"1.5px solid #FDBA74",fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>}
         </div>
         {/* Predecessors — dependency wale project par (template se laga schedule).
@@ -5210,7 +5211,7 @@ function PTAddTask({parent,allTasks,team,onClose,onSave}){
             <div key={f.k}><label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>{f.l}</label>
               {/* Team ki list lambi hoti hai (28 log) — isliye khoj wala box */}
               {f.type==="team"?<SearchSelect value={form[f.k]} options={f.opts} onChange={v=>setForm(p=>({...p,[f.k]:v}))} placeholder={t("tasks.kisi_ko_nahi")}/>
-              :f.type==="select"?<select value={form[f.k]} onChange={upd(f.k)} style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",fontFamily:"inherit"}}>{f.opts.map(o=><option key={o}>{o}</option>)}</select>
+              :f.type==="select"?<PickSelect value={form[f.k]} onChange={upd(f.k)} style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",fontFamily:"inherit"}}>{f.opts.map(o=><option key={o}>{o}</option>)}</PickSelect>
               :<input value={form[f.k]} onChange={upd(f.k)} placeholder={f.ph} style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>}
             </div>
           ))}

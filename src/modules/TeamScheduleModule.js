@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
+import PickSelect from "../components/PickSelect";
 import api from "../config/api";
 import SearchSelect from "../components/SearchSelect";
 import LiveTeamView from "../components/LiveTeamView";
@@ -422,19 +423,19 @@ function CreateWorkModal({onClose,onSave,defaultType="Task",defaultAssignee="",d
             <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>
               <IcAssign size={10} color={T.t4}/> {t("team_schedule.assign_to")}
             </label>
-            <select value={form.assignee} onChange={upd("assignee")}
+            <PickSelect value={form.assignee} onChange={upd("assignee")}
               style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",fontFamily:"inherit"}}>
               {TEAM_MEMBERS.map(m=><option key={m.id} value={m.id}>{m.name} — {m.role}</option>)}
-            </select>
+            </PickSelect>
           </div>
           <div>
             <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>
               <IcLoc size={10} color={T.t4}/> {t("mom.site_project")}
             </label>
-            <select value={form.site} onChange={upd("site")}
+            <PickSelect value={form.site} onChange={upd("site")}
               style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",fontFamily:"inherit"}}>
               {SITES.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}
-            </select>
+            </PickSelect>
           </div>
         </div>
 
@@ -454,10 +455,10 @@ function CreateWorkModal({onClose,onSave,defaultType="Task",defaultAssignee="",d
           </div>
           <div>
             <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>{t("team_schedule.start_status")}</label>
-            <select value={form.status} onChange={upd("status")}
+            <PickSelect value={form.status} onChange={upd("status")}
               style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",fontFamily:"inherit"}}>
               {Object.keys(STATUS_META).map(s=><option key={s}>{s}</option>)}
-            </select>
+            </PickSelect>
           </div>
         </div>
 
@@ -1024,20 +1025,20 @@ function TeamScheduleModule(){
             {/* Member filter */}
             <div>
               <div style={{fontSize:9.5,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".3px",marginBottom:3}}>{t("team_schedule.member")}</div>
-              <select value={fMember} onChange={e=>setFMember(e.target.value)}
+              <PickSelect value={fMember} onChange={e=>setFMember(e.target.value)}
                 style={{height:30,padding:"0 9px",borderRadius:6,border:`1.5px solid ${fMember!=="All"?T.blu:T.b1}`,background:fMember!=="All"?T.bluL:T.surface,fontSize:12,color:fMember!=="All"?T.blu:T.t2,outline:"none",cursor:"pointer",fontFamily:"inherit"}}>
                 <option value="All">{t("team_schedule.all_members")}</option>
                 {TEAM_MEMBERS.map(m=><option key={m.id} value={m.id}>{m.name}</option>)}
-              </select>
+              </PickSelect>
             </div>
             {/* Site filter */}
             <div>
               <div style={{fontSize:9.5,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".3px",marginBottom:3}}>{t("common.site")}</div>
-              <select value={fSite} onChange={e=>setFSite(e.target.value)}
+              <PickSelect value={fSite} onChange={e=>setFSite(e.target.value)}
                 style={{height:30,padding:"0 9px",borderRadius:6,border:`1.5px solid ${fSite!=="All"?T.blu:T.b1}`,background:fSite!=="All"?T.bluL:T.surface,fontSize:12,color:fSite!=="All"?T.blu:T.t2,outline:"none",cursor:"pointer",fontFamily:"inherit"}}>
                 <option value="All">{t("common.all_sites")}</option>
                 {SITES.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}
-              </select>
+              </PickSelect>
             </div>
             {/* Type */}
             <div>

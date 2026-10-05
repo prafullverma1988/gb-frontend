@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
+import PickSelect from "../../components/PickSelect";
 import api from "../../config/api";
 import { T } from "../shared/tokens";
 import { t } from "../../i18n";
@@ -397,11 +398,11 @@ function UploadModal({ state, setState, projectId, cats, onDone }) {
           {state.kind === "document" && (
             <>
               <Lbl>{t("project_files.shreni")}</Lbl>
-              <select value={state.category} onChange={(e) => set("category", e.target.value)} style={inp}>
+              <PickSelect value={state.category} onChange={(e) => set("category", e.target.value)} style={inp}>
                 {(cats.length ? cats : [{ id: "other", label: t("project_files.other_documents") }]).map((c) => (
                   <option key={c.id} value={c.id}>{c.label}</option>
                 ))}
-              </select>
+              </PickSelect>
             </>
           )}
 

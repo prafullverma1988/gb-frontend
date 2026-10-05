@@ -17,6 +17,7 @@
 //        onClose, onImported(res), onFallback()  ← purane wizard par wapas
 // ══════════════════════════════════════════════════════════════════════
 import React, { useState, useMemo } from "react";
+import PickSelect from "../../components/PickSelect";
 import api from "../../config/api";
 import { T } from "../shared/tokens";
 import { t } from "../../i18n";
@@ -200,15 +201,15 @@ export default function BoqMatrixImport({ tenderId, fileName, fileB64, initial, 
                           {ds && ds.length_km != null && <span style={{ fontWeight: 400, color: T.t4 }}> · {qtyf(ds.length_km)} km</span>}
                         </td>
                         <td style={td}>
-                          <select value={s.qty || ""} onChange={(e) => edit((l) => { l.sites[k].qty = e.target.value; })} style={inp}>
+                          <PickSelect value={s.qty || ""} onChange={(e) => edit((l) => { l.sites[k].qty = e.target.value; })} style={inp}>
                             {colOpts.map((c) => <option key={c} value={c}>{c}</option>)}
-                          </select>
+                          </PickSelect>
                         </td>
                         <td style={td}>
-                          <select value={s.amount || ""} onChange={(e) => edit((l) => { l.sites[k].amount = e.target.value || null; })} style={inp}>
+                          <PickSelect value={s.amount || ""} onChange={(e) => edit((l) => { l.sites[k].amount = e.target.value || null; })} style={inp}>
                             <option value="">—</option>
                             {colOpts.map((c) => <option key={c} value={c}>{c}</option>)}
-                          </select>
+                          </PickSelect>
                         </td>
                         <td style={{ ...td, textAlign: "right" }}>{ca ? inr(ca.expected) : "—"}</td>
                         <td style={{ ...td, textAlign: "right", fontWeight: 700, color: good ? T.grn : T.red }}>{ca ? inr(ca.got) : "—"}</td>
@@ -238,10 +239,10 @@ export default function BoqMatrixImport({ tenderId, fileName, fileB64, initial, 
                 <input type="number" value={layout.data_rows[1]} onChange={(e) => edit((l) => { l.data_rows[1] = Number(e.target.value) || 1; })} style={{ ...inp, width: 80 }} /></label>
               {[["description", t("boq_matrix.f_desc")], ["item_code", t("boq_matrix.f_code")], ["sno", t("boq_matrix.f_sno")], ["unit", t("boq_matrix.f_unit")], ["rate", t("boq_matrix.f_rate")]].map(([k, l]) => (
                 <label key={k} style={{ fontSize: 11, color: T.t3 }}>{l}<br />
-                  <select value={(layout.cols || {})[k] || ""} onChange={(e) => edit((x) => { x.cols[k] = e.target.value || null; })} style={inp}>
+                  <PickSelect value={(layout.cols || {})[k] || ""} onChange={(e) => edit((x) => { x.cols[k] = e.target.value || null; })} style={inp}>
                     <option value="">—</option>
                     {colOpts.map((c) => <option key={c} value={c}>{c}</option>)}
-                  </select></label>
+                  </PickSelect></label>
               ))}
               <button onClick={recheck} disabled={!!busy} style={{ ...btn(dirty ? "primary" : "ghost"), opacity: busy ? .6 : 1 }}>
                 {busy === "check" ? t("boq_matrix.checking") : t("boq_matrix.recheck")}

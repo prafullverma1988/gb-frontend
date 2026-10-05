@@ -28,6 +28,7 @@
 //    layout — the backend returns string-sorted order.
 // ════════════════════════════════════════════════════════════════
 import { useState, useEffect, useMemo, useCallback } from "react";
+import PickSelect from "../components/PickSelect";
 import { createPortal } from "react-dom";
 import api from "../config/api";
 import { t, Rich } from "../i18n";
@@ -996,10 +997,10 @@ function AddBatchModal({ projectId, batch, onClose, onSaved }) {
           </div>
           <div>
             <label style={labelStyle}>{t("township_crm.batch_type")}</label>
-            <select style={inputStyle} value={form.batch_type}
+            <PickSelect style={inputStyle} value={form.batch_type}
               onChange={(e) => set("batch_type", e.target.value)}>
               {BATCH_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
+            </PickSelect>
           </div>
         </div>
         <div>
@@ -1163,23 +1164,23 @@ function GenerateUnitsModal({ batch, unitTypes, onClose, onGenerated }) {
 
         <div>
           <label style={labelStyle}>{t("township_crm.unit_type")}</label>
-          <select style={inputStyle} value={form.unit_type_id}
+          <PickSelect style={inputStyle} value={form.unit_type_id}
             onChange={(e) => set("unit_type_id", e.target.value)}>
             <option value="">{t("payroll.select")}</option>
             {unitTypes.map(t => (
               <option key={t.id} value={t.id}>{t.type_name} ({t.type_code})</option>
             ))}
-          </select>
+          </PickSelect>
         </div>
 
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:11 }}>
           <div>
             <label style={labelStyle}>{t("township_crm.facing")}</label>
-            <select style={inputStyle} value={form.facing}
+            <PickSelect style={inputStyle} value={form.facing}
               onChange={(e) => set("facing", e.target.value)}>
               <option value="">{t("township_crm.none")}</option>
               {FACINGS.map(f => <option key={f} value={f}>{f}</option>)}
-            </select>
+            </PickSelect>
           </div>
           <div>
             <label style={labelStyle}>{t("township_crm.block_tower")}</label>
@@ -1191,21 +1192,21 @@ function GenerateUnitsModal({ batch, unitTypes, onClose, onGenerated }) {
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:11 }}>
           <div>
             <label style={labelStyle}>{t("township_crm.corner_pattern")}</label>
-            <select style={inputStyle} value={form.is_corner_pattern}
+            <PickSelect style={inputStyle} value={form.is_corner_pattern}
               onChange={(e) => set("is_corner_pattern", e.target.value)}>
               <option value="none">{t("common.none")}</option>
               <option value="first_last">{t("township_crm.first_last_unit")}</option>
               <option value="all">{t("township_crm.all_units")}</option>
-            </select>
+            </PickSelect>
           </div>
           <div>
             <label style={labelStyle}>{t("township_crm.garden_pattern")}</label>
-            <select style={inputStyle} value={form.is_garden_facing_pattern}
+            <PickSelect style={inputStyle} value={form.is_garden_facing_pattern}
               onChange={(e) => set("is_garden_facing_pattern", e.target.value)}>
               <option value="none">{t("common.none")}</option>
               <option value="first_last">{t("township_crm.first_last_unit")}</option>
               <option value="all">{t("township_crm.all_units")}</option>
-            </select>
+            </PickSelect>
           </div>
         </div>
 
@@ -1887,14 +1888,14 @@ function PlcConfigSection({ projectId }) {
                       onChange={(e) => setRow(i, "rate", e.target.value)}/>
                   </td>
                   <td style={{ ...td, width:100 }}>
-                    <select style={cell} value={r.charge_unit} onChange={(e) => setRow(i, "charge_unit", e.target.value)}>
+                    <PickSelect style={cell} value={r.charge_unit} onChange={(e) => setRow(i, "charge_unit", e.target.value)}>
                       {PLC_UNIT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                    </select>
+                    </PickSelect>
                   </td>
                   <td style={{ ...td, width:130 }}>
-                    <select style={cell} value={r.applies_to} onChange={(e) => setRow(i, "applies_to", e.target.value)}>
+                    <PickSelect style={cell} value={r.applies_to} onChange={(e) => setRow(i, "applies_to", e.target.value)}>
                       {PLC_AREA_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                    </select>
+                    </PickSelect>
                   </td>
                   <td style={{ ...td, width:40, textAlign:"center" }}>
                     <button onClick={() => delRow(i)} title={t("common.remove")} style={{ background:"transparent",
@@ -2334,33 +2335,33 @@ function AddUnitModal({ projectId, unitTypes, batches, onClose, onSaved }) {
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:11 }}>
           <div>
             <label style={labelStyle}>{t("township_crm.unit_type")}</label>
-            <select style={inputStyle} value={form.unit_type_id}
+            <PickSelect style={inputStyle} value={form.unit_type_id}
               onChange={(e) => set("unit_type_id", e.target.value)}>
               <option value="">{t("payroll.select")}</option>
               {unitTypes.map(t => (
                 <option key={t.id} value={t.id}>{t.type_name} ({t.type_code})</option>
               ))}
-            </select>
+            </PickSelect>
           </div>
           <div>
             <label style={labelStyle}>{t("township_crm.batch")}</label>
-            <select style={inputStyle} value={form.batch_id}
+            <PickSelect style={inputStyle} value={form.batch_id}
               onChange={(e) => set("batch_id", e.target.value)}>
               <option value="">{t("township_crm.none")}</option>
               {batches.map(b => (
                 <option key={b.id} value={b.id}>{b.batch_no} · {b.unit_range_label || b.batch_name || ""}</option>
               ))}
-            </select>
+            </PickSelect>
           </div>
         </div>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:11 }}>
           <div>
             <label style={labelStyle}>{t("township_crm.facing")}</label>
-            <select style={inputStyle} value={form.facing}
+            <PickSelect style={inputStyle} value={form.facing}
               onChange={(e) => set("facing", e.target.value)}>
               <option value="">{t("township_crm.none")}</option>
               {FACINGS.map(f => <option key={f} value={f}>{f}</option>)}
-            </select>
+            </PickSelect>
           </div>
           <div style={{ display:"flex", gap:14, alignItems:"flex-end", paddingBottom:6 }}>
             <label style={{ display:"flex", gap:5, alignItems:"center", fontSize:12, color:T.t2, cursor:"pointer" }}>
@@ -2451,17 +2452,17 @@ function AddProspectModal({ projectId, onClose, onSaved }) {
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:11 }}>
           <div>
             <label style={labelStyle}>{t("common.stage")}</label>
-            <select style={inputStyle} value={form.stage}
+            <PickSelect style={inputStyle} value={form.stage}
               onChange={(e) => set("stage", e.target.value)}>
               {STAGE_ORDER.map(s => <option key={s} value={s}>{STAGE_DISPLAY[s]}</option>)}
-            </select>
+            </PickSelect>
           </div>
           <div>
             <label style={labelStyle}>{t("common.priority")}</label>
-            <select style={inputStyle} value={form.priority}
+            <PickSelect style={inputStyle} value={form.priority}
               onChange={(e) => set("priority", e.target.value)}>
               {["High","Medium","Low"].map(p => <option key={p} value={p}>{p}</option>)}
-            </select>
+            </PickSelect>
           </div>
         </div>
         <div>
@@ -2626,11 +2627,11 @@ function ProspectDetailModal({ prospectId, onClose, onChanged }) {
           {/* Actions */}
           <div style={{ display:"flex", gap:8, alignItems:"center", marginTop:16, flexWrap:"wrap" }}>
             <span style={{ fontSize:11, color:T.t2 }}>{t("township_crm.change_stage")}</span>
-            <select value={data.stage} disabled={busy}
+            <PickSelect value={data.stage} disabled={busy}
               onChange={(e) => changeStage(e.target.value)}
               style={{ ...inputStyle, width:"auto", padding:"5px 8px", fontSize:11.5 }}>
               {STAGE_ORDER.map(s => <option key={s} value={s}>{STAGE_DISPLAY[s]}</option>)}
-            </select>
+            </PickSelect>
             <div style={{ marginLeft:"auto", display:"flex", gap:8 }}>
               <Btn small label={t("common.edit_2")} onClick={() => setEditing(true)}/>
               <Btn small danger label={t("common.delete")} onClick={remove} disabled={busy}/>
@@ -2659,9 +2660,9 @@ function ProspectDetailModal({ prospectId, onClose, onChanged }) {
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:11 }}>
               <div>
                 <label style={labelStyle}>{t("common.priority")}</label>
-                <select style={inputStyle} value={form.priority} onChange={(e) => set("priority", e.target.value)}>
+                <PickSelect style={inputStyle} value={form.priority} onChange={(e) => set("priority", e.target.value)}>
                   {["High","Medium","Low"].map(p => <option key={p} value={p}>{p}</option>)}
-                </select>
+                </PickSelect>
               </div>
               <div>
                 <label style={labelStyle}>{t("common.source")}</label>
@@ -2853,12 +2854,12 @@ function BookingFormModal({ unit, interestedProspects, onClose, onSaved }) {
         <div style={{ display:"grid", gap:11 }}>
           <div>
             <label style={labelStyle}>{t("township_crm.customer_from_prospect")}</label>
-            <select style={inputStyle} value={form.prospect_id}
+            <PickSelect style={inputStyle} value={form.prospect_id}
               onChange={(e) => set("prospect_id", e.target.value)}>
               {interestedProspects.map(p => (
                 <option key={p.id} value={p.id}>{p.name} · {p.phone || "—"}</option>
               ))}
-            </select>
+            </PickSelect>
           </div>
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:11 }}>
             <div>
@@ -2939,10 +2940,10 @@ function PaymentRecordModal({ milestone, onClose, onSaved }) {
           </div>
           <div>
             <label style={labelStyle}>{t("common.mode")}</label>
-            <select style={inputStyle} value={form.payment_mode}
+            <PickSelect style={inputStyle} value={form.payment_mode}
               onChange={(e) => set("payment_mode", e.target.value)}>
               {["NEFT","RTGS","UPI","Cheque","Cash"].map(m => <option key={m} value={m}>{m}</option>)}
-            </select>
+            </PickSelect>
           </div>
         </div>
         <div>
@@ -3005,12 +3006,12 @@ function CustomizationDetailModal({ customization, onClose, onChanged }) {
       <div style={{ display:"flex", gap:8, alignItems:"center", marginTop:14, flexWrap:"wrap",
         paddingTop:12, borderTop:`1px solid ${T.b1}` }}>
         <span style={{ fontSize:11, color:T.t2 }}>{t("township_crm.change_status")}</span>
-        <select disabled={busy} defaultValue=""
+        <PickSelect disabled={busy} defaultValue=""
           onChange={(e) => e.target.value && changeStatus(e.target.value)}
           style={{ ...inputStyle, width:"auto", padding:"5px 8px", fontSize:11.5 }}>
           <option value="">{t("payroll.select")}</option>
           {CZ_STATUSES.map(s => <option key={s} value={s}>{s.replace(/_/g," ")}</option>)}
-        </select>
+        </PickSelect>
         <div style={{ marginLeft:"auto" }}>
           <Btn small danger label={t("common.delete")} disabled={busy} onClick={remove}/>
         </div>
@@ -3081,26 +3082,26 @@ function CustomizationFormModal({ projectId, units, onClose, onSaved }) {
         </div>
         <div>
           <label style={labelStyle}>{kind === "unit_merger" ? t("township_crm.primary_unit") : t("mrdetail.unit")}</label>
-          <select style={inputStyle} value={form.primary_unit_id}
+          <PickSelect style={inputStyle} value={form.primary_unit_id}
             onChange={(e) => { set("primary_unit_id", e.target.value); }}
             onBlur={checkElig}>
             <option value="">{t("payroll.select")}</option>
             {sortedUnits.map(u => (
               <option key={u.id} value={u.id}>{u.unit_no} · {u.status}</option>
             ))}
-          </select>
+          </PickSelect>
         </div>
         {kind === "unit_merger" && (
           <div>
             <label style={labelStyle}>{t("township_crm.partner_unit_adjacent_same_batch")}</label>
-            <select style={inputStyle} value={form.partner_unit_id}
+            <PickSelect style={inputStyle} value={form.partner_unit_id}
               onChange={(e) => set("partner_unit_id", e.target.value)}
               onBlur={checkElig}>
               <option value="">{t("payroll.select")}</option>
               {sortedUnits.map(u => (
                 <option key={u.id} value={u.id}>{u.unit_no} · {u.status}</option>
               ))}
-            </select>
+            </PickSelect>
             {eligNote && (
               <div style={{ fontSize:10.5, marginTop:4,
                 color: eligNote.startsWith("✓") ? T.kGrn : "#B4453A" }}>{eligNote}</div>

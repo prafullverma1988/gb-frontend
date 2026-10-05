@@ -6,6 +6,7 @@
 // Sabse zaroori baat jo screen par saaf honi chahiye: jis material ki ginti
 // nahi hui uska antar 0 hi rahega — isse "sab theek hai" nahi samajhna.
 import { useState, useEffect, useCallback } from "react";
+import PickSelect from "../../components/PickSelect";
 import { t } from "../../i18n";
 import {
   T, N, cum, fmtN, fmtD, rupee, rget, dataOf, inpSm, Field, Panel, Row, Scroll, Empty,
@@ -18,10 +19,10 @@ function PlantRange({ meta, plantId, onPlant, range, onRange }) {
   return (
     <div style={{ display: "flex", gap: 8, alignItems: "flex-end", flexWrap: "wrap", marginBottom: 12 }}>
       <Field label={t("rmc.plant")}>
-        <select style={{ ...inpSm, width: 200 }} value={plantId} onChange={(e) => onPlant(e.target.value)}>
+        <PickSelect style={{ ...inpSm, width: 200 }} value={plantId} onChange={(e) => onPlant(e.target.value)}>
           <option value="">{t("rmc.select_plant")}</option>
           {(meta.plants || []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-        </select>
+        </PickSelect>
       </Field>
       <Field label={t("common.from")}>
         <input type="date" style={{ ...inpSm, width: 150 }} value={range.from} onChange={(e) => onRange({ ...range, from: e.target.value })} />

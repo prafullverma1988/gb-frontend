@@ -19,6 +19,7 @@
 // sabse neeche alag dabbe me, aur har baar naam ke saath confirm.
 // ══════════════════════════════════════════════════════════════════════
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import PickSelect from "../components/PickSelect";
 import api from "../config/api";
 import { t } from "../i18n";
 import { useBackClose } from "../utils/backNav";
@@ -780,9 +781,9 @@ function TypeDialog({ item, onClose, onSave }) {
       <label style={lbl} htmlFor="mlib-type">{t("map_library.type")}</label>
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
         <StyleSwatch kind={kind} code={code} size={18} />
-        <select id="mlib-type" value={code} onChange={(e) => setCode(e.target.value)} style={inp}>
+        <PickSelect id="mlib-type" value={code} onChange={(e) => setCode(e.target.value)} style={inp}>
           {typesFor(kind).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-        </select>
+        </PickSelect>
       </div>
       {kind === "line" && (
         <>

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import PickSelect from "../components/PickSelect";
 import api from "../config/api";
 import SearchSelect from "../components/SearchSelect";
 import LibrarySelect from "../components/LibrarySelect";
@@ -158,7 +159,7 @@ const Inp=({value,onChange,placeholder,type="text",min,max})=>(
     onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
 );
 const Sel=({value,onChange,children})=>(
-  <select value={value} onChange={onChange} style={{width:"100%",padding:"8px 11px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",cursor:"pointer"}}>{children}</select>
+  <PickSelect value={value} onChange={onChange} style={{width:"100%",padding:"8px 11px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",cursor:"pointer"}}>{children}</PickSelect>
 );
 
 // Vertical date rail — "16 Apr" stacked, used in MR cards
@@ -1519,11 +1520,11 @@ function CreatePOModal({onClose,onSave,prefillItems,prefillVendor,editPo,dbProje
               <div style={{display:"grid",gridTemplateColumns:"2.5fr 90px 110px auto",gap:7,alignItems:"center"}}>
                 <input value={newMat.name} onChange={e=>setNewMat(p=>({...p,name:e.target.value}))} placeholder={t("common.material_name")} autoFocus
                   style={{padding:"7px 10px",borderRadius:6,border:`1.5px solid ${T.purM}`,fontSize:12.5,color:T.t1,background:"white",outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
-                <select value={newMat.unit} onChange={e=>setNewMat(p=>({...p,unit:e.target.value}))}
+                <PickSelect value={newMat.unit} onChange={e=>setNewMat(p=>({...p,unit:e.target.value}))}
                   style={{padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.purM}`,fontSize:12,color:T.t1,background:"white",outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}>
                   <option value="">{t("common.unit")}</option>
                   {UNITS.map(u=><option key={u}>{u}</option>)}
-                </select>
+                </PickSelect>
                 <input value={newMat.hsn} onChange={e=>setNewMat(p=>({...p,hsn:e.target.value}))} placeholder={t("procurement.hsn_optional")}
                   style={{padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.purM}`,fontSize:12,color:T.t1,background:"white",outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
                 <button onClick={saveNewMaterial} disabled={!newMat.name.trim()||savingMat}
@@ -2848,9 +2849,9 @@ function ProcurementModule(){
               </div>
               {[{val:poStatusF,set:setPoStatusF,opts:["All","Open","Closed"],def:"Status"},{val:poApprovalF,set:setPoApprovalF,opts:["All","Draft","Approved"],def:"Approval"}].map(({val,set,opts,def},i)=>(
                 <div key={i} style={{position:"relative"}}>
-                  <select value={val} onChange={e=>set(e.target.value)} style={{height:31,padding:"0 22px 0 9px",borderRadius:6,border:`1.5px solid ${val!=="All"?T.blu:T.b1}`,background:val!=="All"?T.bluL:T.surface,fontSize:11.5,color:val!=="All"?T.blu:T.t2,outline:"none",cursor:"pointer",fontFamily:"inherit",minWidth:100,appearance:"none",WebkitAppearance:"none"}}>
+                  <PickSelect value={val} onChange={e=>set(e.target.value)} style={{height:31,padding:"0 22px 0 9px",borderRadius:6,border:`1.5px solid ${val!=="All"?T.blu:T.b1}`,background:val!=="All"?T.bluL:T.surface,fontSize:11.5,color:val!=="All"?T.blu:T.t2,outline:"none",cursor:"pointer",fontFamily:"inherit",minWidth:100,appearance:"none",WebkitAppearance:"none"}}>
                     {opts.map(o=><option key={o} value={o}>{o==="All"?`All ${def}`:o}</option>)}
-                  </select>
+                  </PickSelect>
                   <IcDown size={10} color={T.t4} style={{position:"absolute",right:5,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}/>
                 </div>
               ))}

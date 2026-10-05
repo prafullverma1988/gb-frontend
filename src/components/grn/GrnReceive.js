@@ -21,6 +21,7 @@
 // Parent footer ka "Submit GRN" ref se submitDirect() bulata hai.
 // ════════════════════════════════════════════════════════════════
 import React, { forwardRef, useEffect, useImperativeHandle, useMemo, useState } from "react";
+import PickSelect from "../PickSelect";
 import api from "../../config/api";
 import LibrarySelect from "../LibrarySelect";
 import GrnIssueBlock from "../GrnIssueBlock";
@@ -536,9 +537,9 @@ const GrnReceive = forwardRef(function GrnReceive({
                 <span style={{ fontSize: 9 }}>🔒</span>{unit}
               </div>
             ) : (
-              <select value={row.unit} onChange={e => setDRow(row.id, { unit: e.target.value })} style={{ ...inpS, fontSize: 12.5, padding: "7px 9px", cursor: "pointer" }}>
+              <PickSelect value={row.unit} onChange={e => setDRow(row.id, { unit: e.target.value })} style={{ ...inpS, fontSize: 12.5, padding: "7px 9px", cursor: "pointer" }}>
                 {UNITS_MR.map(u => <option key={u}>{u}</option>)}
-              </select>
+              </PickSelect>
             )}
             {isWh && (
               <input type="number" value={row.rate} onChange={e => setDRow(row.id, { rate: e.target.value })}

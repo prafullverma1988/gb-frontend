@@ -1,6 +1,7 @@
 // RMC › Challan — ek TM = ek challan. List, detail, site par accept, cancel.
 // GET /rmc/dispatches · /rmc/dispatches/:id · POST /:id/accept · /:id/cancel
 import { useState, useEffect, useCallback } from "react";
+import PickSelect from "../../components/PickSelect";
 import { useToast } from "../../components/Toast";
 import { t } from "../../i18n";
 import {
@@ -236,22 +237,22 @@ function RmcChallans({ meta, canCreate, canDelete, refreshKey, onRefresh, openId
     <div>
       <div style={{ display: "flex", gap: 8, alignItems: "flex-end", flexWrap: "wrap", marginBottom: 12 }}>
         <Field label={t("common.project")}>
-          <select style={{ ...inpSm, width: 180 }} value={fl.project_id} onChange={(e) => setFl({ ...fl, project_id: e.target.value })}>
+          <PickSelect style={{ ...inpSm, width: 180 }} value={fl.project_id} onChange={(e) => setFl({ ...fl, project_id: e.target.value })}>
             <option value="">{t("common.all")}</option>
             {(meta.projects || []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
+          </PickSelect>
         </Field>
         <Field label={t("rmc.plant")}>
-          <select style={{ ...inpSm, width: 160 }} value={fl.plant_id} onChange={(e) => setFl({ ...fl, plant_id: e.target.value })}>
+          <PickSelect style={{ ...inpSm, width: 160 }} value={fl.plant_id} onChange={(e) => setFl({ ...fl, plant_id: e.target.value })}>
             <option value="">{t("common.all")}</option>
             {(meta.plants || []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
+          </PickSelect>
         </Field>
         <Field label={t("common.status")}>
-          <select style={{ ...inpSm, width: 140 }} value={fl.status} onChange={(e) => setFl({ ...fl, status: e.target.value })}>
+          <PickSelect style={{ ...inpSm, width: 140 }} value={fl.status} onChange={(e) => setFl({ ...fl, status: e.target.value })}>
             <option value="">{t("common.all")}</option>
             {STATUSES.map((s) => <option key={s} value={s}>{dispatchStatusLabel(s)}</option>)}
-          </select>
+          </PickSelect>
         </Field>
         <Field label={t("common.from")}>
           <input type="date" style={{ ...inpSm, width: 140 }} value={fl.from} onChange={(e) => setFl({ ...fl, from: e.target.value })} />
@@ -261,11 +262,11 @@ function RmcChallans({ meta, canCreate, canDelete, refreshKey, onRefresh, openId
         </Field>
         {(meta.plants || []).some(isBitumen) && (
           <Field label={t("rmc.temp_check")}>
-            <select style={{ ...inpSm, width: 150 }} value={fl.temp_review} onChange={(e) => setFl({ ...fl, temp_review: e.target.value })}>
+            <PickSelect style={{ ...inpSm, width: 150 }} value={fl.temp_review} onChange={(e) => setFl({ ...fl, temp_review: e.target.value })}>
               <option value="">{t("common.all")}</option>
               <option value="pending">{t("rmc.rv_pending")}</option>
               <option value="cleared">{t("rmc.rv_cleared")}</option>
-            </select>
+            </PickSelect>
           </Field>
         )}
         <span style={{ flex: 1 }} />

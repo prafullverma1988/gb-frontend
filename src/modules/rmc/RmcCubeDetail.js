@@ -14,6 +14,7 @@
 //
 // POST /rmc/cube-samples/:id/result · POST /rmc/cube-samples/:id/review
 import { useState } from "react";
+import PickSelect from "../../components/PickSelect";
 import { useToast } from "../../components/Toast";
 import { t } from "../../i18n";
 import {
@@ -69,11 +70,11 @@ function ResultForm({ sample, onDone }) {
       <div style={{ padding: 14 }}>
         <Grid cols={3} style={{ marginBottom: 12 }}>
           <Field label={t("rmc.age_days")}>
-            <select style={inp} value={age} onChange={(e) => setAge(e.target.value)}>
+            <PickSelect style={inp} value={age} onChange={(e) => setAge(e.target.value)}>
               <option value="7">{t("rmc.age_7")}</option>
               <option value="28">{t("rmc.age_28")}</option>
               <option value="custom">{t("rmc.age_custom")}</option>
-            </select>
+            </PickSelect>
           </Field>
           {age === "custom" ? (
             <Field label={t("rmc.age_how_many")}>

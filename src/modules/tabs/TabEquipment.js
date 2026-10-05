@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
+import PickSelect from "../../components/PickSelect";
 import api from "../../config/api";
 import { T, fmtN, localYMD } from "../shared/tokens";
 import { Pill, Stat, Panel, THead, AddBtn, FilterTabs } from "../shared/ui";
@@ -554,9 +555,9 @@ function TabEquipment({ projectId }) {
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr 1fr 0.9fr", gap: 10 }}>
                   <div>
                     <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>{t("equipment.equipment_type")}</div>
-                    <select value={reqForm.equipment_type} onChange={e => updReq("equipment_type", e.target.value)} style={inp}>
+                    <PickSelect value={reqForm.equipment_type} onChange={e => updReq("equipment_type", e.target.value)} style={inp}>
                       {REQ_TYPES.map(o => <option key={o} value={o}>{o}</option>)}
-                    </select>
+                    </PickSelect>
                   </div>
                   <div>
                     <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>{t("equipment.capacity")}</div>
@@ -581,10 +582,10 @@ function TabEquipment({ projectId }) {
                     {(() => {
                       const pr = REQ_PRIO.find(x => x.k === reqForm.priority) || REQ_PRIO[0];
                       return (
-                        <select value={reqForm.priority} onChange={e => updReq("priority", e.target.value)}
+                        <PickSelect value={reqForm.priority} onChange={e => updReq("priority", e.target.value)}
                           style={{ ...inp, color: pr.c, fontWeight: pr.k === "normal" ? 400 : 700, borderColor: pr.k === "normal" ? T.b1 : pr.c }}>
                           {REQ_PRIO.map(x => <option key={x.k} value={x.k}>{x.l}</option>)}
-                        </select>
+                        </PickSelect>
                       );
                     })()}
                   </div>
@@ -612,7 +613,7 @@ function TabEquipment({ projectId }) {
                       <>
                         <div style={{ display: "grid", gridTemplateColumns: "0.6fr 1.8fr", gap: 10 }}>
                           <input value={reqMachQ} onChange={e => setReqMachQ(e.target.value)} placeholder={t("equipment.req_machine_search")} style={inp} />
-                          <select value={reqPref ? String(reqPref.id) : ""}
+                          <PickSelect value={reqPref ? String(reqPref.id) : ""}
                             onChange={e => { const m = reqRec.machines.find(x => String(x.id) === e.target.value); if (m) pickReqMachine(m); else setReqPref(null); }}
                             style={{ ...inp, ...(reqPref ? { borderColor: T.blu } : {}) }}>
                             <option value="">{opts.length ? t("equipment.req_machine_none") : t("equipment.req_no_match")}</option>
@@ -621,7 +622,7 @@ function TabEquipment({ projectId }) {
                                 {m.name}{m.registration_no ? " · " + m.registration_no : ""}{[reqKind(m), reqCap(m)].filter(Boolean).length ? " — " + [reqKind(m), reqCap(m)].filter(Boolean).join(" · ") : ""}
                               </option>
                             ))}
-                          </select>
+                          </PickSelect>
                         </div>
                         {reqPref && (
                           <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6, flexWrap: "wrap" }}>
@@ -641,10 +642,10 @@ function TabEquipment({ projectId }) {
                     <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>{t("equipment.req_task_label")}</div>
                     <div style={{ display: "grid", gridTemplateColumns: "0.7fr 1.6fr", gap: 8 }}>
                       <input value={reqTaskQ} onChange={e => setReqTaskQ(e.target.value)} placeholder={t("equipment.req_task_filter")} style={inp} />
-                      <select value={reqForm.task_id} onChange={e => updReq("task_id", e.target.value)} style={inp}>
+                      <PickSelect value={reqForm.task_id} onChange={e => updReq("task_id", e.target.value)} style={inp}>
                         <option value="">{reqTasks.length ? t("equipment.req_task_none") : t("equipment.req_no_task")}</option>
                         {reqTaskOpts.map(x => <option key={x.id} value={x.id}>{x.parent ? x.parent + " › " : ""}{x.name}</option>)}
-                      </select>
+                      </PickSelect>
                     </div>
                   </div>
                   <div>
@@ -774,12 +775,12 @@ function TabEquipment({ projectId }) {
                 ))}
               </div>
               <div style={{ fontSize: 10, color: T.t4, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".4px", marginBottom: 6 }}>{t("equipment.rcv_doosri")}</div>
-              <select value="" onChange={(e) => { const m = rcvOpt.machines.find((x) => String(x.id) === e.target.value); if (m) setRcvSel({ machine: m, request_id: null }); }} style={{ ...inp, maxWidth: 520 }}>
+              <PickSelect value="" onChange={(e) => { const m = rcvOpt.machines.find((x) => String(x.id) === e.target.value); if (m) setRcvSel({ machine: m, request_id: null }); }} style={{ ...inp, maxWidth: 520 }}>
                 <option value="">{t("equipment.rcv_doosri_ph", { city: rcvOpt.city || "—", n: rcvOpt.machines.length })}</option>
                 {rcvOpt.machines.map((m) => (
                   <option key={m.id} value={String(m.id)}>{m.name}{m.registration_no ? " · " + m.registration_no : ""}{m.location ? " — " + locText(m.location) : ""}</option>
                 ))}
-              </select>
+              </PickSelect>
             </>
           )}
           {rcvSel && (
@@ -1008,10 +1009,10 @@ function TabEquipment({ projectId }) {
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                 <div>
                   <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>{t("equipment.equipment_from_master")}</div>
-                  <select value={logForm.equipment_id} onChange={e => updLog("equipment_id", e.target.value)} style={inp}>
+                  <PickSelect value={logForm.equipment_id} onChange={e => updLog("equipment_id", e.target.value)} style={inp}>
                     <option value="">{t("equipment.select_leave_empty_for_ad_hoc")}</option>
                     {masterList.map(m => <option key={m.id} value={m.id}>{m.name}{m.code ? ` (${m.code})` : ""}</option>)}
-                  </select>
+                  </PickSelect>
                 </div>
                 <div>
                   <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>{t("equipment.or_ad_hoc_equipment_name")}</div>
@@ -1070,17 +1071,17 @@ function TabEquipment({ projectId }) {
                 </div>
                 <div>
                   <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>{t("machinery.vendor_party_2")}</div>
-                  <select value={logForm.vendor_id} onChange={e => updLog("vendor_id", e.target.value)} style={inp}>
+                  <PickSelect value={logForm.vendor_id} onChange={e => updLog("vendor_id", e.target.value)} style={inp}>
                     <option value="">—</option>
                     {vendorParties.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                  </select>
+                  </PickSelect>
                 </div>
                 <div>
                   <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>{t("equipment.subcon_party")}</div>
-                  <select value={logForm.subcon_id} onChange={e => updLog("subcon_id", e.target.value)} style={inp}>
+                  <PickSelect value={logForm.subcon_id} onChange={e => updLog("subcon_id", e.target.value)} style={inp}>
                     <option value="">—</option>
                     {subconParties.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                  </select>
+                  </PickSelect>
                 </div>
                 {/* Diesel ab sirf Fuel module me (Fuel qty / cost / pump ke khaane
                     hata diye). Bharte hi server 400 'fuel_moved' deta tha (MCH-22). */}

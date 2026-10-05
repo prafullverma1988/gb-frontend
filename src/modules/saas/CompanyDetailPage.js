@@ -1,6 +1,7 @@
 // The company detail page and everything scoped to a single company:
 // profile/admin editing, module access, data export, users, activity, CRM.
 import { useState, useEffect, useCallback } from "react";
+import PickSelect from "../../components/PickSelect";
 import { API, tok, apiFetch, T, fmtDate, fmtDateTime, fmtNum, fmtMoney, DOMAIN_LABELS,
          IcBuilding, IcUsers, IcPuzzle, IcX, IcChk, IcDownload, IcShield,
          IcActivity, IcDollar, IcEdit, IcClip, IcChevL, IcFolder, IcLock, IcPlus } from "./tokens";
@@ -193,13 +194,13 @@ function EditCompanyModal({ company, onClose, onSaved, setToast }) {
           <div style={{ borderTop:`1px solid ${T.b1}`, paddingTop:14, display:"flex", alignItems:"center", justifyContent:"space-between", gap:10 }}>
             <div style={{ fontSize:11, fontWeight:700, color:T.t3, textTransform:"uppercase", letterSpacing:"0.5px" }}>Admin login</div>
             {admins.length > 1 && (
-              <select value={admin?.id || ""} onChange={e => {
+              <PickSelect value={admin?.id || ""} onChange={e => {
                   const a = admins.find(x => String(x.id) === e.target.value);
                   if (a) setAdmin({ id:a.id, name:a.name||"", email:a.email||"", phone:a.phone||"" });
                 }}
                 style={{ padding:"5px 9px", borderRadius:6, border:`1px solid ${T.b1}`, fontSize:11.5, color:T.t1, background:T.surfaceB, fontFamily:"inherit", cursor:"pointer" }}>
                 {admins.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-              </select>
+              </PickSelect>
             )}
           </div>
 

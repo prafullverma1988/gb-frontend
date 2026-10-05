@@ -17,6 +17,7 @@
 //      GET /road/norms/suggestions?project_id=
 // ══════════════════════════════════════════════════════════════════════
 import React, { useState, useEffect, useCallback } from "react";
+import PickSelect from "../../components/PickSelect";
 import { T } from "../shared/tokens";
 import { useToast } from "../../components/Toast";
 import { useConfirm } from "../../components/ConfirmDialog";
@@ -150,9 +151,9 @@ export default function RoadNorms({ projectId }) {
                           const special = !!(l.lead_formula || l.qty_from_totals);
                           return (
                             <div key={i} style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 6, flexWrap: "wrap" }}>
-                              <select value={l.category} disabled={!mayEdit || special} onChange={(e) => setLine(i, "category", e.target.value)} style={{ ...S.inp, width: 120 }}>
+                              <PickSelect value={l.category} disabled={!mayEdit || special} onChange={(e) => setLine(i, "category", e.target.value)} style={{ ...S.inp, width: 120 }}>
                                 {cats.map((c) => <option key={c} value={c}>{catLabel(c)}</option>)}
-                              </select>
+                              </PickSelect>
                               <input value={l.match || ""} disabled={!mayEdit} placeholder={t("road.norm_match_ph")}
                                 onChange={(e) => setLine(i, "match", e.target.value)} style={{ ...S.inp, width: 190 }} />
                               {l.lead_formula ? (

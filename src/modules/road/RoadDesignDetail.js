@@ -14,6 +14,7 @@
 //      GET /compare · GET /runs · GET /designs/:id/sheet.xlsx
 // ══════════════════════════════════════════════════════════════════════
 import React, { useState, useEffect, useCallback, useMemo } from "react";
+import PickSelect from "../../components/PickSelect";
 import { T } from "../shared/tokens";
 import EChart, { ECHART_FONT } from "../../components/EChart";
 import { useToast } from "../../components/Toast";
@@ -384,9 +385,9 @@ export default function RoadDesignDetail({ designId, onBack, onChanged, tenderMo
                       <td style={S.td}><input type="number" step="0.01" disabled={!mayEdit} value={z.from_ch == null ? "" : z.from_ch} onChange={(e) => setZone(i, "from_ch", e.target.value)} style={{ ...S.inp, width: 100, textAlign: "right" }} /></td>
                       <td style={S.td}><input type="number" step="0.01" disabled={!mayEdit} value={z.to_ch == null ? "" : z.to_ch} onChange={(e) => setZone(i, "to_ch", e.target.value)} style={{ ...S.inp, width: 100, textAlign: "right" }} /></td>
                       <td style={S.td}>
-                        <select disabled={!mayEdit} value={z.soil_case} onChange={(e) => setZone(i, "soil_case", e.target.value)} style={{ ...S.inp, width: 210 }}>
+                        <PickSelect disabled={!mayEdit} value={z.soil_case} onChange={(e) => setZone(i, "soil_case", e.target.value)} style={{ ...S.inp, width: 210 }}>
                           {SOIL_CASES.map((c) => <option key={c} value={c}>{caseLabel(c)}</option>)}
-                        </select>
+                        </PickSelect>
                       </td>
                       <td style={S.td}><input type="number" step="1" disabled={!mayEdit} value={z.reuse_pct == null ? "" : z.reuse_pct} onChange={(e) => setZone(i, "reuse_pct", e.target.value)} style={{ ...S.inp, width: 80, textAlign: "right" }} /></td>
                       <td style={S.td}><input disabled={!mayEdit} value={z.note} onChange={(e) => setZone(i, "note", e.target.value)} style={{ ...S.inp, width: 190 }} /></td>

@@ -8391,6 +8391,7 @@ const dict = {
   // ── search_select ───────────────────────────────────────────
   "search_select.no_match_found":                              "No match found",
   "search_select.no_options_yet":                              "No options available yet",
+  "search_select.chuno":                                        "Choose…",
 
   // ── settings ────────────────────────────────────────────────
   "settings.language.hint":                                    "The app, messages and notifications will use this language",

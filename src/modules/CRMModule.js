@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import PickSelect from "../components/PickSelect";
 import api, { API_BASE, getToken } from "../config/api";
 import SearchSelect from "../components/SearchSelect";
 import { Credit } from "../components/Credit";
@@ -1139,25 +1140,25 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab}
                     <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:8 }}>
                       <div>
                         <label style={{ fontSize:9.5, fontWeight:600, color:T.t4, display:"block", marginBottom:3, textTransform:"uppercase" }}>{t("common.city")}</label>
-                        <select value={bqEdit.cityId} onChange={e => setBqEdit(p => ({ ...p, cityId: e.target.value }))}
+                        <PickSelect value={bqEdit.cityId} onChange={e => setBqEdit(p => ({ ...p, cityId: e.target.value }))}
                           style={{ width:"100%", padding:"7px 9px", borderRadius:6,
                                    border:`1.5px solid ${bqEdit.cityId ? T.b1 : "#FCA5A5"}`,
                                    background:bqEdit.cityId ? T.surface : "#FEF2F2",
                                    fontSize:12.5, color:T.t1, outline:"none", fontFamily:"inherit", boxSizing:"border-box" }}>
                           <option value="">{t("crm.select_city")}</option>
                           {bqCities.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                        </select>
+                        </PickSelect>
                       </div>
                       <div>
                         <label style={{ fontSize:9.5, fontWeight:600, color:T.t4, display:"block", marginBottom:3, textTransform:"uppercase" }}>{t("common.construction_type")}</label>
-                        <select value={bqEdit.typeId} onChange={e => setBqEdit(p => ({ ...p, typeId: e.target.value }))}
+                        <PickSelect value={bqEdit.typeId} onChange={e => setBqEdit(p => ({ ...p, typeId: e.target.value }))}
                           style={{ width:"100%", padding:"7px 9px", borderRadius:6,
                                    border:`1.5px solid ${bqEdit.typeId ? T.b1 : "#FCA5A5"}`,
                                    background:bqEdit.typeId ? T.surface : "#FEF2F2",
                                    fontSize:12.5, color:T.t1, outline:"none", fontFamily:"inherit", boxSizing:"border-box" }}>
                           <option value="">{t("common.select_type")}</option>
                           {bqCTypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                        </select>
+                        </PickSelect>
                       </div>
                     </div>
                     <div style={{ display:"flex", gap:6, justifyContent:"flex-end" }}>
@@ -1352,19 +1353,19 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab}
                 </div>
                 <div style={{marginBottom:10}}>
                   <label style={{fontSize:10,fontWeight:700,color:T.t4,display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".4px"}}>{t("common.city_2")}</label>
-                  <select value={moveCityId} onChange={e => setMoveCityId(e.target.value)}
+                  <PickSelect value={moveCityId} onChange={e => setMoveCityId(e.target.value)}
                     style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${moveCityId?T.b1:"#FCA5A5"}`,background:moveCityId?T.surface:"#FEF2F2",fontSize:12.5,color:T.t1,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}>
                     <option value="">{t("crm.select_city")}</option>
                     {libCities.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                  </select>
+                  </PickSelect>
                 </div>
                 <div style={{marginBottom:14}}>
                   <label style={{fontSize:10,fontWeight:700,color:T.t4,display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".4px"}}>{t("crm.construction_type")}</label>
-                  <select value={moveTypeId} onChange={e => setMoveTypeId(e.target.value)}
+                  <PickSelect value={moveTypeId} onChange={e => setMoveTypeId(e.target.value)}
                     style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${moveTypeId?T.b1:"#FCA5A5"}`,background:moveTypeId?T.surface:"#FEF2F2",fontSize:12.5,color:T.t1,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}>
                     <option value="">{t("common.select_type")}</option>
                     {libCTypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                  </select>
+                  </PickSelect>
                 </div>
                 <div style={{display:"flex",gap:8}}>
                   <button onClick={() => setPendingMove(null)} disabled={moveSaving}
@@ -1426,7 +1427,7 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab}
                     <label style={{fontSize:10,fontWeight:700,color:T.t4,display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".4px"}}>
                      {t("crm.final_quote_optional")}
                     </label>
-                    <select value={convertForm.quote_id || ""}
+                    <PickSelect value={convertForm.quote_id || ""}
                       onChange={e => setConvertForm(p => ({ ...p, quote_id: e.target.value }))}
                       style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,background:T.surface,fontSize:12.5,color:T.t1,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}>
                       <option value="">{t("crm.none_decide_later")}</option>
@@ -1435,7 +1436,7 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab}
                           {q.quote_no} · {q.status} · ₹{Math.round(Number(q.grand_total)||0).toLocaleString("en-IN")}
                         </option>
                       ))}
-                    </select>
+                    </PickSelect>
                     <div style={{fontSize:10.5,color:"#64748B",marginTop:4}}>
                      {t("crm.pick_the_quote_you_settled_on")}
                     </div>
@@ -2722,7 +2723,7 @@ function QuoteBuilderModal({ lead, quoteId: editQuoteId, onClose, onSaved }){
                 </div>
                 <div>
                   <label style={{ fontSize:10, fontWeight:700, color:"#6B7280", display:"block", marginBottom:3, textTransform:"uppercase" }}>{t("common.unit")}</label>
-                  <select value={addSecForm.unit}
+                  <PickSelect value={addSecForm.unit}
                     onChange={e => setAddSecForm(p => ({ ...p, unit: e.target.value }))}
                     style={{ width:"100%", padding:"8px 11px", borderRadius:6, border:"1.5px solid #D1D5DB",
                              fontSize:13, fontFamily:"inherit", outline:"none", boxSizing:"border-box", background:"white" }}>
@@ -2731,7 +2732,7 @@ function QuoteBuilderModal({ lead, quoteId: editQuoteId, onClose, onSaved }){
                     <option value="rft">rft</option>
                     <option value="nos">nos</option>
                     <option value="cubic_ft">{t("common.cubic_ft")}</option>
-                  </select>
+                  </PickSelect>
                 </div>
               </div>
               {/* Per-item qty toggle */}
@@ -2978,11 +2979,11 @@ function QuoteBuilderModal({ lead, quoteId: editQuoteId, onClose, onSaved }){
                         style={{ width:"100%", padding:"6px 9px", borderRadius:5, border:"1.5px solid #D1D5DB",
                                  fontSize:12, marginBottom:6, outline:"none", fontFamily:"inherit", boxSizing:"border-box" }}/>
                       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:6, marginBottom:6 }}>
-                        <select value={addItemNewForm.unit}
+                        <PickSelect value={addItemNewForm.unit}
                           onChange={e => setAddItemNewForm(p => ({ ...p, unit: e.target.value }))}
                           style={{ padding:"6px 9px", borderRadius:5, border:"1.5px solid #D1D5DB", fontSize:12, fontFamily:"inherit", background:"white" }}>
                           {(allUoms.length > 0 ? allUoms.map(u => u.name) : ["Sq.Ft","Nos","Lump Sum","Running Ft","Kg","Point","Unit"]).map(u => <option key={u} value={u}>{u}</option>)}
-                        </select>
+                        </PickSelect>
                         <input type="number" value={addItemNewForm.base_rate}
                           onChange={e => setAddItemNewForm(p => ({ ...p, base_rate: e.target.value }))}
                           placeholder={t("common.base_rate")}
@@ -3119,13 +3120,13 @@ function AddLeadModal({onClose,onSave,assignedToList,defaultStage}){
             <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>
              {t("common.city")}
             </label>
-            <select value={form.cityId} onChange={e => pickCity(e.target.value)}
+            <PickSelect value={form.cityId} onChange={e => pickCity(e.target.value)}
               style={{width:"100%",padding:"8px 10px",borderRadius:7,
                       border:`1.5px solid ${T.b1}`, background:T.surface,
                       fontSize:12.5,color:T.t1,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}>
               <option value="">{t("crm.select_city_optional")}</option>
               {libCities.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
+            </PickSelect>
           </div>
 
           {/* ── Construction Type — library-sourced, optional at lead-creation ── */}
@@ -3133,13 +3134,13 @@ function AddLeadModal({onClose,onSave,assignedToList,defaultStage}){
             <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>
              {t("common.construction_type")}
             </label>
-            <select value={form.constructionTypeId} onChange={e => pickCType(e.target.value)}
+            <PickSelect value={form.constructionTypeId} onChange={e => pickCType(e.target.value)}
               style={{width:"100%",padding:"8px 10px",borderRadius:7,
                       border:`1.5px solid ${T.b1}`, background:T.surface,
                       fontSize:12.5,color:T.t1,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}>
               <option value="">{t("crm.select_type_optional")}</option>
               {libCTypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-            </select>
+            </PickSelect>
           </div>
         </div>
 
@@ -4635,10 +4636,10 @@ function CRMModule(){
             ].map(({l,v,fn,opts})=>(
               <div key={l}>
                 <div style={{fontSize:9.5,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".3px",marginBottom:3}}>{l}</div>
-                <select value={v} onChange={e=>fn(e.target.value)}
+                <PickSelect value={v} onChange={e=>fn(e.target.value)}
                   style={{height:30,padding:"0 10px",borderRadius:6,border:`1.5px solid ${v!=="All"?T.blu:T.b1}`,background:v!=="All"?T.bluL:T.surface,fontSize:12,color:v!=="All"?T.blu:T.t2,outline:"none",cursor:"pointer",fontFamily:"inherit"}}>
                   {opts.map(o=><option key={o}>{o}</option>)}
-                </select>
+                </PickSelect>
               </div>
             ))}
             {activeF>0&&<button onClick={()=>{setFAssignee("All");setFSource("All");setFProjType("All");setFPriority("All");}}

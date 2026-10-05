@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, Fragment } from "react";
+import PickSelect from "../components/PickSelect";
 import api from "../config/api";
 import { clearPhotoPolicyCache } from "../utils/photoPolicy";
 import MapPicker from "../components/MapPicker";
@@ -448,12 +449,12 @@ function DesignationField({ value, onChange, disabled = false, half = true, labe
         </div>
       ) : (
         <div style={{ display: "flex", gap: 6 }}>
-          <select value={value || ""} onChange={e => onChange(e.target.value)} disabled={disabled}
+          <PickSelect value={value || ""} onChange={e => onChange(e.target.value)} disabled={disabled}
             style={{ ...box, flex: 1, cursor: disabled ? "not-allowed" : "pointer" }}>
             <option value="">Select designation...</option>
             {list.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
             {!!value && !list.some(d => d.name === value) && <option value={value}>{value}</option>}
-          </select>
+          </PickSelect>
           {!disabled && (
             <button type="button" onClick={() => { setFresh(""); setAdding(true); }} style={btn(true)}>+ New</button>
           )}
@@ -480,10 +481,10 @@ function FormSelect({ label, value, onChange, options, half = false }) {
   return (
     <div style={{ flex: half ? 1 : undefined, minWidth: half ? 200 : undefined }}>
       <label style={{ fontSize: 12, fontWeight: 600, color: T.textMid, letterSpacing: "0.3px", display: "block", marginBottom: 6 }}>{label}</label>
-      <select value={value} onChange={e => onChange(e.target.value)}
+      <PickSelect value={value} onChange={e => onChange(e.target.value)}
         style={{ width: "100%", padding: "10px 14px", borderRadius: T.radiusSm, border: `1.5px solid ${T.border}`, fontSize: 13.5, color: T.text, background: "white", outline: "none", cursor: "pointer", fontFamily: T.font, boxSizing: "border-box" }}>
         {options.map(o => <option key={o.value || o} value={o.value || o}>{o.label || o}</option>)}
-      </select>
+      </PickSelect>
     </div>
   );
 }
@@ -765,10 +766,10 @@ function LocationsSettings() {
         {form.kind === "warehouse" && (
           <div style={{ marginBottom:10 }}>
             <label style={L}>Warehouse Incharge</label>
-            <select value={form.incharge} onChange={e=>setForm(f=>({...f,incharge:e.target.value}))} style={{...I, cursor:"pointer"}}>
+            <PickSelect value={form.incharge} onChange={e=>setForm(f=>({...f,incharge:e.target.value}))} style={{...I, cursor:"pointer"}}>
               <option value="">— koi nahi —</option>
               {staff.map(u => <option key={u.id} value={u.id}>{u.name}{u.role ? ` · ${u.role}` : ""}</option>)}
-            </select>
+            </PickSelect>
             <div style={{ fontSize:10.5, color:T.textLight, marginTop:4 }}>
               Incharge ko Warehouse module me yahi godown by default khulta hai. Baaki godown bhi dikhte hain, switch kar sakta hai.
             </div>
@@ -1059,7 +1060,7 @@ function MobileLayoutTab({ roleName, dbRole, perms, isAdmin, coModules }) {
         <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
           <span style={fixedBtn}>{first}</span>
           {Array.from({ length: SLOTS }).map((_, i) => (
-            <select key={i} value={shown[i] || ""} onChange={e => setSlot(navKey, i, e.target.value)}
+            <PickSelect key={i} value={shown[i] || ""} onChange={e => setSlot(navKey, i, e.target.value)}
               style={{ flex: "1 1 120px", minWidth: 110, padding: "7px 8px", borderRadius: 8, fontSize: 12.5, fontFamily: "inherit",
                 border: `1.5px solid ${nav.auto ? T.border : T.blue}`, color: nav.auto ? T.textMid : T.text, background: T.card }}>
               <option value="">{t("settings.mlay_empty_slot")}</option>
@@ -1067,7 +1068,7 @@ function MobileLayoutTab({ roleName, dbRole, perms, isAdmin, coModules }) {
                 const why = blockReason(it);
                 return <option key={it.id} value={it.id} disabled={!!why}>{mlayLabel(navKey, it.id)}{why ? ` (${why})` : ""}</option>;
               })}
-            </select>
+            </PickSelect>
           ))}
           <span style={fixedBtn}>{last}</span>
         </div>
@@ -2095,14 +2096,14 @@ function RolesAccess() {
           <div style={{ display: "flex", gap: 7, alignItems: "center", flexWrap: "wrap", padding: "10px 0", borderBottom: `1px solid ${T.borderLight}` }}>
             <input value={pSearch} onChange={e => setPSearch(e.target.value)} placeholder="Search project..."
               style={{ flex: "1 1 150px", minWidth: 130, height: 34, padding: "0 11px", borderRadius: 7, border: `1.5px solid ${pSearch ? T.blue : T.border}`, fontSize: 13, outline: "none", boxSizing: "border-box", fontFamily: "inherit", background: pSearch ? T.blueSoft : T.card }} />
-            <select value={pCity} onChange={e => setPCity(e.target.value)} style={selStyle(pCity !== "All")}>
+            <PickSelect value={pCity} onChange={e => setPCity(e.target.value)} style={selStyle(pCity !== "All")}>
               <option value="All">All cities</option>
               {cityOpts.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
-            <select value={pTender} onChange={e => setPTender(e.target.value)} style={selStyle(pTender !== "All")}>
+            </PickSelect>
+            <PickSelect value={pTender} onChange={e => setPTender(e.target.value)} style={selStyle(pTender !== "All")}>
               <option value="All">All tenders</option>
               {tenderOpts.map(tn => <option key={tn} value={tn}>{tn}</option>)}
-            </select>
+            </PickSelect>
             <span style={{ width: 1, height: 20, background: T.borderLight, flexShrink: 0 }} />
             <span style={{ fontSize: 11.5, color: T.textLight, fontWeight: 600 }}>Group by</span>
             {/* "Koi nahi" ka matlab tha "grouping mat karo" — par padhne wale ko
@@ -2295,11 +2296,11 @@ function RolesAccess() {
         {!editingRole && (
           <div style={{ marginBottom: 16 }}>
             <label style={{ fontSize: 12, fontWeight: 600, color: T.textMid, display: "block", marginBottom: 6 }}>{t("settings.role_preset_label")}</label>
-            <select value={roleForm.preset || ""} onChange={e => setRoleForm(p => ({ ...p, preset: e.target.value }))}
+            <PickSelect value={roleForm.preset || ""} onChange={e => setRoleForm(p => ({ ...p, preset: e.target.value }))}
               style={{ width: "100%", padding: "9px 12px", borderRadius: T.radiusSm, border: `1.5px solid ${T.border}`, fontSize: 13, color: T.text, background: "white", fontFamily: "inherit" }}>
               <option value="">{t("settings.role_preset_none")}</option>
               <option value="store_keeper">{t("settings.role_preset_store_keeper")}</option>
-            </select>
+            </PickSelect>
             {roleForm.preset && <div style={{ fontSize: 11, color: T.textLight, marginTop: 4 }}>{t("settings.role_preset_hint")}</div>}
           </div>
         )}
@@ -2851,11 +2852,11 @@ function ApprovalSettings() {
                     ))}
                     {/* Add-role dropdown (shows only roles not already in this level) */}
                     {unusedRoles.length > 0 && (
-                      <select value="" onChange={e => { if(e.target.value) addRoleToLevel(i, e.target.value); e.target.value=""; }}
+                      <PickSelect value="" onChange={e => { if(e.target.value) addRoleToLevel(i, e.target.value); e.target.value=""; }}
                         style={{ padding: "4px 8px", borderRadius: 20, border: "1.5px dashed "+T.border, fontSize: 12, color: T.textMid, background: "white", cursor: "pointer", fontFamily: "inherit" }}>
                         <option value="">+ Role add karo</option>
                         {unusedRoles.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                      </select>
+                      </PickSelect>
                     )}
                   </div>
                   {isParallel && (
@@ -2922,10 +2923,10 @@ function BackDateControl() {
             <div key={key} style={{ display: "flex", alignItems: "center", gap: 14, padding: "14px 0", borderBottom: i < Object.keys(settings.modules).length - 1 ? `1px solid ${T.borderLight}` : "none" }}>
               <div style={{ flex: 1 }}><div style={{ fontSize: 13.5, fontWeight: 600, color: T.text }}>{moduleLabels[key]}</div></div>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <select value={mod.days} onChange={e => updMod(key, "days", parseInt(e.target.value))} disabled={!mod.restrict}
+                <PickSelect value={mod.days} onChange={e => updMod(key, "days", parseInt(e.target.value))} disabled={!mod.restrict}
                   style={{ padding: "6px 10px", borderRadius: 6, border: `1.5px solid ${T.border}`, fontSize: 12.5, color: T.text, background: "white", cursor: "pointer", fontFamily: T.font, opacity: mod.restrict ? 1 : 0.4 }}>
                   {[1,2,3,5,7,10,15,30].map(d => <option key={d} value={d}>{d} days</option>)}
-                </select>
+                </PickSelect>
                 <Toggle value={mod.restrict} onChange={v => updMod(key, "restrict", v)} />
               </div>
             </div>
@@ -3600,12 +3601,12 @@ function AuditSettings() {
   };
 
   const sel = (label, key, options, ph) => (
-    <select value={f[key]} onChange={e => setF(x => ({ ...x, [key]: e.target.value }))}
+    <PickSelect value={f[key]} onChange={e => setF(x => ({ ...x, [key]: e.target.value }))}
       style={{ padding: "7px 10px", borderRadius: 8, border: "1px solid " + T.border, fontSize: 12.5,
         fontFamily: "inherit", background: T.card, color: T.text, minWidth: 130 }}>
       <option value="">{ph}</option>
       {options.map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
-    </select>
+    </PickSelect>
   );
 
   return (
@@ -4990,11 +4991,11 @@ function CompanyPractices() {
               <div key={f.key}>
                 <label style={{ fontSize: 12.5, fontWeight: 600, color: T.textMid, display: "block", marginBottom: 6 }}>{f.q}</label>
                 {f.options ? (
-                  <select value={vals[f.key] || ""} onChange={e => setVals(v => ({ ...v, [f.key]: e.target.value }))}
+                  <PickSelect value={vals[f.key] || ""} onChange={e => setVals(v => ({ ...v, [f.key]: e.target.value }))}
                     style={{ width: "100%", maxWidth: 420, padding: "10px 12px", borderRadius: T.radiusSm, border: `1.5px solid ${T.border}`, fontSize: 13.5, color: T.text, background: "white", outline: "none", fontFamily: T.font, boxSizing: "border-box" }}>
                     <option value="">— chuna nahi —</option>
                     {f.options.map(o => <option key={o} value={o}>{o}</option>)}
-                  </select>
+                  </PickSelect>
                 ) : f.long ? (
                   <textarea value={vals[f.key] || ""} onChange={e => setVals(v => ({ ...v, [f.key]: e.target.value }))}
                     placeholder={f.hint || ""} rows={3} maxLength={300}

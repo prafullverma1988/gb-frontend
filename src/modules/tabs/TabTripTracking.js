@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
+import PickSelect from "../../components/PickSelect";
 import api from "../../config/api";
 import { T, fmtN, localYMD } from "../shared/tokens";
 import { Pill, Stat, Panel, THead, AddBtn, FilterTabs } from "../shared/ui";
@@ -257,10 +258,10 @@ function CapacityInput({ qty, unit, onQty, onUnit, bad }) {
     <div style={{ display: "flex", gap: 6 }}>
       <input value={qty} inputMode="decimal" placeholder="500" onChange={e => onQty(e.target.value.replace(/[^0-9.]/g, ""))}
         style={{ ...inp, flex: 1, minWidth: 0, borderColor: bad ? T.red : T.b1 }} />
-      <select value={unit} onChange={e => onUnit(e.target.value)} style={{ ...inp, width: 84, flexShrink: 0, borderColor: bad ? T.red : T.b1 }}>
+      <PickSelect value={unit} onChange={e => onUnit(e.target.value)} style={{ ...inp, width: 84, flexShrink: 0, borderColor: bad ? T.red : T.b1 }}>
         <option value="">{t("trip_tracking.cap_unit")}</option>
         {CAP_UNITS.map(u => <option key={u} value={u}>{u}</option>)}
-      </select>
+      </PickSelect>
     </div>
   );
 }
@@ -844,9 +845,9 @@ function RouteForm({ projectId, tasks, route, onCancel, onSaved }) {
         <div><div style={lblS}>{t("trip_tracking.tolerance_min")}</div><input value={f.tolerance_min} onChange={e => upd("tolerance_min", e.target.value.replace(/[^0-9]/g, ""))} placeholder="10" style={inp} /></div>
         <div><div style={lblS}>{t("trip_tracking.cycle_time_min")}</div><input value={f.expected_cycle_min} onChange={e => upd("expected_cycle_min", e.target.value.replace(/[^0-9]/g, ""))} placeholder="0" style={inp} /></div>
         <div><div style={lblS}>{t("trip_tracking.geofence_radius_m")}</div>
-          <select value={f.load_radius} onChange={e => upd("load_radius", Number(e.target.value))} style={inp}>
+          <PickSelect value={f.load_radius} onChange={e => upd("load_radius", Number(e.target.value))} style={inp}>
             {[50, 100, 150, 200].map(rd => <option key={rd} value={rd}>{rd} m</option>)}
-          </select>
+          </PickSelect>
         </div>
       </div>
       {expAuto && <div style={{ fontSize: 11, color: T.t4, marginTop: 5 }}>{t("trip_tracking.exp_andaza", { kmh: SUGGEST_KMH })}</div>}
@@ -879,10 +880,10 @@ function RouteForm({ projectId, tasks, route, onCancel, onSaved }) {
       </div>
       <div style={{ marginTop: 10 }}>
         <div style={lblS}>{t("trip_tracking.default_task_optional")}</div>
-        <select value={f.default_task_id || ""} onChange={e => upd("default_task_id", e.target.value ? Number(e.target.value) : "")} style={inp}>
+        <PickSelect value={f.default_task_id || ""} onChange={e => upd("default_task_id", e.target.value ? Number(e.target.value) : "")} style={inp}>
           <option value="">{t("boq_import_wizard.none")}</option>
           {tasks.map(t => <option key={t.id} value={t.id}>{t.name || t.title}</option>)}
-        </select>
+        </PickSelect>
       </div>
       <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 12 }}>
         <button onClick={onCancel} type="button" style={{ padding: "8px 14px", borderRadius: 7, border: `1px solid ${T.b1}`, background: T.surface, fontSize: 12, fontWeight: 600, color: T.t3, cursor: "pointer", fontFamily: "inherit" }}>{t("common.cancel")}</button>
@@ -976,10 +977,10 @@ function TrucksTab({ cards, onChange }) {
           <input value={q} onChange={e => setQ(e.target.value)} placeholder={t("trip_tracking.gaadi_khoj_ph")}
             style={{ ...fltS, flex: 1, minWidth: 220, borderColor: q ? T.ind : T.b1 }} />
           {caps.length > 0 && (
-            <select value={fCap} onChange={e => setFCap(e.target.value)} style={{ ...fltS, borderColor: fCap ? T.ind : T.b1 }}>
+            <PickSelect value={fCap} onChange={e => setFCap(e.target.value)} style={{ ...fltS, borderColor: fCap ? T.ind : T.b1 }}>
               <option value="">{t("trip_tracking.sab_capacity")}</option>
               {caps.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
+            </PickSelect>
           )}
           <span style={{ fontSize: 11.5, color: T.t4 }}>{t("trip_tracking.n_gaadi", { n: shown.length })}</span>
           {(q || fCap) && <MiniBtn onClick={() => { setQ(""); setFCap(""); }}>{t("common.clear")}</MiniBtn>}
@@ -1075,15 +1076,15 @@ function TruckForm({ truck, parties, onCancel, onSaved }) {
       <div style={{ display: "grid", gridTemplateColumns: editing ? "1.1fr 1.4fr 1.1fr 1.2fr" : "1.1fr 1.4fr 1.1fr 1.2fr 1.1fr", gap: 10, alignItems: "end" }}>
         <div><div style={lblS}>{t("trip_tracking.registration_no")}</div><input value={reg} onChange={e => setReg(e.target.value)} placeholder={t("trip_tracking.cg04_ab_1234")} style={inp} /></div>
         <div><div style={lblS}>{t("trip_tracking.vendor_req")}</div>
-          <select value={vendorId} onChange={e => setVendorId(e.target.value ? Number(e.target.value) : "")} style={inp}>
+          <PickSelect value={vendorId} onChange={e => setVendorId(e.target.value ? Number(e.target.value) : "")} style={inp}>
             <option value="">{t("trip_tracking.vendor_chuniye")}</option>{parties.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
-          </select>
+          </PickSelect>
         </div>
         <div><div style={lblS}>{t("trip_tracking.billing_type")}</div>
-          <select value={billing} onChange={e => setBilling(e.target.value)} style={inp}>
+          <PickSelect value={billing} onChange={e => setBilling(e.target.value)} style={inp}>
             <option value="">{t("trip_tracking.billing_select")}</option>
             {BILL_CHOICES.map(k => <option key={k} value={k}>{BILLING[k].label}</option>)}
-          </select>
+          </PickSelect>
         </div>
         <div><div style={lblS}>{t("trip_tracking.capacity_req")}</div>
           <CapacityInput qty={capQty} unit={capUnit} onQty={setCapQty} onUnit={setCapUnit} bad={tried && !cap.ok} />
@@ -1339,9 +1340,9 @@ function BillingTab({ projectId }) {
       <Panel style={{ marginBottom: 12 }}>
         <div style={{ padding: "12px 15px", display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap" }}>
           <div style={{ flex: 1, minWidth: 200 }}><div style={lblS}>{t("common.vendor")}</div>
-            <select value={vendorId} onChange={e => setVendorId(e.target.value ? Number(e.target.value) : "")} style={inp}>
+            <PickSelect value={vendorId} onChange={e => setVendorId(e.target.value ? Number(e.target.value) : "")} style={inp}>
               <option value="">{t("trip_tracking.vendor_chuniye")}</option>{vendors.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
-            </select>
+            </PickSelect>
           </div>
           <div><div style={lblS}>{t("common.from")}</div><input type="date" value={from} onChange={e => setFrom(e.target.value)} style={{ ...inp, width: 150 }} /></div>
           <div><div style={lblS}>{t("common.to")}</div><input type="date" value={to} onChange={e => setTo(e.target.value)} style={{ ...inp, width: 150 }} /></div>

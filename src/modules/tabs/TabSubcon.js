@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import PickSelect from "../../components/PickSelect";
 import api from "../../config/api";
 import apiCache from "../../utils/apiCache";
 import SearchSelect from "../../components/SearchSelect";
@@ -1294,7 +1295,7 @@ function TabSubcon({ projectId, project }) {
                                    {t("estimate.use_whole_item_as_1_milestone")}
                                   </button>
                                   {templates.length > 0 && (
-                                    <select onChange={async e=>{
+                                    <PickSelect onChange={async e=>{
                                         const tid = parseInt(e.target.value); if (!tid) return;
                                         e.target.value = "";
                                         await applyTemplateToItem(it.id, tid);
@@ -1303,7 +1304,7 @@ function TabSubcon({ projectId, project }) {
                                       style={{padding:"4px 8px",fontSize:10.5,borderRadius:4,border:"1px solid "+T.b1,background:"white",cursor:"pointer",color:T.t3}}>
                                       <option value="">{t("subcon.apply_template")}</option>
                                       {templates.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}
-                                    </select>
+                                    </PickSelect>
                                   )}
                                 </div>
                               </div>
@@ -2686,8 +2687,8 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
                           {ms.items.map((it,iti)=>(
                             <tr key={iti} style={{borderBottom:"1px solid #F3F4F6"}}>
                               <td style={{padding:"6px 8px"}}><input value={it.name} onChange={e=>setPkgAddedSections(p=>p.map((s,i)=>i===msi?{...s,items:s.items.map((x,j)=>j===iti?{...x,name:e.target.value}:x)}:s))} placeholder={t("estimate.item_description")} style={{width:"100%",padding:"5px 8px",borderRadius:4,border:"1.5px solid #E5E7EB",fontSize:12.5,outline:"none",fontFamily:"inherit"}}/></td>
-                              <td style={{padding:"6px 8px"}}><select value={it.unit} onChange={e=>setPkgAddedSections(p=>p.map((s,i)=>i===msi?{...s,items:s.items.map((x,j)=>j===iti?{...x,unit:e.target.value}:x)}:s))} style={{padding:"5px 8px",borderRadius:4,border:"1.5px solid #E5E7EB",fontSize:12,background:"white",outline:"none"}}>
-                                {["Sqft","Cft","No","Running Ft","Unit","Kg","Lump Sum"].map(u=><option key={u}>{u}</option>)}</select></td>
+                              <td style={{padding:"6px 8px"}}><PickSelect value={it.unit} onChange={e=>setPkgAddedSections(p=>p.map((s,i)=>i===msi?{...s,items:s.items.map((x,j)=>j===iti?{...x,unit:e.target.value}:x)}:s))} style={{padding:"5px 8px",borderRadius:4,border:"1.5px solid #E5E7EB",fontSize:12,background:"white",outline:"none"}}>
+                                {["Sqft","Cft","No","Running Ft","Unit","Kg","Lump Sum"].map(u=><option key={u}>{u}</option>)}</PickSelect></td>
                               <td style={{padding:"6px 8px"}}><input type="number" value={it.qty} onChange={e=>setPkgAddedSections(p=>p.map((s,i)=>i===msi?{...s,items:s.items.map((x,j)=>j===iti?{...x,qty:e.target.value}:x)}:s))} placeholder="0" style={{width:70,padding:"5px 7px",borderRadius:4,border:"1.5px solid #E5E7EB",fontSize:12.5,textAlign:"right",outline:"none",fontFamily:"inherit"}}/></td>
                               <td style={{padding:"6px 8px"}}><input type="number" value={it.rate} onChange={e=>setPkgAddedSections(p=>p.map((s,i)=>i===msi?{...s,items:s.items.map((x,j)=>j===iti?{...x,rate:e.target.value}:x)}:s))} placeholder="0" style={{width:80,padding:"5px 7px",borderRadius:4,border:"1.5px solid #E5E7EB",fontSize:12.5,textAlign:"right",outline:"none",fontFamily:"inherit"}}/></td>
                               <td style={{padding:"6px 8px",textAlign:"right",fontWeight:700,color:"#059669",fontSize:12.5}}>{t("subcon.rs_math", { Math: Math.round((parseFloat(it.qty)||0)*(parseFloat(it.rate)||0)).toLocaleString("en-IN") })}</td>
@@ -2728,10 +2729,10 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
                           <div key={f.key}>
                             <label style={{fontSize:11,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>{f.label}</label>
                             {f.type==="select"
-                              ?<select value={pkgAddItemForm.form[f.key]} onChange={e=>setPkgAddItemForm(p=>({...p,form:{...p.form,[f.key]:e.target.value}}))}
+                              ?<PickSelect value={pkgAddItemForm.form[f.key]} onChange={e=>setPkgAddItemForm(p=>({...p,form:{...p.form,[f.key]:e.target.value}}))}
                                   style={{width:"100%",padding:"9px 12px",borderRadius:7,border:"1.5px solid #E5E7EB",fontSize:13,outline:"none",background:"white",fontFamily:"inherit"}}>
                                   {f.opts.map(o=><option key={o}>{o}</option>)}
-                                </select>
+                                </PickSelect>
                               :<input type={f.type} value={pkgAddItemForm.form[f.key]} onChange={e=>setPkgAddItemForm(p=>({...p,form:{...p.form,[f.key]:e.target.value}}))}
                                   placeholder={f.ph} autoFocus={f.key==="name"}
                                   style={{width:"100%",padding:"9px 12px",borderRadius:7,border:"1.5px solid #E5E7EB",fontSize:13,outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
@@ -3107,10 +3108,10 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
                             <input type="text" value={it.description} placeholder={t("estimate.item_description")}
                               onChange={e=>{const a=[...iwManualItems];a[idx]={...a[idx],description:e.target.value};setIwManualItems(a);}}
                               style={{padding:"4px 6px",borderRadius:5,border:`1.5px solid ${T.b1}`,fontSize:11,outline:"none",fontFamily:"inherit",width:"100%",boxSizing:"border-box"}}/>
-                            <select value={it.unit||"Sqft"} onChange={e=>{const a=[...iwManualItems];a[idx]={...a[idx],unit:e.target.value};setIwManualItems(a);}}
+                            <PickSelect value={it.unit||"Sqft"} onChange={e=>{const a=[...iwManualItems];a[idx]={...a[idx],unit:e.target.value};setIwManualItems(a);}}
                               style={{padding:"4px 5px",borderRadius:5,border:`1px solid ${T.b1}`,fontSize:11,outline:"none",background:"white",width:"100%"}}>
                               {["Sqft","Cft","No","Running Ft","Unit","Kg","Lump Sum"].map(u=><option key={u}>{u}</option>)}
-                            </select>
+                            </PickSelect>
                             <input type="number" value={it.rate} placeholder={t("common.rate")}
                               onChange={e=>{const a=[...iwManualItems];a[idx]={...a[idx],rate:e.target.value};setIwManualItems(a);}}
                               style={{padding:"4px 6px",borderRadius:5,border:`1.5px solid ${T.b1}`,fontSize:11,textAlign:"right",outline:"none",fontFamily:"inherit",width:"100%",boxSizing:"border-box"}}/>
@@ -3534,10 +3535,10 @@ function SubconLibraryFormModal({ onClose, onSaved, inpStyle, lblStyle }) {
             </div>
             <div>
               <label style={lblStyle}>{t("subcon.trade_specialty")}</label>
-              <select value={form.trade} onChange={e=>upd("trade", e.target.value)} style={inpStyle}>
+              <PickSelect value={form.trade} onChange={e=>upd("trade", e.target.value)} style={inpStyle}>
                 <option value="">{t("common.select_category")}</option>
                 {trades.map(tc=><option key={tc} value={tc}>{tc}</option>)}
-              </select>
+              </PickSelect>
             </div>
             <div>
               <label style={lblStyle}>{t("common.phone")}</label>
@@ -3562,11 +3563,11 @@ function SubconLibraryFormModal({ onClose, onSaved, inpStyle, lblStyle }) {
             </div>
             <div>
               <label style={lblStyle}>{t("common.status")}</label>
-              <select value={form.status} onChange={e=>upd("status", e.target.value)} style={inpStyle}>
+              <PickSelect value={form.status} onChange={e=>upd("status", e.target.value)} style={inpStyle}>
                 <option value="Active">{t("common.active")}</option>
                 <option value="Inactive">{t("subcon.inactive")}</option>
                 <option value="Blacklisted">{t("subcon.blacklisted")}</option>
-              </select>
+              </PickSelect>
             </div>
           </div>
         </div>

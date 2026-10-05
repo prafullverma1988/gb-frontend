@@ -15,6 +15,7 @@
 // prop me aata hai, taaki page par script ek hi baar lage.
 // ══════════════════════════════════════════════════════════════════════
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import PickSelect from "../components/PickSelect";
 import api, { API_BASE, getToken } from "../config/api";
 import { t } from "../i18n";
 import { useMapLibrary, styleOf, typesFor, StyleSwatch } from "./mapStyles";
@@ -1269,13 +1270,13 @@ export default function SiteMarkingEditor({ lib, loadMaps, onClose, onSaved }) {
           {projects.length > 8 && (
             <input value={pSearch} onChange={(e) => setPSearch(e.target.value)} placeholder={t("map_draw.project_khojo")} style={{ ...inp, marginBottom: 6 }} />
           )}
-          <select value={proj ? String(proj.id) : ""} style={inp}
+          <PickSelect value={proj ? String(proj.id) : ""} style={inp}
             onChange={(e) => { const p = projects.find((x) => String(x.id) === e.target.value); setProj(p || null); setErr(""); }}>
             <option value="">{t("map_draw.project_chuno")}</option>
             {projects.filter((p) => !pSearch || p.name.toLowerCase().includes(pSearch.toLowerCase()) || (proj && p.id === proj.id)).map((p) => (
               <option key={p.id} value={String(p.id)}>{p.name}{p.city ? ` · ${p.city}` : ""}</option>
             ))}
-          </select>
+          </PickSelect>
           {!projects.length && <div style={noteS}>{t("map_draw.koi_project_nahi")}</div>}
         </>
       )}
@@ -1306,7 +1307,7 @@ export default function SiteMarkingEditor({ lib, loadMaps, onClose, onSaved }) {
     const left = running ? Math.max(0, q - doneM) : Math.max(0, q - n);
     return (
       <div style={{ ...card, background: T.grnL, borderColor: T.grnM }}>
-        <select value={String(fr.id)} style={{ ...inp, fontWeight: 700, marginBottom: 4 }}
+        <PickSelect value={String(fr.id)} style={{ ...inp, fontWeight: 700, marginBottom: 4 }}
           onChange={(e) => {
             if (e.target.value === "__all__") { setAllTasks(true); return; }
             const nx = (taskList || []).find((x) => String(x.id) === e.target.value);
@@ -1314,7 +1315,7 @@ export default function SiteMarkingEditor({ lib, loadMaps, onClose, onSaved }) {
           }}>
           {mapPool.map((x) => <option key={x.id} value={String(x.id)}>{x.name}{x.task_no ? ` · ${x.task_no}` : ""}</option>)}
           {!allTasks && baakiN > 0 && <option value="__all__">+ {t("map_draw.baaki_kaam_dikhao", { n: baakiN })}</option>}
-        </select>
+        </PickSelect>
         <div style={{ fontSize: 11, color: T.t4 }}>{fr.item_no ? `BOQ ${fr.item_no} · ` : ""}{fr.task_no}{fr.work_name && fr.work_name !== fr.name ? ` · ${fr.work_name}` : ""}</div>
         {q > 0 && (
           <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
@@ -1447,9 +1448,9 @@ export default function SiteMarkingEditor({ lib, loadMaps, onClose, onSaved }) {
           <div style={lbl}>{t("map_draw.type")}</div>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
             <StyleSwatch kind={kind} code={atype} size={18} />
-            <select value={atype} onChange={(e) => setAtype(e.target.value)} style={inp}>
+            <PickSelect value={atype} onChange={(e) => setAtype(e.target.value)} style={inp}>
               {typeOptions.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-            </select>
+            </PickSelect>
           </div>
           {!isTask && kind === "line" && (
             <>
@@ -1686,11 +1687,11 @@ export default function SiteMarkingEditor({ lib, loadMaps, onClose, onSaved }) {
         <label style={lbl} htmlFor="smk-name">{t("map_draw.naam")}</label>
         <input id="smk-name" autoFocus value={name} maxLength={200} onChange={(e) => setName(e.target.value)} placeholder={t("map_draw.naam_ph")} style={{ ...inp, marginBottom: 10 }} />
         <label style={lbl} htmlFor="smk-folder">{t("map_draw.folder")}</label>
-        <select id="smk-folder" value={folderSel} onChange={(e) => setFolderSel(e.target.value)} style={{ ...inp, marginBottom: folderSel === "new" ? 6 : 10 }}>
+        <PickSelect id="smk-folder" value={folderSel} onChange={(e) => setFolderSel(e.target.value)} style={{ ...inp, marginBottom: folderSel === "new" ? 6 : 10 }}>
           <option value="">{t("map_library.bina_folder")}</option>
           {folders.map((f) => <option key={f.id} value={String(f.id)}>{f.name}{f.by && folders.filter((x) => x.name === f.name).length > 1 ? ` · ${f.by}` : ""}</option>)}
           <option value="new">+ {t("map_draw.naya_folder")}</option>
-        </select>
+        </PickSelect>
         {folderSel === "new" && (
           <input value={newFolder} maxLength={160} onChange={(e) => setNewFolder(e.target.value)} placeholder={t("map_draw.naye_folder_ka_naam")} style={{ ...inp, marginBottom: 10 }} />
         )}
@@ -1770,9 +1771,9 @@ export default function SiteMarkingEditor({ lib, loadMaps, onClose, onSaved }) {
             </div>
             <div style={card}>
               <div style={lbl}>{t("map_draw.type")}</div>
-              <select value={atype} onChange={(e) => setAtype(e.target.value)} style={inp}>
+              <PickSelect value={atype} onChange={(e) => setAtype(e.target.value)} style={inp}>
                 {typeOptions.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-              </select>
+              </PickSelect>
               {kind === "area" && (
                 <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", marginTop: 10 }}>
                   <input type="checkbox" checked={centerPin} onChange={(e) => setCenterPin(e.target.checked)} />

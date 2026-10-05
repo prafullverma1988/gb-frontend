@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useCallback, createContext, useContext } from "react";
+import PickSelect from "../components/PickSelect";
 import api from "../config/api";
 import SearchSelect from "../components/SearchSelect";
 import CityPicker from "../components/CityPicker";
@@ -2945,10 +2946,10 @@ function SubconRateCardSection() {
                 </div>
                 <div style={{flex:1}}>
                   <label style={{fontSize:12,fontWeight:600,color:T.textMid,display:"block",marginBottom:6}}>{t("common.unit")}</label>
-                  <select value={addSecForm.unit} onChange={e=>setAddSecForm(p=>({...p,unit:e.target.value}))}
+                  <PickSelect value={addSecForm.unit} onChange={e=>setAddSecForm(p=>({...p,unit:e.target.value}))}
                     style={{width:"100%",padding:"10px 13px",borderRadius:8,border:`1.5px solid ${T.border}`,fontSize:13.5,color:T.text,outline:"none",background:"white",fontFamily:T.font}}>
                     {(uomOpts.length?uomOpts:["Sqft","Cft","Running Ft","Kg","Point","Unit","Lump Sum"]).map(u=><option key={u}>{u}</option>)}
-                  </select>
+                  </PickSelect>
                 </div>
               </div>
               {/* Per-item qty toggle */}
@@ -5029,7 +5030,7 @@ function ClientBOQSection() {
                 </div>
                 <div>
                   <label style={{ fontSize: 10.5, fontWeight: 700, color: "#6B7280", display: "block", marginBottom: 4, textTransform: "uppercase" }}>{t("common.unit")}</label>
-                  <select value={addSectionForm.unit}
+                  <PickSelect value={addSectionForm.unit}
                     onChange={e => setAddSectionForm(p => ({ ...p, unit: e.target.value }))}
                     style={{ width: "100%", padding: "9px 11px", borderRadius: 7,
                              border: "1.5px solid #D1D5DB", fontSize: 13, fontFamily: "inherit",
@@ -5039,7 +5040,7 @@ function ClientBOQSection() {
                     <option value="rft">rft</option>
                     <option value="nos">nos</option>
                     <option value="cubic_ft">{t("common.cubic_ft")}</option>
-                  </select>
+                  </PickSelect>
                 </div>
               </div>
               {/* Per-item qty toggle — when ON, each item in this
@@ -5330,20 +5331,20 @@ function ClientBOQSection() {
                                  border: "1.5px solid #D1D5DB", fontSize: 12, marginBottom: 6,
                                  outline: "none", fontFamily: "inherit", boxSizing: "border-box" }}/>
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginBottom: 6 }}>
-                        <select value={addItemNewForm.unit}
+                        <PickSelect value={addItemNewForm.unit}
                           onChange={e => setAddItemNewForm(p => ({ ...p, unit: e.target.value }))}
                           style={{ width: "100%", padding: "6px 9px", borderRadius: 5,
                                    border: "1.5px solid #D1D5DB", fontSize: 12,
                                    outline: "none", fontFamily: "inherit", background: "white", boxSizing: "border-box" }}>
                           {uomOptions.map(u => <option key={u} value={u}>{u}</option>)}
-                        </select>
-                        <select value={addItemNewForm.category}
+                        </PickSelect>
+                        <PickSelect value={addItemNewForm.category}
                           onChange={e => setAddItemNewForm(p => ({ ...p, category: e.target.value }))}
                           style={{ width: "100%", padding: "6px 9px", borderRadius: 5,
                                    border: "1.5px solid #D1D5DB", fontSize: 12,
                                    outline: "none", fontFamily: "inherit", background: "white", boxSizing: "border-box" }}>
                           {catOptions.map(c => <option key={c} value={c}>{c}</option>)}
-                        </select>
+                        </PickSelect>
                       </div>
                       <input type="number" value={addItemNewForm.base_rate}
                         onChange={e => setAddItemNewForm(p => ({ ...p, base_rate: e.target.value }))}
@@ -5592,7 +5593,7 @@ function ClientBOQSection() {
                                                        textDecoration: deleted ? "line-through" : "none" }}/>
                                           </td>
                                           <td style={{ padding: "5px 10px" }}>
-                                            <select value={it.unit || ""}
+                                            <PickSelect value={it.unit || ""}
                                               onChange={e => pkgPatchItem(r.item_id, { unit: e.target.value })}
                                               disabled={deleted}
                                               style={{ width: "100%", padding: "4px 7px", borderRadius: 4,
@@ -5601,7 +5602,7 @@ function ClientBOQSection() {
                                                        fontSize: 12, outline: "none", fontFamily: "inherit",
                                                        boxSizing: "border-box" }}>
                                               {uomOptions.map(u => <option key={u} value={u}>{u}</option>)}
-                                            </select>
+                                            </PickSelect>
                                           </td>
                                           <td style={{ padding: "5px 10px", textAlign: "right" }}>
                                             <input type="number" value={it.base_rate ?? 0}
@@ -6072,11 +6073,11 @@ function BoqItemLibrarySection() {
           <input value={search} onChange={e => setSearch(e.target.value)}
             placeholder={t("master_library.search_items_by_name_category_or")}
             style={{ flex: 1, maxWidth: 360, padding: "8px 12px", borderRadius: 7, border: "1.5px solid #E5E7EB", fontSize: 12.5, outline: "none", fontFamily: "inherit" }}/>
-          <select value={filterType} onChange={e => { setFilterType(e.target.value); setFilterCat("All"); }}
+          <PickSelect value={filterType} onChange={e => { setFilterType(e.target.value); setFilterCat("All"); }}
             style={{ padding: "8px 10px", borderRadius: 7, border: "1.5px solid #E5E7EB", fontSize: 12.5, outline: "none", fontFamily: "inherit", color: "#374151" }}>
             <option value="">{t("master_library.sab_project_type")}</option>
             {projTypes.map(pt => <option key={pt.id} value={pt.id}>{pt.name}</option>)}
-          </select>
+          </PickSelect>
           <span style={{ fontSize: 12, color: "#6B7280" }}>{filtered.length} / {rows.length} items</span>
         </div>
         {lc("create") && <button onClick={openCreate}
@@ -6173,17 +6174,17 @@ function BoqItemLibrarySection() {
                 </div>
                 <div>
                   <label style={{ display: "block", fontSize: 10.5, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", marginBottom: 4 }}>{t("master_library.category_2")}</label>
-                  <select value={form.category} onChange={e => upd("category", e.target.value)}
+                  <PickSelect value={form.category} onChange={e => upd("category", e.target.value)}
                     style={{ width: "100%", padding: "8px 10px", borderRadius: 7, border: "1.5px solid #E5E7EB", fontSize: 13, outline: "none", fontFamily: "inherit", background: "white" }}>
                     {catOptions.map(c => <option key={c} value={c}>{c}</option>)}
-                  </select>
+                  </PickSelect>
                 </div>
                 <div>
                   <label style={{ display: "block", fontSize: 10.5, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", marginBottom: 4 }}>{t("common.unit")}</label>
-                  <select value={form.unit} onChange={e => upd("unit", e.target.value)}
+                  <PickSelect value={form.unit} onChange={e => upd("unit", e.target.value)}
                     style={{ width: "100%", padding: "8px 10px", borderRadius: 7, border: "1.5px solid #E5E7EB", fontSize: 13, outline: "none", fontFamily: "inherit", background: "white" }}>
                     {uomOptions.map(u => <option key={u} value={u}>{u}</option>)}
-                  </select>
+                  </PickSelect>
                 </div>
                 <div>
                   <label style={{ display: "block", fontSize: 10.5, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", marginBottom: 4 }}>{t("master_library.base_rate_rs")}</label>

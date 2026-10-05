@@ -3,6 +3,7 @@
 // Nested (rates/slabs/materials) hamesha poora jaata hai — backend purane hata
 // kar naye likhta hai.
 import { useState, useEffect, useCallback } from "react";
+import PickSelect from "../../components/PickSelect";
 import { useToast } from "../../components/Toast";
 import { t } from "../../i18n";
 import {
@@ -43,9 +44,9 @@ const DelBtn = ({ onClick }) => (
 // Matrix ka ek dropdown. Top level par hai taaki har keystroke par remount na ho.
 const MatrixSel = ({ label, hint, value, list, onChange }) => (
   <Field label={label} hint={hint}>
-    <select style={inp} value={value} onChange={(e) => onChange(e.target.value)}>
+    <PickSelect style={inp} value={value} onChange={(e) => onChange(e.target.value)}>
       {list.map((o) => <option key={o} value={o}>{supplyLabel(o)}</option>)}
-    </select>
+    </PickSelect>
   </Field>
 );
 
@@ -117,22 +118,22 @@ function ArrangementForm({ open, meta, row, onClose, onSaved }) {
           <input style={inp} value={v.name} onChange={(e) => upd("name", e.target.value)} placeholder={t("rmc.arr_name_ph")} />
         </Field>
         <Field label={t("rmc.plant")}>
-          <select style={inp} value={v.plant_id} onChange={(e) => upd("plant_id", e.target.value)}>
+          <PickSelect style={inp} value={v.plant_id} onChange={(e) => upd("plant_id", e.target.value)}>
             <option value="">{t("rmc.select_plant")}</option>
             {(meta.plants || []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
+          </PickSelect>
         </Field>
         <Field label={t("rmc.party")}>
-          <select style={inp} value={v.party_id} onChange={(e) => upd("party_id", e.target.value)}>
+          <PickSelect style={inp} value={v.party_id} onChange={(e) => upd("party_id", e.target.value)}>
             <option value="">{t("rmc.select_party")}</option>
             {(meta.parties || []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
+          </PickSelect>
         </Field>
         <Field label={t("rmc.direction")}>
-          <select style={inp} value={v.direction} onChange={(e) => upd("direction", e.target.value)}>
+          <PickSelect style={inp} value={v.direction} onChange={(e) => upd("direction", e.target.value)}>
             <option value="buy">{t("rmc.dir_buy")}</option>
             <option value="sell">{t("rmc.dir_sell")}</option>
-          </select>
+          </PickSelect>
         </Field>
         <Field label={t("rmc.wastage")}>
           <input style={inp} type="number" step="0.01" value={v.wastage_pct} onChange={(e) => upd("wastage_pct", e.target.value)} />
@@ -159,10 +160,10 @@ function ArrangementForm({ open, meta, row, onClose, onSaved }) {
           {v.supply_vehicle === "customer" && <Notice tone="warn">{t("rmc.transport_customer")}</Notice>}
           <Grid cols={3}>
             <Field label={t("rmc.transport_mode")}>
-              <select style={inp} value={v.transport_mode} onChange={(e) => upd("transport_mode", e.target.value)}>
+              <PickSelect style={inp} value={v.transport_mode} onChange={(e) => upd("transport_mode", e.target.value)}>
                 {(opt.transport_mode || ["included", "per_cum_km", "slab_cum", "slab_trip", "per_km_trip", "monthly"])
                   .map((m) => <option key={m} value={m}>{transportModeLabel(m, unit)}</option>)}
-              </select>
+              </PickSelect>
             </Field>
             <Field label={t("rmc.free_km")}>
               <input style={inp} type="number" step="0.1" value={v.transport_free_km} onChange={(e) => upd("transport_free_km", e.target.value)} />
@@ -171,10 +172,10 @@ function ArrangementForm({ open, meta, row, onClose, onSaved }) {
               <input style={inp} type="number" step="0.01" value={v.transport_rate} onChange={(e) => upd("transport_rate", e.target.value)} />
             </Field>
             <Field label={t("rmc.transporter")}>
-              <select style={inp} value={v.transporter_party_id} onChange={(e) => upd("transporter_party_id", e.target.value)}>
+              <PickSelect style={inp} value={v.transporter_party_id} onChange={(e) => upd("transporter_party_id", e.target.value)}>
                 <option value="">{t("rmc.select_party")}</option>
                 {(meta.parties || []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
+              </PickSelect>
             </Field>
             <Field label={t("rmc.round_trip")}>
               <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, color: T.t2, cursor: "pointer", paddingTop: 8 }}>
@@ -230,17 +231,17 @@ function ArrangementForm({ open, meta, row, onClose, onSaved }) {
         empty={v.materials.length === 0 ? t("rmc.material_override_hint") : ""}>
         {v.materials.map((m, i) => (
           <div key={i} style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8, flexWrap: "wrap" }}>
-            <select style={{ ...inpSm, width: 180 }} value={m.material_id}
+            <PickSelect style={{ ...inpSm, width: 180 }} value={m.material_id}
               onChange={(e) => {
                 const hit = (meta.materials || []).find((x) => String(x.id) === e.target.value);
                 updList("materials", i, { material_id: e.target.value, material_name: hit ? hit.name : "" });
               }}>
               <option value="">{t("rmc.select_material")}</option>
               {(meta.materials || []).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
-            </select>
-            <select style={{ ...inpSm, width: 130 }} value={m.supplied_by} onChange={(e) => updList("materials", i, { supplied_by: e.target.value })}>
+            </PickSelect>
+            <PickSelect style={{ ...inpSm, width: 130 }} value={m.supplied_by} onChange={(e) => updList("materials", i, { supplied_by: e.target.value })}>
               {(opt.supply || ["own", "vendor", "customer"]).map((s) => <option key={s} value={s}>{supplyLabel(s)}</option>)}
-            </select>
+            </PickSelect>
             <input style={{ ...inpSm, width: 110 }} type="number" step="0.01" placeholder={t("rmc.wastage")} value={m.wastage_pct} onChange={(e) => updList("materials", i, { wastage_pct: e.target.value })} />
             <DelBtn onClick={() => delList("materials", i)} />
           </div>

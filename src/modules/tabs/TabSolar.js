@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import PickSelect from "../../components/PickSelect";
 import api, { API_BASE } from "../../config/api";
 import { T } from "../shared/tokens";
 import { Panel } from "../shared/ui";
@@ -752,7 +753,7 @@ function TabSuryaGhar({ projectId }) {
                       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,marginBottom:6}}>
                         <div>
                           <label style={{fontSize:9,fontWeight:600,color:T.t4,textTransform:"uppercase",display:"block",marginBottom:2}}>{t("solar.installation_team_subcontractor")}</label>
-                          <select value={installerSubconId} onChange={e=>{
+                          <PickSelect value={installerSubconId} onChange={e=>{
                             const id=e.target.value;
                             setInstallerSubconId(id);
                             if(id){
@@ -766,7 +767,7 @@ function TabSuryaGhar({ projectId }) {
                               <option key={sc.id} value={sc.id}>{sc.name}{sc.trade?` (${sc.trade})`:""}{sc.city?` — ${sc.city}`:""}</option>
                             ))}
                             <option value="__manual__">{t("solar.enter_manually")}</option>
-                          </select>
+                          </PickSelect>
                         </div>
                         <div>
                           <label style={{fontSize:9,fontWeight:600,color:T.t4,textTransform:"uppercase",display:"block",marginBottom:2}}>{t("solar.team_name")}</label>
@@ -1268,11 +1269,11 @@ function TabSolarInstall({ projectId }) {
           <div style={{fontSize:13,fontWeight:700,color:T.t1,marginBottom:10}}>{t("solar.review_ocr_extracted_serial_numbers")}</div>
           {editSerials.map((s,i)=>(
             <div key={i} style={{display:"grid",gridTemplateColumns:"80px 1fr 1fr 24px",gap:6,marginBottom:6,alignItems:"center"}}>
-              <select value={s.component_type} onChange={e=>setEditSerials(p=>p.map((x,j)=>j===i?{...x,component_type:e.target.value}:x))}
+              <PickSelect value={s.component_type} onChange={e=>setEditSerials(p=>p.map((x,j)=>j===i?{...x,component_type:e.target.value}:x))}
                 style={{padding:"4px",borderRadius:5,border:`1px solid ${T.b1}`,fontSize:11,outline:"none",fontFamily:"inherit"}}>
                 <option value="panel">{t("solar.panel")}</option>
                 <option value="inverter">{t("solar.inverter")}</option>
-              </select>
+              </PickSelect>
               <input value={s.brand||""} onChange={e=>setEditSerials(p=>p.map((x,j)=>j===i?{...x,brand:e.target.value}:x))}
                 placeholder={t("solar.brand_e_g_adani")} style={{padding:"4px 7px",borderRadius:5,border:`1px solid ${T.b1}`,fontSize:11,outline:"none",fontFamily:"inherit"}}/>
               <input value={s.serial_number} onChange={e=>setEditSerials(p=>p.map((x,j)=>j===i?{...x,serial_number:e.target.value}:x))}
@@ -1409,10 +1410,10 @@ function TabSolarSubsidy({ projectId }) {
           <div style={{background:ss.bg,borderRadius:7,padding:"10px 12px",border:`1px solid ${ss.c}33`}}>
             <div style={{fontSize:10,color:ss.c,fontWeight:700,textTransform:"uppercase",marginBottom:4}}>{t("solar.subsidy_status")}</div>
             {editing
-              ? <select value={form.subsidy_status} onChange={e=>setForm(p=>({...p,subsidy_status:e.target.value}))}
+              ? <PickSelect value={form.subsidy_status} onChange={e=>setForm(p=>({...p,subsidy_status:e.target.value}))}
                   style={{padding:"6px",borderRadius:5,border:`1px solid ${T.b1}`,fontSize:13,width:"100%",outline:"none",fontFamily:"inherit"}}>
                   {Object.entries(SUBSIDY_S).map(([k,v])=><option key={k} value={k}>{v.l}</option>)}
-                </select>
+                </PickSelect>
               : <div style={{fontSize:16,fontWeight:700,color:ss.c}}>{ss.l}</div>
             }
           </div>

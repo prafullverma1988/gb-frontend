@@ -12,6 +12,7 @@
 //
 // POST /rmc/sales/preview · POST /rmc/sales · GET /rmc/sales
 import { useState, useEffect, useCallback } from "react";
+import PickSelect from "../../components/PickSelect";
 import { useToast } from "../../components/Toast";
 import { t } from "../../i18n";
 import {
@@ -113,22 +114,22 @@ function NewInvoiceModal({ open, meta, onClose, onCreated }) {
       </>}>
       <Grid cols={3} style={{ marginBottom: 12 }}>
         <Field label={t("rmc.customer")}>
-          <select style={inp} value={v.customer_party_id} onChange={(e) => pickCustomer(e.target.value)}>
+          <PickSelect style={inp} value={v.customer_party_id} onChange={(e) => pickCustomer(e.target.value)}>
             <option value="">{t("rmc.select_customer")}</option>
             {(meta.parties || []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
+          </PickSelect>
         </Field>
         <Field label={t("rmc.plant")}>
-          <select style={inp} value={v.plant_id} onChange={(e) => { upd("plant_id", e.target.value); setV((x) => ({ ...x, contract_id: "" })); }}>
+          <PickSelect style={inp} value={v.plant_id} onChange={(e) => { upd("plant_id", e.target.value); setV((x) => ({ ...x, contract_id: "" })); }}>
             <option value="">{t("common.all")}</option>
             {(meta.plants || []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
+          </PickSelect>
         </Field>
         <Field label={t("rmc.arrangement")} hint={t("rmc.sell_arrangement_hint")}>
-          <select style={inp} value={v.contract_id} onChange={(e) => upd("contract_id", e.target.value)}>
+          <PickSelect style={inp} value={v.contract_id} onChange={(e) => upd("contract_id", e.target.value)}>
             <option value="">{t("common.all")}</option>
             {contracts.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
+          </PickSelect>
         </Field>
         <Field label={t("common.from")}>
           <input type="date" style={inp} value={v.from} onChange={(e) => upd("from", e.target.value)} />
@@ -142,11 +143,11 @@ function NewInvoiceModal({ open, meta, onClose, onCreated }) {
         </Field>
         {needState && (
           <Field label={t("rmc.place_of_supply")} hint={t("rmc.pos_hint")} span={2}>
-            <select style={inp} value={v.place_of_supply_code}
+            <PickSelect style={inp} value={v.place_of_supply_code}
               onChange={(e) => upd("place_of_supply_code", e.target.value)}>
               <option value="">{t("rmc.select_state")}</option>
               {STATE_CODES.map((c) => <option key={c} value={c}>{STATES[c]}</option>)}
-            </select>
+            </PickSelect>
           </Field>
         )}
         <Field label={t("rmc.note")} span={needState ? 1 : 3}>
@@ -220,18 +221,18 @@ function RmcSales({ meta, canCreate, canApprove, canDelete, refreshKey, onRefres
 
       <div style={{ display: "flex", gap: 8, alignItems: "flex-end", flexWrap: "wrap", marginBottom: 12 }}>
         <Field label={t("rmc.customer")}>
-          <select style={{ ...inpSm, width: 200 }} value={fl.customer_party_id}
+          <PickSelect style={{ ...inpSm, width: 200 }} value={fl.customer_party_id}
             onChange={(e) => setFl({ ...fl, customer_party_id: e.target.value })}>
             <option value="">{t("common.all")}</option>
             {(meta.parties || []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
+          </PickSelect>
         </Field>
         <Field label={t("common.status")}>
-          <select style={{ ...inpSm, width: 150 }} value={fl.status}
+          <PickSelect style={{ ...inpSm, width: 150 }} value={fl.status}
             onChange={(e) => setFl({ ...fl, status: e.target.value })}>
             <option value="">{t("common.all")}</option>
             {STATUSES.map((s) => <option key={s} value={s}>{billStatusLabel(s)}</option>)}
-          </select>
+          </PickSelect>
         </Field>
         <span style={{ flex: 1 }} />
         {canCreate && <Btn onClick={() => setFormOpen(true)}>{t("rmc.new_invoice")}</Btn>}

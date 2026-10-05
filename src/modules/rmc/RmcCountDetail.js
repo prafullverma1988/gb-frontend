@@ -7,6 +7,7 @@
 // GET /rmc/stock-checks/new?plant_id · POST /rmc/stock-checks
 // PATCH /rmc/stock-checks/:id · POST /:id/submit · /:id/approve · /:id/reject
 import { useState, useEffect, useCallback } from "react";
+import PickSelect from "../../components/PickSelect";
 import { useToast } from "../../components/Toast";
 import { t } from "../../i18n";
 import {
@@ -142,10 +143,10 @@ export function NewCountModal({ open, meta, onClose, onCreated }) {
       <Notice>{t("rmc.count_stock_note")}</Notice>
       <Grid cols={3} style={{ marginBottom: 14 }}>
         <Field label={t("rmc.plant")}>
-          <select style={inp} value={plantId} onChange={(e) => setPlantId(e.target.value)}>
+          <PickSelect style={inp} value={plantId} onChange={(e) => setPlantId(e.target.value)}>
             <option value="">{t("rmc.select_plant")}</option>
             {(meta.plants || []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
+          </PickSelect>
         </Field>
         <Field label={t("rmc.counted_at")}>
           <input style={inp} type="datetime-local" value={countedAt} onChange={(e) => setCountedAt(e.target.value)} />

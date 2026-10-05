@@ -9,6 +9,7 @@
 // API: GET /road/designs/:id/boq-options · PUT /road/designs/:id/boq-map
 // ══════════════════════════════════════════════════════════════════════
 import React, { useState, useEffect, useCallback } from "react";
+import PickSelect from "../../components/PickSelect";
 import { T } from "../shared/tokens";
 import { useToast } from "../../components/Toast";
 import { t } from "../../i18n";
@@ -104,7 +105,7 @@ export default function RoadBoqMap({ design, onSaved }) {
                 <tr key={w.code}>
                   <td style={{ ...S.td, fontWeight: 600, color: T.t1, whiteSpace: "nowrap" }}>{w.name}</td>
                   <td style={S.td}>
-                    <select value={map[w.code] || ""} disabled={!mayEdit} onChange={(e) => set(w.code, e.target.value)}
+                    <PickSelect value={map[w.code] || ""} disabled={!mayEdit} onChange={(e) => set(w.code, e.target.value)}
                       style={{ ...S.inp, maxWidth: 460 }}>
                       <option value="">{t("road.boq_none")}</option>
                       {items.map((i) => (
@@ -113,7 +114,7 @@ export default function RoadBoqMap({ design, onSaved }) {
                           {(i.item_no ? i.item_no + " · " : "") + String(i.description || "").slice(0, 90)}
                         </option>
                       ))}
-                    </select>
+                    </PickSelect>
                   </td>
                   <td style={{ ...S.td, color: T.t3 }}>{cur ? cur.unit || "—" : "—"}</td>
                   <td style={{ ...S.td, textAlign: "right", ...S.num }}>{cur && cur.rate != null ? rupee(cur.rate) : "—"}</td>

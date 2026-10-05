@@ -8390,6 +8390,7 @@ const dict = {
   // ── search_select ───────────────────────────────────────────
   "search_select.no_match_found":                              "कोई मैच नहीं मिला",
   "search_select.no_options_yet":                              "अभी कोई ऑप्शंस नहीं हैं",
+  "search_select.chuno":                                        "चुनें…",
 
   // ── settings ────────────────────────────────────────────────
   "settings.language.hint":                                    "ऐप, मैसेज और नोटिफिकेशन इसी भाषा में आएंगे",

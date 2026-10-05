@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, lazy, Suspense } from "react";
+import PickSelect from "../../components/PickSelect";
 import api from "../../config/api";
 import { T } from "../shared/tokens";
 import { t, Rich } from "../../i18n";
@@ -445,12 +446,12 @@ export default function TenderAiPlan({ tenderId, onOpenProject, initialFile }) {
     return Number(row.qty) > 1 ? "qty" : "percent";
   };
   const pmSel = (row, onPick) => (
-    <select value={row.progress_mode || autoPM(row)} onChange={onPick} title={t("tender_ai_plan.pm_hint")}
+    <PickSelect value={row.progress_mode || autoPM(row)} onChange={onPick} title={t("tender_ai_plan.pm_hint")}
       style={inp({ width: 62, fontSize: 10, padding: "2px 3px",
         color: row.progress_mode ? T.t1 : T.t3 })}>
       <option value="qty">{t("tender_ai_plan.pm_qty")}</option>
       <option value="percent">%</option>
-    </select>
+    </PickSelect>
   );
 
   // ── Tukde — planning me hi ──
@@ -650,7 +651,7 @@ export default function TenderAiPlan({ tenderId, onOpenProject, initialFile }) {
                       <span style={{ fontSize: 13 }}>📍</span>
                     </label>
                     {markOn(w) && (
-                      <select value={markKind(w)}
+                      <PickSelect value={markKind(w)}
                         onChange={(e) => upd((p) => { p.sites[si].works[wi].map_kind = e.target.value; })}
                         style={inp({ width: 104, fontSize: 10.5, padding: "2px 4px" })}>
                         <option value="line">{t("tender_ai_plan.mk_line")}</option>
@@ -661,7 +662,7 @@ export default function TenderAiPlan({ tenderId, onOpenProject, initialFile }) {
                             jaata hai. Pin apne aap banta hai, alag se
                             markna nahi padta. */}
                         <option value="area+pin">{t("tender_ai_plan.mk_area_pin")}</option>
-                      </select>
+                      </PickSelect>
                     )}
                     {LINE_W.includes(w.wtype) && (
                       <button onClick={() => setOpen((o) => ({ ...o, ["tk:" + key]: !o["tk:" + key] }))}
@@ -896,11 +897,11 @@ export default function TenderAiPlan({ tenderId, onOpenProject, initialFile }) {
           )}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
             <div><label style={{ fontSize: 10, fontWeight: 700, color: T.t4, textTransform: "uppercase" }}>{t("tender_ai_plan.city_nayi_site_ke_liye")}</label>
-              <select value={cityId} onChange={(e) => setCityId(e.target.value)} style={inp({ width: "100%", marginTop: 3 })}>
-                <option value="">{t("tender_ai_plan.chuno")}</option>{cities.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
+              <PickSelect value={cityId} onChange={(e) => setCityId(e.target.value)} style={inp({ width: "100%", marginTop: 3 })}>
+                <option value="">{t("tender_ai_plan.chuno")}</option>{cities.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</PickSelect></div>
             <div><label style={{ fontSize: 10, fontWeight: 700, color: T.t4, textTransform: "uppercase" }}>{t("tender_ai_plan.construction_type")}</label>
-              <select value={ctypeId} onChange={(e) => setCtypeId(e.target.value)} style={inp({ width: "100%", marginTop: 3 })}>
-                <option value="">{t("tender_ai_plan.chuno")}</option>{ctypes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
+              <PickSelect value={ctypeId} onChange={(e) => setCtypeId(e.target.value)} style={inp({ width: "100%", marginTop: 3 })}>
+                <option value="">{t("tender_ai_plan.chuno")}</option>{ctypes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</PickSelect></div>
           </div>
           <div style={{ display: "flex", gap: 8 }}>
             <button onClick={() => setExecOpen(false)} style={{ flex: 1, padding: "9px", borderRadius: 7, background: T.surfaceB, border: `1px solid ${T.b1}`, fontSize: 12, fontWeight: 600, color: T.t3, cursor: "pointer" }}>{t("tender_ai_plan.cancel")}</button>

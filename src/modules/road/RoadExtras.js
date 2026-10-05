@@ -13,6 +13,7 @@
 //      GET  /road/designs/:id/mr-suggestion · POST /procurement/mrs
 // ══════════════════════════════════════════════════════════════════════
 import React, { useState, useEffect, useCallback } from "react";
+import PickSelect from "../../components/PickSelect";
 import api from "../../config/api";
 import { T } from "../shared/tokens";
 import { useToast } from "../../components/Toast";
@@ -59,11 +60,11 @@ export function RoadWhatIf({ design, fromCh, toCh }) {
           <div><label style={S.lbl}>{t("road.wi_to")}</label><input type="number" value={f.to_ch} onChange={(e) => setF((p) => ({ ...p, to_ch: e.target.value }))} style={{ ...S.inp, width: 96 }} /></div>
           <div>
             <label style={S.lbl}>{t("road.wi_case")}</label>
-            <select value={f.soil_case} onChange={(e) => setF((p) => ({ ...p, soil_case: e.target.value }))} style={{ ...S.inp, width: 250 }}>
+            <PickSelect value={f.soil_case} onChange={(e) => setF((p) => ({ ...p, soil_case: e.target.value }))} style={{ ...S.inp, width: 250 }}>
               <option value="A">{t("road.wi_case_a")}</option>
               <option value="B">{t("road.wi_case_b")}</option>
               <option value="C">{t("road.wi_case_c")}</option>
-            </select>
+            </PickSelect>
           </div>
           <div><label style={S.lbl}>{t("road.wi_reuse")}</label><input type="number" min="0" max="100" value={f.reuse_pct} onChange={(e) => setF((p) => ({ ...p, reuse_pct: e.target.value }))} style={{ ...S.inp, width: 90 }} /></div>
           <div><label style={S.lbl}>{t("road.wi_loose")}</label><input type="number" step="0.05" value={f.loose} placeholder="1.25" onChange={(e) => setF((p) => ({ ...p, loose: e.target.value }))} style={{ ...S.inp, width: 90 }} /></div>

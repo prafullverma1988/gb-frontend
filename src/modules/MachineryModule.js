@@ -17,6 +17,7 @@
 // Self-contained (own theme/icons/helpers), same as WarehouseModule/FuelModule.
 // ══════════════════════════════════════════════════════════════════════
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import PickSelect from "../components/PickSelect";
 import api, { API_BASE, getToken } from "../config/api";
 import { t, Rich } from "../i18n";
 import ImportFixPanel, { useImportFix } from "../components/ImportFix";
@@ -273,10 +274,10 @@ const CapInput = ({ qty, unit, onQty, onUnit, bad }) => (
   <div style={{ display: "flex", gap: 6 }}>
     <input value={qty == null ? "" : qty} inputMode="decimal" placeholder="500" onChange={(e) => onQty(e.target.value.replace(/[^0-9.]/g, ""))}
       style={{ ...inp, flex: 1, minWidth: 0, borderColor: bad ? T.red : T.b1 }} />
-    <select value={unit || ""} onChange={(e) => onUnit(e.target.value)} style={{ ...inp, width: 86, flexShrink: 0, borderColor: bad ? T.red : T.b1 }}>
+    <PickSelect value={unit || ""} onChange={(e) => onUnit(e.target.value)} style={{ ...inp, width: 86, flexShrink: 0, borderColor: bad ? T.red : T.b1 }}>
       <option value="">{t("machinery.cap_unit")}</option>
       {CAP_UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
-    </select>
+    </PickSelect>
   </div>
 );
 
@@ -348,10 +349,10 @@ const PartyPicker = ({ value, onChange, parties, roles, placeholder }) => {
   const shown = selectedMissing ? [...list, ...parties.filter((p) => String(p.id) === String(value))] : list;
   return (
     <>
-      <select value={value || ""} onChange={(e) => onChange(e.target.value || null)} style={inp}>
+      <PickSelect value={value || ""} onChange={(e) => onChange(e.target.value || null)} style={inp}>
         <option value="">{placeholder || t("machinery.chuno")}</option>
         {shown.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-      </select>
+      </PickSelect>
       <button type="button" onClick={() => setAll((v) => !v)}
         style={{ background: "none", border: "none", color: T.t3, fontSize: 10.5, cursor: "pointer", padding: "4px 0 0", fontFamily: "inherit" }}>
         {all ? `sirf sahi role wale (${parties.filter((p) => hasRole(p, roles)).length})` : `saari parties dikhao (${parties.length})`}
@@ -558,10 +559,10 @@ function MachineForm({ open, onClose, onSaved, machine, parties, seed, cities, s
             <input value={f.code || ""} onChange={(e) => upd("code", e.target.value)} placeholder={t("machinery.eq_jcb_01")} style={inp} />
           </Field>
           <Field label={t("common.ownership")}>
-            <select value={f.ownership || "owned"} onChange={(e) => upd("ownership", e.target.value)} style={inp}>
+            <PickSelect value={f.ownership || "owned"} onChange={(e) => upd("ownership", e.target.value)} style={inp}>
               <option value="owned">{t("machinery.apni_owned")}</option>
               <option value="rented">{t("machinery.kiraye_ki_rented")}</option>
-            </select>
+            </PickSelect>
           </Field>
           <Field label={t("machinery.machine_type")}>
             <input value={f.machine_type || ""} onChange={(e) => upd("machine_type", e.target.value)} placeholder={t("machinery.excavator_tipper_roller")} style={inp} />
@@ -573,11 +574,11 @@ function MachineForm({ open, onClose, onSaved, machine, parties, seed, cities, s
               bad={capCheck(f.capacity_qty, f.capacity_unit).bad && String(f.capacity_qty || "") !== "" && !!f.capacity_unit} />
           </Field>
           <Field label={t("machinery.meter_kis_cheez_ka")}>
-            <select value={f.meter_unit || "hours"} onChange={(e) => upd("meter_unit", e.target.value)} style={inp}>
+            <PickSelect value={f.meter_unit || "hours"} onChange={(e) => upd("meter_unit", e.target.value)} style={inp}>
               <option value="hours">{t("machinery.hour_meter_ghante")}</option>
               <option value="km">{t("machinery.odometer_km")}</option>
               <option value="both">{t("machinery.dono")}</option>
-            </select>
+            </PickSelect>
           </Field>
           <Field label={t("machinery.operator")}>
             <input value={f.operator_name || ""} onChange={(e) => upd("operator_name", e.target.value)} style={inp} />
@@ -602,9 +603,9 @@ function MachineForm({ open, onClose, onSaved, machine, parties, seed, cities, s
       {tab === "rate" && (
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
           <Field label={t("machinery.rate_type")}>
-            <select value={f.measurement_mode || "hourly"} onChange={(e) => upd("measurement_mode", e.target.value)} style={inp}>
+            <PickSelect value={f.measurement_mode || "hourly"} onChange={(e) => upd("measurement_mode", e.target.value)} style={inp}>
               {MODES.map((m) => <option key={m.k} value={m.k}>{m.l}</option>)}
-            </select>
+            </PickSelect>
           </Field>
           <Field label={`Rate (${modeUnit(f.measurement_mode)})`}>
             <input value={f.default_rate || ""} inputMode="decimal" onChange={(e) => upd("default_rate", e.target.value.replace(/[^0-9.]/g, ""))} placeholder="0" style={inp} />
@@ -621,11 +622,11 @@ function MachineForm({ open, onClose, onSaved, machine, parties, seed, cities, s
                 disabled hai, par tab bhi "company" hi padhna chahiye. Pehle
                 yahan default 'rent_included' dikh jaata tha, jo owned machine
                 par seedha ulta padhta hai. */}
-            <select value={owned ? "company" : (f.fuel_responsibility || "rent_included")}
+            <PickSelect value={owned ? "company" : (f.fuel_responsibility || "rent_included")}
               onChange={(e) => upd("fuel_responsibility", e.target.value)} style={inp} disabled={owned}>
               <option value="company">{t("machinery.hamara_company_deti_hai")}</option>
               <option value="rent_included">{t("machinery.kiraye_me_shaamil_vendor_ka")}</option>
-            </select>
+            </PickSelect>
           </Field>
           {/* "Fuel vendor (pump)" yahan se HATA diya gaya. Machine ka pump fix
               hota hi nahi — diesel jahan se mile wahan se aata hai, aur pump
@@ -645,12 +646,12 @@ function MachineForm({ open, onClose, onSaved, machine, parties, seed, cities, s
           <Notice><Rich k="machinery.ye_machine_ka_apna_record_hai" params={{ v: " " }} /></Notice>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             <Field label={t("machinery.gps_telematics_laga_hai")} span={2}>
-              <select value={f.telematics_enabled == null ? "" : String(f.telematics_enabled)}
+              <PickSelect value={f.telematics_enabled == null ? "" : String(f.telematics_enabled)}
                 onChange={(e) => upd("telematics_enabled", e.target.value === "" ? null : Number(e.target.value))} style={inp}>
                 <option value="">{t("machinery.abhi_tay_nahi")}</option>
                 <option value="1">{t("machinery.haan_laga_hai")}</option>
                 <option value="0">{t("machinery.nahi")}</option>
-              </select>
+              </PickSelect>
             </Field>
             {Number(f.telematics_enabled) === 1 && (
               <>
@@ -1144,10 +1145,10 @@ function ImportWizard({ open, onClose, onDone }) {
         <>
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
             <span style={{ fontSize: 11.5, color: T.t3 }}>{t("common.header_row")}</span>
-            <select value={headerRow} onChange={(e) => { const h = Number(e.target.value); setHeaderRow(h); setMap(autoMap(aoa[h] || [])); }}
+            <PickSelect value={headerRow} onChange={(e) => { const h = Number(e.target.value); setHeaderRow(h); setMap(autoMap(aoa[h] || [])); }}
               style={{ ...inp, width: 150 }}>
               {aoa.slice(0, 10).map((r, i) => <option key={i} value={i}>{t("machinery.row_i", { i: firstRow + i })}</option>)}
-            </select>
+            </PickSelect>
             <span style={{ fontSize: 11.5, color: T.t4 }}>{t("machinery.parsed_machine_mili", { parsed: fileRows.length })}</span>
           </div>
           {!!missingReq.length && (
@@ -1164,12 +1165,12 @@ function ImportWizard({ open, onClose, onDone }) {
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
             {IMPORT_COLS.map((c) => (
               <Field key={c.key} label={c.label + (c.required ? " *" : "")}>
-                <select value={map[c.key] == null ? "" : map[c.key]}
+                <PickSelect value={map[c.key] == null ? "" : map[c.key]}
                   onChange={(e) => setMap((p) => ({ ...p, [c.key]: e.target.value === "" ? null : Number(e.target.value) }))}
                   style={inp}>
                   <option value="">{t("machinery.nahi_hai")}</option>
                   {header.map((h, i) => <option key={i} value={i}>{String(h).trim() || `Column ${i + 1}`}</option>)}
-                </select>
+                </PickSelect>
               </Field>
             ))}
           </div>
@@ -1335,17 +1336,17 @@ function ServiceForm({ open, onClose, onSaved, machine, parties, existing, templ
           <input type="date" value={f.service_date || ""} onChange={(e) => upd("service_date", e.target.value)} style={inp} />
         </Field>
         <Field label={t("common.type")}>
-          <select value={f.service_type || "preventive"} onChange={(e) => upd("service_type", e.target.value)} style={inp}>
+          <PickSelect value={f.service_type || "preventive"} onChange={(e) => upd("service_type", e.target.value)} style={inp}>
             <option value="preventive">{t("machinery.preventive_time_par")}</option>
             <option value="breakdown">{t("machinery.breakdown_kharab_hui")}</option>
             <option value="overhaul">{t("machinery.overhaul")}</option>
-          </select>
+          </PickSelect>
         </Field>
         <Field label={t("common.payment")}>
-          <select value={f.payment_mode || "cash"} onChange={(e) => upd("payment_mode", e.target.value)} style={inp}>
+          <PickSelect value={f.payment_mode || "cash"} onChange={(e) => upd("payment_mode", e.target.value)} style={inp}>
             <option value="cash">{t("machinery.cash_site_se_diya")}</option>
             <option value="credit">{t("machinery.udhaar_baad_me_pay")}</option>
-          </select>
+          </PickSelect>
         </Field>
         <Field label={f.payment_mode === "credit" ? t("machinery.vendor_party") : t("machinery.vendor_party_2")} span={2}>
           <PartyPicker value={f.vendor_party_id} onChange={(v) => upd("vendor_party_id", v)}
@@ -1374,17 +1375,17 @@ function ServiceForm({ open, onClose, onSaved, machine, parties, existing, templ
           {items.map((it, i) => (
             <div key={i} style={{ display: "grid", gridTemplateColumns: "1.6fr 110px 90px 90px 130px 26px", gap: 8, marginBottom: 7, alignItems: "center" }}>
               <input value={it.item} onChange={(e) => updItem(i, "item", e.target.value)} placeholder={t("machinery.e_g_engine_oil_15w40")} style={inp} />
-              <select value={it.part_category} onChange={(e) => updItem(i, "part_category", e.target.value)} style={inp}>
+              <PickSelect value={it.part_category} onChange={(e) => updItem(i, "part_category", e.target.value)} style={inp}>
                 {["oil", "filter", "tyre", "hydraulic", "electrical", "engine", "other"].map((c) => <option key={c} value={c}>{c}</option>)}
-              </select>
+              </PickSelect>
               <input value={it.cost} inputMode="decimal" onChange={(e) => updItem(i, "cost", e.target.value.replace(/[^0-9.]/g, ""))} placeholder="₹" style={inp} />
               <input value={it.life_hours} inputMode="decimal" onChange={(e) => updItem(i, "life_hours", e.target.value.replace(/[^0-9.]/g, ""))} placeholder={t("machinery.life_hrs")} style={inp}
                 title={t("machinery.is_part_ki_apni_life_ghante")} />
-              <select value={it.template_id || ""} onChange={(e) => updItem(i, "template_id", e.target.value)} style={inp}
+              <PickSelect value={it.template_id || ""} onChange={(e) => updItem(i, "template_id", e.target.value)} style={inp}
                 title={t("machinery.kaunsa_service_task_poora_hua_uska")}>
                 <option value="">{t("machinery.task")}</option>
                 {(templates || []).map((t) => <option key={t.id} value={t.id}>{t.task}</option>)}
-              </select>
+              </PickSelect>
               <button type="button" onClick={() => setItems((p) => p.filter((_, n) => n !== i))}
                 style={{ background: "none", border: "none", color: T.t4, cursor: "pointer", fontSize: 14 }}>×</button>
             </div>
@@ -1505,9 +1506,9 @@ function DocForm({ open, onClose, onSaved, machine }) {
       )}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
         <Field label={t("machinery.document")}>
-          <select value={f.doc_type || "insurance"} onChange={(e) => upd("doc_type", e.target.value)} style={inp}>
+          <PickSelect value={f.doc_type || "insurance"} onChange={(e) => upd("doc_type", e.target.value)} style={inp}>
             {DOC_TYPES.map((d) => <option key={d.k} value={d.k}>{d.l}</option>)}
-          </select>
+          </PickSelect>
         </Field>
         <Field label={t("machinery.number")}>
           <input value={f.doc_no || ""} onChange={(e) => upd("doc_no", e.target.value)} placeholder={t("machinery.policy_certificate_no")} style={inp} />
@@ -2079,10 +2080,10 @@ function CityShiftModal({ open, onClose, machine, cities, log, onLoadLog, onSave
       </Field>
       <div style={{ height: 10 }} />
       <Field label={t("machinery.ab_kis_city_me")}>
-        <select value={to} onChange={(e) => setTo(e.target.value)} style={inp}>
+        <PickSelect value={to} onChange={(e) => setTo(e.target.value)} style={inp}>
           <option value="">{t("machinery.city_chuno")}</option>
           {cities.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </select>
+        </PickSelect>
       </Field>
       <div style={{ height: 10 }} />
       <Field label={t("machinery.wajah_optional")}>
@@ -2565,10 +2566,10 @@ function RateCardEditor({ card, parties, onCancel, onSaved }) {
           <input value={name} onChange={(e) => setName(e.target.value)} maxLength={80} placeholder={t("trip_tracking.rt_naam_ph")}
             style={{ ...inp, borderColor: tried && !name.trim() ? T.red : T.b1 }} /></div>
         <div><div style={rcLbl}>{t("trip_tracking.rt_kiska")}</div>
-          <select value={vendorId} onChange={(e) => setVendorId(e.target.value)} style={inp}>
+          <PickSelect value={vendorId} onChange={(e) => setVendorId(e.target.value)} style={inp}>
             <option value="">{t("trip_tracking.rt_sab_vendor")}</option>
             {(parties || []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select></div>
+          </PickSelect></div>
         <div><div style={rcLbl}>{t("trip_tracking.rt_capacity_opt")}</div>
           <CapInput qty={capQty} unit={capUnit} onQty={setCapQty} onUnit={setCapUnit} bad={tried && cap.bad} /></div>
       </div>
@@ -2804,17 +2805,17 @@ function VehiclePicker({ tpl, trucks, parties, onlyBaaki, onCancel, onSaved, cit
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("machinery.tv_khoj_ph")}
           style={{ ...fltS, flex: 1, minWidth: 200, borderColor: q ? T.ind : T.b1 }} />
         {tpl.vendor_id == null && (vendorOpts.length > 0 || hasNoVendor) && (
-          <select value={fVendor} onChange={(e) => setFVendor(e.target.value)} style={{ ...fltS, borderColor: fVendor ? T.ind : T.b1 }}>
+          <PickSelect value={fVendor} onChange={(e) => setFVendor(e.target.value)} style={{ ...fltS, borderColor: fVendor ? T.ind : T.b1 }}>
             <option value="">{t("trip_tracking.rt_sab_vendor")}</option>
             {vendorOpts.map(([id, nm]) => <option key={id} value={id}>{nm}</option>)}
             {hasNoVendor && <option value="none">{t("machinery.tv_vendor_nahi")}</option>}
-          </select>
+          </PickSelect>
         )}
         {caps.length > 0 && (
-          <select value={fCap} onChange={(e) => setFCap(e.target.value)} style={{ ...fltS, borderColor: fCap ? T.ind : T.b1 }}>
+          <PickSelect value={fCap} onChange={(e) => setFCap(e.target.value)} style={{ ...fltS, borderColor: fCap ? T.ind : T.b1 }}>
             <option value="">{t("machinery.tv_sab_capacity")}</option>
             {caps.map((c) => <option key={c} value={c}>{c}</option>)}
-          </select>
+          </PickSelect>
         )}
         <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: fBaaki ? T.amb : T.t2, fontWeight: fBaaki ? 700 : 500, cursor: "pointer" }}>
           <input type="checkbox" checked={fBaaki} onChange={(e) => setFBaaki(e.target.checked)} style={{ accentColor: T.amb }} />
@@ -2895,10 +2896,10 @@ function RatePendingBlock({ cards, canRates, onGaadi, onPick, onNewCard }) {
           ? <Btn size="sm" ghost onClick={onNewCard}>{t("trip_tracking.rp_pehle_card_banao")}</Btn>
           : <>
               {all.length > 1 && (
-                <select value={cardId} onChange={(e) => setCardId(e.target.value)} style={{ ...inp, width: "auto", padding: "5px 8px", fontSize: 11.5 }}>
+                <PickSelect value={cardId} onChange={(e) => setCardId(e.target.value)} style={{ ...inp, width: "auto", padding: "5px 8px", fontSize: 11.5 }}>
                   <option value="">{t("trip_tracking.rp_card_select")}</option>
                   {all.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
+                </PickSelect>
               )}
               <Btn size="sm" disabled={!chosen} onClick={() => chosen && onPick(chosen)}>{t("trip_tracking.gs_button")}</Btn>
             </>)}
@@ -3666,11 +3667,11 @@ function TripVehiclesTab({ tv, from, to, onRange, onReload, parties, q, onQ, vie
         <input value={q || ""} onChange={(e) => onQ(e.target.value)} placeholder={t("machinery.tv_khoj_ph")}
           style={{ flex: 1, minWidth: 220, padding: "7px 11px", borderRadius: 7, border: `1.5px solid ${q ? T.ind : T.b1}`, fontSize: 12, fontFamily: "inherit", color: T.t1, background: T.surface, outline: "none" }} />
         {caps.length > 0 && (
-          <select value={fCap} onChange={(e) => setFCap(e.target.value)}
+          <PickSelect value={fCap} onChange={(e) => setFCap(e.target.value)}
             style={{ padding: "7px 10px", borderRadius: 7, border: `1.5px solid ${fCap ? T.ind : T.b1}`, fontSize: 12, fontFamily: "inherit", color: T.t1, background: T.surface, outline: "none" }}>
             <option value="">{t("machinery.tv_sab_capacity")}</option>
             {caps.map((c) => <option key={c} value={c}>{c}</option>)}
-          </select>
+          </PickSelect>
         )}
         {filtering && (
           <button type="button" onClick={() => { onQ(""); setFCap(""); setFCity(""); }}
@@ -3921,11 +3922,11 @@ const RLbl = ({ children }) => (
 const RSel = ({ label, value, onChange, options, w = 150, placeholder = "Sab" }) => (
   <div>
     <RLbl>{label}</RLbl>
-    <select value={value} onChange={(e) => onChange(e.target.value)}
+    <PickSelect value={value} onChange={(e) => onChange(e.target.value)}
       style={{ ...inp, width: w, padding: "6px 8px", fontSize: 11.5 }}>
       <option value="">{placeholder}</option>
       {options.map((o) => <option key={o.v} value={o.v}>{o.l}</option>)}
-    </select>
+    </PickSelect>
   </div>
 );
 
@@ -4957,7 +4958,7 @@ function TelematicsTab({ data, onReload, onNewMachine }) {
               )}
 
               {canMach("create") && <div style={{ display: "flex", gap: 7, alignItems: "center", flexWrap: "wrap" }}>
-                <select value={selId} onChange={(e) => setChoice((p) => ({ ...p, [u.id]: e.target.value }))}
+                <PickSelect value={selId} onChange={(e) => setChoice((p) => ({ ...p, [u.id]: e.target.value }))}
                   style={{ ...inp, width: 320 }}>
                   <option value="">{t("machinery.machine_chuno")}</option>
                   {machines.map((m) => (
@@ -4965,7 +4966,7 @@ function TelematicsTab({ data, onReload, onNewMachine }) {
                       {m.name}{m.registration_no ? ` (${m.registration_no})` : ""}
                     </option>
                   ))}
-                </select>
+                </PickSelect>
                 <Btn size="sm" onClick={() => link(u)} disabled={busyId === u.id || !selId}>
                   {busyId === u.id ? "..." : t("machinery.jodo")}
                 </Btn>
@@ -5180,18 +5181,18 @@ function MachineRequestsTab({ fleet, projects, cities, onChanged }) {
         })}
       </div>
       <div style={{ display: "flex", gap: 8, alignItems: "center", padding: "10px 14px", borderBottom: `1px solid ${T.b1}`, flexWrap: "wrap" }}>
-        <select value={fCity} onChange={(e) => { setFCity(e.target.value); setFProj(""); setFMach(""); }} style={sel(fCity)}>
+        <PickSelect value={fCity} onChange={(e) => { setFCity(e.target.value); setFProj(""); setFMach(""); }} style={sel(fCity)}>
           <option value="">{t("machinery.sab_city")}</option>
           {cities.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </select>
-        <select value={fProj} onChange={(e) => setFProj(e.target.value)} style={{ ...sel(fProj), maxWidth: 220 }}>
+        </PickSelect>
+        <PickSelect value={fProj} onChange={(e) => setFProj(e.target.value)} style={{ ...sel(fProj), maxWidth: 220 }}>
           <option value="">{t("machinery.mr_all_projects")}</option>
           {projOpts.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-        </select>
-        <select value={fMach} onChange={(e) => setFMach(e.target.value)} style={{ ...sel(fMach), maxWidth: 240 }}>
+        </PickSelect>
+        <PickSelect value={fMach} onChange={(e) => setFMach(e.target.value)} style={{ ...sel(fMach), maxWidth: 240 }}>
           <option value="">{t("machinery.mr_all_machines")}</option>
           {machOpts.map((m) => <option key={m.id} value={m.id}>{m.name}{m.registration_no ? " · " + m.registration_no : ""}</option>)}
-        </select>
+        </PickSelect>
         <span style={{ fontSize: 11.5, color: T.t4 }}>{t("machinery.mr_request_date")}</span>
         <input type="date" value={fFrom} onChange={(e) => setFFrom(e.target.value)} style={sel(fFrom)} />
         <span style={{ fontSize: 11.5, color: T.t4 }}>–</span>
@@ -5287,14 +5288,14 @@ function MachineRequestsTab({ fleet, projects, cities, onChanged }) {
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: act.kind === "fulfill" ? "1.3fr 1fr auto" : "1fr auto", gap: 8, alignItems: "center" }}>
                   {act.kind === "fulfill" && (
-                    <select value={act.eq} onChange={(e) => setAct((a) => ({ ...a, eq: e.target.value }))} style={inp}>
+                    <PickSelect value={act.eq} onChange={(e) => setAct((a) => ({ ...a, eq: e.target.value }))} style={inp}>
                       <option value="">{t("machinery.mr_machine_none")}</option>
                       {fleetSorted.map((m) => (
                         <option key={m.id} value={String(m.id)}>
                           {m.name}{m.registration_no ? " · " + m.registration_no : ""}{m.city_name ? " — " + m.city_name : ""}
                         </option>
                       ))}
-                    </select>
+                    </PickSelect>
                   )}
                   <input value={act.note} onChange={(e) => setAct((a) => ({ ...a, note: e.target.value, err: "" }))}
                     placeholder={act.kind === "fulfill" ? t("machinery.mr_note_ph") : t("machinery.mr_reject_ph")} style={inp} />
@@ -5561,11 +5562,11 @@ function MachineryModule() {
                     {/* City + naam/gadi no. ki chhanni — poori list rozana dekhne
                         layak nahi rehti jab har city ki machine ek saath ho. */}
                     <div style={{ display: "flex", gap: 8, alignItems: "center", padding: "10px 14px", borderBottom: `1px solid ${T.b1}`, flexWrap: "wrap" }}>
-                      <select value={fCity} onChange={(e) => setFCity(e.target.value)}
+                      <PickSelect value={fCity} onChange={(e) => setFCity(e.target.value)}
                         style={{ padding: "7px 10px", borderRadius: 7, border: `1.5px solid ${fCity ? T.ind : T.b1}`, fontSize: 12, fontFamily: "inherit", color: T.t1, background: T.surface, outline: "none" }}>
                         <option value="">{t("machinery.sab_city")}</option>
                         {cities.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                      </select>
+                      </PickSelect>
                       <input value={fQ} onChange={(e) => setFQ(e.target.value)} placeholder={t("machinery.naam_ya_gadi_no_se_khojo")}
                         style={{ flex: 1, minWidth: 190, padding: "7px 11px", borderRadius: 7, border: `1.5px solid ${fQ ? T.ind : T.b1}`, fontSize: 12, fontFamily: "inherit", color: T.t1, background: T.surface, outline: "none" }} />
                       <span style={{ fontSize: 11.5, color: T.t4 }}>{t("machinery.n_machine", { n: fleetShown.length })}</span>

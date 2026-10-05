@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
+import PickSelect from "../../components/PickSelect";
 import api from "../../config/api";
 import { T } from "../shared/tokens";
 import { t } from "../../i18n";
@@ -383,9 +384,9 @@ export default function BoqImportWizard({ projectId, existingTasks = [], onClose
                 <div style={{ marginTop: 16, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
                   <div>
                     <div style={{ fontSize: 11, fontWeight: 600, color: T.t3, textTransform: "uppercase", letterSpacing: ".3px", marginBottom: 5 }}>{t("boq_import_wizard.sheet")}</div>
-                    <select value={sheetName} onChange={(e) => loadSheet(wb, e.target.value)} style={inp}>
+                    <PickSelect value={sheetName} onChange={(e) => loadSheet(wb, e.target.value)} style={inp}>
                       {wb.SheetNames.map((n) => <option key={n} value={n}>{n}</option>)}
-                    </select>
+                    </PickSelect>
                   </div>
                   <div>
                     <div style={{ fontSize: 11, fontWeight: 600, color: T.t3, textTransform: "uppercase", letterSpacing: ".3px", marginBottom: 5 }}>{t("boq_import.header_row")} {headerAuto && <span style={{ color: T.ind, fontWeight: 700 }}>{t("boq_import_wizard.auto_detected")}</span>}</div>
@@ -420,10 +421,10 @@ export default function BoqImportWizard({ projectId, existingTasks = [], onClose
                         {tg.label}{tg.required && <span style={{ color: T.red }}>*</span>}
                         {detected && <span style={{ fontSize: 9, fontWeight: 700, color: T.ind, background: T.indL, padding: "1px 6px", borderRadius: 10 }}>{t("boq_import_wizard.detected")}</span>}
                       </div>
-                      <select value={mapping[tg.key] ?? ""} onChange={(e) => setMapping((m) => ({ ...m, [tg.key]: e.target.value === "" ? null : Number(e.target.value) }))} style={inp}>
+                      <PickSelect value={mapping[tg.key] ?? ""} onChange={(e) => setMapping((m) => ({ ...m, [tg.key]: e.target.value === "" ? null : Number(e.target.value) }))} style={inp}>
                         <option value="">{t("boq_import_wizard.none")}</option>
                         {headerCells.map((c, i) => <option key={i} value={i}>{colLabel(i)} · {String(c || "").slice(0, 24) || t("boq_import_wizard.blank")}</option>)}
-                      </select>
+                      </PickSelect>
                     </div>
                   );
                 })}
@@ -490,11 +491,11 @@ export default function BoqImportWizard({ projectId, existingTasks = [], onClose
                 </div>
                 <div>
                   <div style={{ fontSize: 10.5, fontWeight: 600, color: T.t3, textTransform: "uppercase", letterSpacing: ".3px", marginBottom: 4 }}>{t("boq_import_wizard.parent")}</div>
-                  <select value={parentMode} onChange={(e) => setParentMode(e.target.value)} style={inp}>
+                  <PickSelect value={parentMode} onChange={(e) => setParentMode(e.target.value)} style={inp}>
                     <option value="new">{t("boq_import_wizard.naya_wrapper_banao")}</option>
                     <option value="root">{t("boq_import_wizard.project_root_pe_rakho")}</option>
                     <option value="existing">{t("boq_import_wizard.existing_task_ke_andar")}</option>
-                  </select>
+                  </PickSelect>
                 </div>
                 {parentMode === "new" && (
                   <div>
@@ -505,17 +506,17 @@ export default function BoqImportWizard({ projectId, existingTasks = [], onClose
                 {parentMode === "existing" && (
                   <div>
                     <div style={{ fontSize: 10.5, fontWeight: 600, color: T.t3, textTransform: "uppercase", letterSpacing: ".3px", marginBottom: 4 }}>{t("boq_import_wizard.parent_task")}</div>
-                    <select value={parentTaskId} onChange={(e) => setParentTaskId(e.target.value)} style={inp}>
+                    <PickSelect value={parentTaskId} onChange={(e) => setParentTaskId(e.target.value)} style={inp}>
                       <option value="">{t("boq_import_wizard.chunein")}</option>
                       {existingTasks.map((t) => <option key={t.id} value={t.id}>{(t.task_no || t.no || "")} · {String(t.name || "").slice(0, 30)}</option>)}
-                    </select>
+                    </PickSelect>
                   </div>
                 )}
                 <div>
                   <div style={{ fontSize: 10.5, fontWeight: 600, color: T.t3, textTransform: "uppercase", letterSpacing: ".3px", marginBottom: 4 }}>{t("common.category")}</div>
-                  <select value={category} onChange={(e) => setCategory(e.target.value)} style={inp}>
+                  <PickSelect value={category} onChange={(e) => setCategory(e.target.value)} style={inp}>
                     {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
-                  </select>
+                  </PickSelect>
                 </div>
                 <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 12, color: T.t2, alignSelf: "end", paddingBottom: 6 }}>
                   <button type="button" onClick={() => setBudgetNode((v) => !v)} style={{ width: 34, height: 19, borderRadius: 12, border: "none", cursor: "pointer", position: "relative", background: budgetNode ? T.ind : T.b2 }}>

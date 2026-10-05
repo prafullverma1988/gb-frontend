@@ -1,4 +1,5 @@
 import React, { useState, useEffect, lazy, Suspense } from "react";
+import PickSelect from "../../components/PickSelect";
 import api from "../../config/api";
 import apiCache from "../../utils/apiCache";
 import { Avatar, Credit } from "../../components/Credit";
@@ -964,10 +965,10 @@ function TabDesign({ project, isAdmin }) {
               onFocus={el=>el.target.style.borderColor=T.b2}
               onBlur={el=>el.target.style.borderColor=T.b1}/>
           </div>
-          <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)}
+          <PickSelect value={filterStatus} onChange={e=>setFilterStatus(e.target.value)}
             style={{padding:"6px 9px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:11.5,outline:"none",fontFamily:"inherit",cursor:"pointer",background:T.surface,color:T.t2}}>
             {["All Status","Pending","Approved","Revision","Rejected"].map(s=><option key={s} value={s==="All Status"?"All":s}>{s}</option>)}
-          </select>
+          </PickSelect>
           {revQueue.length>0&&(
             <button onClick={()=>setShowRevQ(true)}
               style={{padding:"6px 11px",borderRadius:6,background:T.ambL,border:`1px solid ${T.ambM}`,
@@ -1062,15 +1063,15 @@ function TabDesign({ project, isAdmin }) {
                 onFocus={el=>el.target.style.borderColor=T.b2}
                 onBlur={el=>el.target.style.borderColor=T.b1}/>
             </div>
-            <select value={filterReqStatus} onChange={e=>setFilterReqStatus(e.target.value)}
+            <PickSelect value={filterReqStatus} onChange={e=>setFilterReqStatus(e.target.value)}
               style={{padding:"6px 9px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:11.5,outline:"none",fontFamily:"inherit",cursor:"pointer",background:T.surface,color:T.t2,flexShrink:0}}>
               {["All Status","Pending","In Progress","Uploaded","Rejected"].map(s=><option key={s} value={s==="All Status"?"All":s}>{s}</option>)}
-            </select>
-            <select value={filterReqCat} onChange={e=>setFilterReqCat(e.target.value)}
+            </PickSelect>
+            <PickSelect value={filterReqCat} onChange={e=>setFilterReqCat(e.target.value)}
               style={{padding:"6px 9px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:11.5,outline:"none",fontFamily:"inherit",cursor:"pointer",background:T.surface,color:T.t2,flexShrink:0}}>
               <option value="All">{t("common.all_categories")}</option>
               {CATS.map(c=><option key={c}>{c}</option>)}
-            </select>
+            </PickSelect>
             {isAdmin&&<button onClick={()=>{setEditReq(null);setReqForm({title:"",category:"Architectural",description:"",priority:"Normal",due_date:""});setShowReqForm(true);}}
               style={{padding:"7px 14px",borderRadius:6,background:T.blu,border:"none",color:"white",fontSize:11.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:5,fontFamily:"inherit",boxShadow:`0 2px 6px ${T.blu}33`,flexShrink:0,transition:"background .12s"}}
               onMouseEnter={el=>el.currentTarget.style.background="#1D4ED8"}

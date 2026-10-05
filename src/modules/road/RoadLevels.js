@@ -16,6 +16,7 @@
 // API: GET /road/designs?project_id=|tender_id= · POST /road/designs · GET /road/templates
 // ══════════════════════════════════════════════════════════════════════
 import React, { useState, useEffect, useCallback } from "react";
+import PickSelect from "../../components/PickSelect";
 import { T } from "../shared/tokens";
 import { useToast } from "../../components/Toast";
 import { useConfirm } from "../../components/ConfirmDialog";
@@ -203,10 +204,10 @@ export default function RoadLevels({ project, tender, pick, defaultName }) {
             </div>
             <div>
               <label style={S.lbl}>{t("road.design_section")}</label>
-              <select value={form.template_id} onChange={(e) => setForm((p) => ({ ...p, template_id: e.target.value }))} style={S.inp}>
+              <PickSelect value={form.template_id} onChange={(e) => setForm((p) => ({ ...p, template_id: e.target.value }))} style={S.inp}>
                 <option value="">{t("road.design_section_pick")}</option>
                 {templates.map((tpl) => <option key={tpl.id} value={tpl.id}>{tpl.name}</option>)}
-              </select>
+              </PickSelect>
             </div>
             <div>
               <label style={S.lbl}>{t("road.design_start_ch")}</label>

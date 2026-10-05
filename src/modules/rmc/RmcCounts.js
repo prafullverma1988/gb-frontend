@@ -4,6 +4,7 @@
 // isliye list me bhi "bheja hua" aur "approve hua" alag dikhte hain.
 // GET /rmc/stock-checks
 import { useState, useEffect, useCallback } from "react";
+import PickSelect from "../../components/PickSelect";
 import { t } from "../../i18n";
 import {
   T, fmtDT, rupee, rget, dataOf, inpSm, Field, Btn, Panel, Row, Scroll, Empty, Spinner,
@@ -37,16 +38,16 @@ function RmcCounts({ meta, canCreate, canApprove, refreshKey, onRefresh }) {
 
       <div style={{ display: "flex", gap: 8, alignItems: "flex-end", flexWrap: "wrap", marginBottom: 12 }}>
         <Field label={t("rmc.plant")}>
-          <select style={{ ...inpSm, width: 180 }} value={fl.plant_id} onChange={(e) => setFl({ ...fl, plant_id: e.target.value })}>
+          <PickSelect style={{ ...inpSm, width: 180 }} value={fl.plant_id} onChange={(e) => setFl({ ...fl, plant_id: e.target.value })}>
             <option value="">{t("common.all")}</option>
             {(meta.plants || []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
+          </PickSelect>
         </Field>
         <Field label={t("common.status")}>
-          <select style={{ ...inpSm, width: 180 }} value={fl.status} onChange={(e) => setFl({ ...fl, status: e.target.value })}>
+          <PickSelect style={{ ...inpSm, width: 180 }} value={fl.status} onChange={(e) => setFl({ ...fl, status: e.target.value })}>
             <option value="">{t("common.all")}</option>
             {STATUSES.map((s) => <option key={s} value={s}>{countStatusLabel(s)}</option>)}
-          </select>
+          </PickSelect>
         </Field>
         <span style={{ flex: 1 }} />
         {canCreate && <Btn icon={IcAdd} onClick={() => setFormOpen(true)}>{t("rmc.new_count")}</Btn>}

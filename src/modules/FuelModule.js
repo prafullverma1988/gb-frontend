@@ -14,6 +14,7 @@
 // Cross-check tab is deliberately absent — that is E3.
 // ══════════════════════════════════════════════════════════════════════
 import { useState, useEffect, useCallback, useMemo, createContext, useContext } from "react";
+import PickSelect from "../components/PickSelect";
 import api, { API_BASE, getToken } from "../config/api";
 import { t, Rich } from "../i18n";
 import { BackClose } from "../utils/backNav";
@@ -751,7 +752,7 @@ function RefuelForm({ open, onClose, onSaved, stores, equipment, vendors, projec
         {path !== "pump_machine" && (
           <>
             <Field label={t("fuel.barrel_kahan_ka")}>
-              <select value={f.store_scope || ""} onChange={(e) => { upd("store_scope", e.target.value); upd("store_id", ""); }} style={inp}>
+              <PickSelect value={f.store_scope || ""} onChange={(e) => { upd("store_scope", e.target.value); upd("store_id", ""); }} style={inp}>
                 <option value="">{t("fuel.chunein")}</option>
                 {placesWithStores.some((p) => p.wh) && (
                   <optgroup label={t("fuel.warehouse_central_store")}>
@@ -763,10 +764,10 @@ function RefuelForm({ open, onClose, onSaved, stores, equipment, vendors, projec
                     {placesWithStores.filter((p) => !p.wh).map((p) => <option key={p.key} value={p.key}>{p.label}</option>)}
                   </optgroup>
                 )}
-              </select>
+              </PickSelect>
             </Field>
             <Field label={t("fuel.barrel_store")}>
-              <select value={f.store_id || ""} style={inp} disabled={!f.store_scope}
+              <PickSelect value={f.store_id || ""} style={inp} disabled={!f.store_scope}
                 onChange={(e) => {
                   const v = e.target.value;
                   const s = stores.find((x) => String(x.id) === String(v));
@@ -777,7 +778,7 @@ function RefuelForm({ open, onClose, onSaved, stores, equipment, vendors, projec
                 }}>
                 <option value="">{f.store_scope ? t("fuel.chunein") : t("fuel.pehle_upar_wala_chunein")}</option>
                 {scopedStores.map((s) => <option key={s.id} value={s.id}>{s.name} — {fmtL(s.litres)}</option>)}
-              </select>
+              </PickSelect>
               {f.store_scope && scopedStores.length === 0 && (
                 <div style={{ fontSize: 11, color: T.t4, marginTop: 4 }}>{t("fuel.yahan_koi_barrel_nahi_hai")}</div>
               )}
@@ -789,10 +790,10 @@ function RefuelForm({ open, onClose, onSaved, stores, equipment, vendors, projec
             level. Drum kahan pada hai isse cost nahi badalti. */}
         {isIssue && store && (
           <Field label={t("fuel.kis_project_ka_kaam")} span={2} hint={t("fuel.cost_machine_ke_kaam_par")}>
-            <select value={f.project_id || ""} onChange={(e) => upd("project_id", e.target.value)} style={inp}>
+            <PickSelect value={f.project_id || ""} onChange={(e) => upd("project_id", e.target.value)} style={inp}>
               <option value="">{t("fuel.company_level_koi_project_nahi")}</option>
               {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
+            </PickSelect>
             {drumElsewhere && (
               <div style={{ marginTop: 6, padding: "8px 11px", borderRadius: 6, background: T.ambL, border: `1px solid ${T.ambM}`, fontSize: 11.5, color: T.amb, fontWeight: 600 }}>
                 {t("fuel.drum_doosri_jagah_darj", { place: placeOf(store) })}
@@ -803,19 +804,19 @@ function RefuelForm({ open, onClose, onSaved, stores, equipment, vendors, projec
 
         {path !== "pump_store" && (
           <Field label={t("fuel.machine")} hint={blocked > 0 ? `${blocked} machine list me nahi — unka kiraya diesel ke saath hai` : null}>
-            <select value={f.equipment_id || ""} onChange={(e) => upd("equipment_id", e.target.value)} style={inp}>
+            <PickSelect value={f.equipment_id || ""} onChange={(e) => upd("equipment_id", e.target.value)} style={inp}>
               <option value="">{t("fuel.chunein")}</option>
               {eligible.map((e) => <option key={e.id} value={e.id}>{e.name}{e.code ? ` (${e.code})` : ""}</option>)}
-            </select>
+            </PickSelect>
           </Field>
         )}
 
         {!isIssue && (
           <Field label={t("fuel.pump_fuel_vendor")} hint={t("fuel.free_text_naam_nahi_chalega_party")}>
-            <select value={f.vendor_party_id || ""} onChange={(e) => upd("vendor_party_id", e.target.value)} style={inp}>
+            <PickSelect value={f.vendor_party_id || ""} onChange={(e) => upd("vendor_party_id", e.target.value)} style={inp}>
               <option value="">{t("fuel.chunein")}</option>
               {vendors.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
-            </select>
+            </PickSelect>
           </Field>
         )}
 
@@ -836,10 +837,10 @@ function RefuelForm({ open, onClose, onSaved, stores, equipment, vendors, projec
         )}
         {path === "pump_machine" && (
           <Field label={t("common.project")}>
-            <select value={f.project_id || ""} onChange={(e) => upd("project_id", e.target.value)} style={inp}>
+            <PickSelect value={f.project_id || ""} onChange={(e) => upd("project_id", e.target.value)} style={inp}>
               <option value="">{t("fuel.koi_nahi")}</option>
               {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
+            </PickSelect>
           </Field>
         )}
 
@@ -880,13 +881,13 @@ function RefuelForm({ open, onClose, onSaved, stores, equipment, vendors, projec
              {t("fuel.meter_nahi_de_sakta")}
             </label>
             {f.meter_missing && (
-              <select value={f.meter_missing_reason || ""} onChange={(e) => upd("meter_missing_reason", e.target.value)}
+              <PickSelect value={f.meter_missing_reason || ""} onChange={(e) => upd("meter_missing_reason", e.target.value)}
                 style={{ ...inp, marginTop: 7 }}>
                 <option value="">{t("fuel.wajah_chunein")}</option>
                 <option value="meter_kharab">{t("fuel.meter_kharab_hai")}</option>
                 <option value="meter_nahi">{t("fuel.machine_par_meter_hai_hi_nahi")}</option>
                 <option value="padha_nahi_gaya">{t("fuel.us_waqt_padha_nahi_ja_saka")}</option>
-              </select>
+              </PickSelect>
             )}
           </Field>
         )}
@@ -1581,18 +1582,18 @@ function BarrelTab({ stores, projects, onReload, onOpenLedger, onRefuel, dipPend
 
           {(f.scope || "project") === "project" ? (
             <Field label={t("common.project")}>
-              <select value={f.project_id || ""} onChange={(e) => setF((p) => ({ ...p, project_id: e.target.value }))} style={inp}>
+              <PickSelect value={f.project_id || ""} onChange={(e) => setF((p) => ({ ...p, project_id: e.target.value }))} style={inp}>
                 <option value="">{t("fuel.chunein")}</option>
                 {placeProjects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
+              </PickSelect>
             </Field>
           ) : (
             <Field label={t("fuel.jagah_warehouse")}
               hint={places.warehouses.length ? t("fuel.warehouse_ka_diesel_har_project_ko") : t("fuel.koi_warehouse_nahi_bana")}>
-              <select value={f.warehouse_id || ""} onChange={(e) => setF((p) => ({ ...p, warehouse_id: e.target.value }))} style={inp}>
+              <PickSelect value={f.warehouse_id || ""} onChange={(e) => setF((p) => ({ ...p, warehouse_id: e.target.value }))} style={inp}>
                 <option value="">{t("fuel.chunein")}</option>
                 {places.warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
-              </select>
+              </PickSelect>
             </Field>
           )}
           <Field label={t("common.naam")} hint={t("fuel.drum_par_likha_naam_number")}>
@@ -1632,19 +1633,19 @@ function BarrelTab({ stores, projects, onReload, onOpenLedger, onRefuel, dipPend
               to_warehouse_id: k === "warehouse" ? (p.to_warehouse_id || onlyWarehouse) : p.to_warehouse_id })))}
             <div style={{ marginTop: 8 }}>
               {f.to_scope === "warehouse" ? (
-                <select value={f.to_warehouse_id || ""} onChange={(e) => setF((p) => ({ ...p, to_warehouse_id: e.target.value }))} style={inp}>
+                <PickSelect value={f.to_warehouse_id || ""} onChange={(e) => setF((p) => ({ ...p, to_warehouse_id: e.target.value }))} style={inp}>
                   <option value="">{t("fuel.chunein")}</option>
                   {places.warehouses
                     .filter((w) => shiftFor.project_id || Number(shiftFor.warehouse_id) !== Number(w.id))
                     .map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
-                </select>
+                </PickSelect>
               ) : (
-                <select value={f.to_project_id || ""} onChange={(e) => setF((p) => ({ ...p, to_project_id: e.target.value }))} style={inp}>
+                <PickSelect value={f.to_project_id || ""} onChange={(e) => setF((p) => ({ ...p, to_project_id: e.target.value }))} style={inp}>
                   <option value="">{t("fuel.chunein")}</option>
                   {placeProjects
                     .filter((p) => String(p.id) !== String(shiftFor.project_id))
                     .map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                </select>
+                </PickSelect>
               )}
             </div>
           </Field>
@@ -1888,25 +1889,25 @@ function SubconTab({ subcons, stores, vendors, projects, from, to, onRange, onRe
           </Field>
 
           <Field label={t("fuel.kis_subcon_ko")} hint={subcons.length ? null : t("fuel.koi_subcon_nahi")}>
-            <select value={f.subcon_party_id || ""} onChange={(e) => setF((p) => ({ ...p, subcon_party_id: e.target.value }))} style={inp}>
+            <PickSelect value={f.subcon_party_id || ""} onChange={(e) => setF((p) => ({ ...p, subcon_party_id: e.target.value }))} style={inp}>
               <option value="">{t("fuel.chunein")}</option>
               {subcons.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-            </select>
+            </PickSelect>
           </Field>
 
           {fromPump ? (
             <Field label={t("fuel.pump_fuel_vendor")}>
-              <select value={f.vendor_party_id || ""} onChange={(e) => setF((p) => ({ ...p, vendor_party_id: e.target.value }))} style={inp}>
+              <PickSelect value={f.vendor_party_id || ""} onChange={(e) => setF((p) => ({ ...p, vendor_party_id: e.target.value }))} style={inp}>
                 <option value="">{t("fuel.chunein")}</option>
                 {vendors.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
-              </select>
+              </PickSelect>
             </Field>
           ) : (
             <Field label={t("fuel.barrel_store")} hint={store ? t("fuel.rate_drum_ke_average_se", { rate: fmtN(store.avg_rate) }) : null}>
-              <select value={f.store_id || ""} onChange={(e) => setF((p) => ({ ...p, store_id: e.target.value }))} style={inp}>
+              <PickSelect value={f.store_id || ""} onChange={(e) => setF((p) => ({ ...p, store_id: e.target.value }))} style={inp}>
                 <option value="">{t("fuel.chunein")}</option>
                 {stores.map((s) => <option key={s.id} value={s.id}>{s.name} — {fmtL(s.litres)} · {placeOf(s)}</option>)}
-              </select>
+              </PickSelect>
             </Field>
           )}
 
@@ -1937,19 +1938,19 @@ function SubconTab({ subcons, stores, vendors, projects, from, to, onRange, onRe
 
           {fromPump && (
             <Field label={t("common.project")} hint={t("fuel.project_pump_wali_cost")}>
-              <select value={f.project_id || ""} onChange={(e) => setF((p) => ({ ...p, project_id: e.target.value }))} style={inp}>
+              <PickSelect value={f.project_id || ""} onChange={(e) => setF((p) => ({ ...p, project_id: e.target.value }))} style={inp}>
                 <option value="">{t("fuel.company_level_koi_project_nahi")}</option>
                 {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
+              </PickSelect>
             </Field>
           )}
 
           {fromPump && (
             <Field label={t("common.payment")}>
-              <select value={f.payment_mode || "credit"} onChange={(e) => setF((p) => ({ ...p, payment_mode: e.target.value }))} style={inp}>
+              <PickSelect value={f.payment_mode || "credit"} onChange={(e) => setF((p) => ({ ...p, payment_mode: e.target.value }))} style={inp}>
                 <option value="credit">{t("fuel.udhaar_credit")}</option>
                 <option value="cash">{t("common.cash")}</option>
-              </select>
+              </PickSelect>
             </Field>
           )}
 
@@ -2318,11 +2319,11 @@ const FLbl = ({ children }) => (
 const FSel = ({ label, value, onChange, options, w = 150, placeholder = "Sab" }) => (
   <div>
     <FLbl>{label}</FLbl>
-    <select value={value} onChange={(e) => onChange(e.target.value)}
+    <PickSelect value={value} onChange={(e) => onChange(e.target.value)}
       style={{ ...inp, width: w, padding: "6px 8px", fontSize: 11.5 }}>
       <option value="">{placeholder}</option>
       {options.map((o) => <option key={o.v} value={o.v}>{o.l}</option>)}
-    </select>
+    </PickSelect>
   </div>
 );
 

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
+import PickSelect from "../../components/PickSelect";
 import api from "../../config/api";
 import { CreateTransactionModal } from "../FinanceModule";
 import TransactionDetailDrawer from "../../components/TransactionDetailDrawer";
@@ -175,10 +176,10 @@ function TabTransaction({projectId, projectName}) {
   // Sel helper
   const Sel=({val,set,opts,def,minW=100})=>(
     <div style={{position:"relative"}}>
-      <select value={val} onChange={e=>set(e.target.value)}
+      <PickSelect value={val} onChange={e=>set(e.target.value)}
         style={{height:29,padding:"0 20px 0 9px",borderRadius:6,border:`1.5px solid ${val!=="All"?T.blu:T.b1}`,background:val!=="All"?T.bluL:T.surface,fontSize:11.5,color:val!=="All"?T.blu:T.t2,outline:"none",cursor:"pointer",fontFamily:"inherit",fontWeight:val!=="All"?600:400,minWidth:minW,appearance:"none",WebkitAppearance:"none"}}>
         {opts.map(o=><option key={o} value={o}>{o==="All"?def:o}</option>)}
-      </select>
+      </PickSelect>
       <svg width={9} height={9} viewBox="0 0 24 24" fill="none" stroke={T.t4} strokeWidth={2} style={{position:"absolute",right:5,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}><path d="M6 9l6 6 6-6"/></svg>
     </div>
   );
@@ -292,10 +293,10 @@ function TabTransaction({projectId, projectName}) {
             ].map(({label,val,set,opts,def},i)=>(
               <div key={i}>
                 <div style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",marginBottom:4}}>{label}</div>
-                <select value={val} onChange={e=>set(e.target.value)}
+                <PickSelect value={val} onChange={e=>set(e.target.value)}
                   style={{width:"100%",height:29,padding:"0 8px",borderRadius:6,border:`1.5px solid ${val!=="All"?T.blu:T.b1}`,background:val!=="All"?T.bluL:T.surface,fontSize:11.5,color:val!=="All"?T.blu:T.t2,outline:"none",fontFamily:"inherit",fontWeight:val!=="All"?600:400}}>
                   {opts.map(o=><option key={o} value={o}>{o==="All"?def:o}</option>)}
-                </select>
+                </PickSelect>
               </div>
             ))}
             <div>

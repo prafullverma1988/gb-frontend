@@ -14,6 +14,7 @@
 //      POST /road/ai/read-drawing
 // ══════════════════════════════════════════════════════════════════════
 import React, { useState } from "react";
+import PickSelect from "../../components/PickSelect";
 import { T } from "../shared/tokens";
 import { useToast } from "../../components/Toast";
 import { t } from "../../i18n";
@@ -310,9 +311,9 @@ export default function RoadSectionTemplate({ editRow, onClose, onSaved }) {
                       <td style={S.td}><input value={l.name} onChange={(e) => setLayer(i, "name", e.target.value)} style={{ ...S.inp, width: 150 }} /></td>
                       <td style={S.td}><input type="number" step="1" value={l.thickness_mm == null ? "" : l.thickness_mm} onChange={(e) => setLayer(i, "thickness_mm", e.target.value)} style={{ ...S.inp, width: 84, textAlign: "right" }} /></td>
                       <td style={S.td}>
-                        <select value={l.extent} onChange={(e) => setLayer(i, "extent", e.target.value)} style={{ ...S.inp, width: 150 }}>
+                        <PickSelect value={l.extent} onChange={(e) => setLayer(i, "extent", e.target.value)} style={{ ...S.inp, width: 150 }}>
                           {EXTENTS.map((x) => <option key={x} value={x}>{extentLabel(x)}</option>)}
-                        </select>
+                        </PickSelect>
                       </td>
                       <td style={S.td}><input type="number" step="0.01" value={l.density_t_cum} onChange={(e) => setLayer(i, "density_t_cum", e.target.value)} placeholder={t("road.col_density_ph")} style={{ ...S.inp, width: 96, textAlign: "right" }} /></td>
                       <td style={S.td}>

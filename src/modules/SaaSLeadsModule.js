@@ -5,6 +5,7 @@
 // Self-contained per house rule (own icons, theme, components).
 // ─────────────────────────────────────────────────────────────────
 import { useState, useEffect, useCallback } from "react";
+import PickSelect from "../components/PickSelect";
 import api, { getUser } from "../config/api";
 
 // ── ICONS ───────────────────────────────────────────────────────
@@ -111,7 +112,7 @@ function Field({ label, children }) {
 }
 const inputStyle = { width:"100%", padding:"8px 11px", borderRadius:8, border:`1px solid ${T.b1}`, fontSize:13, color:T.t1, background:T.surfaceB, fontFamily:"inherit", outline:"none" };
 function TextInput(props){ return <input {...props} style={{ ...inputStyle, ...(props.style||{}) }} />; }
-function Select({ value, onChange, children, style:sx }){ return <select value={value||""} onChange={onChange} style={{ ...inputStyle, cursor:"pointer", ...(sx||{}) }}>{children}</select>; }
+function Select({ value, onChange, children, style:sx }){ return <PickSelect value={value||""} onChange={onChange} style={{ ...inputStyle, cursor:"pointer", ...(sx||{}) }}>{children}</PickSelect>; }
 
 // ─────────────────────────────────────────────────────────────────
 export default function SaaSLeadsModule() {

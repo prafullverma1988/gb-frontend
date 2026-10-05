@@ -11,6 +11,7 @@
 //
 // POST /rmc/batch-import (dry_run true/false) · GET /rmc/batch-imports (+ ?id=)
 import { useState, useEffect, useCallback } from "react";
+import PickSelect from "../../components/PickSelect";
 import { useToast } from "../../components/Toast";
 import { t } from "../../i18n";
 import {
@@ -158,11 +159,11 @@ function ImportForm({ meta, canCreate, onImported }) {
 
       <div style={{ display: "flex", gap: 8, alignItems: "flex-end", flexWrap: "wrap", marginBottom: 12 }}>
         <Field label={t("rmc.plant")}>
-          <select style={{ ...inpSm, width: 200 }} value={plantId}
+          <PickSelect style={{ ...inpSm, width: 200 }} value={plantId}
             onChange={(e) => { setPlantId(e.target.value); setDry(null); }}>
             <option value="">{t("rmc.select_plant")}</option>
             {plants.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
+          </PickSelect>
         </Field>
         <Field label={t("common.from")} hint={t("rmc.batch_range_hint")}>
           <input type="date" style={{ ...inpSm, width: 145 }} value={range.from}

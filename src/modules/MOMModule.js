@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from "react";
+import PickSelect from "../components/PickSelect";
 import api from "../config/api";
 import SearchSelect from "../components/SearchSelect";
 import ExportMenu from "../components/DataExport";
@@ -759,10 +760,10 @@ function MMItem({it,meta,onPatch,inputStyle,allMode,projects}){
             <>
               <div style={{fontSize:12.5,fontWeight:600,color:T.t1,marginBottom:6}}>{it.task_name||it.title||t("mom.existing_task")}{allMode&&it.project?<span style={{fontSize:10,fontWeight:500,color:T.t4}}>  ·  {it.project}</span>:null}</div>
               <div style={{display:"flex",gap:6,marginBottom:6,flexWrap:"wrap"}}>
-                <select value={it.status||""} onChange={e=>onPatch(it._id,{status:e.target.value})} style={{...inp,width:"auto"}}>
+                <PickSelect value={it.status||""} onChange={e=>onPatch(it._id,{status:e.target.value})} style={{...inp,width:"auto"}}>
                   <option value="">{t("mom.status")}</option>
                   {["Not Started","Ongoing","Completed"].map(s=><option key={s}>{s}</option>)}
-                </select>
+                </PickSelect>
                 <input type="number" value={it.progress>=0?it.progress:""} onChange={e=>onPatch(it._id,{progress:e.target.value===""?-1:Number(e.target.value)})} placeholder="%" style={{...inp,width:64}}/>
                 <input value={it.note||""} onChange={e=>onPatch(it._id,{note:e.target.value})} placeholder={t("mom.progress_note_optional")} style={{...inp,flex:1,minWidth:120}}/>
               </div>
@@ -781,13 +782,13 @@ function MMItem({it,meta,onPatch,inputStyle,allMode,projects}){
                 <textarea value={it.description} onChange={e=>onPatch(it._id,{description:e.target.value})} rows={2} placeholder={t("app.details")} style={{...inp,width:"100%",resize:"none",lineHeight:1.4,fontFamily:"inherit"}}/>
               )}
               <div style={{display:"flex",alignItems:"center",gap:8,marginTop:6,flexWrap:"wrap"}}>
-                {it.type!=="mr"&&<select value={it.priority} onChange={e=>onPatch(it._id,{priority:e.target.value})} style={{...inp,padding:"4px 7px",width:"auto"}}>{["Low","Medium","High"].map(p=><option key={p}>{p}</option>)}</select>}
+                {it.type!=="mr"&&<PickSelect value={it.priority} onChange={e=>onPatch(it._id,{priority:e.target.value})} style={{...inp,padding:"4px 7px",width:"auto"}}>{["Low","Medium","High"].map(p=><option key={p}>{p}</option>)}</PickSelect>}
                 {allMode&&(
-                  <select value={it.project||""} onChange={e=>onPatch(it._id,{project:e.target.value})}
+                  <PickSelect value={it.project||""} onChange={e=>onPatch(it._id,{project:e.target.value})}
                     style={{...inp,padding:"4px 7px",width:"auto",maxWidth:150,border:`1.5px solid ${needProj?T.amb:T.b1}`,color:needProj?T.amb:T.t1}}>
                     <option value="">{t("mom.project")}</option>
                     {projects.map(p=><option key={p.id} value={p.name}>{p.name}</option>)}
-                  </select>
+                  </PickSelect>
                 )}
                 {it.assignee?<span style={{fontSize:10.5,color:T.t3}}>@ {it.assignee}</span>:null}
                 <span style={{marginLeft:"auto",fontSize:9.5,color:T.t4}}>{Math.round((it.confidence||0)*100)}%</span>
@@ -1022,10 +1023,10 @@ function MeetingModeModal({projectId=null,projectName="",onClose,onComplete}){
               {mode==="single"?(
                 <div style={{marginBottom:12}}>
                   <label style={labelStyle}>{t("common.project")} <span style={{color:T.t4,textTransform:"none",fontWeight:500}}>{t("mom.material_task_ke_liye")}</span></label>
-                  <select value={proj} onChange={e=>setProj(e.target.value)} style={inputStyle}>
+                  <PickSelect value={proj} onChange={e=>setProj(e.target.value)} style={inputStyle}>
                     <option value="">{t("mom.select_project")}</option>
                     {projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
-                  </select>
+                  </PickSelect>
                 </div>
               ):(
                 <div style={{marginBottom:12,fontSize:11,color:T.t2,background:T.purL,border:`1px solid ${T.purM}`,borderRadius:8,padding:"9px 11px",lineHeight:1.5}}>
@@ -1041,11 +1042,11 @@ function MeetingModeModal({projectId=null,projectName="",onClose,onComplete}){
                     <button onClick={()=>addCustomTitle(title)} style={{...btnS,padding:"8px 14px",whiteSpace:"nowrap"}}>{t("common.save")}</button>
                   </div>
                 ):(
-                  <select value={titleOptions.includes(title)?title:""} onChange={e=>{ const v=e.target.value; if(v==="__add__"){ setTitle(""); setAddingTitle(true); } else setTitle(v); }} style={inputStyle}>
+                  <PickSelect value={titleOptions.includes(title)?title:""} onChange={e=>{ const v=e.target.value; if(v==="__add__"){ setTitle(""); setAddingTitle(true); } else setTitle(v); }} style={inputStyle}>
                     <option value="">{t("mom.select_meeting_title")}</option>
                     {titleOptions.map(t=><option key={t} value={t}>{t}</option>)}
                     <option value="__add__">{t("mom.add_new")}</option>
-                  </select>
+                  </PickSelect>
                 )}
               </div>
               {transcribing?(
@@ -1092,10 +1093,10 @@ function MeetingModeModal({projectId=null,projectName="",onClose,onComplete}){
               {mode==="single"?(
                 <div style={{marginBottom:14}}>
                   <label style={labelStyle}>{t("common.project")} <span style={{color:T.t4,textTransform:"none",fontWeight:500}}>{t("mom.material_task_ke_liye_zaroori")}</span></label>
-                  <select value={proj} onChange={e=>setProj(e.target.value)} style={inputStyle}>
+                  <PickSelect value={proj} onChange={e=>setProj(e.target.value)} style={inputStyle}>
                     <option value="">{t("mom.select_project")}</option>
                     {projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
-                  </select>
+                  </PickSelect>
                 </div>
               ):(
                 <div style={{marginBottom:12,fontSize:11,color:T.t3}}>{t("mom.har_item_ka")} <b style={{color:T.pur}}>project</b> {t("mom.neeche_check_correct_karein_ai_ne")}</div>
@@ -1395,16 +1396,16 @@ function MOMModule({projectId=null,projectName="",embedded=false}={}){
               style={{height:28,padding:"0 8px 0 24px",borderRadius:6,border:"1px solid rgba(255,255,255,0.18)",background:"rgba(255,255,255,0.1)",fontSize:12,color:"white",outline:"none",width:150,boxSizing:"border-box",fontFamily:"inherit"}}/>
           </div>
           {/* Filters */}
-          <select value={fSite} onChange={e=>setFSite(e.target.value)}
+          <PickSelect value={fSite} onChange={e=>setFSite(e.target.value)}
             style={{height:28,padding:"0 8px",borderRadius:6,border:`1px solid ${fSite!=="All"?"rgba(251,191,36,0.5)":"rgba(255,255,255,0.18)"}`,background:fSite!=="All"?"rgba(251,191,36,0.15)":"rgba(255,255,255,0.07)",color:fSite!=="All"?"#FDE68A":"rgba(255,255,255,0.7)",fontSize:11.5,outline:"none",cursor:"pointer",fontFamily:"inherit"}}>
             <option value="All">{t("common.all_sites")}</option>
             {sites.map(s=><option key={s} style={{color:T.t1,background:T.surface}}>{s}</option>)}
-          </select>
-          <select value={fType} onChange={e=>setFType(e.target.value)}
+          </PickSelect>
+          <PickSelect value={fType} onChange={e=>setFType(e.target.value)}
             style={{height:28,padding:"0 8px",borderRadius:6,border:`1px solid ${fType!=="All"?"rgba(251,191,36,0.5)":"rgba(255,255,255,0.18)"}`,background:fType!=="All"?"rgba(251,191,36,0.15)":"rgba(255,255,255,0.07)",color:fType!=="All"?"#FDE68A":"rgba(255,255,255,0.7)",fontSize:11.5,outline:"none",cursor:"pointer",fontFamily:"inherit"}}>
             <option value="All">{t("common.all_types")}</option>
             {MEETING_TYPES.map(t=><option key={t} style={{color:T.t1,background:T.surface}}>{t}</option>)}
-          </select>
+          </PickSelect>
           {/* Export — MOM ka Export tick (5 Oct 2026) */}
           {can("MOM","export")&&<ExportMenu
             filename="moms"

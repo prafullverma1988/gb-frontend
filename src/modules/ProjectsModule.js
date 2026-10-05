@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import PickSelect from "../components/PickSelect";
 import api from "../config/api";
 import apiCache from "../utils/apiCache";
 import DangerDelete from "./shared/DangerDelete";
@@ -298,10 +299,10 @@ function SitePulseDrawer({onClose,onSelectProject}){
           <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:C.tl,display:"flex"}}><IcX size={15}/></button>
         </div>
         <div style={{display:"flex",gap:6}}>
-          <select value={site} onChange={e=>setSite(e.target.value)} style={{flex:1,padding:"6px 8px",borderRadius:7,border:`1.5px solid ${C.b}`,fontSize:11.5,background:C.bg,outline:"none",fontFamily:"inherit",color:C.t}}>
+          <PickSelect value={site} onChange={e=>setSite(e.target.value)} style={{flex:1,padding:"6px 8px",borderRadius:7,border:`1.5px solid ${C.b}`,fontSize:11.5,background:C.bg,outline:"none",fontFamily:"inherit",color:C.t}}>
             <option value="All">{t("common.all_projects")}</option>
             {projects.map(s=><option key={s}>{s}</option>)}
-          </select>
+          </PickSelect>
           <div style={{flex:1,position:"relative"}}>
             <button onClick={()=>setShowTypeMenu(v=>!v)} style={{width:"100%",padding:"6px 8px",borderRadius:7,border:`1.5px solid ${showTypeMenu?C.p:C.b}`,fontSize:11.5,background:C.bg,outline:"none",fontFamily:"inherit",color:C.t,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"space-between",gap:5}}>
               <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{allSelected?t("common.all_types"):`${selTypes.length} type${selTypes.length!==1?"s":""}`}</span>
@@ -730,14 +731,14 @@ function NewProjectModal({onClose,onCreated}){
             {/* Type * — library-backed dropdown, mandatory */}
             <div>
               <label style={{fontSize:10.5,fontWeight:600,color:form.constructionTypeId?T.t3:"#DC2626",display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".5px"}}>{t("projects.type")}</label>
-              <select value={form.constructionTypeId} onChange={e => pickType(e.target.value)}
+              <PickSelect value={form.constructionTypeId} onChange={e => pickType(e.target.value)}
                 style={{width:"100%",padding:"9px 12px",borderRadius:7,
                         border:`1.5px solid ${form.constructionTypeId?T.b1:"#FCA5A5"}`,
                         background: form.constructionTypeId?T.bg:"#FEF2F2",
                         fontSize:13, color:T.t1, outline:"none", boxSizing:"border-box", fontFamily:"inherit"}}>
                 <option value="">{t("common.select_type")}</option>
                 {libCTypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-              </select>
+              </PickSelect>
             </div>
             {inp("BOQ Value (₹)","boq_value",    "e.g. 5000000", "number")}
             {inp("Start Date",   "start_date",   "", "date")}
@@ -1096,7 +1097,7 @@ function ProjectSettingsModal({project, onClose, onUpdated, onDeleted}){
                 </div>
                 <div>
                   {lbl("Project Type")}
-                  <select value={form.constructionTypeId}
+                  <PickSelect value={form.constructionTypeId}
                     onChange={e=>{
                       const tid=e.target.value;
                       const ct=libCTypes.find(x=>String(x.id)===String(tid));
@@ -1106,7 +1107,7 @@ function ProjectSettingsModal({project, onClose, onUpdated, onDeleted}){
                       fontSize:13,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}>
                     <option value="">{t("common.select_type")}</option>
                     {libCTypes.map(ct=><option key={ct.id} value={ct.id}>{ct.name}</option>)}
-                  </select>
+                  </PickSelect>
                 </div>
               </div>
               <div>
@@ -3113,10 +3114,10 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
         {!loading&&mode==="materials"&&activeTab==="mr"&&(<>
           {/* Filters: site + material search */}
           <div style={{padding:"10px 14px 6px",borderBottom:"1px solid "+T.b1,display:"flex",gap:8,flexWrap:"wrap"}}>
-            <select value={mrSite} onChange={e=>setMrSite(e.target.value)}
+            <PickSelect value={mrSite} onChange={e=>setMrSite(e.target.value)}
               style={{flex:"1 1 130px",padding:"6px 9px",borderRadius:7,border:"1.5px solid "+T.b1,fontSize:12,color:T.t2,background:"white",cursor:"pointer",fontFamily:"inherit"}}>
               {mrSiteList.map(s=><option key={s}>{s}</option>)}
-            </select>
+            </PickSelect>
             <input value={mrSearch} onChange={e=>setMrSearch(e.target.value)} placeholder={t("common.search_material")}
               style={{flex:"2 1 150px",padding:"6px 9px",borderRadius:7,border:"1.5px solid "+T.b1,fontSize:12,color:T.t2,background:"white",outline:"none",fontFamily:"inherit"}}/>
           </div>
@@ -3654,31 +3655,31 @@ function ProjectsPage({onSelectProject}){
 
         {/* City */}
         <div style={{position:"relative"}}>
-          <select value={filterCity} onChange={e=>setFilterCity(e.target.value)}
+          <PickSelect value={filterCity} onChange={e=>setFilterCity(e.target.value)}
             style={{height:32,padding:"0 24px 0 9px",borderRadius:6,border:`1.5px solid ${filterCity!=="All"?T.blu:T.b1}`,background:filterCity!=="All"?T.bluL:T.surfaceB,fontSize:12,color:filterCity!=="All"?T.blu:T.t2,outline:"none",cursor:"pointer",fontFamily:"inherit",fontWeight:filterCity!=="All"?600:400,minWidth:90,appearance:"none",WebkitAppearance:"none"}}>
             {cities.map(c=><option key={c} value={c}>{c==="All"?t("projects.all_cities"):c}</option>)}
-          </select>
+          </PickSelect>
           <div style={{position:"absolute",right:6,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}><IcDown size={11} color={T.t4}/></div>
         </div>
 
         {/* Status */}
         <div style={{position:"relative"}}>
-          <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)}
+          <PickSelect value={filterStatus} onChange={e=>setFilterStatus(e.target.value)}
             style={{height:32,padding:"0 24px 0 9px",borderRadius:6,border:`1.5px solid ${filterStatus!=="All"?T.blu:T.b1}`,background:filterStatus!=="All"?T.bluL:T.surfaceB,fontSize:12,color:filterStatus!=="All"?T.blu:T.t2,outline:"none",cursor:"pointer",fontFamily:"inherit",fontWeight:filterStatus!=="All"?600:400,minWidth:90,appearance:"none",WebkitAppearance:"none"}}>
             {["All","Ongoing","Hold","Not Started"].map(s=><option key={s} value={s}>{s==="All"?t("common.all_status"):s}</option>)}
-          </select>
+          </PickSelect>
           <div style={{position:"absolute",right:6,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}><IcDown size={11} color={T.t4}/></div>
         </div>
 
         {/* Tender — tabhi jab kisi site par tender juda ho */}
         {!!tenderOpts.length&&(
         <div style={{position:"relative"}}>
-          <select value={filterTender} onChange={e=>setFilterTender(e.target.value)}
+          <PickSelect value={filterTender} onChange={e=>setFilterTender(e.target.value)}
             title={t("projects.ek_tender_ki_saari_site_ek")}
             style={{height:32,padding:"0 24px 0 9px",borderRadius:6,border:`1.5px solid ${filterTender!=="All"?T.ind:T.b1}`,background:filterTender!=="All"?T.indL:T.surfaceB,fontSize:12,color:filterTender!=="All"?T.ind:T.t2,outline:"none",cursor:"pointer",fontFamily:"inherit",fontWeight:filterTender!=="All"?600:400,minWidth:110,maxWidth:190,appearance:"none",WebkitAppearance:"none"}}>
             <option value="All">{t("projects.all_tenders")}</option>
             {tenderOpts.map(([id,label])=><option key={id} value={id}>{label}</option>)}
-          </select>
+          </PickSelect>
           <div style={{position:"absolute",right:6,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}><IcDown size={11} color={T.t4}/></div>
         </div>
         )}
@@ -4331,7 +4332,7 @@ function TodoDrawer({todos,loading,onClose,onSelectProject}){
           {/* ── Scope selector — Company level vs a specific project. ── */}
           <div style={{marginBottom:8}}>
             <div style={{fontSize:9.5,fontWeight:700,color:"#7C3AED",letterSpacing:".4px",marginBottom:4}}>{t("projects.kahaan_banega")}</div>
-            <select
+            <PickSelect
               value={newTodo.project_id || ""}
               onChange={e=>setNewTodo(p=>({...p,project_id:e.target.value?Number(e.target.value):null}))}
               style={{width:"100%",padding:"7px 10px",borderRadius:6,border:"1.5px solid #DDD6FE",fontSize:12,outline:"none",fontFamily:"inherit",background:"white",boxSizing:"border-box"}}>
@@ -4339,7 +4340,7 @@ function TodoDrawer({todos,loading,onClose,onSelectProject}){
               {projects.map(p=>(
                 <option key={p.id} value={p.id}>📍 {p.name}{p.city?" · "+p.city:""}</option>
               ))}
-            </select>
+            </PickSelect>
           </div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6,marginBottom:8}}>
             <SearchSelect value={newTodo.priority} options={["High","Medium","Low"]} compact

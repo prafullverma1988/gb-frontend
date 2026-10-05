@@ -28,6 +28,7 @@
 //   rowAction(r)= { label, onClick } — us row par ek chhota link (Assets: example row)
 //   skippedHint = Skip wali rows ki apni baat (default: "pehle se app me hain")
 import { useState } from "react";
+import PickSelect from "./PickSelect";
 import SearchSelect from "./SearchSelect";
 import { t } from "../i18n";
 
@@ -168,11 +169,11 @@ function RowEditor({ r, rows, lists, fields, onSet, onSame }) {
         );
       }
       return (
-        <select value={hit || (odd ? "__odd" : "")} onChange={(e) => { if (e.target.value !== "__odd") onSet(k, e.target.value); }} style={style(k)}>
+        <PickSelect value={hit || (odd ? "__odd" : "")} onChange={(e) => { if (e.target.value !== "__odd") onSet(k, e.target.value); }} style={style(k)}>
           <option value="">{t("import_fix.select")}</option>
           {odd && <option value="__odd">{oddText}</option>}
           {opts.map((o) => <option key={o} value={o}>{f.optionLabel ? f.optionLabel(o) : o}</option>)}
-        </select>
+        </PickSelect>
       );
     }
     if (f.type === "date") {

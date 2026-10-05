@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import PickSelect from "../components/PickSelect";
 import api, { getWarehouseId, setWarehouseId } from "../config/api";
 import SearchSelect from "../components/SearchSelect";
 import GrnReceive from "../components/grn/GrnReceive";
@@ -75,10 +76,10 @@ const UnitLock=({unit,locked,onChange,fallbackUnits=UNITS,compact})=>{
     );
   }
   return (
-    <select value={unit||"Nos"} onChange={e=>onChange(e.target.value)}
+    <PickSelect value={unit||"Nos"} onChange={e=>onChange(e.target.value)}
       style={{height:compact?32:38,padding:"0 6px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:11.5,background:T.surface,fontFamily:"inherit",outline:"none"}}>
       {fallbackUnits.map(u=><option key={u}>{u}</option>)}
-    </select>
+    </PickSelect>
   );
 };
 
@@ -279,11 +280,11 @@ function MaterialFormModal({material,library=[],onClose,onSaved}){
       )}
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:11,marginBottom:11}}>
         <Field label={t("common.category")}>
-          <select value={f.category} onChange={e=>upd("category",e.target.value)} disabled={fromLibrary}
+          <PickSelect value={f.category} onChange={e=>upd("category",e.target.value)} disabled={fromLibrary}
             style={{width:"100%",padding:"8px 11px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:fromLibrary?T.t2:T.t1,background:fromLibrary?T.surfaceB:T.surface,outline:"none",fontFamily:"inherit",cursor:fromLibrary?"not-allowed":"pointer"}}>
             {CATEGORIES.map(c=><option key={c}>{c}</option>)}
             {fromLibrary&&!CATEGORIES.includes(f.category)&&<option>{f.category}</option>}
-          </select>
+          </PickSelect>
         </Field>
         <Field label={<span>{t("common.unit")} {fromLibrary?<span style={{textTransform:"none",letterSpacing:0,color:T.t4,fontWeight:500}}>{t("warehouse.locked_from_library")}</span>:""}</span>}>
           <UnitLock unit={f.unit} locked={fromLibrary} onChange={u=>upd("unit",u)}/>
@@ -1123,10 +1124,10 @@ function NewMRModal({library,onClose,onSaved,prefill,warehouse}){
           </div>
         </Field>
         <Field label={t("common.priority")}>
-          <select value={f.priority} onChange={e=>upd("priority",e.target.value)}
+          <PickSelect value={f.priority} onChange={e=>upd("priority",e.target.value)}
             style={{width:"100%",padding:"8px 11px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",fontFamily:"inherit"}}>
             {PRIORITIES.map(p=><option key={p}>{p}</option>)}
-          </select>
+          </PickSelect>
         </Field>
       </div>
 
@@ -1951,21 +1952,21 @@ function StockTab({stock,grns,issues,onSelect,onAddMaterial,onAddStock,onIssue,o
           <input value={search} onChange={e=>setSearch(e.target.value)} placeholder={t("common.search_material")}
             style={{width:"100%",height:33,padding:"0 9px 0 28px",borderRadius:7,border:`1.5px solid ${search?T.blu:T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
         </div>
-        <select value={cat} onChange={e=>setCat(e.target.value)}
+        <PickSelect value={cat} onChange={e=>setCat(e.target.value)}
           style={{height:33,padding:"0 10px",borderRadius:7,border:`1.5px solid ${cat!=="All"?T.blu:T.b1}`,background:cat!=="All"?T.bluL:T.surface,fontSize:12,color:cat!=="All"?T.blu:T.t2,outline:"none",cursor:"pointer",fontFamily:"inherit"}}>
           {CATEGORIES_ALL.map(c=><option key={c}>{c}</option>)}
-        </select>
+        </PickSelect>
         <button onClick={()=>setShowLow(s=>!s)}
           style={{height:33,padding:"0 11px",borderRadius:7,border:`1.5px solid ${showLow?"#EF4444":T.b1}`,background:showLow?"#FEF2F2":T.surface,color:showLow?"#EF4444":T.t3,fontSize:12,fontWeight:showLow?700:400,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
           <IcAlert size={12} color={showLow?"#EF4444":T.t4}/> {t("warehouse.low_stock")}
         </button>
-        <select value={sort} onChange={e=>setSort(e.target.value)}
+        <PickSelect value={sort} onChange={e=>setSort(e.target.value)}
           style={{height:33,padding:"0 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,background:T.surface,fontSize:12,color:T.t2,outline:"none",cursor:"pointer",fontFamily:"inherit"}}>
           <option value="name">{t("warehouse.sort_name")}</option>
           <option value="qty">{t("warehouse.sort_qty")}</option>
           <option value="value">{t("warehouse.sort_value")}</option>
           <option value="low">{t("warehouse.sort_alerts_first")}</option>
-        </select>
+        </PickSelect>
         <div style={{display:"flex",gap:2,background:T.surfaceB,borderRadius:7,border:`1px solid ${T.b1}`,padding:3}}>
           {[["group","≡≡","Grouped by category"],["grid","⊞","Card grid"],["list","☰","Compact list"]].map(([id,ico,ttl])=>(
             <button key={id} onClick={()=>setView(id)} title={ttl}

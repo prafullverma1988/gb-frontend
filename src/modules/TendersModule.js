@@ -13,6 +13,7 @@
 // alag rasta hai, wo PUT /tenders/:id/link-project use karta hai.
 // ════════════════════════════════════════════════════════════════════
 import { useState, useEffect, useMemo, useCallback, useRef, Fragment } from "react";
+import PickSelect from "../components/PickSelect";
 import PhotoLocateModal from "./tabs/PhotoLocateModal";
 import TenderAiPlan from "./tabs/TenderAiPlan";
 import BoqMatrixImport from "./tabs/BoqMatrixImport";
@@ -300,7 +301,7 @@ const TxtIn = ({value, onChange, ph, type="text"}) => (
 );
 const SelIn = ({value, onChange, options, ph}) => (
   <div style={{position:"relative"}}>
-    <select value={value ?? ""} onChange={e=>onChange(e.target.value)}
+    <PickSelect value={value ?? ""} onChange={e=>onChange(e.target.value)}
       style={{...inputStyle, appearance:"none", WebkitAppearance:"none", cursor:"pointer", paddingRight:30}}>
       {ph !== undefined && <option value="">{ph}</option>}
       {/* o.group ho to parivaar-wise dabbe (Pipeline ke andar Inlet/Outlet) */}
@@ -312,7 +313,7 @@ const SelIn = ({value, onChange, options, ph}) => (
               : options.filter(o=>!o.group).map(o=><option key={String(o.v)} value={o.v}>{o.l}</option>)
           ))
         : options.map(o=><option key={String(o.v)} value={o.v}>{o.l}</option>)}
-    </select>
+    </PickSelect>
     <div style={{position:"absolute", right:10, top:"50%", transform:"translateY(-50%)", pointerEvents:"none"}}>
       <IcDown size={12} color={T.t4}/>
     </div>

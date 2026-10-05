@@ -25,6 +25,7 @@
 // API contract: gb-backend/docs/plans/asset-api-phase1.md + asset-api-phase2.md
 // ══════════════════════════════════════════════════════════════════════
 import { useState, useEffect, useCallback, useMemo } from "react";
+import PickSelect from "../components/PickSelect";
 import api, { API_BASE, getToken, getUser } from "../config/api";
 import SearchSelect from "../components/SearchSelect";
 import GrnIssueBlock from "../components/GrnIssueBlock";
@@ -565,12 +566,12 @@ function ToSiteFields({ v, onChange, pickers, me }) {
           options={(pickers.projects || []).map((p) => ({ id: p.id, name: p.name }))} placeholder={t("assets.select_project")} />
       </Field>
       <Field label={t("assets.holder_type")}>
-        <select value={v.holder_type || "user"} style={inp}
+        <PickSelect value={v.holder_type || "user"} style={inp}
           onChange={(e) => onChange({ ...v, holder_type: e.target.value, holder_id: "", custodian_user_id: e.target.value === "user" ? "" : (v.custodian_user_id || String(me.id || "")) })}>
           <option value="user">{t("assets.holder_user")}</option>
           <option value="worker">{t("assets.holder_worker")}</option>
           <option value="subcon">{t("assets.holder_subcon")}</option>
-        </select>
+        </PickSelect>
       </Field>
       <Field label={t("assets.holder")}>
         <SearchSelect value={v.holder_id || ""} accent={T.ind}
@@ -602,18 +603,18 @@ function RentCell({ ln, onChange, enabled }) {
   if (!enabled) return <span style={{ fontSize: 11, color: T.t4 }}>{t("assets.charge_free")}</span>;
   return (
     <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
-      <select value={ln.charge_mode || "free"} onChange={(e) => onChange({ ...ln, charge_mode: e.target.value })} style={{ ...inpSm, width: 74 }}>
+      <PickSelect value={ln.charge_mode || "free"} onChange={(e) => onChange({ ...ln, charge_mode: e.target.value })} style={{ ...inpSm, width: 74 }}>
         <option value="free">{t("assets.charge_free")}</option>
         <option value="rent">{t("assets.charge_rent")}</option>
-      </select>
+      </PickSelect>
       {ln.charge_mode === "rent" && (
         <>
           <input value={ln.rent_rate || ""} inputMode="decimal" placeholder="₹"
             onChange={(e) => onChange({ ...ln, rent_rate: e.target.value.replace(/[^0-9.]/g, "") })} style={{ ...inpSm, width: 64 }} />
-          <select value={ln.rent_basis || "day"} onChange={(e) => onChange({ ...ln, rent_basis: e.target.value })} style={{ ...inpSm, width: 78 }}>
+          <PickSelect value={ln.rent_basis || "day"} onChange={(e) => onChange({ ...ln, rent_basis: e.target.value })} style={{ ...inpSm, width: 78 }}>
             <option value="day">{t("assets.per_day")}</option>
             <option value="month">{t("assets.per_month")}</option>
-          </select>
+          </PickSelect>
         </>
       )}
     </div>
@@ -651,10 +652,10 @@ function DashboardTab({ dash: companyDash, warehouses, onOpenVoucher, onGo }) {
   const view = whId ? whDash : companyDash;
   const picker = (warehouses || []).length > 1 ? (
     <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
-      <select value={whId} onChange={(e) => setWhId(e.target.value)} style={{ ...inp, width: 240 }}>
+      <PickSelect value={whId} onChange={(e) => setWhId(e.target.value)} style={{ ...inp, width: 240 }}>
         <option value="">{t("assets.all_warehouses")}</option>
         {(warehouses || []).map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
-      </select>
+      </PickSelect>
       {scoped && <span style={{ fontSize: 11.5, color: T.t3 }}>{t("assets.wh_scope_hint")}</span>}
     </div>
   ) : null;
@@ -921,15 +922,15 @@ function RegisterTab({ items, cats, warehouses, canSetup, canCreate, canExport, 
       <div style={{ display: "flex", gap: 8, padding: "10px 14px", borderBottom: `1px solid ${T.b1}`, flexWrap: "wrap", alignItems: "center" }}>
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("assets.search_ph")} style={{ ...inp, width: 240 }} />
         <Seg value={tracking} onChange={setTracking} options={[{ k: "", l: t("assets.all") }, { k: "serialized", l: t("assets.tracking_serialized") }, { k: "bulk", l: t("assets.tracking_bulk") }]} />
-        <select value={cat} onChange={(e) => setCat(e.target.value)} style={{ ...inp, width: 180 }}>
+        <PickSelect value={cat} onChange={(e) => setCat(e.target.value)} style={{ ...inp, width: 180 }}>
           <option value="">{t("assets.all_categories")}</option>
           {(cats || []).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </select>
+        </PickSelect>
         {(warehouses || []).length > 1 && (
-          <select value={whId} onChange={(e) => setWhId(e.target.value)} style={{ ...inp, width: 200 }}>
+          <PickSelect value={whId} onChange={(e) => setWhId(e.target.value)} style={{ ...inp, width: 200 }}>
             <option value="">{t("assets.all_warehouses")}</option>
             {(warehouses || []).map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
-          </select>
+          </PickSelect>
         )}
         {scoped && <span style={{ fontSize: 11.5, color: T.t3 }}>{t("assets.reg_wh_hint")}</span>}
       </div>
@@ -1073,10 +1074,10 @@ function ItemDrawer({ item, cats, canEdit, onClose, onChanged, onOpenVoucher }) 
             <input value={f.unit || ""} onChange={(e) => upd("unit", e.target.value)} style={inp} readOnly={!canEdit} list="assets-units" />
           </Field>
           <Field label={t("assets.category")}>
-            <select value={f.category_id || ""} onChange={(e) => upd("category_id", e.target.value)} style={inp} disabled={!canEdit}>
+            <PickSelect value={f.category_id || ""} onChange={(e) => upd("category_id", e.target.value)} style={inp} disabled={!canEdit}>
               <option value="">—</option>
               {(cats || []).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
+            </PickSelect>
           </Field>
           <Field label={t("assets.tracking")}>
             <input value={trackLabel(item.tracking_mode)} readOnly style={{ ...inp, background: T.surfaceB, color: T.t3 }} />
@@ -1233,10 +1234,10 @@ function CategoriesModal({ open, cats, onClose, onChanged }) {
       <div style={{ display: "grid", gridTemplateColumns: "1.6fr 1fr 80px auto", gap: 8, alignItems: "end", marginBottom: 14 }}>
         <Field label={t("assets.cat_name")}><input value={add.name} onChange={(e) => setAdd({ ...add, name: e.target.value })} style={inp} placeholder={t("assets.cat_name_ph")} /></Field>
         <Field label={t("assets.tracking")}>
-          <select value={add.tracking_mode} onChange={(e) => setAdd({ ...add, tracking_mode: e.target.value })} style={inp}>
+          <PickSelect value={add.tracking_mode} onChange={(e) => setAdd({ ...add, tracking_mode: e.target.value })} style={inp}>
             <option value="bulk">{t("assets.tracking_bulk")}</option>
             <option value="serialized">{t("assets.tracking_serialized")}</option>
-          </select>
+          </PickSelect>
         </Field>
         <Field label={t("assets.unit")}><input value={add.default_unit} onChange={(e) => setAdd({ ...add, default_unit: e.target.value })} style={inp} list="assets-units-cat" /></Field>
         <Btn icon={IcAdd} onClick={create} disabled={busy}>{t("assets.add")}</Btn>
@@ -1247,10 +1248,10 @@ function CategoriesModal({ open, cats, onClose, onChanged }) {
           edit && edit.id === c.id ? (
             <Row key={c.id} cols="1.6fr 1fr 80px auto">
               <input value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value })} style={inpSm} />
-              <select value={edit.tracking_mode} onChange={(e) => setEdit({ ...edit, tracking_mode: e.target.value })} style={inpSm}>
+              <PickSelect value={edit.tracking_mode} onChange={(e) => setEdit({ ...edit, tracking_mode: e.target.value })} style={inpSm}>
                 <option value="bulk">{t("assets.tracking_bulk")}</option>
                 <option value="serialized">{t("assets.tracking_serialized")}</option>
-              </select>
+              </PickSelect>
               <input value={edit.default_unit || ""} onChange={(e) => setEdit({ ...edit, default_unit: e.target.value })} style={inpSm} />
               <div style={{ display: "flex", gap: 5 }}>
                 <Btn size="sm" onClick={saveEdit} disabled={busy}>{t("assets.save")}</Btn>
@@ -1608,10 +1609,10 @@ function GrnForm({ open, meta, pickers, cats, canAll, onClose, onSaved }) {
       {!whOptions.length && <Notice tone="warn">{t("assets.issue_no_warehouse")}</Notice>}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12, marginBottom: 14 }}>
         <Field label={t("assets.warehouse")}>
-          <select value={f.warehouse_id || ""} onChange={(e) => upd("warehouse_id", e.target.value)} style={inp}>
+          <PickSelect value={f.warehouse_id || ""} onChange={(e) => upd("warehouse_id", e.target.value)} style={inp}>
             <option value="">{t("assets.select")}</option>
             {whOptions.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
-          </select>
+          </PickSelect>
         </Field>
         <Field label={t("assets.date")}><input type="date" value={f.date || ""} onChange={(e) => upd("date", e.target.value)} style={inp} /></Field>
         <Field label={t("assets.invoice_no")}><input value={f.invoice_no || ""} onChange={(e) => upd("invoice_no", e.target.value)} style={inp} /></Field>
@@ -1656,17 +1657,17 @@ function GrnForm({ open, meta, pickers, cats, canAll, onClose, onSaved }) {
                 <Field label={t("assets.spec")}><input value={l.spec} onChange={(e) => updLine(i, { ...l, spec: e.target.value })} style={inp} placeholder={t("assets.spec_ph")} /></Field>
                 <Field label={t("assets.unit")}><input value={l.unit} onChange={(e) => updLine(i, { ...l, unit: e.target.value })} style={inp} list="assets-units-grn" /></Field>
                 <Field label={t("assets.tracking")}>
-                  <select value={l.tracking_mode} onChange={(e) => updLine(i, { ...l, tracking_mode: e.target.value })} style={inp}>
+                  <PickSelect value={l.tracking_mode} onChange={(e) => updLine(i, { ...l, tracking_mode: e.target.value })} style={inp}>
                     <option value="bulk">{t("assets.tracking_bulk")}</option>
                     <option value="serialized">{t("assets.tracking_serialized")}</option>
-                  </select>
+                  </PickSelect>
                 </Field>
                 <Field label={t("assets.category")}>
-                  <select value={l.category_id} style={inp}
+                  <PickSelect value={l.category_id} style={inp}
                     onChange={(e) => { const c = catOf(e.target.value); updLine(i, { ...l, category_id: e.target.value, tracking_mode: c ? c.tracking_mode : l.tracking_mode, unit: c && c.default_unit ? c.default_unit : l.unit }); }}>
                     <option value="">—</option>
                     {(cats || []).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                  </select>
+                  </PickSelect>
                 </Field>
                 <Field label={t("assets.qty")}><input value={l.qty} inputMode="decimal" onChange={(e) => updLine(i, { ...l, qty: e.target.value.replace(/[^0-9.]/g, "") })} style={inp} /></Field>
                 <Field label={t("assets.rate")}><input value={l.rate} inputMode="decimal" onChange={(e) => updLine(i, { ...l, rate: e.target.value.replace(/[^0-9.]/g, "") })} style={inp} placeholder="₹" /></Field>
@@ -1782,10 +1783,10 @@ function NewPurchaseModal({ open, meta, pickers, cats, canAll, onClose, onSaved 
       {!whOptions.length && <Notice tone="warn">{t("assets.issue_no_warehouse")}</Notice>}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12, marginBottom: 14 }}>
         <Field label={t("assets.buy_for_store")}>
-          <select value={f.warehouse_id || ""} onChange={(e) => upd("warehouse_id", e.target.value)} style={inp}>
+          <PickSelect value={f.warehouse_id || ""} onChange={(e) => upd("warehouse_id", e.target.value)} style={inp}>
             <option value="">{t("assets.select")}</option>
             {whOptions.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
-          </select>
+          </PickSelect>
         </Field>
         <Field label={t("assets.buy_for_project")} hint={t("assets.buy_project_hint")}>
           <SearchSelect value={f.project_id || ""} onChange={(k) => upd("project_id", k)} accent={T.ind}
@@ -1822,17 +1823,17 @@ function NewPurchaseModal({ open, meta, pickers, cats, canAll, onClose, onSaved 
                 <Field label={t("assets.spec")}><input value={l.spec} onChange={(e) => updLine(i, { ...l, spec: e.target.value })} style={inp} placeholder={t("assets.spec_ph")} /></Field>
                 <Field label={t("assets.unit")}><input value={l.unit} onChange={(e) => updLine(i, { ...l, unit: e.target.value })} style={inp} list="assets-units-buy" /></Field>
                 <Field label={t("assets.tracking")}>
-                  <select value={l.tracking_mode} onChange={(e) => updLine(i, { ...l, tracking_mode: e.target.value })} style={inp}>
+                  <PickSelect value={l.tracking_mode} onChange={(e) => updLine(i, { ...l, tracking_mode: e.target.value })} style={inp}>
                     <option value="bulk">{t("assets.tracking_bulk")}</option>
                     <option value="serialized">{t("assets.tracking_serialized")}</option>
-                  </select>
+                  </PickSelect>
                 </Field>
                 <Field label={t("assets.category")}>
-                  <select value={l.category_id} style={inp}
+                  <PickSelect value={l.category_id} style={inp}
                     onChange={(e) => { const c = catOf(e.target.value); updLine(i, { ...l, category_id: e.target.value, tracking_mode: c ? c.tracking_mode : l.tracking_mode, unit: c && c.default_unit ? c.default_unit : l.unit }); }}>
                     <option value="">—</option>
                     {(cats || []).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                  </select>
+                  </PickSelect>
                 </Field>
                 <Field label={t("assets.qty")}><input value={l.qty} inputMode="decimal" onChange={(e) => updLine(i, { ...l, qty: e.target.value.replace(/[^0-9.]/g, "") })} style={inp} /></Field>
                 <Field label={t("assets.buy_rate")}><input value={l.rate} inputMode="decimal" onChange={(e) => updLine(i, { ...l, rate: e.target.value.replace(/[^0-9.]/g, "") })} style={inp} placeholder="₹" /></Field>
@@ -2322,18 +2323,18 @@ function VoucherDrawer({ id, me, onClose, onChanged }) {
                   {mode === "accept" && (
                     <>
                       {ln.tracking_mode === "serialized" ? (
-                        <select value={(acc[ln.id] || {}).accepted_qty || "1"} onChange={(e) => setAcc((p) => ({ ...p, [ln.id]: { ...p[ln.id], accepted_qty: e.target.value } }))} style={inpSm}>
+                        <PickSelect value={(acc[ln.id] || {}).accepted_qty || "1"} onChange={(e) => setAcc((p) => ({ ...p, [ln.id]: { ...p[ln.id], accepted_qty: e.target.value } }))} style={inpSm}>
                           <option value="1">1</option><option value="0">0</option>
-                        </select>
+                        </PickSelect>
                       ) : (
                         <input value={(acc[ln.id] || {}).accepted_qty || ""} inputMode="decimal" style={inpSm}
                           onChange={(e) => setAcc((p) => ({ ...p, [ln.id]: { ...p[ln.id], accepted_qty: e.target.value.replace(/[^0-9.]/g, "") } }))} />
                       )}
-                      <select value={(acc[ln.id] || {}).accepted_condition || "good"} onChange={(e) => setAcc((p) => ({ ...p, [ln.id]: { ...p[ln.id], accepted_condition: e.target.value } }))} style={inpSm}>
+                      <PickSelect value={(acc[ln.id] || {}).accepted_condition || "good"} onChange={(e) => setAcc((p) => ({ ...p, [ln.id]: { ...p[ln.id], accepted_condition: e.target.value } }))} style={inpSm}>
                         <option value="good">{t("assets.cond_good")}</option>
                         <option value="damaged">{t("assets.cond_damaged")}</option>
                         <option value="lost">{t("assets.cond_lost")}</option>
-                      </select>
+                      </PickSelect>
                       {photoCol && (
                         <LinePhoto pol={accPol} value={(acc[ln.id] || {}).photo_url || ""}
                           need={(acc[ln.id] || {}).accepted_condition === "damaged" && N((acc[ln.id] || {}).accepted_qty) > 0}
@@ -2499,10 +2500,10 @@ function IssueForm({ open, meta, pickers, me, canAll, preset, onClose, onSaved }
       {!whOptions.length && <Notice tone="warn">{t("assets.issue_no_warehouse")}</Notice>}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
         <Field label={t("assets.from_warehouse")}>
-          <select value={wh} onChange={(e) => { setWh(e.target.value); setLines([newMoveLine()]); }} style={inp}>
+          <PickSelect value={wh} onChange={(e) => { setWh(e.target.value); setLines([newMoveLine()]); }} style={inp}>
             <option value="">{t("assets.select")}</option>
             {whOptions.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
-          </select>
+          </PickSelect>
         </Field>
         <Field label={t("assets.date")}><input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={inp} /></Field>
         <div style={{ gridColumn: "span 2", fontSize: 11, fontWeight: 700, color: T.t3, textTransform: "uppercase", letterSpacing: ".4px", marginTop: 4 }}>{t("assets.to_site")}</div>
@@ -2529,10 +2530,10 @@ function IssueForm({ open, meta, pickers, me, canAll, preset, onClose, onSaved }
                   </div>
                   <input value={h && h.tracking_mode === "serialized" ? "1" : l.qty} inputMode="decimal" style={inpSm} disabled={!!(h && h.tracking_mode === "serialized")}
                     onChange={(e) => updLine(i, { ...l, qty: e.target.value.replace(/[^0-9.]/g, "") })} />
-                  <select value={l.condition} onChange={(e) => updLine(i, { ...l, condition: e.target.value })} style={inpSm}>
+                  <PickSelect value={l.condition} onChange={(e) => updLine(i, { ...l, condition: e.target.value })} style={inpSm}>
                     <option value="good">{t("assets.cond_good")}</option>
                     <option value="damaged">{t("assets.cond_damaged")}</option>
-                  </select>
+                  </PickSelect>
                   {external && <RentCell ln={l} onChange={(nl) => updLine(i, nl)} enabled />}
                   <input value={l.remarks} onChange={(e) => updLine(i, { ...l, remarks: e.target.value })} style={inpSm} />
                   <Btn size="sm" ghost onClick={() => setLines((p) => (p.length > 1 ? p.filter((_, j) => j !== i) : [newMoveLine()]))}><IcTrash size={12} color={T.red} /></Btn>
@@ -2644,10 +2645,10 @@ function AddAssetForm({ open, meta, pickers, cats, me, onClose, onSaved }) {
   };
 
   const condSelect = (
-    <select value={f.condition || "good"} onChange={(e) => upd("condition", e.target.value)} style={inp}>
+    <PickSelect value={f.condition || "good"} onChange={(e) => upd("condition", e.target.value)} style={inp}>
       <option value="good">{t("assets.cond_good")}</option>
       <option value="damaged">{t("assets.cond_damaged")}</option>
-    </select>
+    </PickSelect>
   );
   const qtyInput = (
     <input value={f.qty || ""} inputMode="decimal" onChange={(e) => upd("qty", e.target.value.replace(/[^0-9.]/g, ""))} style={inp} />
@@ -2676,20 +2677,20 @@ function AddAssetForm({ open, meta, pickers, cats, me, onClose, onSaved }) {
             <Field label={t("assets.spec")}><input value={f.spec || ""} onChange={(e) => upd("spec", e.target.value)} style={inp} placeholder={t("assets.spec_ph")} /></Field>
             <Field label={t("assets.unit")}><input value={f.unit || ""} onChange={(e) => upd("unit", e.target.value)} style={inp} list="assets-units-add" /></Field>
             <Field label={t("assets.tracking")}>
-              <select value={f.tracking_mode || "bulk"} onChange={(e) => upd("tracking_mode", e.target.value)} style={inp}>
+              <PickSelect value={f.tracking_mode || "bulk"} onChange={(e) => upd("tracking_mode", e.target.value)} style={inp}>
                 <option value="bulk">{t("assets.tracking_bulk")}</option>
                 <option value="serialized">{t("assets.tracking_serialized")}</option>
-              </select>
+              </PickSelect>
             </Field>
             <Field label={t("assets.category")}>
-              <select value={f.category_id || ""} style={inp}
+              <PickSelect value={f.category_id || ""} style={inp}
                 onChange={(e) => {
                   const c = catOf(e.target.value);
                   setF((p) => ({ ...p, category_id: e.target.value, tracking_mode: c ? c.tracking_mode : p.tracking_mode, unit: c && c.default_unit ? c.default_unit : p.unit }));
                 }}>
                 <option value="">—</option>
                 {(cats || []).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
+              </PickSelect>
             </Field>
             <Field label={t("assets.qty")}>{qtyInput}</Field>
             <Field label={t("assets.condition")}>{condSelect}</Field>
@@ -2706,10 +2707,10 @@ function AddAssetForm({ open, meta, pickers, cats, me, onClose, onSaved }) {
           options={[{ k: "store", l: t("assets.add_where_store") }, { k: "site", l: t("assets.add_where_site") }]} />
         {where === "store" ? (
           <Field label={t("assets.add_store")}>
-            <select value={f.warehouse_id || ""} onChange={(e) => upd("warehouse_id", e.target.value)} style={inp}>
+            <PickSelect value={f.warehouse_id || ""} onChange={(e) => upd("warehouse_id", e.target.value)} style={inp}>
               <option value="">{t("assets.select")}</option>
               {stores.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
-            </select>
+            </PickSelect>
           </Field>
         ) : (
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
@@ -2875,19 +2876,19 @@ function MoveForm({ open, kind, meta, pickers, me, canAll, onClose, onSaved }) {
           </Field>
         )}
         <Field label={storeMode ? t("assets.from_store") : t("assets.from")} hint={hold && groups.length === 0 ? (storeMode ? t("assets.from_store_empty") : t("assets.from_empty_hint")) : undefined}>
-          <select value={from} onChange={(e) => { setFrom(e.target.value); setLines([newMoveLine()]); }} style={inp} disabled={hold == null}>
+          <PickSelect value={from} onChange={(e) => { setFrom(e.target.value); setLines([newMoveLine()]); }} style={inp} disabled={hold == null}>
             <option value="">{hold == null ? t("assets.loading") : t("assets.select")}</option>
             {groups.map((x) => <option key={x.key} value={x.key}>{x.label}</option>)}
-          </select>
+          </PickSelect>
         </Field>
         <Field label={t("assets.date")}><input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={inp} /></Field>
 
         {(isReturn || storeMode) ? (
           <Field label={storeMode ? t("assets.to_store") : t("assets.to_warehouse")} span={2}>
-            <select value={toWh} onChange={(e) => setToWh(e.target.value)} style={inp}>
+            <PickSelect value={toWh} onChange={(e) => setToWh(e.target.value)} style={inp}>
               <option value="">{t("assets.select")}</option>
               {all.filter((w) => !(g && g.warehouse_id && w.id === g.warehouse_id)).map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
-            </select>
+            </PickSelect>
           </Field>
         ) : (
           <>
@@ -2915,11 +2916,11 @@ function MoveForm({ open, kind, meta, pickers, me, canAll, onClose, onSaved }) {
                   </div>
                   <input value={h && h.tracking_mode === "serialized" ? "1" : l.qty} inputMode="decimal" style={inpSm} disabled={!!(h && h.tracking_mode === "serialized")}
                     onChange={(e) => updLine(i, { ...l, qty: e.target.value.replace(/[^0-9.]/g, "") })} />
-                  <select value={l.condition} onChange={(e) => updLine(i, { ...l, condition: e.target.value })} style={inpSm}>
+                  <PickSelect value={l.condition} onChange={(e) => updLine(i, { ...l, condition: e.target.value })} style={inpSm}>
                     {!(h && h.bucket === "damaged") && <option value="good">{t("assets.cond_good")}</option>}
                     <option value="damaged">{t("assets.cond_damaged")}</option>
                     <option value="lost">{t("assets.cond_lost")}</option>
-                  </select>
+                  </PickSelect>
                   {external && <RentCell ln={l} onChange={(nl) => updLine(i, nl)} enabled />}
                   <input value={l.remarks} onChange={(e) => updLine(i, { ...l, remarks: e.target.value })} style={inpSm} />
                   <Btn size="sm" ghost onClick={() => setLines((p) => (p.length > 1 ? p.filter((_, j) => j !== i) : [newMoveLine()]))}><IcTrash size={12} color={T.red} /></Btn>
@@ -3076,10 +3077,10 @@ function RepairForm({ open, kind, meta, pickers, me, canAll, onClose, onSaved })
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
         {isOut ? (
           <Field label={t("assets.from")} hint={hold && hold.length === 0 ? t("assets.from_empty_hint") : undefined}>
-            <select value={from} onChange={(e) => { setFrom(e.target.value); setLines([newMoveLine()]); }} style={inp} disabled={hold == null}>
+            <PickSelect value={from} onChange={(e) => { setFrom(e.target.value); setLines([newMoveLine()]); }} style={inp} disabled={hold == null}>
               <option value="">{hold == null ? t("assets.loading") : t("assets.select")}</option>
               {groups.map((x) => <option key={x.key} value={x.key}>{x.label}</option>)}
-            </select>
+            </PickSelect>
           </Field>
         ) : (
           <Field label={t("assets.repair_vendor")}>
@@ -3095,10 +3096,10 @@ function RepairForm({ open, kind, meta, pickers, me, canAll, onClose, onSaved })
           </Field>
         ) : (
           <Field label={t("assets.to_warehouse")} span={2} hint={myWh.length ? undefined : t("assets.issue_no_warehouse")}>
-            <select value={toWh} onChange={(e) => setToWh(e.target.value)} style={inp}>
+            <PickSelect value={toWh} onChange={(e) => setToWh(e.target.value)} style={inp}>
               <option value="">{t("assets.select")}</option>
               {myWh.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
-            </select>
+            </PickSelect>
           </Field>
         )}
       </div>
@@ -3125,11 +3126,11 @@ function RepairForm({ open, kind, meta, pickers, me, canAll, onClose, onSaved })
                   </div>
                   <input value={h && h.tracking_mode === "serialized" ? "1" : l.qty} inputMode="decimal" style={inpSm} disabled={!!(h && h.tracking_mode === "serialized")}
                     onChange={(e) => updLine(i, { ...l, qty: e.target.value.replace(/[^0-9.]/g, "") })} />
-                  <select value={l.condition} onChange={(e) => updLine(i, { ...l, condition: e.target.value })} style={inpSm}>
+                  <PickSelect value={l.condition} onChange={(e) => updLine(i, { ...l, condition: e.target.value })} style={inpSm}>
                     <option value="good">{t("assets.cond_good")}</option>
                     <option value="damaged">{t("assets.cond_damaged")}</option>
                     {!isOut && <option value="lost">{t("assets.cond_lost")}</option>}
-                  </select>
+                  </PickSelect>
                   <input value={l.remarks} onChange={(e) => updLine(i, { ...l, remarks: e.target.value })} style={inpSm} />
                   <Btn size="sm" ghost onClick={() => setLines((p) => (p.length > 1 ? p.filter((_, j) => j !== i) : [newMoveLine()]))}><IcTrash size={12} color={T.red} /></Btn>
                 </Row>
@@ -3190,7 +3191,7 @@ function MovementsTab({ refreshKey, meta, pickers, canCreate, onIssue, onTransfe
             voucher seedha dhoondh leta hai (phone na chale to web par). */}
         <Seg value={fl.for_me} onChange={(k) => upd("for_me", k)}
           options={[{ k: "", l: t("assets.all") }, { k: "1", l: t("assets.for_me_accept") }]} />
-        <select value={fl.type} onChange={(e) => upd("type", e.target.value)} style={{ ...inp, width: 130 }}>
+        <PickSelect value={fl.type} onChange={(e) => upd("type", e.target.value)} style={{ ...inp, width: 130 }}>
           <option value="">{t("assets.all_types")}</option>
           <option value="issue">{t("assets.type_issue")}</option>
           <option value="return">{t("assets.type_return")}</option>
@@ -3199,22 +3200,22 @@ function MovementsTab({ refreshKey, meta, pickers, canCreate, onIssue, onTransfe
           <option value="repair_in">{t("assets.type_repair_in")}</option>
           <option value="adjust">{t("assets.type_adjust")}</option>
           <option value="opening">{t("assets.type_opening")}</option>
-        </select>
-        <select value={fl.status} onChange={(e) => upd("status", e.target.value)} style={{ ...inp, width: 130 }}>
+        </PickSelect>
+        <PickSelect value={fl.status} onChange={(e) => upd("status", e.target.value)} style={{ ...inp, width: 130 }}>
           <option value="">{t("assets.all_status")}</option>
           <option value="pending">{t("assets.status_pending")}</option>
           <option value="accepted">{t("assets.status_accepted")}</option>
           <option value="rejected">{t("assets.status_rejected")}</option>
           <option value="cancelled">{t("assets.status_cancelled")}</option>
-        </select>
+        </PickSelect>
         <div style={{ width: 200 }}>
           <SearchSelect value={fl.project_id} onChange={(k) => upd("project_id", k)} accent={T.ind}
             options={[{ id: "", name: t("assets.all_projects") }, ...(pickers.projects || []).map((p) => ({ id: p.id, name: p.name }))]} placeholder={t("assets.all_projects")} />
         </div>
-        <select value={fl.warehouse_id} onChange={(e) => upd("warehouse_id", e.target.value)} style={{ ...inp, width: 160 }}>
+        <PickSelect value={fl.warehouse_id} onChange={(e) => upd("warehouse_id", e.target.value)} style={{ ...inp, width: 160 }}>
           <option value="">{t("assets.all_warehouses")}</option>
           {((meta && meta.warehouses) || []).map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
-        </select>
+        </PickSelect>
         <input type="date" value={fl.from} onChange={(e) => upd("from", e.target.value)} style={{ ...inp, width: 140 }} title={t("assets.from_date")} />
         <input type="date" value={fl.to} onChange={(e) => upd("to", e.target.value)} style={{ ...inp, width: 140 }} title={t("assets.to_date")} />
         {(fl.type || fl.status || fl.project_id || fl.warehouse_id || fl.from || fl.to) && (
@@ -3312,10 +3313,10 @@ function NewVerificationModal({ open, meta, pickers, me, onClose, onCreated, onO
         </Field>
         {where === "warehouse" ? (
           <Field label={t("assets.warehouse")} span={2}>
-            <select value={wh} onChange={(e) => setWh(e.target.value)} style={inp}>
+            <PickSelect value={wh} onChange={(e) => setWh(e.target.value)} style={inp}>
               <option value="">{t("assets.select")}</option>
               {all.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
-            </select>
+            </PickSelect>
           </Field>
         ) : <ToSiteFields v={site} onChange={setSite} pickers={pickers} me={me} />}
         <Field label={t("assets.date")}><input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={inp} /></Field>
@@ -3599,17 +3600,17 @@ function VerificationsTab({ refreshKey, meta, pickers, canCreate, onNew, onOpen,
     <Panel title={t("assets.verify_title")} action={canCreate && <Btn size="sm" icon={IcAdd} onClick={onNew}>{t("assets.verify_new")}</Btn>}>
       <div style={{ display: "flex", gap: 8, padding: "10px 14px", borderBottom: `1px solid ${T.b1}`, flexWrap: "wrap", alignItems: "center" }}>
         <Seg value={fl.mine} onChange={(k) => upd("mine", k)} options={[{ k: "", l: t("assets.all") }, { k: "1", l: t("assets.verify_mine") }]} />
-        <select value={fl.status} onChange={(e) => upd("status", e.target.value)} style={{ ...inp, width: 140 }}>
+        <PickSelect value={fl.status} onChange={(e) => upd("status", e.target.value)} style={{ ...inp, width: 140 }}>
           <option value="">{t("assets.all_status")}</option>
           <option value="draft">{t("assets.verify_draft")}</option>
           <option value="pending">{t("assets.verify_pending_status")}</option>
           <option value="closed">{t("assets.verify_closed")}</option>
           <option value="cancelled">{t("assets.status_cancelled")}</option>
-        </select>
-        <select value={fl.warehouse_id} onChange={(e) => upd("warehouse_id", e.target.value)} style={{ ...inp, width: 160 }}>
+        </PickSelect>
+        <PickSelect value={fl.warehouse_id} onChange={(e) => upd("warehouse_id", e.target.value)} style={{ ...inp, width: 160 }}>
           <option value="">{t("assets.all_warehouses")}</option>
           {((meta && meta.warehouses) || []).map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
-        </select>
+        </PickSelect>
         <div style={{ width: 200 }}>
           <SearchSelect value={fl.project_id} onChange={(k) => upd("project_id", k)} accent={T.ind}
             options={[{ id: "", name: t("assets.all_projects") }, ...(pickers.projects || []).map((p) => ({ id: p.id, name: p.name }))]} placeholder={t("assets.all_projects")} />
@@ -3786,11 +3787,11 @@ function CustodyTab({ refreshKey, meta, pickers, onOpenItem }) {
         <Seg value={view} onChange={(v) => { setView(v); setPick(""); setHolderType(""); }}
           options={[{ k: "project", l: t("assets.view_project") }, { k: "custodian", l: t("assets.view_custodian") }, { k: "holder", l: t("assets.view_holder") }, { k: "warehouse", l: t("assets.view_warehouse") }]} />
         {view === "holder" && (
-          <select value={holderType} onChange={(e) => { setHolderType(e.target.value); setPick(""); }} style={{ ...inp, width: 120 }}>
+          <PickSelect value={holderType} onChange={(e) => { setHolderType(e.target.value); setPick(""); }} style={{ ...inp, width: 120 }}>
             <option value="">{t("assets.all")}</option>
             <option value="worker">{t("assets.holder_worker")}</option>
             <option value="subcon">{t("assets.holder_subcon")}</option>
-          </select>
+          </PickSelect>
         )}
         <div style={{ width: 240 }}>
           <SearchSelect value={pick} onChange={(k) => setPick(k)} accent={T.ind} options={[{ id: "", name: t("assets.all") }, ...pickOptions]} placeholder={t("assets.all")} />
@@ -3905,15 +3906,15 @@ function NewRequestModal({ open, meta, pickers, items, me, onClose, onCreated })
             options={(pickers.projects || []).map((p) => ({ id: p.id, name: p.name }))} placeholder={t("assets.select")} />
         </Field>
         <Field label={t("assets.req_from_store")} hint={t("assets.req_hint_store")}>
-          <select value={f.warehouse_id} onChange={(e) => upd("warehouse_id", e.target.value)} style={inp}>
+          <PickSelect value={f.warehouse_id} onChange={(e) => upd("warehouse_id", e.target.value)} style={inp}>
             <option value="">{t("assets.req_any_store")}</option>
             {((meta && meta.warehouses) || []).map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
-          </select>
+          </PickSelect>
         </Field>
         <Field label={t("assets.req_priority")}>
-          <select value={f.priority} onChange={(e) => upd("priority", e.target.value)} style={inp}>
+          <PickSelect value={f.priority} onChange={(e) => upd("priority", e.target.value)} style={inp}>
             {["low", "normal", "high", "urgent"].map((k) => <option key={k} value={k}>{prioLabel(k)}</option>)}
-          </select>
+          </PickSelect>
         </Field>
         <Field label={t("assets.req_when")}><input type="date" value={f.needed_from || ""} onChange={(e) => upd("needed_from", e.target.value)} style={inp} /></Field>
         <Field label={t("assets.req_days")} hint={t("assets.req_days_hint")}>
@@ -4091,17 +4092,17 @@ function RequestsTab({ refreshKey, meta, pickers, onNew, onOpen }) {
       <div style={{ display: "flex", gap: 8, padding: "10px 14px", borderBottom: `1px solid ${T.b1}`, flexWrap: "wrap", alignItems: "center" }}>
         <Seg value={box} onChange={setBox}
           options={[{ k: "", l: t("assets.req_all") }, { k: "mine", l: t("assets.req_mine") }, { k: "for_me", l: t("assets.req_for_me") }]} />
-        <select value={fl.status} onChange={(e) => upd("status", e.target.value)} style={{ ...inp, width: 150 }}>
+        <PickSelect value={fl.status} onChange={(e) => upd("status", e.target.value)} style={{ ...inp, width: 150 }}>
           <option value="open">{t("assets.req_st_open_filter")}</option>
           <option value="">{t("assets.all_status")}</option>
           <option value="done">{t("assets.req_st_done")}</option>
           <option value="rejected">{t("assets.req_st_rejected")}</option>
           <option value="cancelled">{t("assets.req_st_cancelled")}</option>
-        </select>
-        <select value={fl.priority} onChange={(e) => upd("priority", e.target.value)} style={{ ...inp, width: 150 }}>
+        </PickSelect>
+        <PickSelect value={fl.priority} onChange={(e) => upd("priority", e.target.value)} style={{ ...inp, width: 150 }}>
           <option value="">{t("assets.req_priority_all")}</option>
           {["urgent", "high", "normal", "low"].map((k) => <option key={k} value={k}>{prioLabel(k)}</option>)}
-        </select>
+        </PickSelect>
         <div style={{ width: 200 }}>
           <SearchSelect value={fl.project_id} onChange={(k) => upd("project_id", k)} accent={T.ind}
             options={[{ id: "", name: t("assets.all_projects") }, ...(pickers.projects || []).map((p) => ({ id: p.id, name: p.name }))]} placeholder={t("assets.all_projects")} />

@@ -1,4 +1,6 @@
 import { useState, useEffect, useMemo, useRef, useLayoutEffect, Fragment } from "react";
+import SearchSelect from "../components/SearchSelect";
+import PickSelect from "../components/PickSelect";
 import { createPortal } from "react-dom";
 import TransactionDetailDrawer from "../components/TransactionDetailDrawer";
 import LibrarySelect from "../components/LibrarySelect";
@@ -296,152 +298,7 @@ function DuplicateModal({project,onClose,onConfirm}){
 
 // ─── SEARCHABLE SELECT COMBOBOX ───────────────────────────────
 // Uses position:fixed for the dropdown so it is never clipped by overflow:hidden parents
-function SearchSelect({options,value,onChange,placeholder,accent,compact,onAfterSelect,inputRef}){
-  const [open,setOpen]=useState(false);
-  const [q,setQ]=useState("");
-  const [hi,setHi]=useState(-1);
-  const [dropPos,setDropPos]=useState({top:0,left:0,width:180});
-  const wrapRef=useRef(null);
-  const ownInputRef=useRef(null);
-  const listRef=useRef(null);
-  const ac=accent||T.blu;
-  const ht=compact?28:30;
-  const opts=Array.isArray(options)?options:[];
-  const filtered=q?opts.filter(o=>(typeof o==="string"?o:o.label).toLowerCase().includes(q.toLowerCase())):opts;
-
-  // close on outside click
-  useEffect(()=>{
-    const h=e=>{
-      if(wrapRef.current&&!wrapRef.current.contains(e.target)){
-        setOpen(false);setQ("");setHi(-1);
-      }
-    };
-    document.addEventListener("mousedown",h);
-    return()=>document.removeEventListener("mousedown",h);
-  },[]);
-
-  // reposition when open changes
-  useEffect(()=>{
-    if(!open) return;
-    const recalc=()=>{
-      const el=ownInputRef.current;
-      if(el){
-        const r=el.getBoundingClientRect();
-        setDropPos({top:r.bottom+2,left:r.left,width:Math.max(r.width,180)});
-      }
-    };
-    recalc();
-    window.addEventListener("scroll",recalc,true);
-    window.addEventListener("resize",recalc);
-    return()=>{
-      window.removeEventListener("scroll",recalc,true);
-      window.removeEventListener("resize",recalc);
-    };
-  },[open]);
-
-  // scroll highlighted item into view
-  useEffect(()=>{
-    if(hi>=0&&listRef.current){
-      const items=listRef.current.querySelectorAll("[data-opt]");
-      if(items[hi]) items[hi].scrollIntoView({block:"nearest"});
-    }
-  },[hi]);
-
-  const handleSelect=(val)=>{
-    onChange(val);setQ("");setOpen(false);setHi(-1);
-    if(onAfterSelect) setTimeout(()=>onAfterSelect(),30);
-  };
-
-  const openDrop=()=>{
-    const el=ownInputRef.current;
-    if(el){
-      const r=el.getBoundingClientRect();
-      setDropPos({top:r.bottom+2,left:r.left,width:Math.max(r.width,180)});
-    }
-    setQ("");setHi(-1);setOpen(true);
-  };
-
-  const assignRef=el=>{
-    ownInputRef.current=el;
-    if(inputRef){if(typeof inputRef==="function") inputRef(el); else inputRef.current=el;}
-  };
-
-  const onKeyDown=e=>{
-    if(!open){if(e.key==="ArrowDown"||e.key==="Enter") openDrop(); return;}
-    if(e.key==="Escape"||e.key==="Tab"){setOpen(false);setQ("");setHi(-1);if(e.key==="Escape")e.preventDefault();return;}
-    if(e.key==="ArrowDown"){
-      e.preventDefault();
-      setHi(p=>p<filtered.length-1?p+1:0);
-    } else if(e.key==="ArrowUp"){
-      e.preventDefault();
-      setHi(p=>p>0?p-1:filtered.length-1);
-    } else if(e.key==="Enter"){
-      e.preventDefault();
-      const idx=hi>=0?hi:0;
-      if(filtered[idx]){const v=typeof filtered[idx]==="string"?filtered[idx]:filtered[idx].value; handleSelect(v);}
-    }
-  };
-
-  return(
-    <div ref={wrapRef} style={{position:"relative"}}>
-      <input
-        ref={assignRef}
-        value={open?q:value||""}
-        onChange={e=>{setQ(e.target.value);setHi(-1);if(!open)openDrop();}}
-        onFocus={()=>{if(!open)openDrop();}}
-        onMouseDown={e=>{if(open){e.preventDefault();setOpen(false);setQ("");setHi(-1);}}}
-        onBlur={e=>{
-          // Close only if focus goes outside the entire component (not to the dropdown portal)
-          setTimeout(()=>{
-            if(document.activeElement&&listRef.current&&listRef.current.contains(document.activeElement)) return;
-            setOpen(false);setQ("");setHi(-1);
-          },150);
-        }}
-        onKeyDown={onKeyDown}
-        placeholder={placeholder||t("finance.type_or_select")}
-        autoComplete="off"
-        style={{height:ht,padding:`0 22px 0 7px`,borderRadius:5,
-          border:`1.5px solid ${open?ac:T.b1}`,fontSize:compact?11:12,outline:"none",
-          boxSizing:"border-box",fontFamily:"inherit",background:T.surface,width:"100%",
-          cursor:"pointer"}}/>
-      <span style={{position:"absolute",right:5,top:"50%",transform:`translateY(-50%) rotate(${open?180:0}deg)`,
-        pointerEvents:"none",display:"flex",color:T.t4,transition:"transform 0.18s"}}>
-        <IcDown size={10} color="currentColor"/>
-      </span>
-      {open&&createPortal(
-        <div ref={listRef}
-          style={{position:"fixed",top:dropPos.top,left:dropPos.left,minWidth:dropPos.width,
-            background:T.surface,borderRadius:8,border:`1.5px solid ${ac}`,
-            boxShadow:"0 8px 28px rgba(0,0,0,0.2)",zIndex:99999,maxHeight:220,overflowY:"auto",
-            animation:"fadeSlideIn 0.12s ease"}}>
-          {filtered.length===0&&(
-            <div style={{padding:"12px 10px",fontSize:11,color:T.t4,textAlign:"center"}}>{t("search_select.no_match_found")}</div>
-          )}
-          {filtered.map((opt,i)=>{
-            const label=typeof opt==="string"?opt:opt.label;
-            const val=typeof opt==="string"?opt:opt.value;
-            const isCur=val===value;
-            const isHi=i===hi;
-            return(
-              <div key={i} data-opt={i}
-                onMouseDown={e=>{e.preventDefault();handleSelect(val);}}
-                onMouseEnter={()=>setHi(i)}
-                style={{padding:"7px 11px",fontSize:12,cursor:"pointer",
-                  color:isCur?ac:T.t1,fontWeight:isCur?700:400,
-                  background:isHi?(isCur?ac+"28":T.sltL):isCur?ac+"14":"transparent",
-                  borderBottom:i<filtered.length-1?`1px solid ${T.b1}`:"none",
-                  whiteSpace:"nowrap",outline:isHi?`2px solid ${ac}44`:"none",
-                  outlineOffset:"-2px"}}>
-                {label}
-              </div>
-            );
-          })}
-        </div>,
-        document.body
-      )}
-    </div>
-  );
-}
+// SearchSelect — shared (components/SearchSelect, app jaisa picker), 6 Oct 2026
 
 // ─── BILL CONFLICT WARNING MODAL ─────────────────────────────────
 // Pops up before the bill modal when /finance/check-bill-conflict reports
@@ -755,11 +612,11 @@ function DualBillStrip({ row, onFields }){
             onChange={e=>onFields({altOn:true,alt_qty:e.target.value},"qty")}
             placeholder={suggest!=null?String(suggest):"weight"} title={t("finance.weighbridge_parchi_ka_weight_editable")}
             style={sInp({width:100})}/>
-          <select value={row.alt_unit||""} onChange={e=>onFields({altOn:true,alt_unit:e.target.value})}
+          <PickSelect value={row.alt_unit||""} onChange={e=>onFields({altOn:true,alt_unit:e.target.value})}
             style={{padding:"6px 9px",borderRadius:6,border:`1.5px solid ${T.bluM}`,fontSize:12.5,outline:"none",fontFamily:"inherit",cursor:"pointer",background:T.surface}}>
             {!row.alt_unit&&<option value="">—</option>}
             {unitOpts.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
+          </PickSelect>
           <span style={{fontSize:11,color:T.t3}}>× ₹</span>
           <input type="number" value={row.rate||""}
             onChange={e=>onFields({rate:e.target.value},"rate")}
@@ -2327,7 +2184,7 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
                 {type==="Payment Received" && raBills.length>0 && (
                   <div>
                     {lbl("RA Bill (optional)")}
-                    <select value={raBillId||""} onChange={e=>setRaBillId(e.target.value?Number(e.target.value):null)}
+                    <PickSelect value={raBillId||""} onChange={e=>setRaBillId(e.target.value?Number(e.target.value):null)}
                       style={{...inp(),cursor:"pointer"}}
                       onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}>
                       <option value="">{t("finance.kisi_ra_bill_se_link_nahi")}</option>
@@ -2336,7 +2193,7 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
                           {`RA-${b.bill_no} · ${b.tender_no} · Net ₹${Number(b.net_payable).toLocaleString("en-IN")} · Balance ₹${Number(b.balance).toLocaleString("en-IN")}`}
                         </option>
                       ))}
-                    </select>
+                    </PickSelect>
                   </div>
                 )}
                 <div>
@@ -2385,12 +2242,12 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
                 <div style={{fontSize:11.5,color:T.t3,marginTop:2}}>{t("finance.city_hint_no_project")}</div>
               </div>
               <div style={{flex:"1 1 240px",minWidth:220}}>
-                <select value={cityChoice} onChange={e=>{setCityChoice(e.target.value);setCityErr(false);}}
+                <PickSelect value={cityChoice} onChange={e=>{setCityChoice(e.target.value);setCityErr(false);}}
                   style={{...inp(),cursor:"pointer",...(cityErr?{borderColor:T.red}:{})}}>
                   <option value="">{t("finance.city_select_placeholder")}</option>
                   {cityList.map(c=><option key={c.id} value={String(c.id)}>{c.name}</option>)}
                   <option value="central">{t("finance.central_whole_company")}</option>
-                </select>
+                </PickSelect>
               </div>
             </div>
           )}
@@ -2539,7 +2396,7 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
                         : t("finance.bill_ko_grn_se_link_karne")}
                     </div>
                   </div>
-                  <select value={selectedGRNId||""} onChange={e=>pickGRN(e.target.value?parseInt(e.target.value):null)}
+                  <PickSelect value={selectedGRNId||""} onChange={e=>pickGRN(e.target.value?parseInt(e.target.value):null)}
                     style={{height:32,padding:"0 9px",borderRadius:6,border:`1.5px solid ${selectedGRNId?T.grn:T.amb}`,background:selectedGRNId?T.grnL:T.surface,fontSize:12,fontWeight:600,color:selectedGRNId?T.grn:T.amb,outline:"none",cursor:"pointer",fontFamily:"inherit",minWidth:200}}>
                     <option value="">{t("finance.direct_purchase_no_grn")}</option>
                     {availableGRNs.map(g=>{
@@ -2547,7 +2404,7 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
                       const itemCount=(g.items||[]).length;
                       return <option key={g.id} value={g.id}>{g.grn_number} · {dt} · {itemCount} item{itemCount!==1?"s":""}</option>;
                     })}
-                  </select>
+                  </PickSelect>
                   {selectedGRNId&&(
                     <span style={{fontSize:10.5,fontWeight:700,color:T.grn,padding:"3px 8px",background:T.grnL,borderRadius:12,border:`1px solid ${T.grnM}`}}>{t("finance.linked")}</span>
                   )}
@@ -3086,17 +2943,17 @@ function AddPartyModal({onClose,onAdd}){
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:11}}>
           <div>
             {lbl("Party Type *")}
-            <select value={PARTY_TYPES.some(c=>c.key===type)?type:(PARTY_TYPES[0]?.key||"")} onChange={e=>setType(e.target.value)}
+            <PickSelect value={PARTY_TYPES.some(c=>c.key===type)?type:(PARTY_TYPES[0]?.key||"")} onChange={e=>setType(e.target.value)}
               style={inp({cursor:"pointer"})}>
               {PARTY_TYPES.map(c=><option key={c.key} value={c.key}>{c.label}</option>)}
-            </select>
+            </PickSelect>
           </div>
           <div>
             {lbl("Balance Type")}
-            <select value={balType} onChange={e=>setBalType(e.target.value)}
+            <PickSelect value={balType} onChange={e=>setBalType(e.target.value)}
               style={inp({cursor:"pointer"})}>
               {BAL_TYPES.map(b=><option key={b}>{b}</option>)}
-            </select>
+            </PickSelect>
           </div>
           <div>
             {lbl("Opening Balance (Rs.)")}
@@ -3307,19 +3164,19 @@ function SendToStaffModal({staff,accounts,onClose,onDone}){
         style={{width:"100%",padding:"9px 11px",borderRadius:8,border:`1px solid ${T.b2}`,fontSize:13,fontWeight:700,boxSizing:"border-box",margin:"4px 0 10px"}}/>
       {bucket!=="salary"&&<>
         <label style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:.4}}>{t("finance.pay_from_account")}</label>
-        <select value={accountId} onChange={e=>setAccountId(e.target.value)}
+        <PickSelect value={accountId} onChange={e=>setAccountId(e.target.value)}
           style={{width:"100%",padding:"9px 11px",borderRadius:8,border:`1px solid ${accountId?T.b2:T.amb}`,fontSize:12,boxSizing:"border-box",margin:"4px 0 10px",background:T.surface}}>
           <option value="">{t("finance.select_account")}</option>
           {accts.map(a=><option key={a.id} value={String(a.id)}>{a.name}{a.no?` ${a.no}`:""} · {fmtS(a.balance)}</option>)}
-        </select>
+        </PickSelect>
       </>}
       <div style={{display:"flex",gap:8}}>
         <div style={{flex:1}}>
           <label style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:.4}}>{t("finance.method")}</label>
-          <select value={method} onChange={e=>setMethod(e.target.value)}
+          <PickSelect value={method} onChange={e=>setMethod(e.target.value)}
             style={{width:"100%",padding:"9px 11px",borderRadius:8,border:`1px solid ${T.b2}`,fontSize:12,boxSizing:"border-box",margin:"4px 0 10px",background:T.surface}}>
             <option value="bank_transfer">{t("finance.bank_neft")}</option><option value="upi">UPI</option><option value="cash">{t("common.cash")}</option><option value="cheque">{t("common.cheque")}</option>
-          </select>
+          </PickSelect>
         </div>
         <div style={{flex:1}}>
           <label style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:.4}}>{t("finance.tx_ref")}</label>
@@ -3669,11 +3526,11 @@ function CashDayBook({ accounts=[], view="cashbook", mapRow, reloadKey=0 }){ // 
               style={{padding:"4px 12px",borderRadius:20,border:`1.5px solid ${on?col:T.b1}`,background:on?(id==="Receipts"?T.grnL:id==="Payments"?T.redL:T.sltL):T.surfaceB,color:on?col:T.t3,fontSize:11.5,fontWeight:on?700:500,cursor:"pointer"}}>{l}</button>
           );})}
           <div style={{width:1,height:20,background:T.b1,margin:"0 3px"}}/>
-          <select value={fSite}  onChange={e=>setFSite(e.target.value)}  style={{...selStyle,borderColor:fSite!=="All"?T.blu:T.b1,background:fSite!=="All"?T.bluL:T.surface,color:fSite!=="All"?T.blu:T.t2}}><option value="All">{t("common.all_sites")}</option>{SITES.map(s=><option key={s}>{s}</option>)}</select>
-          <select value={fHead}  onChange={e=>setFHead(e.target.value)}  style={{...selStyle,borderColor:fHead!=="All"?T.blu:T.b1,background:fHead!=="All"?T.bluL:T.surface,color:fHead!=="All"?T.blu:T.t2}}><option value="All">{t("finance.all_heads")}</option>{HEADS.map(h=><option key={h}>{h}</option>)}</select>
-          <select value={fMOP}   onChange={e=>setFMOP(e.target.value)}   style={{...selStyle,borderColor:fMOP!=="All"?T.blu:T.b1,background:fMOP!=="All"?T.bluL:T.surface,color:fMOP!=="All"?T.blu:T.t2}}><option value="All">{t("finance.all_mop")}</option>{MOPS.map(m=><option key={m}>{m}</option>)}</select>
-          <select value={fAcc}   onChange={e=>setFAcc(e.target.value)}   style={{...selStyle,borderColor:fAcc!=="All"?T.blu:T.b1,background:fAcc!=="All"?T.bluL:T.surface,color:fAcc!=="All"?T.blu:T.t2}}><option value="All">{t("finance.all_accounts")}</option>{ACCTS.map(a=><option key={a}>{a}</option>)}</select>
-          <select value={fParty} onChange={e=>setFParty(e.target.value)} style={{...selStyle,borderColor:fParty!=="All"?T.pur:T.b1,background:fParty!=="All"?T.purL:T.surface,color:fParty!=="All"?T.pur:T.t2}}><option value="All">{t("finance.all_parties")}</option>{PARTIES.map(p=><option key={p}>{p}</option>)}</select>
+          <PickSelect value={fSite}  onChange={e=>setFSite(e.target.value)}  style={{...selStyle,borderColor:fSite!=="All"?T.blu:T.b1,background:fSite!=="All"?T.bluL:T.surface,color:fSite!=="All"?T.blu:T.t2}}><option value="All">{t("common.all_sites")}</option>{SITES.map(s=><option key={s}>{s}</option>)}</PickSelect>
+          <PickSelect value={fHead}  onChange={e=>setFHead(e.target.value)}  style={{...selStyle,borderColor:fHead!=="All"?T.blu:T.b1,background:fHead!=="All"?T.bluL:T.surface,color:fHead!=="All"?T.blu:T.t2}}><option value="All">{t("finance.all_heads")}</option>{HEADS.map(h=><option key={h}>{h}</option>)}</PickSelect>
+          <PickSelect value={fMOP}   onChange={e=>setFMOP(e.target.value)}   style={{...selStyle,borderColor:fMOP!=="All"?T.blu:T.b1,background:fMOP!=="All"?T.bluL:T.surface,color:fMOP!=="All"?T.blu:T.t2}}><option value="All">{t("finance.all_mop")}</option>{MOPS.map(m=><option key={m}>{m}</option>)}</PickSelect>
+          <PickSelect value={fAcc}   onChange={e=>setFAcc(e.target.value)}   style={{...selStyle,borderColor:fAcc!=="All"?T.blu:T.b1,background:fAcc!=="All"?T.bluL:T.surface,color:fAcc!=="All"?T.blu:T.t2}}><option value="All">{t("finance.all_accounts")}</option>{ACCTS.map(a=><option key={a}>{a}</option>)}</PickSelect>
+          <PickSelect value={fParty} onChange={e=>setFParty(e.target.value)} style={{...selStyle,borderColor:fParty!=="All"?T.pur:T.b1,background:fParty!=="All"?T.purL:T.surface,color:fParty!=="All"?T.pur:T.t2}}><option value="All">{t("finance.all_parties")}</option>{PARTIES.map(p=><option key={p}>{p}</option>)}</PickSelect>
           {(fSite!=="All"||fHead!=="All"||fMOP!=="All"||fAcc!=="All"||fParty!=="All"||chip!=="All"||search||fFrom!==defFrom||fTo!==defTo)&&(
             <button onClick={()=>{setFSite("All");setFHead("All");setFMOP("All");setFAcc("All");setFParty("All");setChip("All");setSearch("");setFFrom(defFrom);setFTo(defTo);}}
               style={{marginLeft:"auto",padding:"3px 9px",borderRadius:20,border:`1px solid ${T.b1}`,background:"none",color:T.t4,fontSize:11,cursor:"pointer"}}>{t("common.clear")}</button>
@@ -5250,14 +5107,14 @@ Status: ${ledgerRow.status||"unpaid"}`;
                     <input value={partySearch} onChange={e=>setPartySearch(e.target.value)} placeholder={t("finance.search_parties")}
                       style={{width:"100%",height:30,padding:"0 8px 0 26px",borderRadius:6,border:`1.5px solid ${partySearch?T.blu:T.b1}`,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit",background:partySearch?T.bluL:T.surface}}/>
                   </div>
-                  <select value={chipParty} onChange={e=>setChipParty(e.target.value)} title={t("finance.filter_by_type")}
+                  <PickSelect value={chipParty} onChange={e=>setChipParty(e.target.value)} title={t("finance.filter_by_type")}
                     style={{height:30,padding:"0 7px",borderRadius:6,border:`1.5px solid ${chipParty!=="All"?T.blu:T.b1}`,fontSize:11.5,color:chipParty!=="All"?T.blu:T.t2,background:chipParty!=="All"?T.bluL:T.surface,outline:"none",cursor:"pointer",fontFamily:"inherit",flexShrink:0}}>
                     {pCatsOk
                       ? [<option key="All" value="All">{t("finance.all_types")}</option>,
                          ...pCats.filter(c=>c.is_active).map(c=><option key={c.key} value={c.key}>{c.label}</option>),
                          <option key="__none" value="__none">{t("finance.ptype_other")}</option>]
                       : ["All",...PARTY_TYPE_BUCKETS].map(o=><option key={o} value={o}>{o==="All"?t("finance.all_types"):t("finance.ptype_"+o)}</option>)}
-                  </select>
+                  </PickSelect>
                   {[["az",t("party.sort_a_z")],["bal","₹"]].map(([mode,label])=>(
                     <button key={mode} onClick={()=>setPartySort(mode)}
                       title={mode==="az"?t("party.sort_a_z"):t("common.balance")}
@@ -5367,14 +5224,14 @@ Status: ${ledgerRow.status||"unpaid"}`;
                     <span style={{fontSize:10.5,color:T.t4}}>–</span>
                     <input type="date" value={ledgerTo} onChange={e=>setLedgerTo(e.target.value)} title={t("finance.to_date")}
                       style={{height:28,padding:"0 7px",borderRadius:6,border:`1.5px solid ${ledgerTo?T.blu:T.b1}`,fontSize:11,color:T.t2,background:ledgerTo?T.bluL:T.surface,outline:"none",fontFamily:"inherit"}}/>
-                    <select value={ledgerProj} onChange={e=>setLedgerProj(e.target.value)}
+                    <PickSelect value={ledgerProj} onChange={e=>setLedgerProj(e.target.value)}
                       style={{height:28,padding:"0 7px",borderRadius:6,border:`1.5px solid ${ledgerProj!=="All"?T.blu:T.b1}`,fontSize:11,color:ledgerProj!=="All"?T.blu:T.t2,background:ledgerProj!=="All"?T.bluL:T.surface,outline:"none",cursor:"pointer",fontFamily:"inherit",maxWidth:120}}>
                       <option value="All">{t("common.all_projects")}</option>{ledgerProjOpts.map(p=><option key={p}>{p}</option>)}
-                    </select>
-                    <select value={ledgerType} onChange={e=>setLedgerType(e.target.value)}
+                    </PickSelect>
+                    <PickSelect value={ledgerType} onChange={e=>setLedgerType(e.target.value)}
                       style={{height:28,padding:"0 7px",borderRadius:6,border:`1.5px solid ${ledgerType!=="All"?T.blu:T.b1}`,fontSize:11,color:ledgerType!=="All"?T.blu:T.t2,background:ledgerType!=="All"?T.bluL:T.surface,outline:"none",cursor:"pointer",fontFamily:"inherit",maxWidth:130}}>
                       <option value="All">{t("common.all_types")}</option>{ledgerTypeOpts.map(tp=><option key={tp}>{tp}</option>)}
-                    </select>
+                    </PickSelect>
                     {ledgerFiltered&&(
                       <button onClick={clearLedgerFilters} title={t("finance.clear_filters")}
                         style={{height:28,padding:"0 8px",borderRadius:6,border:`1px solid ${T.b1}`,background:"none",color:T.t4,fontSize:11,cursor:"pointer",display:"flex",alignItems:"center",gap:3,fontFamily:"inherit"}}>
@@ -5952,9 +5809,9 @@ Status: ${ledgerRow.status||"unpaid"}`;
                         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
                           <div>
                             <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:4}}>{t("common.reason")}</label>
-                            <select value={editReason} onChange={e=>setEditReason(e.target.value)} style={{width:"100%",padding:"7px 10px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}>
+                            <PickSelect value={editReason} onChange={e=>setEditReason(e.target.value)} style={{width:"100%",padding:"7px 10px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}>
                               <option value="">{t("finance.pr_reason_select")}</option><option>{t("finance.partial_stock_available")}</option><option>{t("finance.budget_limit")}</option><option>{t("finance.price_negotiated")}</option><option>{t("finance.split_payment")}</option><option>{t("common.other")}</option>
-                            </select>
+                            </PickSelect>
                           </div>
                           <div>
                             <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:4}}>{t("common.note")}</label>
@@ -6355,22 +6212,22 @@ Status: ${ledgerRow.status||"unpaid"}`;
                         ))}
                       </div>
                       {(equipRouteEdit.route === "vendor" || equipRouteEdit.route === "site_exp") && (
-                        <select value={equipRouteEdit.vendor_id || ""} onChange={e=>setEquipRouteEdit({...equipRouteEdit,vendor_id:e.target.value?parseInt(e.target.value,10):null})}
+                        <PickSelect value={equipRouteEdit.vendor_id || ""} onChange={e=>setEquipRouteEdit({...equipRouteEdit,vendor_id:e.target.value?parseInt(e.target.value,10):null})}
                           style={{width:"100%",height:34,padding:"0 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,background:T.surface,outline:"none",fontFamily:"inherit"}}>
                           <option value="">{equipRouteEdit.route === "site_exp" ? t("finance.no_payee_site_cash") : t("finance.select_vendor")}</option>
                           {equipParties.filter(p=>equipHasRole(p,["material_vendor","equipment_vendor","equipment","vendor","supplier","material vendor","material supplier","transporter"])).map(p=>(
                             <option key={p.id} value={p.id}>{p.name}</option>
                           ))}
-                        </select>
+                        </PickSelect>
                       )}
                       {equipRouteEdit.route === "subcon_against" && (
-                        <select value={equipRouteEdit.subcon_id || ""} onChange={e=>setEquipRouteEdit({...equipRouteEdit,subcon_id:e.target.value?parseInt(e.target.value,10):null})}
+                        <PickSelect value={equipRouteEdit.subcon_id || ""} onChange={e=>setEquipRouteEdit({...equipRouteEdit,subcon_id:e.target.value?parseInt(e.target.value,10):null})}
                           style={{width:"100%",height:34,padding:"0 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,background:T.surface,outline:"none",fontFamily:"inherit"}}>
                           <option value="">{t("finance.select_sub_contractor")}</option>
                           {equipParties.filter(p=>equipHasRole(p,["subcontractor","subcon","sub-con"])).map(p=>(
                             <option key={p.id} value={p.id}>{p.name}</option>
                           ))}
-                        </select>
+                        </PickSelect>
                       )}
                       <div style={{display:"flex",gap:6,justifyContent:"flex-end",marginTop:10}}>
                         <button onClick={()=>setEquipRouteEdit(null)} disabled={acting}
@@ -6436,16 +6293,16 @@ Status: ${ledgerRow.status||"unpaid"}`;
           {/* Filter bar */}
           <div style={{background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`,padding:"8px 12px",marginBottom:12,display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
             <span style={{fontSize:12,fontWeight:600,color:T.t2}}>{t("finance.filters")}</span>
-            <select value={grnFilter.project} onChange={e=>setGrnFilter(p=>({...p,project:e.target.value}))}
+            <PickSelect value={grnFilter.project} onChange={e=>setGrnFilter(p=>({...p,project:e.target.value}))}
               style={{height:30,padding:"0 8px",borderRadius:6,border:`1.5px solid ${grnFilter.project!=="All"?T.blu:T.b1}`,background:grnFilter.project!=="All"?T.bluL:T.surface,fontSize:11.5,color:grnFilter.project!=="All"?T.blu:T.t2,outline:"none",cursor:"pointer",fontFamily:"inherit"}}>
               <option value="All">{t("common.all_projects")}</option>
               {[...new Set(grnList.map(g=>g.project_name).filter(Boolean))].map(p=><option key={p}>{p}</option>)}
-            </select>
-            <select value={grnFilter.head} onChange={e=>setGrnFilter(p=>({...p,head:e.target.value}))}
+            </PickSelect>
+            <PickSelect value={grnFilter.head} onChange={e=>setGrnFilter(p=>({...p,head:e.target.value}))}
               style={{height:30,padding:"0 8px",borderRadius:6,border:`1.5px solid ${grnFilter.head!=="All"?T.blu:T.b1}`,background:grnFilter.head!=="All"?T.bluL:T.surface,fontSize:11.5,color:grnFilter.head!=="All"?T.blu:T.t2,outline:"none",cursor:"pointer",fontFamily:"inherit"}}>
               <option value="All">{t("common.all_categories")}</option>
               {["Civil","Electrical","Plumbing","Finishing","Structural","Mechanical","Safety","General"].map(h=><option key={h}>{h}</option>)}
-            </select>
+            </PickSelect>
             <div style={{position:"relative",flex:1,minWidth:160}}>
               <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke={T.t4} strokeWidth={1.8} strokeLinecap="round" style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}><path d="M21 21l-4.35-4.35M17 11A6 6 0 115 11a6 6 0 0112 0z"/></svg>
               <input value={grnFilter.material} onChange={e=>setGrnFilter(p=>({...p,material:e.target.value}))} placeholder={t("common.search_material")}
@@ -6959,16 +6816,16 @@ Status: ${ledgerRow.status||"unpaid"}`;
                   </div>
                   <div>
                     <div style={lblStyle}>MOP</div>
-                    <select value={settleMop} onChange={e=>setSettleMop(e.target.value)} style={inStyle}>
+                    <PickSelect value={settleMop} onChange={e=>setSettleMop(e.target.value)} style={inStyle}>
                       {["Cash","Cheque","Bank Transfer","UPI","NEFT"].map(m=><option key={m} value={m}>{m}</option>)}
-                    </select>
+                    </PickSelect>
                   </div>
                 </div>
                 <div style={lblStyle}>{t("finance.pay_from_account")}</div>
-                <select value={settleAcct} onChange={e=>setSettleAcct(e.target.value)} style={{...inStyle,marginBottom:12}}>
+                <PickSelect value={settleAcct} onChange={e=>setSettleAcct(e.target.value)} style={{...inStyle,marginBottom:12}}>
                   <option value="">{t("finance.select_account")}</option>
                   {activeAccounts.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}
-                </select>
+                </PickSelect>
                 <div style={lblStyle}>{t("common.note_optional")}</div>
                 <input type="text" value={settleNote} onChange={e=>setSettleNote(e.target.value)} placeholder={t("finance.what_is_this_payment_for")} style={{...inStyle,marginBottom:16}}/>
                 <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>

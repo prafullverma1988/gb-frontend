@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
+import PickSelect from "../../components/PickSelect";
 import api from "../../config/api";
 import apiCache from "../../utils/apiCache";
 import uploadManager from "../../utils/uploadManager";
@@ -629,11 +630,11 @@ function TabMaterial({ project }) {
                   <div style={{display:"grid",gridTemplateColumns:"1fr 100px 76px",gap:8,alignItems:"center"}}>
                     <input value={libNewName} onChange={e=>setLibNewName(e.target.value)} placeholder={t("common.material_name")} autoFocus
                       style={{padding:"8px 10px",borderRadius:6,border:`1.5px solid ${T.purM}`,fontSize:12.5,color:T.t1,background:"white",outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
-                    <select value={libNewUnit} onChange={e=>setLibNewUnit(e.target.value)}
+                    <PickSelect value={libNewUnit} onChange={e=>setLibNewUnit(e.target.value)}
                       style={{padding:"8px 9px",borderRadius:6,border:`1.5px solid ${T.purM}`,fontSize:12,color:T.t1,background:"white",outline:"none",fontFamily:"inherit",boxSizing:"border-box",cursor:"pointer"}}>
                       <option value="">{t("common.unit")}</option>
                       {UNITS_MR.map(u=><option key={u}>{u}</option>)}
-                    </select>
+                    </PickSelect>
                     <button onClick={saveLibMaterial} disabled={!libNewName.trim()||libSaving}
                       style={{padding:"8px 0",borderRadius:6,background:libNewName.trim()?T.pur:T.b1,color:libNewName.trim()?"white":T.t4,border:"none",fontSize:12,fontWeight:700,cursor:libNewName.trim()?"pointer":"not-allowed",fontFamily:"inherit"}}>
                       {libSaving?"…":t("common.save")}
@@ -696,10 +697,10 @@ function TabMaterial({ project }) {
                             <span style={{fontSize:9,opacity:.5}}>🔒</span>{displayUnit}
                           </div>
                         ) : (
-                          <select value={it.unit} onChange={e=>updItem(idx,{unit:e.target.value})}
+                          <PickSelect value={it.unit} onChange={e=>updItem(idx,{unit:e.target.value})}
                             style={{padding:"7px 8px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",cursor:"pointer",width:"100%"}}>
                             {UNITS_MR.map(u=><option key={u}>{u}</option>)}
-                          </select>
+                          </PickSelect>
                         )}
                         <input type="number" value={it.approx_amount} onChange={e=>updItem(idx,{approx_amount:e.target.value})} placeholder="0"
                           style={{padding:"7px 8px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",width:"100%"}}
@@ -1181,10 +1182,10 @@ function TabMaterial({ project }) {
               style={{width:"100%",padding:"7px 9px 7px 28px",borderRadius:7,border:"1.5px solid "+T.b1,fontSize:12.5,color:T.t1,background:"white",outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}
               onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
           </div>
-          <select value={fMaterial} onChange={e=>setFMaterial(e.target.value)}
+          <PickSelect value={fMaterial} onChange={e=>setFMaterial(e.target.value)}
             style={{padding:"7px 10px",borderRadius:7,border:"1.5px solid "+T.b1,fontSize:12,color:T.t1,background:"white",outline:"none",fontFamily:"inherit",cursor:"pointer"}}>
             {MATERIAL_NAMES.map(n=><option key={n}>{n}</option>)}
-          </select>
+          </PickSelect>
           <div style={{display:"flex",gap:3,background:T.surfaceB,borderRadius:6,padding:3}}>
             {[["tile","⊞"],["list","☰"]].map(([id,icon])=>(
               <button key={id} onClick={()=>setViewMode(id)}
@@ -1283,10 +1284,10 @@ function TabMaterial({ project }) {
                   <input value={ledgerSearch} onChange={e=>setLedgerSearch(e.target.value)} placeholder={t("common.search_material")}
                     style={{width:"100%",padding:"7px 9px 7px 28px",borderRadius:7,border:"1.5px solid "+T.b1,fontSize:12.5,color:T.t1,background:"white",outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
                 </div>
-                <select value={ledgerVendor} onChange={e=>setLedgerVendor(e.target.value)}
+                <PickSelect value={ledgerVendor} onChange={e=>setLedgerVendor(e.target.value)}
                   style={{padding:"7px 10px",borderRadius:7,border:"1.5px solid "+T.b1,fontSize:12,color:T.t1,background:"white",fontFamily:"inherit",cursor:"pointer"}}>
                   {allVendors.map(v=><option key={v}>{v}</option>)}
-                </select>
+                </PickSelect>
               </div>
 
               {ledgerFiltered.length===0&&<div style={{textAlign:"center",padding:"50px 0",color:T.t4,fontSize:13}}>{t("material.no_material_data_record_grn_to")}</div>}

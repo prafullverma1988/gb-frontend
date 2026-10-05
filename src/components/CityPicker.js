@@ -9,6 +9,7 @@
 // List parent ke paas rehti hai (`cities` / `setCities`), taaki nayi city
 // usi form ke doosre hisson ko bhi turant dikhe.
 import { useState } from "react";
+import PickSelect from "./PickSelect";
 import api from "../config/api";
 import { t } from "../i18n";
 
@@ -67,12 +68,12 @@ export default function CityPicker({ value, onChange, cities = [], setCities, pl
 
   return (
     <div style={{ display: "flex", gap: 6 }}>
-      <select value={value || ""} disabled={disabled}
+      <PickSelect value={value || ""} disabled={disabled}
         onChange={(e) => onChange(e.target.value, byId(e.target.value))}
         style={{ ...selectStyle, flex: 1, minWidth: 0, cursor: disabled ? "not-allowed" : "pointer" }}>
         <option value="">{placeholder || t("crm.select_city")}</option>
         {cities.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-      </select>
+      </PickSelect>
       {!disabled && (
         <button type="button" onClick={() => { setName(""); setErr(""); setAdding(true); }} style={btn(false)}>
           + {t("common.new")}

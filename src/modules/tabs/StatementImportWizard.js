@@ -14,6 +14,7 @@
 // number ek hon to aage ka kaam sirf safai hai; alag hon to farak utna hi hai
 // jitni entry kahin gum hai — aur wahi asli sawaal hai.
 import React, { useState, useCallback, useEffect, useMemo } from "react";
+import PickSelect from "../../components/PickSelect";
 import api from "../../config/api";
 import SearchSelect from "../../components/SearchSelect";
 import { T } from "../shared/tokens";
@@ -338,9 +339,9 @@ export default function StatementImportWizard({ accounts, defaultAccountId, onCl
           {step === 1 && (
             <div>
               <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: T.t2, marginBottom: 5 }}>{t("stmt.which_account")}</label>
-              <select value={acctId} onChange={(e) => setAcctId(e.target.value)} style={{ ...box, width: "100%", maxWidth: 400, marginBottom: 16 }}>
+              <PickSelect value={acctId} onChange={(e) => setAcctId(e.target.value)} style={{ ...box, width: "100%", maxWidth: 400, marginBottom: 16 }}>
                 {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}{a.account_number ? ` · ${a.account_number}` : ""}</option>)}
-              </select>
+              </PickSelect>
               <label style={{ display: "block", border: `2px dashed ${T.b2}`, borderRadius: 10, padding: "34px 18px", textAlign: "center", cursor: "pointer", background: T.surfaceB }}>
                 <input type="file" accept=".xlsx,.xls,.csv,.pdf" style={{ display: "none" }} onChange={onFile} />
                 <div style={{ fontSize: 14, fontWeight: 600, color: T.blu }}>{busy ? t("stmt.reading") : t("stmt.pick_file")}</div>
@@ -401,9 +402,9 @@ export default function StatementImportWizard({ accounts, defaultAccountId, onCl
               )}
               <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 14 }}>
                 <label style={{ fontSize: 12, color: T.t2 }}>{t("stmt.tolerance")}</label>
-                <select value={tol} onChange={(e) => setTol(Number(e.target.value))} style={box}>
+                <PickSelect value={tol} onChange={(e) => setTol(Number(e.target.value))} style={box}>
                   {[0, 1, 2, 3, 5, 7].map((n) => <option key={n} value={n}>{n === 0 ? t("stmt.tol_exact") : t("stmt.tol_days", { n })}</option>)}
-                </select>
+                </PickSelect>
                 <span style={{ fontSize: 11.5, color: T.t4 }}>{t("stmt.tolerance_why")}</span>
               </div>
               <div style={{ fontSize: 11, fontWeight: 700, color: T.t4, textTransform: "uppercase", letterSpacing: ".6px", marginBottom: 6 }}>{t("stmt.preview")}</div>
@@ -424,19 +425,19 @@ export default function StatementImportWizard({ accounts, defaultAccountId, onCl
                     <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: req ? T.t1 : T.t3, marginBottom: 3 }}>
                       {label}{req ? " *" : ""}
                     </label>
-                    <select value={hdr.map[k] >= 0 ? hdr.map[k] : ""} onChange={(e) => setCol(k, e.target.value)} style={{ ...box, width: "100%" }}>
+                    <PickSelect value={hdr.map[k] >= 0 ? hdr.map[k] : ""} onChange={(e) => setCol(k, e.target.value)} style={{ ...box, width: "100%" }}>
                       <option value="">{t("stmt.col_none")}</option>
                       {hdr.headings.map((h, i) => <option key={i} value={i}>{h || `(${t("stmt.col_n", { n: i + 1 })})`}</option>)}
-                    </select>
+                    </PickSelect>
                   </div>
                 ))}
               </div>
 
               <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 14 }}>
                 <label style={{ fontSize: 12, color: T.t2 }}>{t("stmt.tolerance")}</label>
-                <select value={tol} onChange={(e) => setTol(Number(e.target.value))} style={box}>
+                <PickSelect value={tol} onChange={(e) => setTol(Number(e.target.value))} style={box}>
                   {[0, 1, 2, 3, 5, 7].map((n) => <option key={n} value={n}>{n === 0 ? t("stmt.tol_exact") : t("stmt.tol_days", { n })}</option>)}
-                </select>
+                </PickSelect>
                 <span style={{ fontSize: 11.5, color: T.t4 }}>{t("stmt.tolerance_why")}</span>
               </div>
 

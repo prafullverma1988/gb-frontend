@@ -9,6 +9,7 @@
 // Pehle TabMaterial ke andar tha; ab site aur godown dono ka GRN ek hi
 // component (components/grn/GrnReceive.js) se banta hai, isliye yahan.
 import React from "react";
+import PickSelect from "../PickSelect";
 import api from "../../config/api";
 import { T } from "../../modules/shared/tokens";
 import { t } from "../../i18n";
@@ -71,11 +72,11 @@ export default function DualUnitToggle({ units, primaryUnit, itemName, qty, valu
             placeholder={suggestQty != null ? String(suggestQty) : t("material.weighbridge_weight")}
             title={t("material.weighbridge_parchi_ka_actual_weight_editable")}
             style={{ width: 110, padding: "6px 9px", borderRadius: 6, border: "1.5px solid " + T.bluM, fontSize: 12.5, outline: "none", boxSizing: "border-box", fontFamily: "inherit", background: T.bluL }} />
-          <select value={value?.alt_unit || ""}
+          <PickSelect value={value?.alt_unit || ""}
             onChange={e => onChange({ ...value, altOn: true, alt_unit: e.target.value })}
             style={{ padding: "6px 9px", borderRadius: 6, border: "1.5px solid " + T.bluM, fontSize: 12.5, outline: "none", fontFamily: "inherit", cursor: "pointer", background: T.surface }}>
             {altUnitOptions.map(u => <option key={u}>{u}</option>)}
-          </select>
+          </PickSelect>
           {suggestQty != null && !value?.alt_qty && (
             <span style={{ fontSize: 10.5, color: T.t4 }}>{t("material.suggestqty_alt_unit_suggested_ratio", { suggestQty, alt_unit: value?.alt_unit, ratio })}</span>
           )}

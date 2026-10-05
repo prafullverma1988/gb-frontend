@@ -4,6 +4,7 @@
 // the company detail surface and the Customers surface each own a file, and
 // this one keeps the shell plus the platform-wide tabs.
 import { useState, useEffect, useCallback } from "react";
+import PickSelect from "../components/PickSelect";
 import { BundleView, TicketBadge, fmtTicketTime } from "./shared/TicketBundle";
 import { apiFetch, T, fmtDate, fmtDateTime, fmtNum, fmtMoney,
          IcBuilding, IcUsers, IcTrend, IcPlus, IcX, IcChk,
@@ -609,21 +610,21 @@ function TabAuditLogs({ companies }) {
       {/* Filters */}
       <div style={{ display:"flex", gap:10, marginBottom:14, alignItems:"center" }}>
         <IcFilter size={14} color={T.t4}/>
-        <select value={filters.company_id} onChange={e => setFilters(p=>({...p,company_id:e.target.value}))}
+        <PickSelect value={filters.company_id} onChange={e => setFilters(p=>({...p,company_id:e.target.value}))}
           style={{ padding:"6px 10px", borderRadius:7, border:`1px solid ${T.b1}`, fontSize:12, color:T.t1, background:T.surface, fontFamily:"inherit", cursor:"pointer" }}>
           <option value="">All Companies</option>
           {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </select>
-        <select value={filters.action} onChange={e => setFilters(p=>({...p,action:e.target.value}))}
+        </PickSelect>
+        <PickSelect value={filters.action} onChange={e => setFilters(p=>({...p,action:e.target.value}))}
           style={{ padding:"6px 10px", borderRadius:7, border:`1px solid ${T.b1}`, fontSize:12, color:T.t1, background:T.surface, fontFamily:"inherit", cursor:"pointer" }}>
           <option value="">All Actions</option>
           {ACTIONS.map(a => <option key={a} value={a}>{a}</option>)}
-        </select>
-        <select value={filters.entity_type} onChange={e => setFilters(p=>({...p,entity_type:e.target.value}))}
+        </PickSelect>
+        <PickSelect value={filters.entity_type} onChange={e => setFilters(p=>({...p,entity_type:e.target.value}))}
           style={{ padding:"6px 10px", borderRadius:7, border:`1px solid ${T.b1}`, fontSize:12, color:T.t1, background:T.surface, fontFamily:"inherit", cursor:"pointer" }}>
           <option value="">All Entity Types</option>
           {ENTITIES.map(e => <option key={e} value={e}>{e.replace("_"," ")}</option>)}
-        </select>
+        </PickSelect>
         {(filters.company_id || filters.action || filters.entity_type) && (
           <button onClick={() => setFilters({ company_id:"", entity_type:"", action:"" })}
             style={{ fontSize:11, color:T.red, background:"none", border:"none", cursor:"pointer", fontWeight:600, fontFamily:"inherit" }}>
@@ -931,7 +932,7 @@ function TabFeatureRequests() {
               <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:16 }}>
                 <div>
                   <div style={{ fontSize:10, fontWeight:600, color:T.t4, textTransform:"uppercase", marginBottom:5 }}>Status</div>
-                  <select value={edit.status} onChange={e => setEdit({ ...edit, status:e.target.value })}
+                  <PickSelect value={edit.status} onChange={e => setEdit({ ...edit, status:e.target.value })}
                     style={{ width:"100%", padding:"8px 10px", border:`1px solid ${T.b1}`, borderRadius:8, fontSize:12, background:T.surface, color:T.t1, fontFamily:"inherit", outline:"none" }}>
                     <option value="new">New</option>
                     <option value="under_review">Under Review</option>
@@ -939,17 +940,17 @@ function TabFeatureRequests() {
                     <option value="in_development">In Development</option>
                     <option value="shipped">Shipped</option>
                     <option value="rejected">Rejected</option>
-                  </select>
+                  </PickSelect>
                 </div>
                 <div>
                   <div style={{ fontSize:10, fontWeight:600, color:T.t4, textTransform:"uppercase", marginBottom:5 }}>Priority</div>
-                  <select value={edit.priority} onChange={e => setEdit({ ...edit, priority:e.target.value })}
+                  <PickSelect value={edit.priority} onChange={e => setEdit({ ...edit, priority:e.target.value })}
                     style={{ width:"100%", padding:"8px 10px", border:`1px solid ${T.b1}`, borderRadius:8, fontSize:12, background:T.surface, color:T.t1, fontFamily:"inherit", outline:"none" }}>
                     <option value="low">Low</option>
                     <option value="medium">Medium</option>
                     <option value="high">High</option>
                     <option value="critical">Critical</option>
-                  </select>
+                  </PickSelect>
                 </div>
               </div>
 
@@ -1298,11 +1299,11 @@ function TabSanchalan({ onOpenDetail }) {
             <div style={{ fontSize:11, color:T.t3, marginBottom:16 }}>Selected company will be hidden from all customer dashboards and moved to Sanchalan.</div>
 
             <div style={{ fontSize:11, fontWeight:700, color:T.t2, marginBottom:6, textTransform:"uppercase", letterSpacing:"0.5px" }}>Company</div>
-            <select value={addId} onChange={e => setAddId(e.target.value)}
+            <PickSelect value={addId} onChange={e => setAddId(e.target.value)}
               style={{ width:"100%", padding:"10px 12px", border:`1px solid ${T.b2}`, borderRadius:8, fontSize:13, marginBottom:14 }}>
               <option value="">— Select —</option>
               {allCompanies.map(c => <option key={c.id} value={c.id}>{c.name} ({c.slug})</option>)}
-            </select>
+            </PickSelect>
 
             <div style={{ fontSize:11, fontWeight:700, color:T.t2, marginBottom:6, textTransform:"uppercase", letterSpacing:"0.5px" }}>Label / Brand Group</div>
             <input value={addLabel} onChange={e => setAddLabel(e.target.value)}
@@ -1373,10 +1374,10 @@ function TabGoLive({ companies }) {
       <PageHeader title="Go-Live Checklist"
         sub="Naya client live hone ke liye taiyaar hai ya nahi — sab auto-computed, koi manual tick nahi"
         right={
-          <select value={cid || ""} onChange={e => setCid(Number(e.target.value))}
+          <PickSelect value={cid || ""} onChange={e => setCid(Number(e.target.value))}
             style={{ padding:"7px 10px", borderRadius:8, border:`1px solid ${T.b2}`, fontSize:12.5, color:T.t2, background:T.surface, fontFamily:"inherit", maxWidth:260 }}>
             {(companies || []).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
+          </PickSelect>
         }/>
 
       {err && <div style={{ padding:14, background:T.redL, border:`1px solid ${T.redM}`, borderRadius:9, fontSize:12.5, color:T.red }}>{err}</div>}

@@ -17,6 +17,7 @@
 // Anything more (line items, account changes) — user should delete + recreate.
 
 import { useState, useEffect } from "react";
+import PickSelect from "./PickSelect";
 import api from "../config/api";
 import ActivityLog from "./ActivityLog";
 import { t } from "../i18n";
@@ -545,12 +546,12 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
               {cityInfo?.applicable && cityInfo.cities?.length > 0 && (
                 <div style={{ gridColumn: "1 / -1" }}>
                   <div style={{ fontSize: 10.5, fontWeight: 700, color: T.t3, textTransform: "uppercase", letterSpacing: ".4px", marginBottom: 4 }}>{t("finance.city_label")}</div>
-                  <select value={cityInfo.city_id ? String(cityInfo.city_id) : "central"} disabled={citySaving || !canEditTxn}
+                  <PickSelect value={cityInfo.city_id ? String(cityInfo.city_id) : "central"} disabled={citySaving || !canEditTxn}
                     onChange={e => saveCity(e.target.value)}
                     style={{ width: "100%", height: 34, padding: "0 10px", borderRadius: 7, border: `1.5px solid ${T.b1}`, fontSize: 13, background: "#fff", color: "#111827", outline: "none", cursor: citySaving ? "wait" : "pointer", fontFamily: "inherit" }}>
                     {cityInfo.cities.map(c => <option key={c.id} value={String(c.id)}>{c.name}</option>)}
                     <option value="central">{t("finance.central_whole_company")}</option>
-                  </select>
+                  </PickSelect>
                   {cityMsg && <div style={{ fontSize: 11.5, marginTop: 4, color: cityMsg.ok ? T.grn : T.red }}>{cityMsg.text}</div>}
                 </div>
               )}
@@ -626,7 +627,7 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
               )}
               <div>
                 <label style={lblStyle}>{t("common.party")}</label>
-                <select value={String(form.party_id ?? "")}
+                <PickSelect value={String(form.party_id ?? "")}
                   onChange={e => {
                     const id = e.target.value;
                     const hit = parties.find(x => String(x.id) === id);
@@ -641,11 +642,11 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
                       ? [{ id: form.party_id, name: form.party_name || `#${form.party_id}` }, ...parties]
                       : parties
                   ).map(p => <option key={p.id} value={String(p.id)}>{p.name}</option>)}
-                </select>
+                </PickSelect>
               </div>
               <div>
                 <label style={lblStyle}>{t("common.project")}</label>
-                <select value={String(form.project_id ?? "")}
+                <PickSelect value={String(form.project_id ?? "")}
                   onChange={e => {
                     const id = e.target.value;
                     const hit = projects.find(x => String(x.id) === id);
@@ -659,17 +660,17 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
                       ? [{ id: form.project_id, name: form.project_name || `#${form.project_id}` }, ...projects]
                       : projects
                   ).map(p => <option key={p.id} value={String(p.id)}>{p.name}</option>)}
-                </select>
+                </PickSelect>
               </div>
               <Field label={t("common.reference_no")} value={form.reference_no} onChange={v => setForm(p => ({ ...p, reference_no: v }))}/>
               <div>
                 <label style={lblStyle}>{t("common.status")}</label>
-                <select value={form.status} onChange={e => setForm(p => ({ ...p, status: e.target.value }))} style={inpStyle}>
+                <PickSelect value={form.status} onChange={e => setForm(p => ({ ...p, status: e.target.value }))} style={inpStyle}>
                   <option value="paid">paid</option>
                   <option value="unpaid">unpaid</option>
                   <option value="approved">approved</option>
                   <option value="pending">pending</option>
-                </select>
+                </PickSelect>
               </div>
               <Field label={t("common.note")} value={form.note} onChange={v => setForm(p => ({ ...p, note: v }))}/>
             </div>

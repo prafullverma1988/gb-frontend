@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from "react";
+import PickSelect from "../components/PickSelect";
 import api, { API_BASE } from "../config/api";
 import apiCache from "../utils/apiCache";
 import { Avatar, Credit } from "../components/Credit";
@@ -553,9 +554,9 @@ function ProjectSettingsForm({ project, isAdmin, onClose }) {
       <div style={card}>
         <div style={sectionTitle}>{t("project_detail.status_dates_2")}</div>
         <div style={{ marginBottom:10 }}><label style={L}>{t("common.status")}</label>
-          <select value={form.status} onChange={upd("status")} style={{ ...I, cursor:"pointer" }}>
+          <PickSelect value={form.status} onChange={upd("status")} style={{ ...I, cursor:"pointer" }}>
             {STATUS_OPTS.map(s => <option key={s} value={s}>{s}</option>)}
-          </select>
+          </PickSelect>
         </div>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
           <div><label style={L}>{t("common.start_date")}</label><input type="date" value={form.start_date} onChange={upd("start_date")} style={I}/></div>

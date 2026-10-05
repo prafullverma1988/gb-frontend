@@ -20,6 +20,7 @@
 // App me isi ka jodidaar: sanchalan-app src/components/WeighPanel.js
 // Backend: routes/weighments.js
 import React, { useEffect, useState } from "react";
+import PickSelect from "../PickSelect";
 import api from "../../config/api";
 import uploadManager from "../../utils/uploadManager";
 import { loadPhotoPolicy, policyFor } from "../../utils/photoPolicy";
@@ -521,11 +522,11 @@ export default function WeighbridgePanel({ dest, onChanged }) {
                     <input type="number" value={p.challanQty || ""} placeholder="0"
                       onChange={e => setPick(key, { challanQty: e.target.value })}
                       style={{ ...inp, width: 80, padding: "5px 7px", fontSize: 11.5 }} />
-                    <select value={p.challanUnit || l.unit || "Ton"}
+                    <PickSelect value={p.challanUnit || l.unit || "Ton"}
                       onChange={e => setPick(key, { challanUnit: e.target.value })}
                       style={{ ...inp, padding: "5px 4px", fontSize: 11, width: 66 }}>
                       {challanUnits(l.unit).map(u => <option key={u} value={u}>{u}</option>)}
-                    </select>
+                    </PickSelect>
                   </div>
                 )}
                 <button type="button" onClick={() => removeLine(key)} style={{ border: "none", background: "none", color: T.red, fontSize: 16, lineHeight: 1, cursor: "pointer", padding: 0 }}>×</button>
@@ -601,9 +602,9 @@ export default function WeighbridgePanel({ dest, onChanged }) {
                 )}
                 <div>
                   <label style={lbl}>{t("common.unit")}</label>
-                  <select value={st.freeUnit} onChange={e => upd({ freeUnit: e.target.value })} style={{ ...inp, cursor: "pointer" }}>
+                  <PickSelect value={st.freeUnit} onChange={e => upd({ freeUnit: e.target.value })} style={{ ...inp, cursor: "pointer" }}>
                     {[...new Set([...(libUnit(st.freeName) ? [libUnit(st.freeName)] : []), ...FREE_UNITS])].map(u => <option key={u}>{u}</option>)}
-                  </select>
+                  </PickSelect>
                 </div>
                 <button type="button" onClick={() => upd({ pm: null })} style={{ ...btn(T.surface, T.t3, T.b1), height: 33 }}>{t("weigh.cancel_back")}</button>
                 {/* Zaroori me qty ke bina jodna hi nahi — jud jaane ke baad qty badalne ka khaana nahi hai. */}

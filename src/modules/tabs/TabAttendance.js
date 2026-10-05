@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import PickSelect from "../../components/PickSelect";
 import api from "../../config/api";
 import apiCache from "../../utils/apiCache";
 import SearchSelect from "../../components/SearchSelect";
@@ -1091,11 +1092,11 @@ function TabAttendance({ project, onRequestPayment }) {
                   const differs = cr>0 && Number(skillForm.rate)!==cr;
                   return(
                   <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:10,padding:"10px 12px",background:T.ambL,border:`1px solid ${T.ambM}`,borderRadius:8}}>
-                    <select value={skillForm.skill} onChange={e=>{const sk=e.target.value; setSkillForm({skill:sk,rate:getRateForRole(sk)||""});}}
+                    <PickSelect value={skillForm.skill} onChange={e=>{const sk=e.target.value; setSkillForm({skill:sk,rate:getRateForRole(sk)||""});}}
                       style={{flex:1,padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,fontFamily:"inherit",background:"white"}}>
                       <option value="">{t("attendance.select_skill")}</option>
                       {rateCard.map(rc=>{const n=rc.role||rc.name||rc.skill; if(!n) return null; const has=(vd?.skills||[]).some(s=>s.skill===n); return <option key={rc.id} value={n} disabled={has}>{n}{has?t("attendance.added"):""}</option>;})}
-                    </select>
+                    </PickSelect>
                     <input type="number" value={cr||""} disabled placeholder={t("attendance.card")} title={t("attendance.card_rate")} style={{width:78,padding:"7px 8px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,textAlign:"right",background:cr>0?T.grnL:T.surfaceB,color:cr>0?T.grn:T.t4,fontWeight:600,boxSizing:"border-box"}}/>
                     <input type="number" value={skillForm.rate} onChange={e=>setSkillForm(f=>({...f,rate:e.target.value}))} placeholder={t("common.rate")} min={0}
                       style={{width:78,padding:"7px 8px",borderRadius:6,border:`1.5px solid ${differs?T.ambM:T.b1}`,fontSize:13,fontWeight:700,color:differs?T.amb:T.t1,textAlign:"right",fontFamily:"inherit",background:differs?"white":"white",boxSizing:"border-box"}}/>
@@ -1430,10 +1431,10 @@ function TabAttendance({ project, onRequestPayment }) {
               <div key={f.key} style={{marginBottom:10}}>
                 <div style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:".4px",marginBottom:5}}>{f.l}</div>
                 {f.type==="select"
-                  ?<select value={wfForm[f.key]||""} onChange={e=>{const v=e.target.value;setWfForm(p=>({...p,role:v,dailyRate:p.dailyRate||getRateForRole(v)||""}));}}
+                  ?<PickSelect value={wfForm[f.key]||""} onChange={e=>{const v=e.target.value;setWfForm(p=>({...p,role:v,dailyRate:p.dailyRate||getRateForRole(v)||""}));}}
                       style={{width:"100%",padding:"7px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",fontFamily:"inherit"}}>
                       {f.opts.map(o=><option key={o}>{o}</option>)}
-                    </select>
+                    </PickSelect>
                   :<input type={f.type} value={wfForm[f.key]||""} onChange={e=>setWfForm(p=>({...p,[f.key]:e.target.value}))} placeholder={f.ph}
                       style={{width:"100%",padding:"7px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>}
               </div>
@@ -1684,7 +1685,7 @@ function TabAttendance({ project, onRequestPayment }) {
               const otherUsed = new Set(vSkills.filter((_,idx)=>idx!==i).map(x=>x.skill));
               return(
                 <div key={i} style={{display:"grid",gridTemplateColumns:"1.5fr 100px 100px 28px",gap:8,marginBottom:6,alignItems:"center"}}>
-                  <select value={s.skill}
+                  <PickSelect value={s.skill}
                     onChange={e=>{ const sk=e.target.value; const cr=getRateForRole(sk)||0; setVSkills(prev=>prev.map((sx,idx)=>idx===i?{...sx,skill:sk,card_rate:cr,rate:cr||sx.rate}:sx)); }}
                     style={{padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,outline:"none",fontFamily:"inherit",background:"white"}}>
                     {/* If current skill not in rate card, still keep it visible */}
@@ -1700,7 +1701,7 @@ function TabAttendance({ project, onRequestPayment }) {
                         {rname}{disabled ? t("common.already_added") : ""}
                       </option>;
                     })}
-                  </select>
+                  </PickSelect>
                   <input type="number" value={cardRate||""} disabled placeholder="—"
                     title={t("attendance.from_library_labour_rate_card")}
                     style={{padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,fontWeight:600,color:cardRate>0?T.grn:T.t4,outline:"none",fontFamily:"inherit",background:cardRate>0?T.grnL:T.surfaceB,boxSizing:"border-box",textAlign:"right"}}/>

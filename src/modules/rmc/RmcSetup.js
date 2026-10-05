@@ -1,6 +1,7 @@
 // RMC › Setup — Plants, Arrangements, Leads, Mix designs (sub-tabs).
 // Plant aur Lead yahin hain; Arrangement aur Mix design apni file me.
 import { useState, useEffect, useCallback } from "react";
+import PickSelect from "../../components/PickSelect";
 import { useToast } from "../../components/Toast";
 import { t } from "../../i18n";
 import {
@@ -60,58 +61,58 @@ function PlantForm({ open, meta, plant, onClose, onSaved }) {
         {/* Ek plant ek hi cheez banata hai. Challan ban jaane ke baad backend
             prakaar badalne nahi deta (purane challan ki unit/QC ulat jaati). */}
         <Field label={t("rmc.plant_makes")} hint={t("rmc.plant_makes_hint")} span={2}>
-          <select style={inp} value={v.product_kind || "concrete"} onChange={(e) => upd("product_kind", e.target.value)}>
+          <PickSelect style={inp} value={v.product_kind || "concrete"} onChange={(e) => upd("product_kind", e.target.value)}>
             <option value="concrete">{t("rmc.kind_concrete")}</option>
             <option value="bitumen">{t("rmc.kind_bitumen")}</option>
-          </select>
+          </PickSelect>
         </Field>
         <Field label={t("rmc.owner")}>
-          <select style={inp} value={v.owner || "own"} onChange={(e) => upd("owner", e.target.value)}>
+          <PickSelect style={inp} value={v.owner || "own"} onChange={(e) => upd("owner", e.target.value)}>
             <option value="own">{ownerLabel("own")}</option>
             <option value="hired">{ownerLabel("hired")}</option>
             <option value="vendor">{ownerLabel("vendor")}</option>
-          </select>
+          </PickSelect>
         </Field>
         <Field label={t("rmc.plant_type")}>
-          <select style={inp} value={v.plant_type || "stationary"} onChange={(e) => upd("plant_type", e.target.value)}>
+          <PickSelect style={inp} value={v.plant_type || "stationary"} onChange={(e) => upd("plant_type", e.target.value)}>
             <option value="stationary">{t("rmc.type_stationary")}</option>
             <option value="mobile">{t("rmc.type_mobile")}</option>
-          </select>
+          </PickSelect>
         </Field>
         <Field label={t("rmc.capacity_per_hr", { unit: plantUnit(meta, v) })}>
           <input style={inp} type="number" step="0.01" value={v.capacity_cum_hr || ""} onChange={(e) => upd("capacity_cum_hr", e.target.value)} />
         </Field>
         {v.owner === "vendor" && (
           <Field label={t("rmc.vendor_party")}>
-            <select style={inp} value={v.vendor_party_id || ""} onChange={(e) => upd("vendor_party_id", e.target.value)}>
+            <PickSelect style={inp} value={v.vendor_party_id || ""} onChange={(e) => upd("vendor_party_id", e.target.value)}>
               <option value="">{t("rmc.select_party")}</option>
               {(meta.parties || []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
+            </PickSelect>
           </Field>
         )}
         <Field label={t("rmc.store")} hint={t("rmc.plant_store_hint")}>
-          <select style={inp} value={v.warehouse_id || ""} onChange={(e) => upd("warehouse_id", e.target.value)}>
+          <PickSelect style={inp} value={v.warehouse_id || ""} onChange={(e) => upd("warehouse_id", e.target.value)}>
             <option value="">{t("rmc.no_store")}</option>
             {(meta.warehouses || []).map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
-          </select>
+          </PickSelect>
         </Field>
         {/* Machine Machinery me bani hai — yahan sirf plant se link hoti hai.
             Khaali chhodna theek hai; "Koi machine nahi" se hata bhi sakte ho. */}
         <Field label={t("rmc.plant_machine")} hint={t("rmc.plant_machine_hint")}>
-          <select style={inp} value={v.equipment_id || ""} onChange={(e) => upd("equipment_id", e.target.value)}>
+          <PickSelect style={inp} value={v.equipment_id || ""} onChange={(e) => upd("equipment_id", e.target.value)}>
             <option value="">{t("rmc.no_machine")}</option>
             {(meta.machines || []).map((mc) => (
               <option key={mc.id} value={mc.id}>
                 {mc.name}{mc.machine_type ? ` · ${mc.machine_type}` : mc.category ? ` · ${mc.category}` : ""}
               </option>
             ))}
-          </select>
+          </PickSelect>
         </Field>
         <Field label={t("rmc.project_optional")}>
-          <select style={inp} value={v.project_id || ""} onChange={(e) => upd("project_id", e.target.value)}>
+          <PickSelect style={inp} value={v.project_id || ""} onChange={(e) => upd("project_id", e.target.value)}>
             <option value="">{t("common.all")}</option>
             {(meta.projects || []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
+          </PickSelect>
         </Field>
         <Field label={t("rmc.address")} span={2}>
           <input style={inp} value={v.address || ""} onChange={(e) => upd("address", e.target.value)} />
@@ -216,16 +217,16 @@ function LeadsTab({ meta, canEdit, onChanged }) {
       <Notice>{t("rmc.lead_note")}</Notice>
       <div style={{ display: "flex", gap: 8, alignItems: "flex-end", flexWrap: "wrap", marginBottom: 12 }}>
         <Field label={t("rmc.plant")}>
-          <select style={{ ...inpSm, width: 170 }} value={fl.plant_id} onChange={(e) => setFl({ ...fl, plant_id: e.target.value })}>
+          <PickSelect style={{ ...inpSm, width: 170 }} value={fl.plant_id} onChange={(e) => setFl({ ...fl, plant_id: e.target.value })}>
             <option value="">{t("common.all")}</option>
             {(meta.plants || []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
+          </PickSelect>
         </Field>
         <Field label={t("common.project")}>
-          <select style={{ ...inpSm, width: 190 }} value={fl.project_id} onChange={(e) => setFl({ ...fl, project_id: e.target.value })}>
+          <PickSelect style={{ ...inpSm, width: 190 }} value={fl.project_id} onChange={(e) => setFl({ ...fl, project_id: e.target.value })}>
             <option value="">{t("common.all")}</option>
             {(meta.projects || []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
+          </PickSelect>
         </Field>
         <span style={{ flex: 1 }} />
         {canEdit && (
@@ -265,16 +266,16 @@ function LeadsTab({ meta, canEdit, onChanged }) {
         </>}>
         <Grid>
           <Field label={t("rmc.plant")}>
-            <select style={inp} value={v.plant_id} onChange={(e) => setV({ ...v, plant_id: e.target.value })}>
+            <PickSelect style={inp} value={v.plant_id} onChange={(e) => setV({ ...v, plant_id: e.target.value })}>
               <option value="">{t("rmc.select_plant")}</option>
               {(meta.plants || []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
+            </PickSelect>
           </Field>
           <Field label={t("common.project")}>
-            <select style={inp} value={v.project_id} onChange={(e) => setV({ ...v, project_id: e.target.value })}>
+            <PickSelect style={inp} value={v.project_id} onChange={(e) => setV({ ...v, project_id: e.target.value })}>
               <option value="">{t("rmc.select_project")}</option>
               {(meta.projects || []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
+            </PickSelect>
           </Field>
           <Field label={t("rmc.lead_km")} hint={t("rmc.lead_one_way")}>
             <input style={inp} type="number" step="0.1" value={v.lead_km} onChange={(e) => setV({ ...v, lead_km: e.target.value })} />

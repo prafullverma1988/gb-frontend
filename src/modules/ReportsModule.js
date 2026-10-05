@@ -1,4 +1,6 @@
 import { useState, useMemo, useRef, useEffect } from "react";
+import SearchSelect from "../components/SearchSelect";
+import PickSelect from "../components/PickSelect";
 import api from "../config/api";
 import { t } from "../i18n";
 import { companyName, companyNameHtml } from "../utils/companyName";
@@ -38,70 +40,7 @@ const IcBar  =(p)=><Ic {...p} d="M18 20V10M12 20V4M6 20v-6"/>;
 const IcCalc =(p)=><Ic {...p} d="M9 7H6a2 2 0 00-2 2v9a2 2 0 002 2h9a2 2 0 002-2V7a2 2 0 00-2-2H9zM9 7V4M15 7V4M9 12h6M9 16h3"/>;
 const IcLoc  =(p)=><Ic {...p} d="M17.657 16.657L13.414 20.9a2 2 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0zM15 11a3 3 0 11-6 0 3 3 0 016 0"/>;
 // ── SEARCHABLE SELECT (position:fixed dropdown, tab-navigable) ───────
-function SearchSelect({options,value,onChange,placeholder,accent,style:extStyle,autoFocus,onTabNext}){
-  const [open,setOpen]=useState(false);
-  const [q,setQ]=useState("");
-  const [pos,setPos]=useState({top:0,left:0,width:160});
-  const wrapRef=useRef(null);
-  const inpRef=useRef(null);
-  const ac=accent||"#2563EB";
-  const opts=Array.isArray(options)?options:[];
-  const filtered=q?opts.filter(o=>String(o).toLowerCase().includes(q.toLowerCase())):opts;
-
-  useEffect(()=>{
-    const h=e=>{if(wrapRef.current&&!wrapRef.current.contains(e.target)){setOpen(false);setQ("");}};
-    document.addEventListener("mousedown",h);
-    return()=>document.removeEventListener("mousedown",h);
-  },[]);
-
-  const openDrop=()=>{
-    const r=inpRef.current?.getBoundingClientRect();
-    if(r) setPos({top:r.bottom+2,left:r.left,width:Math.max(r.width,160)});
-    setQ("");setOpen(true);
-  };
-  const pick=v=>{onChange(v);setQ("");setOpen(false);};
-  const baseH=extStyle?.height||30;
-
-  return(
-    <div ref={wrapRef} style={{position:"relative",...extStyle}}>
-      <input ref={el=>{inpRef.current=el;if(autoFocus&&el)el.focus();}}
-        value={open?q:(value||"")}
-        onChange={e=>{setQ(e.target.value);if(!open)openDrop();}}
-        onFocus={openDrop}
-        placeholder={placeholder||t("reports.select")}
-        onKeyDown={e=>{
-          if(e.key==="Escape"){setOpen(false);setQ("");}
-          if(e.key==="Enter"&&filtered.length>0){e.preventDefault();pick(filtered[0]);}
-          if(e.key==="Tab"){
-            setOpen(false);setQ("");
-            if(onTabNext){e.preventDefault();onTabNext();}
-          }
-        }}
-        style={{width:"100%",height:baseH,padding:"0 20px 0 7px",borderRadius:5,
-          border:`1.5px solid ${open?ac:"#E5E7EB"}`,fontSize:11.5,outline:"none",
-          boxSizing:"border-box",fontFamily:"inherit",background:"#FFFFFF",cursor:"text"}}/>
-      <span style={{position:"absolute",right:4,top:"50%",transform:"translateY(-50%)",pointerEvents:"none",color:"#9CA3AF",fontSize:9}}>▼</span>
-      {open&&(
-        <div style={{position:"fixed",top:pos.top,left:pos.left,width:pos.width,
-          background:"#FFFFFF",borderRadius:7,border:`1.5px solid ${ac}`,
-          boxShadow:"0 8px 24px rgba(0,0,0,0.15)",zIndex:9999,maxHeight:190,overflowY:"auto"}}>
-          {filtered.map((o,i)=>(
-            <div key={i} onMouseDown={e=>{e.preventDefault();pick(o);}}
-              style={{padding:"6px 10px",fontSize:12,cursor:"pointer",
-                color:o===value?ac:"#111827",fontWeight:o===value?700:400,
-                background:o===value?(ac+"18"):"transparent",
-                borderBottom:i<filtered.length-1?"1px solid #F3F4F6":"none",whiteSpace:"nowrap"}}
-              onMouseEnter={e=>e.currentTarget.style.background="#F1F5F9"}
-              onMouseLeave={e=>e.currentTarget.style.background=o===value?(ac+"18"):"transparent"}>
-              {o}
-            </div>
-          ))}
-          {!filtered.length&&<div style={{padding:"8px 10px",fontSize:11,color:"#9CA3AF",textAlign:"center"}}>{t("reports.no_match")}</div>}
-        </div>
-      )}
-    </div>
-  );
-}
+// SearchSelect — shared (components/SearchSelect, app jaisa picker), 6 Oct 2026
 
 
 
@@ -431,21 +370,21 @@ function CashBookModule(){
         </div>
         {/* Row 2: Filters + buttons */}
         <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
-          <select value={fSite} onChange={e=>setFSite(e.target.value)} style={{...selStyle,borderColor:fSite!=="All"?T.blu:T.b1,background:fSite!=="All"?T.bluL:T.surface,color:fSite!=="All"?T.blu:T.t2}}>
+          <PickSelect value={fSite} onChange={e=>setFSite(e.target.value)} style={{...selStyle,borderColor:fSite!=="All"?T.blu:T.b1,background:fSite!=="All"?T.bluL:T.surface,color:fSite!=="All"?T.blu:T.t2}}>
             <option value="All">{t("common.all_sites")}</option>{SITES_LIVE.map(s=><option key={s}>{s}</option>)}
-          </select>
-          <select value={fHead} onChange={e=>setFHead(e.target.value)} style={{...selStyle,borderColor:fHead!=="All"?T.blu:T.b1,background:fHead!=="All"?T.bluL:T.surface,color:fHead!=="All"?T.blu:T.t2}}>
+          </PickSelect>
+          <PickSelect value={fHead} onChange={e=>setFHead(e.target.value)} style={{...selStyle,borderColor:fHead!=="All"?T.blu:T.b1,background:fHead!=="All"?T.bluL:T.surface,color:fHead!=="All"?T.blu:T.t2}}>
             <option value="All">{t("finance.all_heads")}</option>{HEADS_LIVE.map(h=><option key={h}>{h}</option>)}
-          </select>
-          <select value={fMOP} onChange={e=>setFMOP(e.target.value)} style={{...selStyle,borderColor:fMOP!=="All"?T.blu:T.b1,background:fMOP!=="All"?T.bluL:T.surface,color:fMOP!=="All"?T.blu:T.t2}}>
+          </PickSelect>
+          <PickSelect value={fMOP} onChange={e=>setFMOP(e.target.value)} style={{...selStyle,borderColor:fMOP!=="All"?T.blu:T.b1,background:fMOP!=="All"?T.bluL:T.surface,color:fMOP!=="All"?T.blu:T.t2}}>
             <option value="All">{t("finance.all_mop")}</option>{MOPS_LIVE.map(m=><option key={m} value={m}>{mopLabel(m)}</option>)}
-          </select>
-          <select value={fAcc} onChange={e=>setFAcc(e.target.value)} style={{...selStyle,borderColor:fAcc!=="All"?T.blu:T.b1,background:fAcc!=="All"?T.bluL:T.surface,color:fAcc!=="All"?T.blu:T.t2}}>
+          </PickSelect>
+          <PickSelect value={fAcc} onChange={e=>setFAcc(e.target.value)} style={{...selStyle,borderColor:fAcc!=="All"?T.blu:T.b1,background:fAcc!=="All"?T.bluL:T.surface,color:fAcc!=="All"?T.blu:T.t2}}>
             <option value="All">{t("finance.all_accounts")}</option>{ACCOUNTS_LIVE.map(a=><option key={a}>{a}</option>)}
-          </select>
-          <select value={fParty} onChange={e=>setFParty(e.target.value)} style={{...selStyle,borderColor:fParty!=="All"?T.pur:T.b1,background:fParty!=="All"?T.purL:T.surface,color:fParty!=="All"?T.pur:T.t2}}>
+          </PickSelect>
+          <PickSelect value={fParty} onChange={e=>setFParty(e.target.value)} style={{...selStyle,borderColor:fParty!=="All"?T.pur:T.b1,background:fParty!=="All"?T.purL:T.surface,color:fParty!=="All"?T.pur:T.t2}}>
             <option value="All">{t("finance.all_parties")}</option>{PARTIES_LIVE.map(p=><option key={p}>{p}</option>)}
-          </select>
+          </PickSelect>
           {/* Reports = VIEW-ONLY. Excel + PDF only. Add/Edit/Delete
               moved out — those live in Finance → Cash Book where the
               backend ledger is the source of truth. */}
@@ -939,18 +878,18 @@ function ChallanModule(){
         </div>
         {/* Row 2: filters */}
         <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
-          <select value={fSite} onChange={e=>setFSite(e.target.value)}
+          <PickSelect value={fSite} onChange={e=>setFSite(e.target.value)}
             style={{...selStyle2,borderColor:fSite!=="All"?T.blu:T.b1,background:fSite!=="All"?T.bluL:T.surface,color:fSite!=="All"?T.blu:T.t2}}>
             <option value="All">{t("common.all_sites")}</option>{SITES_LIVE.map(s=><option key={s}>{s}</option>)}
-          </select>
-          <select value={fParty} onChange={e=>setFParty(e.target.value)}
+          </PickSelect>
+          <PickSelect value={fParty} onChange={e=>setFParty(e.target.value)}
             style={{...selStyle2,borderColor:fParty!=="All"?T.pur:T.b1,background:fParty!=="All"?T.purL:T.surface,color:fParty!=="All"?T.pur:T.t2}}>
             <option value="All">{t("reports.all_vendors")}</option>{VENDORS_LIVE.map(s=><option key={s}>{s}</option>)}
-          </select>
-          <select value={fHead} onChange={e=>setFHead(e.target.value)}
+          </PickSelect>
+          <PickSelect value={fHead} onChange={e=>setFHead(e.target.value)}
             style={{...selStyle2,borderColor:fHead!=="All"?T.blu:T.b1,background:fHead!=="All"?T.bluL:T.surface,color:fHead!=="All"?T.blu:T.t2}}>
             <option value="All">{t("common.all_categories")}</option>{CATS_LIVE.map(h=><option key={h}>{h}</option>)}
-          </select>
+          </PickSelect>
           {/* MOP dropdown removed — GRNs don't have a payment method
               at GRN time; that lives on the eventual bill payment txn. */}
           {["All","Billed","Unbilled"].map(s=>(

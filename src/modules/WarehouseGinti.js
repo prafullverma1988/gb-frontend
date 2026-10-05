@@ -20,6 +20,7 @@
 // chuna hua store khud jod deta hai. Module ke bahar se kuch nahi liya.
 
 import { useState, useEffect, useMemo, useCallback } from "react";
+import PickSelect from "../components/PickSelect";
 import api from "../config/api";
 import { t } from "../i18n";
 import { BackClose } from "../utils/backNav";
@@ -223,10 +224,10 @@ function NewCountModal({ stock, onClose, onCreated, onOpenExisting }) {
       {opt("all", t("warehouse.gt_scope_all"), t("warehouse.gt_scope_all_sub"))}
       {opt("category", t("warehouse.gt_scope_cat"), t("warehouse.gt_scope_cat_sub"))}
       {scope === "category" && (
-        <select value={cat} onChange={(e) => setCat(e.target.value)} style={{ ...inp, marginBottom: 10 }}>
+        <PickSelect value={cat} onChange={(e) => setCat(e.target.value)} style={{ ...inp, marginBottom: 10 }}>
           <option value="">{t("warehouse.gt_pick_cat")}</option>
           {cats.map((c) => <option key={c} value={c}>{c}</option>)}
-        </select>
+        </PickSelect>
       )}
       {opt("items", t("warehouse.gt_scope_items"), t("warehouse.gt_scope_items_sub"))}
       {scope === "items" && (
@@ -656,26 +657,26 @@ export function DisposalModal({ stock, onClose, onSaved }) {
           <div key={l.uid} style={{ border: `1px solid ${T.b1}`, borderRadius: 9, padding: 11, marginBottom: 10, background: T.surfaceB }}>
             <div style={{ display: "grid", gridTemplateColumns: "1.6fr 1fr 1.3fr 90px 26px", gap: 8, alignItems: "end" }}>
               <div>{lbl(t("warehouse.gt_h_material"))}
-                <select value={l.mid} onChange={(e) => upd(l.uid, { mid: e.target.value, bucket: "", action: "" })} style={inp}>
+                <PickSelect value={l.mid} onChange={(e) => upd(l.uid, { mid: e.target.value, bucket: "", action: "" })} style={inp}>
                   <option value="">{t("warehouse.gt_d_pick_mat")}</option>
                   {mats.map((x) => (
                     <option key={x.id} value={x.id}>
                       {x.name} — {BUCKETS.filter((b) => bucketQty(x, b) > EPS).map((b) => bucketName(b) + " " + fmtQ(bucketQty(x, b))).join(" · ")}
                     </option>
                   ))}
-                </select>
+                </PickSelect>
               </div>
               <div>{lbl(t("warehouse.gt_d_from"))}
-                <select value={l.bucket} disabled={!m} onChange={(e) => upd(l.uid, { bucket: e.target.value, action: "" })} style={inp}>
+                <PickSelect value={l.bucket} disabled={!m} onChange={(e) => upd(l.uid, { bucket: e.target.value, action: "" })} style={inp}>
                   <option value="">—</option>
                   {m && BUCKETS.filter((b) => bucketQty(m, b) > EPS).map((b) => <option key={b} value={b}>{bucketName(b)} ({fmtQ(bucketQty(m, b))})</option>)}
-                </select>
+                </PickSelect>
               </div>
               <div>{lbl(t("warehouse.gt_d_action"))}
-                <select value={l.action} disabled={!l.bucket} onChange={(e) => upd(l.uid, { action: e.target.value })} style={inp}>
+                <PickSelect value={l.action} disabled={!l.bucket} onChange={(e) => upd(l.uid, { action: e.target.value })} style={inp}>
                   <option value="">—</option>
                   {(ACTIONS[l.bucket] || []).map((a) => <option key={a} value={a}>{actionName(l.bucket, a)}</option>)}
-                </select>
+                </PickSelect>
               </div>
               <div>{lbl(t("warehouse.gt_d_qty") + (m ? " (" + (m.unit || "") + ")" : ""))}
                 <input type="number" min="0" value={l.qty} onChange={(e) => upd(l.uid, { qty: e.target.value })} style={{ ...inp, textAlign: "right" }} />
@@ -690,10 +691,10 @@ export function DisposalModal({ stock, onClose, onSaved }) {
                 {/* Party list khaali ho (nayi company) to naam likh do — server dono maanta hai. */}
                 {parties && parties.length === 0
                   ? <input value={l.party_name} onChange={(e) => upd(l.uid, { party_name: e.target.value })} placeholder={t("warehouse.gt_d_vendor_name")} style={inp} />
-                  : <select value={l.party_id} onChange={(e) => upd(l.uid, { party_id: e.target.value })} style={inp}>
+                  : <PickSelect value={l.party_id} onChange={(e) => upd(l.uid, { party_id: e.target.value })} style={inp}>
                       <option value="">{parties ? t("warehouse.gt_d_pick_vendor") : t("warehouse.gt_loading")}</option>
                       {(parties || []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                    </select>}</div>}
+                    </PickSelect>}</div>}
               {l.action === "repair_out" && <div>{lbl(t("warehouse.gt_d_return"))}<input type="date" value={l.ret} onChange={(e) => upd(l.uid, { ret: e.target.value })} style={inp} /></div>}
               {l.bucket === "repair" && l.action && <div>{lbl(t("warehouse.gt_d_cost"))}<input type="number" min="0" value={l.cost} onChange={(e) => upd(l.uid, { cost: e.target.value })} placeholder="₹" style={inp} /></div>}
               <div style={{ gridColumn: l.action === "sold" || l.action === "repair_out" ? "auto" : "1 / -1" }}>{lbl(t("warehouse.gt_h_note"))}

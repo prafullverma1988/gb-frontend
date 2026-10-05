@@ -18,6 +18,7 @@
 // retention %, TDS %, GST %, start/end dates, terms, internal notes.
 // ───────────────────────────────────────────────────────────────────
 import { useState, useEffect, useMemo } from "react";
+import PickSelect from "../components/PickSelect";
 import api from "../config/api";
 import SearchSelect from "../components/SearchSelect";
 import { t, Rich } from "../i18n";
@@ -917,12 +918,12 @@ export default function EstimateBuilderModal({
                                 display:"block", marginBottom:5, textTransform:"uppercase", letterSpacing:".4px" }}>
                  {t("common.city")}
                 </label>
-                <select value={pickCityId} onChange={e => setPickCityId(e.target.value)}
+                <PickSelect value={pickCityId} onChange={e => setPickCityId(e.target.value)}
                   style={{ width:"100%", padding:"9px 10px", fontSize:13,
                            border:"1px solid #CBD5E1", borderRadius:7, background:"white" }}>
                   <option value="">{t("estimate_builder.select_city")}</option>
                   {cities.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
+                </PickSelect>
               </div>
 
               <div style={{ marginBottom:18 }}>
@@ -930,12 +931,12 @@ export default function EstimateBuilderModal({
                                 display:"block", marginBottom:5, textTransform:"uppercase", letterSpacing:".4px" }}>
                  {t("common.construction_type")}
                 </label>
-                <select value={pickTypeId} onChange={e => setPickTypeId(e.target.value)}
+                <PickSelect value={pickTypeId} onChange={e => setPickTypeId(e.target.value)}
                   style={{ width:"100%", padding:"9px 10px", fontSize:13,
                            border:"1px solid #CBD5E1", borderRadius:7, background:"white" }}>
                   <option value="">{t("estimate_builder.select_type")}</option>
                   {ctypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                </select>
+                </PickSelect>
               </div>
 
               <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
@@ -1610,7 +1611,7 @@ export default function EstimateBuilderModal({
                 </div>
                 <div>
                   <label style={{ fontSize:10, fontWeight:700, color:"#6B7280", display:"block", marginBottom:3, textTransform:"uppercase" }}>{t("common.unit")}</label>
-                  <select value={addSecForm.unit}
+                  <PickSelect value={addSecForm.unit}
                     onChange={e => setAddSecForm(p => ({ ...p, unit: e.target.value }))}
                     style={{ width:"100%", padding:"8px 11px", borderRadius:6, border:"1.5px solid #D1D5DB",
                              fontSize:13, fontFamily:"inherit", outline:"none", boxSizing:"border-box", background:"white" }}>
@@ -1619,7 +1620,7 @@ export default function EstimateBuilderModal({
                     <option value="rft">rft</option>
                     <option value="nos">nos</option>
                     <option value="cubic_ft">{t("common.cubic_ft")}</option>
-                  </select>
+                  </PickSelect>
                 </div>
               </div>
               {/* Per-item qty toggle */}
@@ -1880,11 +1881,11 @@ export default function EstimateBuilderModal({
                         style={{ width:"100%", padding:"6px 9px", borderRadius:5, border:"1.5px solid #D1D5DB",
                                  fontSize:12, marginBottom:6, outline:"none", fontFamily:"inherit", boxSizing:"border-box" }}/>
                       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:6, marginBottom:6 }}>
-                        <select value={addItemNewForm.unit}
+                        <PickSelect value={addItemNewForm.unit}
                           onChange={e => setAddItemNewForm(p => ({ ...p, unit: e.target.value }))}
                           style={{ padding:"6px 9px", borderRadius:5, border:"1.5px solid #D1D5DB", fontSize:12, fontFamily:"inherit", background:"white" }}>
                           {(allUoms.length > 0 ? allUoms.map(u => u.name) : ["Sq.Ft","Nos","Lump Sum","Running Ft","Kg","Point","Unit"]).map(u => <option key={u} value={u}>{u}</option>)}
-                        </select>
+                        </PickSelect>
                         <input type="number" value={addItemNewForm.base_rate}
                           onChange={e => setAddItemNewForm(p => ({ ...p, base_rate: e.target.value }))}
                           placeholder={t("common.base_rate")}

@@ -1,6 +1,7 @@
 // RMC › Orders — site ki maang: banao, dekho, approve/reject karo.
 // GET /rmc/orders · POST /rmc/orders · POST /rmc/orders/:id/decide
 import { useState, useEffect, useCallback } from "react";
+import PickSelect from "../../components/PickSelect";
 import SearchSelect from "../../components/SearchSelect";
 import { useToast } from "../../components/Toast";
 import { t } from "../../i18n";
@@ -64,16 +65,16 @@ function OrderForm({ open, meta, onClose, onSaved }) {
           <input style={inp} value={v.element} onChange={(e) => upd("element", e.target.value)} />
         </Field>
         <Field label={t("rmc.plant")}>
-          <select style={inp} value={v.plant_id} onChange={(e) => setV((x) => ({ ...x, plant_id: e.target.value, contract_id: "" }))}>
+          <PickSelect style={inp} value={v.plant_id} onChange={(e) => setV((x) => ({ ...x, plant_id: e.target.value, contract_id: "" }))}>
             <option value="">{t("rmc.plant_later")}</option>
             {(meta.plants || []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
+          </PickSelect>
         </Field>
         <Field label={t("rmc.arrangement")}>
-          <select style={inp} value={v.contract_id} onChange={(e) => upd("contract_id", e.target.value)}>
+          <PickSelect style={inp} value={v.contract_id} onChange={(e) => upd("contract_id", e.target.value)}>
             <option value="">{t("rmc.arrangement_later")}</option>
             {contracts.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
+          </PickSelect>
         </Field>
         <Field label={t("rmc.pump")} span={2}>
           <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, color: T.t2, cursor: "pointer" }}>
@@ -157,16 +158,16 @@ function OrderDrawer({ order, meta, canApprove, onClose, onChanged }) {
             {mode === "approve" && (
               <Grid style={{ marginBottom: 12 }}>
                 <Field label={t("rmc.plant")} hint={t("rmc.approve_plant_hint")}>
-                  <select style={inp} value={plantId} onChange={(e) => { setPlantId(e.target.value); setContractId(""); }}>
+                  <PickSelect style={inp} value={plantId} onChange={(e) => { setPlantId(e.target.value); setContractId(""); }}>
                     <option value="">{t("rmc.plant_later")}</option>
                     {(meta.plants || []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                  </select>
+                  </PickSelect>
                 </Field>
                 <Field label={t("rmc.arrangement")}>
-                  <select style={inp} value={contractId} onChange={(e) => setContractId(e.target.value)}>
+                  <PickSelect style={inp} value={contractId} onChange={(e) => setContractId(e.target.value)}>
                     <option value="">{t("rmc.arrangement_later")}</option>
                     {contracts.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                  </select>
+                  </PickSelect>
                 </Field>
               </Grid>
             )}
@@ -211,16 +212,16 @@ function RmcOrders({ meta, canCreate, canApprove, refreshKey, onRefresh, openId,
     <div>
       <div style={{ display: "flex", gap: 8, alignItems: "flex-end", flexWrap: "wrap", marginBottom: 12 }}>
         <Field label={t("common.project")}>
-          <select style={{ ...inpSm, width: 190 }} value={fl.project_id} onChange={(e) => setFl({ ...fl, project_id: e.target.value })}>
+          <PickSelect style={{ ...inpSm, width: 190 }} value={fl.project_id} onChange={(e) => setFl({ ...fl, project_id: e.target.value })}>
             <option value="">{t("common.all")}</option>
             {(meta.projects || []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
+          </PickSelect>
         </Field>
         <Field label={t("common.status")}>
-          <select style={{ ...inpSm, width: 150 }} value={fl.status} onChange={(e) => setFl({ ...fl, status: e.target.value })}>
+          <PickSelect style={{ ...inpSm, width: 150 }} value={fl.status} onChange={(e) => setFl({ ...fl, status: e.target.value })}>
             <option value="">{t("common.all")}</option>
             {STATUSES.map((s) => <option key={s} value={s}>{orderStatusLabel(s)}</option>)}
-          </select>
+          </PickSelect>
         </Field>
         <Field label={t("common.from")}>
           <input type="date" style={{ ...inpSm, width: 145 }} value={fl.from} onChange={(e) => setFl({ ...fl, from: e.target.value })} />

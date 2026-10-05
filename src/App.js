@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback, lazy, Suspense, Fragment } from "react";
+import PickSelect from "./components/PickSelect";
 import api, { getUser, getToken, getCompanies, clearAuth, saveAuth, API_BASE } from "./config/api";
 import { initDiag, recordScreen } from "./utils/diag";
 import apiCache from "./utils/apiCache";
@@ -988,10 +989,10 @@ function Sidebar({active,setActive,collapsed,setCollapsed,user,onLogout,enabledM
                 <div style={{padding:"8px 6px"}}>
                   <input value={newCo.name} onChange={e=>setNewCo(p=>({...p,name:e.target.value}))} placeholder={t("app.company_name")}
                     style={{width:"100%",padding:"7px 9px",borderRadius:6,border:"1px solid rgba(255,255,255,0.15)",background:"rgba(255,255,255,0.06)",color:"white",fontSize:12,outline:"none",boxSizing:"border-box",marginBottom:6,fontFamily:"inherit"}}/>
-                  <select value={newCo.domain} onChange={e=>setNewCo(p=>({...p,domain:e.target.value}))}
+                  <PickSelect value={newCo.domain} onChange={e=>setNewCo(p=>({...p,domain:e.target.value}))}
                     style={{width:"100%",padding:"7px 9px",borderRadius:6,border:"1px solid rgba(255,255,255,0.15)",background:"rgba(255,255,255,0.06)",color:"white",fontSize:12,outline:"none",boxSizing:"border-box",marginBottom:6,fontFamily:"inherit"}}>
                     {DOMAINS.map(d=><option key={d.id} value={d.id}>{domainIcons[d.id]} {d.label}</option>)}
-                  </select>
+                  </PickSelect>
                   <input value={newCo.city} onChange={e=>setNewCo(p=>({...p,city:e.target.value}))} placeholder={t("app.city_optional")}
                     style={{width:"100%",padding:"7px 9px",borderRadius:6,border:"1px solid rgba(255,255,255,0.15)",background:"rgba(255,255,255,0.06)",color:"white",fontSize:12,outline:"none",boxSizing:"border-box",marginBottom:6,fontFamily:"inherit"}}/>
                   <div style={{display:"flex",gap:6}}>
@@ -1487,7 +1488,7 @@ function DashboardModule(){
               <button key={v} onClick={()=>setFinProjView(v)} style={{padding:"4px 11px",borderRadius:5,border:"none",background:finProjView===v?T.blu:"none",color:finProjView===v?"#fff":T.t3,fontSize:11,fontWeight:finProjView===v?700:500,cursor:"pointer",fontFamily:"inherit"}}>{l}</button>
             ))}
           </div>
-          <select value={selProject} onChange={e=>setSelProject(e.target.value)} style={{padding:"4px 8px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:11.5,color:T.t2,background:T.surface,outline:"none",fontFamily:"inherit"}}>{projects.map(p=>(<option key={p}>{p}</option>))}</select>
+          <PickSelect value={selProject} onChange={e=>setSelProject(e.target.value)} style={{padding:"4px 8px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:11.5,color:T.t2,background:T.surface,outline:"none",fontFamily:"inherit"}}>{projects.map(p=>(<option key={p}>{p}</option>))}</PickSelect>
         </div>} style={{marginBottom:12}}>
         {finProjView==="realtime" ? <RealtimeFinancials projects={finProjData}/> : (
         <div style={{overflowX:"auto"}}>

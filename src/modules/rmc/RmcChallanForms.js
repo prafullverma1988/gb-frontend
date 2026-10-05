@@ -1,6 +1,7 @@
 // RMC › Challan ke do form: "Challan banao" (plant side / site side) aur
 // "Site par accept". Dono POST /rmc/dispatches aur /:id/accept par jaate hain.
 import { useState, useEffect } from "react";
+import PickSelect from "../../components/PickSelect";
 import SearchSelect from "../../components/SearchSelect";
 import { useToast } from "../../components/Toast";
 import { t } from "../../i18n";
@@ -107,28 +108,28 @@ export function ChallanForm({ open, meta, preset, onClose, onSaved, onGoSetup })
             options={(meta.projects || []).map((p) => ({ id: p.id, name: p.name }))} placeholder={t("rmc.select_project")} />
         </Field>
         <Field label={t("rmc.order")} hint={t("rmc.order_optional")}>
-          <select style={inp} value={v.order_id} onChange={(e) => pickOrder(e.target.value)}>
+          <PickSelect style={inp} value={v.order_id} onChange={(e) => pickOrder(e.target.value)}>
             <option value="">{t("rmc.no_order")}</option>
             {orders.map((o) => <option key={o.id} value={o.id}>{o.order_no} · {o.grade} · {cum(o.qty_cum)} {unitOf(o)}</option>)}
-          </select>
+          </PickSelect>
         </Field>
         <Field label={t("rmc.plant")}>
-          <select style={inp} value={v.plant_id} onChange={(e) => pickPlant(e.target.value)}>
+          <PickSelect style={inp} value={v.plant_id} onChange={(e) => pickPlant(e.target.value)}>
             <option value="">{t("rmc.select_plant")}</option>
             {(meta.plants || []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
+          </PickSelect>
         </Field>
         <Field label={t("rmc.arrangement")} hint={contract ? t("rmc.matrix_line", { mat: supplyLabel(contract.supply_material), veh: supplyLabel(contract.supply_vehicle) }) : ""}>
-          <select style={inp} value={v.contract_id} onChange={(e) => upd("contract_id", e.target.value)}>
+          <PickSelect style={inp} value={v.contract_id} onChange={(e) => upd("contract_id", e.target.value)}>
             <option value="">{t("rmc.no_arrangement")}</option>
             {contracts.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
+          </PickSelect>
         </Field>
         <Field label={t("rmc.entered_side")} hint={plant ? t("rmc.side_hint") : ""}>
-          <select style={inp} value={v.entered_side} onChange={(e) => upd("entered_side", e.target.value)}>
+          <PickSelect style={inp} value={v.entered_side} onChange={(e) => upd("entered_side", e.target.value)}>
             <option value="plant">{t("rmc.side_plant")}</option>
             <option value="site">{t("rmc.side_site")}</option>
-          </select>
+          </PickSelect>
         </Field>
         <Field label={t("rmc.grade")}>
           <input style={inp} list="rmc-challan-grades" value={v.grade}
@@ -152,21 +153,21 @@ export function ChallanForm({ open, meta, preset, onClose, onSaved, onGoSetup })
         )}
         {matShown && (
           <Field label={t("rmc.mix_design")} hint={t("rmc.design_auto_hint")}>
-            <select style={inp} value={v.design_id} onChange={(e) => upd("design_id", e.target.value)}>
+            <PickSelect style={inp} value={v.design_id} onChange={(e) => upd("design_id", e.target.value)}>
               <option value="">{t("rmc.design_active")}</option>
               {designs.map((d) => <option key={d.id} value={d.id}>{d.grade} · v{d.version}</option>)}
-            </select>
+            </PickSelect>
           </Field>
         )}
         <Field label={bit ? t("rmc.vehicle_tipper") : t("rmc.tm")}>
-          <select style={inp} value={v.equipment_id}
+          <PickSelect style={inp} value={v.equipment_id}
             onChange={(e) => {
               const eq = (meta.vehicles || []).find((x) => String(x.id) === e.target.value);
               setV((x) => ({ ...x, equipment_id: e.target.value, vehicle_no: eq && eq.registration_no ? eq.registration_no : x.vehicle_no }));
             }}>
             <option value="">{t("rmc.select_tm")}</option>
             {(meta.vehicles || []).map((e) => <option key={e.id} value={e.id}>{e.name}{e.capacity ? ` · ${e.capacity}` : ""}</option>)}
-          </select>
+          </PickSelect>
         </Field>
         <Field label={t("rmc.vehicle_no")}>
           <input style={inp} value={v.vehicle_no} onChange={(e) => upd("vehicle_no", e.target.value)} placeholder={t("rmc.vehicle_no_ph")} />
@@ -282,10 +283,10 @@ export function AcceptForm({ open, dispatch, onClose, onDone }) {
         </Field>
         {short && (<>
           <Field label={t("rmc.reject_reason")}>
-            <select style={inp} value={v.reject_reason} onChange={(e) => upd("reject_reason", e.target.value)}>
+            <PickSelect style={inp} value={v.reject_reason} onChange={(e) => upd("reject_reason", e.target.value)}>
               <option value="">{t("rmc.pick_reason")}</option>
               {(bit ? REJECT_REASONS_BIT : REJECT_REASONS).map((r) => <option key={r} value={r}>{rejectReasonLabel(r)}</option>)}
-            </select>
+            </PickSelect>
           </Field>
           <Field label={t("rmc.reject_note")}>
             <input style={inp} value={v.reject_note} onChange={(e) => upd("reject_note", e.target.value)} />

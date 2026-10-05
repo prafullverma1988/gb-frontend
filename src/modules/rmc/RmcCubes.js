@@ -17,6 +17,7 @@
 //
 // GET /rmc/reports/cube-register · POST /rmc/cube-samples
 import { useState, useEffect, useCallback, useMemo } from "react";
+import PickSelect from "../../components/PickSelect";
 import { useToast } from "../../components/Toast";
 import { t } from "../../i18n";
 import {
@@ -89,35 +90,35 @@ function NewSampleModal({ open, meta, onClose, onCreated }) {
       </>}>
       <Grid cols={3} style={{ marginBottom: 12 }}>
         <Field label={t("rmc.challan")} hint={t("rmc.sample_challan_hint")} span={3}>
-          <select style={inp} value={v.dispatch_id} onChange={(e) => pickChallan(e.target.value)}>
+          <PickSelect style={inp} value={v.dispatch_id} onChange={(e) => pickChallan(e.target.value)}>
             <option value="">{t("rmc.sample_no_challan")}</option>
             {challans.map((d) => (
               <option key={d.id} value={d.id}>
                 {d.challan_no} · {d.grade} · {d.project_name || "—"}
               </option>
             ))}
-          </select>
+          </PickSelect>
         </Field>
         <Field label={t("common.project")}>
-          <select style={inp} value={v.project_id} disabled={fromChallan}
+          <PickSelect style={inp} value={v.project_id} disabled={fromChallan}
             onChange={(e) => setV((x) => ({ ...x, project_id: e.target.value }))}>
             <option value="">{t("rmc.select_project")}</option>
             {(meta.projects || []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
+          </PickSelect>
         </Field>
         <Field label={t("rmc.plant")}>
-          <select style={inp} value={v.plant_id} disabled={fromChallan}
+          <PickSelect style={inp} value={v.plant_id} disabled={fromChallan}
             onChange={(e) => setV((x) => ({ ...x, plant_id: e.target.value }))}>
             <option value="">{t("rmc.select_plant")}</option>
             {(meta.plants || []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
+          </PickSelect>
         </Field>
         <Field label={t("rmc.test_kind")} hint={autoKind ? t("rmc.test_kind_auto") : ""}>
-          <select style={inp} value={kind} disabled={!!autoKind}
+          <PickSelect style={inp} value={kind} disabled={!!autoKind}
             onChange={(e) => setV((x) => ({ ...x, test_kind: e.target.value }))}>
             <option value="cube">{t("rmc.test_cube")}</option>
             <option value="marshall">{t("rmc.test_marshall")}</option>
-          </select>
+          </PickSelect>
         </Field>
         <Field label={t("rmc.grade")}
           hint={v.grade && !ms ? t("rmc.fck_is", { n: fckOf(v.grade) == null ? "—" : fckOf(v.grade) }) : ""}>
@@ -241,18 +242,18 @@ function RmcCubes({ meta, canCreate, refreshKey, onRefresh }) {
 
       <div style={{ display: "flex", gap: 8, alignItems: "flex-end", flexWrap: "wrap", marginBottom: 12 }}>
         <Field label={t("common.project")}>
-          <select style={{ ...inpSm, width: 190 }} value={fl.project_id}
+          <PickSelect style={{ ...inpSm, width: 190 }} value={fl.project_id}
             onChange={(e) => setFl({ ...fl, project_id: e.target.value })}>
             <option value="">{t("common.all")}</option>
             {(meta.projects || []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
+          </PickSelect>
         </Field>
         <Field label={t("common.status")}>
-          <select style={{ ...inpSm, width: 150 }} value={fl.status}
+          <PickSelect style={{ ...inpSm, width: 150 }} value={fl.status}
             onChange={(e) => setFl({ ...fl, status: e.target.value })}>
             <option value="">{t("common.all")}</option>
             {STATUSES.map((s) => <option key={s} value={s}>{cubeStatusLabel(s)}</option>)}
-          </select>
+          </PickSelect>
         </Field>
         <Field label={t("common.from")}>
           <input type="date" style={{ ...inpSm, width: 145 }} value={range.from}
@@ -264,11 +265,11 @@ function RmcCubes({ meta, canCreate, refreshKey, onRefresh }) {
         </Field>
         {hasBit && (
           <Field label={t("rmc.test_kind")}>
-            <select style={{ ...inpSm, width: 130 }} value={fl.kind} onChange={(e) => setFl({ ...fl, kind: e.target.value })}>
+            <PickSelect style={{ ...inpSm, width: 130 }} value={fl.kind} onChange={(e) => setFl({ ...fl, kind: e.target.value })}>
               <option value="">{t("common.all")}</option>
               <option value="cube">{t("rmc.test_cube")}</option>
               <option value="marshall">{t("rmc.test_marshall")}</option>
-            </select>
+            </PickSelect>
           </Field>
         )}
         <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: T.t2, fontWeight: 600, paddingBottom: 8, cursor: "pointer" }}>

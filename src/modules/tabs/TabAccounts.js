@@ -17,6 +17,7 @@
 // comment dekho). Aadha-chhana running balance ek galat number hai jo sahi
 // lagta hai, aur ye screen galat number pakadne ke liye hi bani hai.
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import PickSelect from "../../components/PickSelect";
 import api, { getUser } from "../../config/api";
 import { T, fmtN } from "../shared/tokens";
 import { Panel, PHead, Pill } from "../shared/ui";
@@ -804,10 +805,10 @@ export default function TabAccounts() {
             aria-label={t("acctledger.search_ph")} style={{ ...inputS, flex: "1 1 230px", minWidth: 170 }} />
           <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} aria-label={t("acctledger.from_date")} style={inputS} />
           <input type="date" value={to} onChange={(e) => setTo(e.target.value)} aria-label={t("acctledger.to_date")} style={inputS} />
-          <select value={type} onChange={(e) => setType(e.target.value)} aria-label={t("acctledger.type")} style={inputS}>
+          <PickSelect value={type} onChange={(e) => setType(e.target.value)} aria-label={t("acctledger.type")} style={inputS}>
             <option value="">{t("acctledger.all_types")}</option>
             {types.map((x) => <option key={x} value={x}>{x.replace(/_/g, " ")}</option>)}
-          </select>
+          </PickSelect>
           <button onClick={() => setDir(dir === "in" ? "" : "in")} style={chipS(dir === "in")}>{t("acctledger.only_in")}</button>
           <button onClick={() => setDir(dir === "out" ? "" : "out")} style={chipS(dir === "out")}>{t("acctledger.only_out")}</button>
           <button onClick={() => setBig(!big)} style={chipS(big)}>{t("acctledger.big_only")}</button>

@@ -16,6 +16,7 @@
 // Dono PATCH /road/designs/:id se save hote hain.
 // ══════════════════════════════════════════════════════════════════════
 import React, { useState, useEffect, useCallback } from "react";
+import PickSelect from "../../components/PickSelect";
 import api from "../../config/api";
 import { T } from "../shared/tokens";
 import { useToast } from "../../components/Toast";
@@ -117,10 +118,10 @@ export default function RoadDesignSetup({ design, onSaved }) {
           <div style={{ display: "flex", gap: 10, alignItems: "flex-end", flexWrap: "wrap" }}>
             <div style={{ flex: 1, minWidth: 260 }}>
               <label style={S.lbl}>{t("road.stretch_task")}</label>
-              <select value={taskId} disabled={!mayEdit} onChange={(e) => setTaskId(e.target.value)} style={S.inp}>
+              <PickSelect value={taskId} disabled={!mayEdit} onChange={(e) => setTaskId(e.target.value)} style={S.inp}>
                 <option value="">{t("road.stretch_pick")}</option>
                 {tasks.map((x) => <option key={x.id} value={x.id}>{taskLabel(x)}</option>)}
-              </select>
+              </PickSelect>
             </div>
             {mayEdit && (
               <button onClick={saveTask} disabled={busy || String(design.task_id || "") === String(taskId)}
@@ -143,10 +144,10 @@ export default function RoadDesignSetup({ design, onSaved }) {
           <div style={{ display: "flex", gap: 10, alignItems: "flex-end", flexWrap: "wrap" }}>
             <div style={{ flex: 1, minWidth: 260 }}>
               <label style={S.lbl}>{t("road.line_label")}</label>
-              <select value={lineId} disabled={!mayEdit} onChange={(e) => setLineId(e.target.value)} style={S.inp}>
+              <PickSelect value={lineId} disabled={!mayEdit} onChange={(e) => setLineId(e.target.value)} style={S.inp}>
                 <option value="">{t("road.line_none")}</option>
                 {lines.map((x) => <option key={x.id} value={x.id}>{String(x.name || "").slice(0, 60)}{x.length_m ? " · " + n2(x.length_m) + " m" : ""}</option>)}
-              </select>
+              </PickSelect>
             </div>
             {mayEdit && (
               <button onClick={saveLine} disabled={busy || String(design.alignment_id || "") === String(lineId)}

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
+import PickSelect from "../../components/PickSelect";
 import api from "../../config/api";
 import { T } from "../shared/tokens";
 import { t } from "../../i18n";
@@ -195,12 +196,12 @@ export default function TenderPlanWizard({ projectId, onClose, onDone }) {
                     </td>
                     {!!aligns.length && (
                       <td style={td}>
-                        <select value={r.alignment_id} onChange={(e) => upd(i, { alignment_id: e.target.value })} disabled={!r.take}
+                        <PickSelect value={r.alignment_id} onChange={(e) => upd(i, { alignment_id: e.target.value })} disabled={!r.take}
                           style={{ width: "100%", padding: "5px 7px", borderRadius: 6, border: `1px solid ${T.b1}`,
                             fontSize: 11, color: T.t2, background: T.surface, outline: "none", fontFamily: "inherit" }}>
                           <option value="">{t("tasks.koi_nahi_2")}</option>
                           {aligns.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-                        </select>
+                        </PickSelect>
                       </td>
                     )}
                   </tr>

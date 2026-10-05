@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import PickSelect from "./PickSelect";
 import api from "../config/api";
 import LiveLocationMap from "./LiveLocationMap";
 import { Rich, t } from "../i18n";
@@ -234,11 +235,11 @@ export default function LiveTeamView() {
         {cities.length > 0 && (
           <div style={{ padding:"8px 12px",borderBottom:`1px solid ${T.b1}`,display:"flex",alignItems:"center",gap:7 }}>
             <span style={{ fontSize:10.5,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".3px" }}>{t("common.city")}</span>
-            <select value={cityFilter} onChange={e => setCityFilter(e.target.value)}
+            <PickSelect value={cityFilter} onChange={e => setCityFilter(e.target.value)}
               style={{ flex:1,height:28,padding:"0 8px",borderRadius:6,border:`1.5px solid ${cityFilter!=="all"?T.blu:T.b1}`,background:cityFilter!=="all"?T.bluL:T.surface,fontSize:12,color:cityFilter!=="all"?T.blu:T.t2,outline:"none",cursor:"pointer",fontFamily:"inherit" }}>
               <option value="all">{t("live_team.all_cities")}</option>
               {cities.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
+            </PickSelect>
           </div>
         )}
 

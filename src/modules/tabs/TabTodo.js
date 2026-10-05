@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import PickSelect from "../../components/PickSelect";
 import api from "../../config/api";
 import SearchSelect from "../../components/SearchSelect";
 import { T } from "../shared/tokens";
@@ -258,16 +259,16 @@ function TabTodo({projectId}) {
             </div>
           ))}
         </div>
-        <select value={fCat} onChange={e=>setFCat(e.target.value)}
+        <PickSelect value={fCat} onChange={e=>setFCat(e.target.value)}
           style={{height:30,padding:"0 10px",borderRadius:6,border:`1.5px solid ${fCat!=="All"?T.blu:T.b1}`,background:fCat!=="All"?T.bluL:T.surface,fontSize:11.5,color:fCat!=="All"?T.blu:T.t2,outline:"none",cursor:"pointer",fontFamily:"inherit"}}>
           <option value="All">{t("common.all_categories")}</option>
           {CATS.map(c=><option key={c}>{c}</option>)}
-        </select>
-        <select value={fPri} onChange={e=>setFPri(e.target.value)}
+        </PickSelect>
+        <PickSelect value={fPri} onChange={e=>setFPri(e.target.value)}
           style={{height:30,padding:"0 10px",borderRadius:6,border:`1.5px solid ${fPri!=="All"?T.blu:T.b1}`,background:fPri!=="All"?T.bluL:T.surface,fontSize:11.5,color:fPri!=="All"?T.blu:T.t2,outline:"none",cursor:"pointer",fontFamily:"inherit"}}>
           <option value="All">{t("todo.all_priority")}</option>
           {PRIS.map(p=><option key={p}>{p}</option>)}
-        </select>
+        </PickSelect>
         {canAddTodo && <AddBtn label={t("todo.add_todo")} onClick={()=>setShowAdd(!showAdd)}/>}
       </div>
 

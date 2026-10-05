@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import PickSelect from "../components/PickSelect";
 import api from "../config/api";
 import apiCache from "../utils/apiCache";
 import uploadManager from "../utils/uploadManager";
@@ -719,10 +720,10 @@ export default function DesignModule() {
             style={S.searchInput}/>
           <span style={S.searchIcon}><IcSearch size={13} color={T.t4}/></span>
         </div>
-        <select value={revProject} onChange={e=>setRevProject(e.target.value)}
+        <PickSelect value={revProject} onChange={e=>setRevProject(e.target.value)}
           style={{padding:"7px 10px",borderRadius:7,border:"1.5px solid "+(revProject!=="All"?T.blu:T.b1),fontSize:11.5,outline:"none",fontFamily:"inherit",cursor:"pointer",background:revProject!=="All"?T.bluL:T.surface}}>
           {projectNames.map(p=><option key={p}>{p}</option>)}
-        </select>
+        </PickSelect>
       </div>
       <div style={S.hint}>{t("design.revqueue_drawings_in_revision", { revQueue: revQueue.length })}</div>
       {revQueue.length===0&&<div style={S.empty50}><div style={{fontSize:32,marginBottom:8}}>✅</div><div style={{fontSize:13,color:T.t2}}>{t("design.koi_revision_pending_nahi")}</div></div>}
@@ -1117,14 +1118,14 @@ export default function DesignModule() {
               style={S.searchInput}/>
             <span style={S.searchIcon}><IcSearch size={13} color={T.t4}/></span>
           </div>
-          <select value={aprvProject} onChange={e=>setAprvProject(e.target.value)}
+          <PickSelect value={aprvProject} onChange={e=>setAprvProject(e.target.value)}
             style={{padding:"7px 10px",borderRadius:7,border:"1.5px solid "+(aprvProject!=="All"?T.blu:T.b1),fontSize:11.5,outline:"none",fontFamily:"inherit",cursor:"pointer",background:aprvProject!=="All"?T.bluL:T.surface}}>
             {projectNames.map(p=><option key={p}>{p}</option>)}
-          </select>
-          <select value={aprvCat} onChange={e=>setAprvCat(e.target.value)}
+          </PickSelect>
+          <PickSelect value={aprvCat} onChange={e=>setAprvCat(e.target.value)}
             style={{padding:"7px 10px",borderRadius:7,border:"1.5px solid "+(aprvCat!=="All"?T.blu:T.b1),fontSize:11.5,outline:"none",fontFamily:"inherit",cursor:"pointer",background:aprvCat!=="All"?T.bluL:T.surface}}>
             {["All",...CATS_LIST].map(c=><option key={c}>{c}</option>)}
-          </select>
+          </PickSelect>
         </div>
 
         <div style={S.hint}>{t("design.pendingdrawings_drawings_awaiting_approval", { pendingDrawings: pendingDrawings.length })}</div>
@@ -1206,14 +1207,14 @@ export default function DesignModule() {
               style={S.searchInput}/>
             <span style={S.searchIcon}><IcSearch size={13} color={T.t4}/></span>
           </div>
-          <select value={histProject} onChange={e=>setHistProject(e.target.value)}
+          <PickSelect value={histProject} onChange={e=>setHistProject(e.target.value)}
             style={{padding:"7px 10px",borderRadius:7,border:"1.5px solid "+(histProject!=="All"?T.blu:T.b1),fontSize:11.5,outline:"none",fontFamily:"inherit",cursor:"pointer",background:histProject!=="All"?T.bluL:T.surface}}>
             {projectNames.map(p=><option key={p}>{p}</option>)}
-          </select>
-          <select value={histStatus} onChange={e=>setHistStatus(e.target.value)}
+          </PickSelect>
+          <PickSelect value={histStatus} onChange={e=>setHistStatus(e.target.value)}
             style={{padding:"7px 10px",borderRadius:7,border:"1.5px solid "+(histStatus!=="All"?T.blu:T.b1),fontSize:11.5,outline:"none",fontFamily:"inherit",cursor:"pointer",background:histStatus!=="All"?T.bluL:T.surface}}>
             {["All","Pending","Approved","Revision","Rejected"].map(s=><option key={s} value={s}>{s==="All"?t("common.all_status"):s}</option>)}
-          </select>
+          </PickSelect>
         </div>
 
         <div style={S.hint}>{t("design.histdrawings_drawings_latest_changes_first", { histDrawings: histDrawings.length })}</div>
@@ -1285,10 +1286,10 @@ export default function DesignModule() {
             {v.label}
           </button>
         ))}
-        <select value={ddProject} onChange={e=>setDdProject(e.target.value)}
+        <PickSelect value={ddProject} onChange={e=>setDdProject(e.target.value)}
           style={{marginLeft:"auto",padding:"7px 10px",borderRadius:7,border:"1.5px solid "+(ddProject!=="All"?T.blu:T.b1),fontSize:11.5,outline:"none",fontFamily:"inherit",cursor:"pointer"}}>
           {projectNames.map(p=><option key={p}>{p}</option>)}
-        </select>
+        </PickSelect>
       </div>
 
       {/* Source filter: All / Site Drawings / House Plans */}

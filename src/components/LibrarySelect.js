@@ -24,6 +24,7 @@
 //   filter    — optional fn(items) => items  (extra client-side filter)
 
 import { useState, useEffect, useCallback } from "react";
+import PickSelect from "./PickSelect";
 import api from "../config/api";
 import SearchSelect from "./SearchSelect";
 import { t } from "../i18n";
@@ -408,7 +409,7 @@ export default function LibrarySelect({
             {cfg.fields.map((f) => (
               <div key={f.key}>
                 {f.type === "select" ? (
-                  <select
+                  <PickSelect
                     value={form[f.key] || ""}
                     onChange={(e) => setForm((p) => ({ ...p, [f.key]: e.target.value }))}
                     style={fldStyle}
@@ -417,7 +418,7 @@ export default function LibrarySelect({
                     {(dynOpts[f.key] || f.options || []).map((o) => (typeof o === "string"
                       ? <option key={o} value={o}>{o}</option>
                       : <option key={o.value} value={o.value}>{o.label}</option>))}
-                  </select>
+                  </PickSelect>
                 ) : (
                   <input
                     autoFocus={f.autoFocus}

@@ -8393,6 +8393,7 @@ const dict = {
   // ── search_select ───────────────────────────────────────────
   "search_select.no_match_found":                              "Koi match nahi mila",
   "search_select.no_options_yet":                              "Abhi koi options nahi hain",
+  "search_select.chuno":                                        "Select karo…",
 
   // ── settings ────────────────────────────────────────────────
   "settings.language.hint":                                    "App, messages aur notifications isi language me aayenge",

@@ -14,6 +14,7 @@
 //      PATCH /road/levels/import/:id/rows/:rowId · POST …/commit · DELETE
 // ══════════════════════════════════════════════════════════════════════
 import React, { useState, useRef, useEffect, useMemo } from "react";
+import PickSelect from "../../components/PickSelect";
 import { T } from "../shared/tokens";
 import { useToast } from "../../components/Toast";
 import { t } from "../../i18n";
@@ -269,9 +270,9 @@ export default function RoadLevelsImport({ design, onClose, onCommitted, kind })
               {wb && (
                 <div style={{ marginTop: 16 }}>
                   <label style={S.lbl}>{t("road.imp_sheet")}</label>
-                  <select value={sheetName} onChange={(e) => loadSheet(wb, e.target.value)} style={{ ...S.inp, maxWidth: 320 }}>
+                  <PickSelect value={sheetName} onChange={(e) => loadSheet(wb, e.target.value)} style={{ ...S.inp, maxWidth: 320 }}>
                     {wb.SheetNames.map((n) => <option key={n} value={n}>{n}</option>)}
-                  </select>
+                  </PickSelect>
                   <div style={{ marginTop: 14, fontSize: 12, color: T.t3 }}>
                     {t("road.imp_sheet_rows", { n: aoa.length })}
                   </div>
@@ -316,16 +317,16 @@ export default function RoadLevelsImport({ design, onClose, onCommitted, kind })
                   </div>
                   <div>
                     <label style={S.lbl}>{t("road.imp_ch_col")}</label>
-                    <select value={chCol} onChange={(e) => setChCol(Number(e.target.value))} style={S.inp}>
+                    <PickSelect value={chCol} onChange={(e) => setChCol(Number(e.target.value))} style={S.inp}>
                       {head.map((c, i) => <option key={i} value={i}>{colLabel(i)} · {String(c || "").slice(0, 20) || t("road.imp_blank_cell")}</option>)}
-                    </select>
+                    </PickSelect>
                   </div>
                   <div>
                     <label style={S.lbl}>{t("road.imp_frl_col")}</label>
-                    <select value={frlCol == null ? "" : frlCol} onChange={(e) => setFrlCol(e.target.value === "" ? null : Number(e.target.value))} style={S.inp}>
+                    <PickSelect value={frlCol == null ? "" : frlCol} onChange={(e) => setFrlCol(e.target.value === "" ? null : Number(e.target.value))} style={S.inp}>
                       <option value="">{t("road.imp_no_frl_col")}</option>
                       {head.map((c, i) => <option key={i} value={i}>{colLabel(i)} · {String(c || "").slice(0, 20) || t("road.imp_blank_cell")}</option>)}
-                    </select>
+                    </PickSelect>
                   </div>
                 </div>
                 <div style={{ marginTop: 12, paddingTop: 11, borderTop: `1px solid ${T.b1}`, display: "flex", gap: 22, flexWrap: "wrap" }}>

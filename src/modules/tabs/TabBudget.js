@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
+import PickSelect from "../../components/PickSelect";
 import api from "../../config/api";
 import { T } from "../shared/tokens";
 import { t, Rich } from "../../i18n";
@@ -416,14 +417,14 @@ export default function TabBudget({ project }) {
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8, gap: 10, flexWrap: "wrap" }}>
         <div style={{ fontSize: 14, fontWeight: 700, color: T.t1 }}>{t("common.tasks")} <span style={{ fontSize: 12, fontWeight: 400, color: T.t4 }}>· {totals.budget_nodes || 0} budgeted</span></div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <select value={levelFilter} onChange={(e) => applyLevel(e.target.value)}
+          <PickSelect value={levelFilter} onChange={(e) => applyLevel(e.target.value)}
             style={{ height: 32, padding: "0 10px", borderRadius: 7, border: `1.5px solid ${levelFilter !== "All" ? T.blu : T.b1}`, background: levelFilter !== "All" ? T.bluL : T.surface, color: levelFilter !== "All" ? T.blu : T.t2, fontSize: 11.5, fontWeight: levelFilter !== "All" ? 700 : 400, fontFamily: "inherit", cursor: "pointer", outline: "none" }}>
             <option value="All">{t("budget.all_levels_tasks", { tasks: tasks.length })}</option>
             {levelMeta.map((lv) => (
               <option key={lv.depth} value={String(lv.depth + 1)}>L{lv.depth + 1} — {lv.label}{lv.depth > 0 ? t("budget.upto") : ""} ({lv.cum})</option>
             ))}
             {levelFilter === "custom" && <option value="custom">{t("budget.custom_view")}</option>}
-          </select>
+          </PickSelect>
           <button onClick={collapseAll} title={t("budget.collapse_all")} style={{ height: 32, width: 32, borderRadius: 7, border: `1px solid ${T.b1}`, background: T.surface, color: T.t3, cursor: "pointer", fontSize: 13, fontFamily: "inherit" }}>⊟</button>
           <button onClick={expandAll} title={t("budget.expand_all")} style={{ height: 32, width: 32, borderRadius: 7, border: `1px solid ${T.b1}`, background: T.surface, color: T.t3, cursor: "pointer", fontSize: 13, fontFamily: "inherit" }}>⊞</button>
           <button onClick={load} style={{ height: 32, padding: "0 12px", borderRadius: 7, border: `1px solid ${T.b1}`, background: T.surface, color: T.t2, cursor: "pointer", fontSize: 12, fontFamily: "inherit" }}>{t("common.refresh_2")}</button>
@@ -504,8 +505,8 @@ export default function TabBudget({ project }) {
               <fieldset disabled={!canWriteTask} style={{ border: "none", margin: 0, padding: 0, minWidth: 0 }}>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 12 }}>
                 <div><div style={{ fontSize: 11, color: T.t3, marginBottom: 4 }}>{t("common.unit")}</div>
-                  <select value={hdr.unit || ""} onChange={(e) => setHdr({ ...hdr, unit: e.target.value })} style={{ ...inp, cursor: "pointer" }}>
-                    <option value="">—</option>{units.map((u) => <option key={u.id} value={u.code}>{u.code}</option>)}</select></div>
+                  <PickSelect value={hdr.unit || ""} onChange={(e) => setHdr({ ...hdr, unit: e.target.value })} style={{ ...inp, cursor: "pointer" }}>
+                    <option value="">—</option>{units.map((u) => <option key={u.id} value={u.code}>{u.code}</option>)}</PickSelect></div>
                 <div><div style={{ fontSize: 11, color: T.t3, marginBottom: 4 }}>{t("budget.scope_qty")}</div>
                   <input type="number" value={hdr.scope_qty ?? ""} onChange={(e) => setHdr({ ...hdr, scope_qty: e.target.value })} style={{ ...inp, textAlign: "right" }} /></div>
                 <div><div style={{ fontSize: 11, color: T.t3, marginBottom: 4 }}>{t("budget.billing_rate_unit")}</div>

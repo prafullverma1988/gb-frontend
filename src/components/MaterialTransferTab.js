@@ -21,6 +21,7 @@
 // Backend: /warehouse/transfers  (+ /:id/approve /:id/reject /:id/receive)
 
 import { useState, useEffect, useCallback } from "react";
+import PickSelect from "./PickSelect";
 import api from "../config/api";
 import { t } from "../i18n";
 import { can, canEntry, currentUser } from "../utils/perms";
@@ -308,10 +309,10 @@ function NewTransferModal({ projectId, projectName, isAdmin, onClose, onSaved })
             </div>
             <div>
               <label style={lbl}>{t("material_transfer.to_project")}</label>
-              <select value={toProject} onChange={e => setToProject(e.target.value)} style={inp}>
+              <PickSelect value={toProject} onChange={e => setToProject(e.target.value)} style={inp}>
                 <option value="">{t("material_transfer.select_destination")}</option>
                 {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
+              </PickSelect>
             </div>
           </div>
 
@@ -323,10 +324,10 @@ function NewTransferModal({ projectId, projectName, isAdmin, onClose, onSaved })
           )}
           {rows.map((r, i) => (
             <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 80px 60px 26px", gap: 6, marginBottom: 6 }}>
-              <select value={r.material} onChange={e => pickMaterial(i, e.target.value)} style={inp}>
+              <PickSelect value={r.material} onChange={e => pickMaterial(i, e.target.value)} style={inp}>
                 <option value="">{t("material_transfer.material")}</option>
                 {stock.map(s => <option key={s.material_name} value={s.material_name}>{s.material_name} ({s.balance} {s.unit})</option>)}
-              </select>
+              </PickSelect>
               <input type="number" placeholder={t("common.qty")} value={r.qty} onChange={e => setRow(i, { qty: e.target.value })}
                 style={{ ...inp, textAlign: "right" }}/>
               <div style={{ ...inp, background: T.surfaceB, color: T.t3, fontSize: 11, display: "flex", alignItems: "center", justifyContent: "center" }}>{r.unit || "—"}</div>

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
+import PickSelect from "../../components/PickSelect";
 import api, { API_BASE } from "../../config/api";
 import apiCache from "../../utils/apiCache";
 import SearchSelect from "../../components/SearchSelect";
@@ -4303,9 +4304,9 @@ function TabEstimate({ project }) {
             </div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:10}}>
               <div><label style={lblS}>{t("common.mode")}</label>
-                <select value={payForm.payment_mode} onChange={e=>setPayForm(p=>({...p,payment_mode:e.target.value}))} style={inpS}>
+                <PickSelect value={payForm.payment_mode} onChange={e=>setPayForm(p=>({...p,payment_mode:e.target.value}))} style={inpS}>
                   <option>{t("common.bank_transfer")}</option><option>{t("common.cash")}</option><option>{t("common.cheque")}</option><option>UPI</option><option>{t("estimate.credit_card")}</option>
-                </select>
+                </PickSelect>
               </div>
               <div><label style={lblS}>{t("estimate.reference")}</label><input value={payForm.reference_no} onChange={e=>setPayForm(p=>({...p,reference_no:e.target.value}))} style={inpS}/></div>
             </div>

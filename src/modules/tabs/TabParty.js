@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
+import PickSelect from "../../components/PickSelect";
 import api from "../../config/api";
 import { CreateTransactionModal } from "../FinanceModule";
 import TransactionDetailDrawer from "../../components/TransactionDetailDrawer";
@@ -113,10 +114,10 @@ function AddPartyModal({ open, onClose, onSaved }) {
           </div>
           <div>
             {lbl("Type *")}
-            <select value={form.type} onChange={set("type")} style={{...ip, background:T.surface}}>
+            <PickSelect value={form.type} onChange={set("type")} style={{...ip, background:T.surface}}>
               {["Client","Supplier","Material Supplier","Sub-Con","Labour Vendor","Other Vendor"].map(t =>
                 <option key={t} value={t}>{t}</option>)}
-            </select>
+            </PickSelect>
           </div>
         </div>
 
