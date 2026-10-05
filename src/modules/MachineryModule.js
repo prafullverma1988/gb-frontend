@@ -2723,7 +2723,8 @@ function VehiclePicker({ tpl, trucks, parties, onlyBaaki, onCancel, onSaved }) {
   const kindLbl = kindLabel(tpl.kind);
   const cands = (trucks || []).filter((r) => r.is_trip_vehicle && Number(r.is_active) !== 0
     && (tpl.vendor_id == null || String(truckVendorId(r)) === String(tpl.vendor_id)))
-    .sort((a, b) => String(a.registration_no || a.name || "").localeCompare(String(b.registration_no || b.name || "")));
+    .sort((a, b) => ((Number(b.rate_card_id) === Number(tpl.id)) - (Number(a.rate_card_id) === Number(tpl.id)))
+      || String(a.registration_no || a.name || "").localeCompare(String(b.registration_no || b.name || "")));
   // Bina vendor wali gaadi par card nahi lagta (uska bill kisi ke naam nahi
   // banta — server 400 deta hai): dikhti hai par tick band, saath me wajah.
   const noVendor = (r) => truckVendorId(r) == null;
@@ -2825,14 +2826,14 @@ function VehiclePicker({ tpl, trucks, parties, onlyBaaki, onCancel, onSaved }) {
           const elsewhere = r.rate_card_id && Number(r.rate_card_id) !== Number(tpl.id);
           const bm = billingMeta(r.trip_billing);
           return (
-            <label key={r.id} style={{ display: "grid", gridTemplateColumns: "22px 1.2fr 1.2fr 90px 1.4fr 90px", alignItems: "center", gap: 8, padding: "8px 12px", borderBottom: `1px solid ${T.b1}`, cursor: blocked ? "not-allowed" : "pointer", background: on ? T.indL + "88" : "transparent", opacity: blocked ? 0.6 : 1 }}>
+            <label key={r.id} style={{ display: "grid", gridTemplateColumns: "22px minmax(110px,1.1fr) minmax(110px,1.2fr) 90px minmax(130px,1.4fr) 90px", alignItems: "center", gap: 8, padding: "9px 12px", borderBottom: `1px solid ${T.b1}`, borderLeft: `3px solid ${on && elsewhere ? T.amb : "transparent"}`, cursor: blocked ? "not-allowed" : "pointer", background: on ? T.indL + "88" : "transparent", opacity: blocked ? 0.6 : 1 }}>
               <input type="checkbox" checked={on} disabled={blocked} onChange={() => toggle(r.id)} style={{ accentColor: T.ind }} />
-              <span style={{ fontSize: 12.5, fontWeight: 700, color: T.t1 }}>{r.registration_no || r.name}</span>
+              <span style={{ fontSize: 13, fontWeight: 800, color: T.t1, letterSpacing: 0.3 }}>{r.registration_no || r.name}</span>
               <span style={{ fontSize: 11.5, color: T.t3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{vName(r) || t("machinery.tv_vendor_nahi")}</span>
               <span style={{ fontSize: 11.5, color: capOf(r) ? T.t2 : T.t4 }}>{capOf(r) || "—"}</span>
               <span style={{ fontSize: 11, color: blocked || elsewhere ? T.amb : T.t4, fontWeight: blocked || elsewhere ? 700 : 500 }}>
                 {blocked ? t("trip_tracking.gs_bina_vendor")
-                  : elsewhere ? t("trip_tracking.gs_pehle_par", { name: r.rate_card_name || "—" })
+                  : elsewhere ? (on ? t("trip_tracking.tc_se_aayegi", { name: r.rate_card_name || "—" }) : t("trip_tracking.gs_pehle_par", { name: r.rate_card_name || "—" }))
                   : Number(r.rate_card_id) === Number(tpl.id) ? t("trip_tracking.gs_is_card_par") : ""}
               </span>
               <span><Pill label={bm.l} c={bm.c} bg={bm.bg} /></span>
@@ -2841,7 +2842,17 @@ function VehiclePicker({ tpl, trucks, parties, onlyBaaki, onCancel, onSaved }) {
         })}
       </div>
       <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", alignItems: "center", marginTop: 10 }}>
-        <span style={{ fontSize: 12, fontWeight: 700, color: T.t2, marginRight: "auto" }}>{t("trip_tracking.gs_n_select", { n: sel.size })}</span>
+        <span style={{ fontSize: 12, fontWeight: 700, color: T.t2, marginRight: "auto", display: "flex", gap: 10, flexWrap: "wrap" }}>
+          {t("trip_tracking.gs_n_select", { n: sel.size })}
+          {(() => {
+            const moving = cands.filter((r) => sel.has(r.id) && r.rate_card_id && Number(r.rate_card_id) !== Number(tpl.id)).length;
+            const leaving = cands.filter((r) => !sel.has(r.id) && Number(r.rate_card_id) === Number(tpl.id)).length;
+            return <>
+              {moving > 0 && <span style={{ color: T.amb }}>{t("trip_tracking.tc_aayengi", { n: moving })}</span>}
+              {leaving > 0 && <span style={{ color: T.red }}>{t("trip_tracking.tc_hategi", { n: leaving })}</span>}
+            </>;
+          })()}
+        </span>
         <Btn ghost onClick={onCancel}>{t("common.cancel")}</Btn>
         <Btn onClick={save} disabled={busy || !trucks}>{busy ? t("common.saving_2") : t("trip_tracking.gs_save")}</Btn>
       </div>
@@ -3227,14 +3238,41 @@ function CardPickModal({ vehicle, cards, parties, onClose, onSaved }) {
 }
 
 // ── Rate card view (Trip vehicles → "Rate card") ─────────────────
-// Card ki list (naam, kiska, tareeka, rate, kitni gaadi), "Naya rate card",
-// editor, "Gaadi select karo", amber "Rate tay karna baaki" aur purane vendor
-// card — Trip Tracking ka purana Rate card tab hu-ba-hu, ab yahan.
-function RateCardView({ cards, trucks, parties, canRates, edit, onEdit, pick, onPick, flash, onFlash, onChanged, onGaadi }) {
+// 5 Oct 2026 (Prafull: "rate card click pe us card me jitni gaadi hai dikhe"):
+// upar har card ka ek chip (naam · capacity · rate · kitni gaadi), chuna hua
+// card neeche khulta hai — rate, Edit / + Gaadi jodo / Itihaas / Hatao, aur
+// USI card ki gaadiyan (number, vendor, capacity, chuni tareekh me trip + ₹),
+// har gaadi par "Card badlo" (CardPickModal — trip ke rate par asar ka
+// preview ke saath). Pehle sirf ek table thi jisme "1 vehicles" likha aata
+// tha aur dekhne ka koi raasta nahi tha ki kaunsi.
+function RateCardView({ cards, trucks, tvRows, parties, canRates, edit, onEdit, pick, onPick, flash, onFlash, onChanged, onGaadi }) {
   const [busyId, setBusyId] = useState(null);
+  const [showHist, setShowHist] = useState(false);
   const list = (cards.list || []).map((c) => (c.kind === "trip" ? c : normCard(c)));
   const legacy = (cards.legacy || []).map(normCard);
-  const COLS = "1.3fr 2fr 90px 200px";
+  // Chuna hua card: picker/editor khula ho to wahi, warna user ka chuna, warna pehla.
+  const [selId, setSelId] = useState(null);
+  const pickId = pick && pick.tpl ? pick.tpl.id : null;
+  const editId = edit && edit.id ? edit.id : null;
+  const sel = list.find((c) => String(c.id) === String(pickId || editId || selId)) || list[0] || null;
+  useEffect(() => { setShowHist(false); }, [sel && sel.id]);
+
+  // Gaadi-wise trip / ₹ chuni tareekh ke (Gaadi wali list ka hi hisaab).
+  const tripStat = useMemo(() => {
+    const m = new Map();
+    (tvRows || []).forEach((g) => (g.vehicles || []).forEach((v) => {
+      if (v.vendor_changed) return;
+      m.set(String(v.id), { trips: Number(v.trips) || 0, amount: Number(v.amount) || 0, unbilled: Number(v.unbilled) || 0 });
+    }));
+    return m;
+  }, [tvRows]);
+  const onCard = (c) => (trucks || []).filter((r) => Number(r.is_active) !== 0 && Number(r.rate_card_id) === Number(c.id))
+    .sort((a, b) => String(a.registration_no || a.name || "").localeCompare(String(b.registration_no || b.name || "")));
+  const vName = (r) => r.vendor_name || r.default_vendor_name || t("machinery.tv_vendor_nahi");
+  const asVeh = (r) => ({
+    id: r.id, name: r.name, registration_no: r.registration_no, vendor_id: truckVendorId(r), vendor_name: r.vendor_name || r.default_vendor_name || null,
+    capacity: capOf(r), trip_billing: r.trip_billing, rate_card_id: r.rate_card_id || null, rate_card_name: r.rate_card_name || null,
+  });
 
   const remove = async (c) => {
     // Ginti har city ki (vehicles_total) — server sab city ki gaadi se card hatata hai.
@@ -3244,17 +3282,25 @@ function RateCardView({ cards, trucks, parties, canRates, edit, onEdit, pick, on
     const r = await api.del("/trips/rate-templates/" + c.id);
     setBusyId(null);
     if (!r || r.success === false) { window.alert((r && r.message) || t("trip_tracking.action_fail")); return; }
+    setSelId(null);
     onChanged();
   };
   const fromLegacy = (c) => onEdit({ _seed: { name: kiskaOf(c, parties), vendor_id: c.vendor_id, kind: "km",
     method: c.method, rates: c.rates, onward_rate: c.onward_rate, round_mode: c.round_mode, note: c.note } });
+  const choose = (c) => { setSelId(c.id); onEdit(null); onPick(null); onFlash(""); };
+
+  const chipS = (on) => ({ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 3, textAlign: "left", minWidth: 170, maxWidth: 260,
+    padding: "9px 12px", borderRadius: 9, cursor: "pointer", fontFamily: "inherit",
+    border: `1.5px solid ${on ? T.ind : T.b1}`, background: on ? T.indL : T.surface });
+  const VCOLS = "minmax(120px,1.1fr) minmax(120px,1.3fr) 90px 92px 60px 92px 110px";
+  const cardTrucks = sel ? onCard(sel) : [];
 
   return (
     <div>
       {flash && <div style={{ border: `1px solid ${T.grn}44`, background: T.grnL, borderRadius: 8, padding: "9px 13px", marginBottom: 12, fontSize: 12, color: T.grn, fontWeight: 600 }}>{flash}</div>}
 
       <RatePendingBlock cards={cards} canRates={canRates} onGaadi={onGaadi}
-        onPick={(c) => { onEdit(null); onFlash(""); onPick({ tpl: c, baaki: true }); }}
+        onPick={(c) => { onEdit(null); onFlash(""); setSelId(c.id); onPick({ tpl: c, baaki: true }); }}
         onNewCard={() => { onPick(null); onFlash(""); onEdit({}); }} />
 
       {legacy.length > 0 && (
@@ -3271,67 +3317,136 @@ function RateCardView({ cards, trucks, parties, canRates, edit, onEdit, pick, on
         </div>
       )}
 
-      <Panel title={t("trip_tracking.rc_list", { list: list.length ? `(${list.length})` : "" })}
-        action={canRates && <Btn size="sm" icon={IcAdd} onClick={() => { onPick(null); onFlash(""); onEdit(edit && !edit.id && !edit._seed ? null : {}); }}>{t("trip_tracking.rc_new")}</Btn>}>
-        {edit && (
-          <RateCardEditor key={edit.id ? "e-" + edit.id : (edit._seed ? "s-" + edit._seed.vendor_id : "n")} card={edit} parties={parties}
+      {/* Card ke chip — dabao to neeche wahi card */}
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
+        {list.map((c) => {
+          const on = sel && String(sel.id) === String(c.id);
+          const n = Number(c.vehicles) || 0;
+          return (
+            <button key={c.id} type="button" onClick={() => choose(c)} style={chipS(on)} aria-pressed={on}>
+              <span style={{ display: "flex", gap: 6, alignItems: "center", width: "100%" }}>
+                <span style={{ fontSize: 12.5, fontWeight: 700, color: on ? T.ind : T.t1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, minWidth: 0 }}>{c.name}</span>
+                <span style={{ fontSize: 10.5, fontWeight: 700, color: n ? T.t1 : T.t4, background: n ? T.surfaceB : "transparent", border: `1px solid ${T.b1}`, borderRadius: 8, padding: "0 6px", fontVariantNumeric: "tabular-nums" }}>{t("trip_tracking.n_gaadi", { n })}</span>
+              </span>
+              <span style={{ fontSize: 10.5, color: T.t3, fontVariantNumeric: "tabular-nums", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "100%" }}>
+                {[c.capacity, rateLine(c)].filter(Boolean).join(" · ")}
+              </span>
+            </button>
+          );
+        })}
+        {canRates && (
+          <Btn size="sm" icon={IcAdd} onClick={() => { onPick(null); onFlash(""); onEdit(edit && !edit.id && !edit._seed ? null : {}); }}>{t("trip_tracking.rc_new")}</Btn>
+        )}
+      </div>
+
+      {/* Naya card (ya purane se) — chip ke neeche apna editor */}
+      {edit && !edit.id && (
+        <Panel title={t("trip_tracking.rc_new")}>
+          <RateCardEditor key={edit._seed ? "s-" + edit._seed.vendor_id : "n"} card={edit} parties={parties}
             onCancel={() => onEdit(null)}
             onSaved={(saved, isNew) => {
               onEdit(null); onChanged();
-              if (saved && saved.trips_updated) onFlash(t("trip_tracking.rt_saved_trips", { name: saved.name, n: saved.trips_updated }));
+              if (saved && saved.id) setSelId(saved.id);
               // Naya card bana — ab uski gaadi select karo.
               if (isNew && saved) onPick({ tpl: saved, baaki: false });
             }} />
-        )}
-        {/* Picker gaadi ki taaza list aane ke BAAD hi — pehle se lagi gaadi usi se tick hoti hain. */}
-        {pick && !trucks && <Empty>{t("common.loading_2")}</Empty>}
-        {pick && trucks && (
-          <VehiclePicker key={"p-" + pick.tpl.id + (pick.baaki ? "-b" : "")} tpl={pick.tpl} trucks={trucks} parties={parties} onlyBaaki={pick.baaki}
-            onCancel={() => onPick(null)}
-            onSaved={(res) => {
-              onFlash(t("trip_tracking.gs_saved", { name: pick.tpl.name, n: res.assigned || 0, trips: res.trips_updated || 0 }));
-              onPick(null); onChanged();
-            }} />
-        )}
+        </Panel>
+      )}
 
-        {list.length === 0 && !edit && !pick && (
-          <Empty>{canRates ? t("trip_tracking.rt_empty_can") : t("trip_tracking.rc_empty")}</Empty>
-        )}
-        {list.length > 0 && (
-          <>
-            <Row head cols={COLS}>
-              <span>{t("trip_tracking.rt_hdr_card")}</span><span>{t("trip_tracking.rt_hdr_rate")}</span><span>{t("trip_tracking.rt_hdr_gaadi")}</span><span />
-            </Row>
-            {list.map((c) => (
-              <Row key={c.id} cols={COLS}>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 12.5, fontWeight: 700, color: T.t1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.name}</div>
-                  <div style={{ fontSize: 11, color: T.t3, marginTop: 1 }}>{kiskaOf(c, parties)}</div>
-                  <div style={{ display: "flex", gap: 4, marginTop: 3, flexWrap: "wrap" }}>
-                    <Pill label={kindLabel(c.kind)} c={T.ind} bg={T.indL} />
-                    {c.capacity && <Pill label={c.capacity} c={T.t3} bg={T.sltL} />}
-                  </div>
+      {list.length === 0 && !edit && (
+        <Empty>{canRates ? t("trip_tracking.rt_empty_can") : t("trip_tracking.rc_empty")}</Empty>
+      )}
+
+      {sel && (
+        <div style={{ background: T.surface, border: `1px solid ${T.b1}`, borderRadius: 10, overflow: "hidden" }}>
+          {/* Card ka sir — naam, kiska, rate, kaam ke button */}
+          <div style={{ padding: "13px 15px", borderBottom: `1px solid ${T.b1}`, display: "flex", gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}>
+            <div style={{ flex: 1, minWidth: 220 }}>
+              <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                <span style={{ fontSize: 15, fontWeight: 800, color: T.t1 }}>{sel.name}</span>
+                <Pill label={kindLabel(sel.kind)} c={T.ind} bg={T.indL} />
+                {sel.capacity && <Pill label={sel.capacity} c={T.t3} bg={T.sltL} />}
+              </div>
+              <div style={{ fontSize: 11.5, color: T.t3, marginTop: 3 }}>{kiskaOf(sel, parties)}</div>
+              <div style={{ fontSize: 12.5, color: T.t1, marginTop: 6, fontVariantNumeric: "tabular-nums", fontWeight: 600 }}>
+                {sel.kind === "trip" ? t("trip_tracking.rt_per_trip_amt", { amt: rs2(sel.trip_rate) }) : slabText(sel)}
+              </div>
+              {sel.kind !== "trip" && (
+                <div style={{ fontSize: 10.5, color: T.t4, marginTop: 1 }}>{RC_METHOD[sel.method].label} · {RC_ROUND[sel.round_mode].label} · {t("trip_tracking.rc_ex_10", { amt: rs2(rcAmount(sel, 10)) })}</div>
+              )}
+              {sel.note && <div style={{ fontSize: 10.5, color: T.t4, marginTop: 2 }}>{sel.note}</div>}
+            </div>
+            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              {canRates && <Btn size="sm" icon={IcAdd} disabled={!trucks} onClick={() => { onEdit(null); onFlash(""); onPick({ tpl: sel, baaki: false }); }}>{t("trip_tracking.tc_gaadi_jodo")}</Btn>}
+              {canRates && <Btn size="sm" ghost onClick={() => { onPick(null); onFlash(""); onEdit(sel); }}>{t("trip_tracking.tc_rate_badlo")}</Btn>}
+              <button type="button" onClick={() => setShowHist((v) => !v)} style={linkBtn(T.t3)}>{showHist ? t("trip_tracking.tc_itihaas_band") : t("trip_tracking.tc_itihaas")}</button>
+              {canRates && <button type="button" disabled={busyId === sel.id} onClick={() => remove(sel)} style={linkBtn(T.red)}>{t("trip_tracking.tc_card_hatao")}</button>}
+            </div>
+          </div>
+
+          {edit && edit.id && String(edit.id) === String(sel.id) && (
+            <RateCardEditor key={"e-" + edit.id} card={edit} parties={parties}
+              onCancel={() => onEdit(null)}
+              onSaved={(saved) => {
+                onEdit(null); onChanged();
+                if (saved && saved.trips_updated) onFlash(t("trip_tracking.rt_saved_trips", { name: saved.name, n: saved.trips_updated }));
+              }} />
+          )}
+          {showHist && <div style={{ padding: "8px 15px", borderBottom: `1px solid ${T.b1}` }}><CardHistory tplId={sel.id} parties={parties} /></div>}
+
+          {/* Gaadi jodo — picker usi card ke andar */}
+          {pick && !trucks && <Empty>{t("common.loading_2")}</Empty>}
+          {pick && trucks && String(pick.tpl.id) === String(sel.id) && (
+            <VehiclePicker key={"p-" + pick.tpl.id + (pick.baaki ? "-b" : "")} tpl={pick.tpl} trucks={trucks} parties={parties} onlyBaaki={pick.baaki}
+              onCancel={() => onPick(null)}
+              onSaved={(res) => {
+                onFlash(t("trip_tracking.gs_saved", { name: pick.tpl.name, n: res.assigned || 0, trips: res.trips_updated || 0 }));
+                onPick(null); onChanged();
+              }} />
+          )}
+
+          {/* Is card ki gaadiyan */}
+          <div style={{ padding: "10px 15px 4px", fontSize: 11, fontWeight: 700, color: T.t4, textTransform: "uppercase", letterSpacing: ".4px" }}>
+            {t("trip_tracking.tc_is_card_ki_gaadi", { n: cardTrucks.length })}
+          </div>
+          {!trucks && <Empty>{t("common.loading_2")}</Empty>}
+          {trucks && cardTrucks.length === 0 && (
+            <div style={{ padding: "14px 15px 18px", fontSize: 12, color: T.t3 }}>
+              {t("trip_tracking.tc_koi_gaadi_nahi")}
+              {canRates && !pick && <> <button type="button" onClick={() => { onEdit(null); onFlash(""); onPick({ tpl: sel, baaki: false }); }} style={linkBtn(T.ind)}>{t("trip_tracking.tc_gaadi_jodo")}</button></>}
+            </div>
+          )}
+          {trucks && cardTrucks.length > 0 && (
+            <div style={{ overflowX: "auto", padding: "0 15px 12px" }}>
+              <div style={{ minWidth: 720 }}>
+                <div style={{ display: "grid", gridTemplateColumns: VCOLS, gap: 8, padding: "7px 8px", background: T.surfaceB, borderRadius: 6, border: `1px solid ${T.b1}` }}>
+                  {[t("machinery.tv_h_vehicle"), t("common.vendor"), t("trip_tracking.tc_h_capacity"), t("machinery.tv_h_billing"), t("machinery.tv_h_trips"), t("machinery.tv_h_amount"), ""].map((h, i) => (
+                    <span key={i} style={{ fontSize: 9.5, fontWeight: 700, color: T.t4, textTransform: "uppercase", letterSpacing: ".4px", textAlign: i === 4 || i === 5 ? "right" : "left" }}>{h}</span>
+                  ))}
                 </div>
-                <div style={{ fontSize: 11.5, color: T.t2, lineHeight: 1.5, fontVariantNumeric: "tabular-nums" }}>
-                  {c.kind === "trip"
-                    ? <span style={{ fontSize: 12.5, fontWeight: 700, color: T.t1 }}>{t("trip_tracking.rt_per_trip_amt", { amt: rs2(c.trip_rate) })}</span>
-                    : <>
-                        {slabText(c)}
-                        <div style={{ fontSize: 10.5, color: T.t4 }}>{RC_METHOD[c.method].label} · {RC_ROUND[c.round_mode].label} · {t("trip_tracking.rc_ex_10", { amt: rs2(rcAmount(c, 10)) })}</div>
-                      </>}
-                  {c.note && <div style={{ fontSize: 10.5, color: T.t4 }}>{c.note}</div>}
-                </div>
-                <span style={{ fontSize: 12, fontWeight: 700, color: Number(c.vehicles) ? T.t1 : T.t4, fontVariantNumeric: "tabular-nums" }}>{t("trip_tracking.n_gaadi", { n: Number(c.vehicles) || 0 })}</span>
-                <span style={{ display: "flex", gap: 10, justifyContent: "flex-end", flexWrap: "wrap" }}>
-                  {canRates && <button type="button" onClick={() => { onPick(null); onFlash(""); onEdit(c); }} style={linkBtn(T.blu)}>{t("common.edit_2")}</button>}
-                  {canRates && <button type="button" disabled={!trucks} onClick={() => { onEdit(null); onFlash(""); onPick({ tpl: c, baaki: false }); }} style={linkBtn(T.ind)}>{t("trip_tracking.gs_button")}</button>}
-                  {canRates && <button type="button" disabled={busyId === c.id} onClick={() => remove(c)} style={linkBtn(T.red)}>{t("trip_tracking.rc_hatao")}</button>}
-                </span>
-              </Row>
-            ))}
-          </>
-        )}
-      </Panel>
+                {cardTrucks.map((r) => {
+                  const st = tripStat.get(String(r.id)) || { trips: 0, amount: 0 };
+                  const bm = billingMeta(r.trip_billing);
+                  return (
+                    <div key={r.id} style={{ display: "grid", gridTemplateColumns: VCOLS, gap: 8, padding: "8px 8px", borderBottom: `1px solid ${T.b1}`, alignItems: "center" }}>
+                      <span style={{ fontSize: 12, fontWeight: 800, color: T.t1, letterSpacing: 0.3 }}>{r.registration_no || r.name}</span>
+                      <span style={{ fontSize: 12, color: T.t2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{vName(r)}</span>
+                      <span style={{ fontSize: 11.5, color: capOf(r) ? T.t2 : T.t4 }}>{capOf(r) || "—"}</span>
+                      <span><Pill label={bm.l} c={bm.c} bg={bm.bg} /></span>
+                      <span style={{ fontSize: 12, textAlign: "right", fontVariantNumeric: "tabular-nums", color: T.t2 }}>{st.trips}</span>
+                      <span style={{ fontSize: 12, textAlign: "right", fontVariantNumeric: "tabular-nums", fontWeight: 700, color: T.t1 }}>{r.trip_billing === "monthly" ? "—" : rupee(st.amount)}</span>
+                      <span style={{ textAlign: "right" }}>
+                        {canRates && <button type="button" onClick={() => onGaadi(asVeh(r))} style={linkBtn(T.ind)}>{t("trip_tracking.tc_card_badlo")}</button>}
+                      </span>
+                    </div>
+                  );
+                })}
+                <div style={{ fontSize: 10.5, color: T.t4, marginTop: 6 }}>{t("trip_tracking.tc_trips_note")}</div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -3456,7 +3571,7 @@ function TripVehiclesTab({ tv, from, to, onRange, onReload, parties, q, onQ, vie
     return (
       <div>
         {switcher}
-        <RateCardView cards={cards} trucks={trucks} parties={parties} canRates={canRates}
+        <RateCardView cards={cards} trucks={trucks} tvRows={tv.rows} parties={parties} canRates={canRates}
           edit={edit} onEdit={setEdit} pick={pick} onPick={setPick} flash={flash} onFlash={setFlash}
           onChanged={refresh} onGaadi={(r) => setCardFor(r)} />
         {cardModal}
@@ -3590,10 +3705,10 @@ function TripVehiclesTab({ tv, from, to, onRange, onReload, parties, q, onQ, vie
                                         style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit", fontSize: 10.5, color: T.amb, fontWeight: 600, textDecoration: "underline dotted" }}>{t("machinery.tv_cap_nahi")}</button>
                                     : <span style={{ fontSize: 10.5, color: T.t4 }}>{t("machinery.tv_cap_nahi")}</span>)}
                                 {v.rate_card_name
-                                  ? (cardable ? chipBtn(<Pill label={v.rate_card_name} c={T.ind} bg={T.indL} />, () => setCardFor(vehOf(v, g)), t("machinery.tv_card_click"))
+                                  ? (cardable ? chipBtn(<Pill label={v.rate_card_name + " ▾"} c={T.ind} bg={T.indL} />, () => setCardFor(vehOf(v, g)), t("machinery.tv_card_click"))
                                     : <Pill label={v.rate_card_name} c={T.ind} bg={T.indL} />)
                                   : (["km", "trip", "pending"].includes(v.trip_billing) && "rate_card_id" in v && !removed
-                                    ? (cardable ? chipBtn(<Pill label={t("machinery.tv_card_nahi")} c={T.amb} bg={T.ambL} />, () => setCardFor(vehOf(v, g)), t("machinery.tv_card_click"))
+                                    ? (cardable ? chipBtn(<Pill label={t("trip_tracking.tc_card_lagao")} c={T.amb} bg={T.ambL} />, () => setCardFor(vehOf(v, g)), t("machinery.tv_card_click"))
                                       : <Pill label={t("machinery.tv_card_nahi")} c={T.amb} bg={T.ambL} />)
                                     : null)}
                               </span>
