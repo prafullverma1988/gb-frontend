@@ -5550,6 +5550,7 @@ const dict = {
   "mom.stop_transcribe":                                       "Stop & Transcribe",
   "mom.task":                                                  "Task",
   "mom.task_update":                                           "Task Update",
+  "mom.team_list_nahi_aayi":                                   "Couldn't load the team list",
   "mom.time":                                                  "Time",
   "mom.todo":                                                  "Todo",
   "mom.total_moms":                                            "Total MOMs",
@@ -10843,6 +10844,7 @@ const dict = {
   "todo.loading_todos":                                        "Loading todos…",
   "todo.new_todo_item":                                        "New Todo Item",
   "todo.no_todos_yet_add_your_first":                          "No todos yet — add your first one!",
+  "todo.save_nahi_hua":                                        "Not saved — please try again",
 
   // ── township_crm ────────────────────────────────────────────
   "township_crm.absorbpct_absorbed":                           "{absorbPct}% absorbed",

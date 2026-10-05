@@ -416,21 +416,36 @@ function CreateMOMModal({onClose,onSave,projectId=null,projectName=""}){
   const [saving,setSaving]=useState(false);
   const [saveErr,setSaveErr]=useState("");
   const [sites, setSites] = useState([]);   // loaded from /projects
-  const [team, setTeam]   = useState([]);   // loaded from /users
+  const [team, setTeam]   = useState([]);   // loaded from /projects/team-members
+  const [teamState, setTeamState] = useState("loading"); // loading | ok | error
+  const [teamTry, setTeamTry] = useState(0);
   useEffect(()=>{
     api.get("/projects").then(r=>{
       if(r.success && Array.isArray(r.data)){
         setSites(r.data.map(p=>({key:String(p.id||p.name), label:p.name||"Untitled"})));
       }
     }).catch(()=>{});
-    api.get("/settings/users").then(r=>{
-      if(r.success && Array.isArray(r.data)){
-        setTeam(r.data.map(u=>({key:String(u.id||u.name), label:u.name||u.email||"User"})));
-      } else if(r.users && Array.isArray(r.users)){
-        setTeam(r.users.map(u=>({key:String(u.id||u.name), label:u.name||u.email||"User"})));
-      }
-    }).catch(()=>{});
   },[]);
+  // /settings/users sirf "Users & Roles" wale ko milta hai — baaki sabko 403, aur
+  // Conducted By / Attendees / Assign To khaali. team-members har role ko milta hai
+  // (company ke active users). Client bahar; naam trim NAHI — conducted_by /
+  // attendees / assignee naam se save hote hain, DB jaisa hi jaana chahiye.
+  useEffect(()=>{
+    setTeamState("loading");
+    api.get("/projects/team-members").then(r=>{
+      if(r && r.success && Array.isArray(r.data)){
+        setTeam(r.data.filter(u=>u.role!=="client" && (u.name||"").trim()).map(u=>({key:String(u.id), label:u.name})));
+        setTeamState("ok");
+      } else setTeamState("error");
+    }).catch(()=>setTeamState("error"));
+  },[teamTry]);
+  const teamPh=teamState==="error"?t("mom.team_list_nahi_aayi"):teamState==="loading"?t("mom.loading_users"):t("mom.select_user");
+  const teamErrRow=teamState==="error"&&(
+    <div style={{display:"flex",alignItems:"center",gap:8,fontSize:11.5,color:T.red,padding:"5px 0"}}>
+      {t("mom.team_list_nahi_aayi")}
+      <button onClick={()=>setTeamTry(n=>n+1)} style={{padding:"3px 10px",borderRadius:6,background:T.surface,border:`1px solid ${T.redM}`,color:T.red,fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>{t("common.retry")}</button>
+    </div>
+  );
   const [form,setForm]=useState({
     title:"",type:"Site Review",
     site: projectName || "",
@@ -557,7 +572,7 @@ function CreateMOMModal({onClose,onSave,projectId=null,projectName=""}){
                 <input value={form.venue} onChange={upd("venue")} placeholder={t("mom.site_office_head_office_client_location")} style={inputStyle}/>
               </div>
               <div><label style={labelStyle}>{t("mom.conducted_by")}</label>
-                <SearchSelect value={form.conductedBy} options={team} onChange={v=>setForm(p=>({...p,conductedBy:labelOf(team,v)}))} placeholder={team.length?t("mom.select_user"):t("mom.loading_users")}/>
+                <SearchSelect value={form.conductedBy} options={team} onChange={v=>setForm(p=>({...p,conductedBy:labelOf(team,v)}))} placeholder={teamPh}/>
               </div>
             </div>
             {/* Attendees */}
@@ -574,7 +589,8 @@ function CreateMOMModal({onClose,onSave,projectId=null,projectName=""}){
                     </button>
                   );
                 })}
-                {team.length===0 && <span style={{fontSize:11,color:T.t4,fontStyle:"italic",padding:"5px 0"}}>{t("mom.loading_users")}</span>}
+                {teamState==="loading" && <span style={{fontSize:11,color:T.t4,fontStyle:"italic",padding:"5px 0"}}>{t("mom.loading_users")}</span>}
+                {teamErrRow}
               </div>
               <div style={{display:"flex",gap:6}}>
                 <input value={attendeeInput} onChange={e=>setAttendeeInput(e.target.value)} placeholder={t("mom.add_custom_attendee_name")} style={{...inputStyle,flex:1}} onKeyDown={e=>e.key==="Enter"&&addCustomAttendee()}/>
@@ -624,6 +640,7 @@ function CreateMOMModal({onClose,onSave,projectId=null,projectName=""}){
         {step===3&&(
           <div>
             <div style={{fontSize:12,color:T.t3,marginBottom:12}}>{t("mom.define_action_items_with_owners_and")}</div>
+            {teamErrRow}
             {actions.map((a,i)=>(
               <div key={i} style={{background:T.surfaceB,borderRadius:8,border:`1px solid ${T.b1}`,padding:"11px 12px",marginBottom:8}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:7}}>
@@ -640,7 +657,7 @@ function CreateMOMModal({onClose,onSave,projectId=null,projectName=""}){
                 </div>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
                   <div><label style={labelStyle}>{t("mom.assign_to")}</label>
-                    <SearchSelect value={a.assignee} options={team} onChange={v=>updAction(i,"assignee",labelOf(team,v))} placeholder={team.length?t("mom.select_user"):t("common.loading")}/>
+                    <SearchSelect value={a.assignee} options={team} onChange={v=>updAction(i,"assignee",labelOf(team,v))} placeholder={teamPh}/>
                   </div>
                   <div><label style={labelStyle}>{t("common.due_date")}</label>
                     <input type="date" value={a.dueDate} onChange={e=>updAction(i,"dueDate",e.target.value)} style={{...inputStyle}}/>
@@ -810,7 +827,8 @@ function MeetingModeModal({projectId=null,projectName="",onClose,onComplete}){
 
   useEffect(()=>{
     api.get("/projects").then(r=>{ if(r&&r.success&&Array.isArray(r.data)) setProjects(r.data); }).catch(()=>{});
-    api.get("/settings/users").then(r=>{ if(r&&r.success&&Array.isArray(r.data)) setUsers(r.data); }).catch(()=>{});
+    // team-members har role ko milta hai (/settings/users non-admin ko 403 — auto-match chup-chaap band tha)
+    api.get("/projects/team-members").then(r=>{ if(r&&r.success&&Array.isArray(r.data)) setUsers(r.data.filter(u=>u.role!=="client"&&(u.name||"").trim())); }).catch(()=>{});
     try{ const s=JSON.parse(localStorage.getItem(mmTitleKey)||"[]"); if(Array.isArray(s)) setCustomTitles(s); }catch(e){}
     return ()=>{ if(timerRef.current) clearInterval(timerRef.current); if(streamRef.current){ try{streamRef.current.getTracks().forEach(t=>t.stop());}catch(e){} } };
   },[]);

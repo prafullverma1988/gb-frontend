@@ -11,6 +11,24 @@ import { canAny, currentUser } from "../../utils/perms";
 // done / checklist tick bina Edit ke bhi kar sakta hai.
 const TODO_MODS = ["To Do", "Tasks"];
 
+// Todo ki haalat — row par ANGREZI chaabi ('Pending' | 'In Progress' |
+// 'Completed'); ginti, done-list aur server sab isi se. Pehle checklist tick
+// par t() ka anuvaad ("Chal raha hai" / "चल रहा है") server par chala jaata
+// tha, aur box tick "done" / "todo" likhta tha.
+const normStatus=(s)=>{
+  const v=String(s||"").toLowerCase().replace(/[_-]/g," ").trim();
+  if(v==="completed"||v==="done"||v==="complete") return "Completed";
+  if(v==="in progress"||v==="ongoing"||v==="progress"||v==="doing") return "In Progress";
+  return "Pending";
+};
+const statusFromPct=(pct)=>(pct>=100?"Completed":pct>0?"In Progress":"Pending");
+// Server ki zubaan. company_todos.status khula VARCHAR — chaabi jaisi ki
+// taisi (mobile TodoScreen bhi yahi likhta hai). project_tasks.status
+// ENUM('Not Started','Ongoing','Hold','Completed') — wahan 'Pending' /
+// 'In Progress' 400 (tasks.status_galat_hai) dete hain.
+const TASK_STATUS={Pending:"Not Started","In Progress":"Ongoing",Completed:"Completed"};
+const serverStatus=(todo,s)=>(todo._source==="company_todo"?s:TASK_STATUS[s]);
+
 function TabTodo({projectId}) {
   const CATS=["Civil","Electrical","Plumbing","Finishing","Documentation","Admin","Other"];
   const PRIS=["High","Medium","Low"];
@@ -55,7 +73,8 @@ function TabTodo({projectId}) {
       assigneeId:t.assigned_to||null,
       due:t.due_date||"",
       cat:t.category||"Other",
-      done:t.status==="done"||t.status==="Completed",
+      status:normStatus(t.status),
+      done:normStatus(t.status)==="Completed",
       checklist:cl,
       // Unified-todo metadata (mirrors mobile)
       _source: t._source || "project_task",
@@ -65,12 +84,24 @@ function TabTodo({projectId}) {
     };
   };
 
-  // Source-aware endpoint helpers — same pattern as Home → TodoDrawer.
+  // Source-aware endpoint helpers. project_task todo → PUT /tasks/:id (mobile
+  // wala raasta): /projects/:id/tasks/:id `progress` phenk deta hai, to poora
+  // (100%) kaam checklist se wapas khulta hi nahi (400 reopen_pct).
   const apiBaseFor=(t)=>(
     t._source==="company_todo"
       ? "/projects/company-todos/"+t.id
-      : "/projects/"+projectId+"/tasks/"+t.id
+      : "/tasks/"+t.id
   );
+
+  // PUT + mana hone par wapas. api.put 400/500 par throw nahi karta —
+  // {success:false} lautata hai; pehle catch kabhi chalta hi nahi tha, to
+  // server ke mana karne par bhi (galat status, photo ki rok) tick laga rehta.
+  const putTodo=async(todo,body)=>{
+    const res=await api.put(apiBaseFor(todo),body);
+    if(res&&res.success) return;
+    setTodos(p=>p.map(x=>x.id===todo.id?todo:x));
+    alert((res&&!res._networkError&&res.message)||t("todo.save_nahi_hua"));
+  };
   const pingPathFor=(t)=>(
     t._source==="company_todo" || (t._source!=="project_task" && !t.project_id)
       ? "/projects/company-todos/"+t.id+"/ping"
@@ -115,25 +146,14 @@ function TabTodo({projectId}) {
   const toggle=async(id)=>{
     const todo=todos.find(t=>t.id===id);
     if(!todo || !canTick(todo)) return;
-    const newStatus=todo.done?"todo":"done";
-    setTodos(p=>p.map(t=>t.id===id?{...t,done:!t.done}:t));
-    try{
-      await api.put(apiBaseFor(todo),{status:newStatus});
-    }catch(e){
-      setTodos(p=>p.map(t=>t.id===id?{...t,done:!t.done}:t)); // revert
-    }
-  };
-
-  // Inverse of progressFromStatus — derive status from checklist completion %.
-  const statusFromPct=(pct)=>{
-    if(pct>=100) return t("common.completed");
-    if(pct>0)    return t("projects.in_progress");
-    return t("common.not_started");
+    const next=todo.done?"Pending":"Completed";
+    setTodos(p=>p.map(x=>x.id===id?{...x,status:next,done:next==="Completed"}:x));
+    await putTodo(todo,{status:serverStatus(todo,next)});
   };
 
   // Toggle a checklist item — emits canonical {text, done} on write AND
   // auto-promotes/demotes the todo's status when completion crosses a
-  // threshold (0 → Not Started, 1-99% → In Progress, 100% → Completed).
+  // threshold (0 → Pending, 1-99% → In Progress, 100% → Completed).
   // One combined PUT keeps the checklist and status in lockstep server-side.
   const toggleCheck=async(todoId,ci)=>{
     const todo=todos.find(t=>t.id===todoId);
@@ -147,19 +167,17 @@ function TabTodo({projectId}) {
     if(updated.length>0){
       const pct=Math.round((updated.filter(c=>c.done).length/updated.length)*100);
       const derived=statusFromPct(pct);
-      const currentStatus=todo.done?"Completed":(todo.status||"Not Started");
-      if(derived!==currentStatus){
-        body.status=derived;
+      if(derived!==todo.status){
+        body.status=serverStatus(todo,derived);
+        // Poora (100%) task wapas Ongoing — server % bhi saath maangta hai
+        // (reopen_pct), to checklist ka %.
+        if(todo._source!=="company_todo"&&todo.status==="Completed"&&derived==="In Progress") body.progress=pct;
         patch.done=derived==="Completed";
         patch.status=derived;
       }
     }
     setTodos(p=>p.map(t=>t.id===todoId?{...t,...patch}:t));
-    try{
-      await api.put(apiBaseFor(todo),body);
-    }catch(e){
-      setTodos(p=>p.map(t=>t.id===todoId?{...t,checklist:todo.checklist,done:todo.done}:t));
-    }
+    await putTodo(todo,body);
   };
 
   // Ping the assignee — source-aware endpoint.
