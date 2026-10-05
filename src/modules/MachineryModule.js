@@ -5236,6 +5236,11 @@ function MachineRequestsTab({ fleet, projects, cities, onChanged }) {
                     <MrReg v={r.fulfilled_registration_no} />
                   </div>
                 )}
+                {st.k === "fulfilled" && r.fulfilled_equipment_name && (
+                  <div style={{ fontSize: 10.5, fontWeight: 600, color: r.received_at ? T.grn : T.amb, marginTop: 2 }}>
+                    {r.received_at ? t("machinery.mr_site_par_mili", { date: fmtD(r.received_at) }) : t("machinery.mr_raaste_me")}
+                  </div>
+                )}
               </div>
               <div style={{ minWidth: 0 }}>
                 {r.task_name && <div style={{ fontSize: 12, fontWeight: 600, color: T.t1 }}>{t("machinery.mr_task", { name: r.task_name })}</div>}
@@ -5556,8 +5561,8 @@ function MachineryModule() {
                         </button>
                       )}
                     </div>
-                    <Row head cols="1.7fr 100px 92px 0.9fr 1fr 110px 100px">
-                      <span>{t("fuel.machine")}</span><span>{t("machinery.city")}</span><span>{t("common.ownership")}</span><span>{t("machinery.current_meter")}</span><span>{t("common.documents")}</span><span>{t("machinery.health")}</span><span>{t("machinery.detail_poora")}</span>
+                    <Row head cols="1.6fr 100px 140px 88px 0.9fr 1fr 106px 96px">
+                      <span>{t("fuel.machine")}</span><span>{t("machinery.city")}</span><span>{t("machinery.where_now")}</span><span>{t("common.ownership")}</span><span>{t("machinery.current_meter")}</span><span>{t("common.documents")}</span><span>{t("machinery.health")}</span><span>{t("machinery.detail_poora")}</span>
                     </Row>
                     {fleetShown.length === 0 && (
                       <Empty>{t("machinery.is_chhanni_me_koi_machine_nahi")}</Empty>
@@ -5567,7 +5572,7 @@ function MachineryModule() {
                       const bad = m.doc_status && m.doc_status.days < 0;
                       const soon = m.doc_status && m.doc_status.days >= 0 && m.doc_status.days <= 30;
                       return (
-                        <Row key={m.id} cols="1.7fr 100px 92px 0.9fr 1fr 110px 100px" onClick={() => setOpenId(m.id)}>
+                        <Row key={m.id} cols="1.6fr 100px 140px 88px 0.9fr 1fr 106px 96px" onClick={() => setOpenId(m.id)}>
                           <div>
                             {/* Gadi number naam ke saath hi, alag rang me — fuel ki
                                 parchi number se milti hai, naam se nahi. */}
@@ -5584,6 +5589,17 @@ function MachineryModule() {
                           </div>
                           <span style={{ fontSize: 11.5, color: m.city_name ? T.t2 : T.amb }}>
                             {m.city_name || t("machinery.city_nahi")}
+                          </span>
+                          {/* Abhi kahan hai (6 Oct 2026) — site ke Receive se project par,
+                              Fulfill ke baad receive tak raaste me, warna free */}
+                          <span style={{ minWidth: 0 }}>
+                            {m.location && m.location.state === "site" ? (
+                              <span title={m.location.project_name || ""} style={{ fontSize: 11.5, fontWeight: 600, color: T.grn, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.location.project_name || "—"}</span>
+                            ) : m.location && m.location.state === "transit" ? (
+                              <span title={m.location.project_name || ""} style={{ fontSize: 11, fontWeight: 700, color: T.amb, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t("machinery.where_transit", { name: m.location.project_name || "—" })}</span>
+                            ) : (
+                              <span style={{ fontSize: 11.5, color: T.t4 }}>{t("machinery.where_free")}</span>
+                            )}
                           </span>
                           <span><Pill label={m.owned ? t("machinery.owned") : t("machinery.rented")} c={m.owned ? T.ind : T.t3} bg={m.owned ? T.indL : T.sltL} /></span>
                           <span>{m.owned ? <MeterCell meter={m.meter} unit={m.meter_unit} /> : <span style={{ fontSize: 11.5, color: T.t4 }}>{t("machinery.vendor_scope")}</span>}</span>
