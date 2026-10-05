@@ -1433,6 +1433,7 @@ function PartyMasterSection() {
               <FormField label={t("master_library.wallet_limit_2")} value={form.wallet_limit} onChange={v => upd("wallet_limit", v)} placeholder="e.g. 5000" half />
               <FormField label={t("master_library.negative_limit_allowed")} value={form.negative_limit} onChange={v => upd("negative_limit", v)} placeholder="e.g. 2000" half />
             </div>
+            <div style={{ fontSize: 11.5, color: T.textLight, margin: "-6px 0 14px" }}>{t("master_library.wallet_limits_hint")}</div>
             <FormField label={t("crm.address")} value={form.address || ""} onChange={v => upd("address", v)} placeholder={t("master_library.full_address")} />
             <div style={{ height: 14 }} />
             <FormField label={t("common.city")} value={form.city} onChange={v => upd("city", v)} />
