@@ -5505,6 +5505,7 @@ const dict = {
   "mom.stop_transcribe":                                       "Stop & transcribe",
   "mom.task":                                                  "Task",
   "mom.task_update":                                           "Task update",
+  "mom.team_list_nahi_aayi":                                   "Team ki list nahi aayi",
   "mom.time":                                                  "Time",
   "mom.todo":                                                  "Todo",
   "mom.total_moms":                                            "Total MOMs",
