@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import api from "../config/api";
 import apiCache from "../utils/apiCache";
 import DangerDelete from "./shared/DangerDelete";
+import { can, canAny } from "../utils/perms";
 import { Credit } from "../components/Credit";
 import useDebounce from "../utils/useDebounce";
 import SearchSelect from "../components/SearchSelect";
@@ -869,6 +870,10 @@ const mapProject=(p)=>({
   tender_label:[p.tender_no,p.tender_title].filter(Boolean).join(" · "),
   status:STATUS_MAP[p.status]||p.status||"Not Started",
   boq:parseFloat(p.boq_value)||0,
+  // Server ne null bheja = is user ko ye number dikhana mana hai (Budget VIEW /
+  // Financial Reports VIEW nahi — 5 Oct 2026). Card par "—".
+  boqHidden:p.boq_value===null,
+  expenseHidden:(p.spent ?? p.total_expense)===null,
   // spent = server ki live laagat (projectPnl) — Finance P&L wala hi aankda.
   // total_expense ka purana counter bigda hua tha (PRJ-14); purane jawab me
   // spent na ho tabhi wo.
@@ -1519,7 +1524,7 @@ function MRFlowCard({mr, stage, onApprove, onReject, acting, rejectId, setReject
             </div>
           }
         </>)}
-        {stage==="Approved"&&(
+        {stage==="Approved"&&!!onMarkOrdered&&(
           showManual ? (
             <div style={{background:T.surface,border:`1px solid ${T.b1}`,borderRadius:7,padding:"9px 11px"}}>
               <div style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".4px",marginBottom:6}}>{t("procurement.manual_order")}</div>
@@ -1775,7 +1780,7 @@ function WHMRCard({mr, acting, onApprove, onReject, rejectId, setRejectId, rejec
         <Credit label={t("common.requested_by")} name={mr.requested_by_name||"Site Team"} time={mr.date||mr.created_at}/>
         <PhotoStrip photos={mr.photo_urls} accent={sc.c}/>
       </div>
-      {(mr.status==="Pending"||!mr.status)&&(
+      {(mr.status==="Pending"||!mr.status)&&!!onApprove&&(
         <div style={{padding:"8px 13px 11px",borderTop:"1px solid "+T.b1,background:T.bg}}>
           {isRej
             ?<div style={{display:"flex",flexDirection:"column",gap:5}}>
@@ -2207,7 +2212,10 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
   // back to the admin gate (that would wrongly grant buttons on a PM-turn item
   // if the workflow fetch was stale/failed). The admin fallback applies ONLY
   // to items the engine doesn't track AND when no workflow is enabled.
-  const canActOnMr=(id)=>mrKnown.has(String(id))?mrAct.has(String(id)):(!mrWfOn&&isAdminUser);
+  // Roles & Access (5 Oct 2026): MR approve = Procurement → APPROVE tick (server
+  // PATCH /procurement/mrs/:id/approve) — chain ki baari ke saath dono chahiye.
+  const canProcApprove=can("Procurement","approve");
+  const canActOnMr=(id)=>canProcApprove&&(mrKnown.has(String(id))?mrAct.has(String(id)):(!mrWfOn&&isAdminUser));
   const canActOnPo=(id)=>poKnown.has(String(id))?poAct.has(String(id)):(!poWfOn&&isAdminUser);
   // Waiting-on label (for read-only cards in the All view).
   // Poora item rakhte hain, sirf _waitingOn string nahi — card ko naam
@@ -3137,7 +3145,8 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
                   waitingNote={!canActOnMr(mr.id)?escalationNote(mrWaitMap.get(String(mr.id))):null}
                   onApprove={canActOnMr(mr.id)?approveMR:null} onReject={canActOnMr(mr.id)?rejectMR:null} acting={acting} rejectId={rejectId} setRejectId={setRejectId}
                   rejectNote={rejectNote} setRejectNote={setRejectNote}
-                  onMarkOrdered={async(id, vendor, expected_delivery, receiving_contacts=[], order_type="Manual")=>{
+                  // Mark ordered = Procurement → EDIT (server PATCH /mrs/:id/mark-ordered)
+                  onMarkOrdered={!can("Procurement","edit")?null:async(id, vendor, expected_delivery, receiving_contacts=[], order_type="Manual")=>{
                     setActing(p=>({...p,[id]:"ordering"}));
                     try{
                       const res=await api.patch("/procurement/mrs/"+id+"/mark-ordered",{
@@ -3251,7 +3260,8 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
                 :whPendingMRs.map(mr=>(
                     <WHMRCard key={mr.id} mr={mr} acting={acting}
                       rejectId={rejectId} setRejectId={setRejectId} rejectNote={rejectNote} setRejectNote={setRejectNote}
-                      onApprove={async(id)=>{
+                      // Store MR approve/reject = Warehouse → APPROVE (transition: Edit bhi) — server PATCH /warehouse/mr/:id
+                      onApprove={!(canAny("Warehouse","approve")||can("Warehouse","edit"))?null:async(id)=>{
                         setActing(p=>({...p,["whmr"+id]:"approving"}));
                         const res=await api.patch("/warehouse/mr/"+id,{status:"Approved"}).catch(()=>({success:false}));
                         if(res.success!==false) setData(p=>({...p,whmrs:p.whmrs.map(m=>m.id===id?{...m,status:"Approved"}:m)}));
@@ -3312,7 +3322,11 @@ function ProjectsPage({onSelectProject}){
   const currentUser = (() => { try { return JSON.parse(localStorage.getItem("gb_user")) || {}; } catch { return {}; } })();
   // admin / super_admin see ALL projects; everyone else sees only their assigned projects
   const isAdmin = ["admin","super_admin"].includes(currentUser.role);
-  const canCreateProject = ["admin","super_admin","project_manager"].includes(currentUser.role);
+  // Roles & Access (5 Oct 2026): naya project / duplicate = Projects → CREATE tick
+  // (role ki shart hati — server bhi sirf tick maangta hai); list CSV = Projects → EXPORT.
+  const canCreateProject = can("Projects","create");
+  const canExportProjects = can("Projects","export");
+  const money = (hidden, v) => hidden ? "—" : "₹"+fmt(v);
   const allowedProjectIds = isAdmin ? null : (currentUser.projects || []);
 
   // Inject keyframes once
@@ -3687,11 +3701,11 @@ function ProjectsPage({onSelectProject}){
         </div>
 
         {/* Export CSV */}
-        <button onClick={exportCSV} style={{height:32,padding:"0 12px",borderRadius:6,border:`1.5px solid ${T.b1}`,background:T.surfaceB,fontSize:12,fontWeight:600,color:T.t2,cursor:"pointer",display:"flex",alignItems:"center",gap:5,whiteSpace:"nowrap",flexShrink:0}}
+        {canExportProjects&&<button onClick={exportCSV} style={{height:32,padding:"0 12px",borderRadius:6,border:`1.5px solid ${T.b1}`,background:T.surfaceB,fontSize:12,fontWeight:600,color:T.t2,cursor:"pointer",display:"flex",alignItems:"center",gap:5,whiteSpace:"nowrap",flexShrink:0}}
           onMouseEnter={e=>{e.currentTarget.style.borderColor=T.grn;e.currentTarget.style.color=T.grn;e.currentTarget.style.background=T.grnL;}}
           onMouseLeave={e=>{e.currentTarget.style.borderColor=T.b1;e.currentTarget.style.color=T.t2;e.currentTarget.style.background=T.surfaceB;}}>
           <IcDown size={12} color="currentColor"/> {t("projects.export_csv")}
-        </button>
+        </button>}
 
         {/* New Project */}
         {canCreateProject&&<button onClick={()=>setShowNew(true)} style={{height:32,padding:"0 14px",borderRadius:6,background:`linear-gradient(135deg,${T.blu},#1D4ED8)`,color:"white",fontSize:12.5,fontWeight:700,border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:5,boxShadow:`0 3px 8px ${T.blu}44`,whiteSpace:"nowrap",flexShrink:0}}
@@ -3725,7 +3739,7 @@ function ProjectsPage({onSelectProject}){
               <div style={{fontSize:12.5,fontWeight:700,color:T.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={label}>{label}</div>
             </div>
             {[["Sites",`${filtered.length}${done?` · ${done} poori`:""}`],
-              [wsum>0?"Progress (BOQ-wise)":"Progress",avg+"%"],["BOQ","₹"+fmt(boq)],["Kharcha","₹"+fmt(spent)]].map(([l,v])=>(
+              [wsum>0?"Progress (BOQ-wise)":"Progress",avg+"%"],["BOQ",money(filtered.some(p=>p.boqHidden),boq)],["Kharcha",money(filtered.some(p=>p.expenseHidden),spent)]].map(([l,v])=>(
               <div key={l} style={{textAlign:"right",flexShrink:0}}>
                 <div style={{fontSize:9,color:T.t4,textTransform:"uppercase",letterSpacing:".4px"}}>{l}</div>
                 <div style={{fontSize:12.5,fontWeight:700,color:T.t1,fontVariantNumeric:"tabular-nums"}}>{v}</div>
@@ -3800,7 +3814,7 @@ function ProjectsPage({onSelectProject}){
                             onMouseEnter={e=>e.currentTarget.style.background=T.bluL} onMouseLeave={e=>e.currentTarget.style.background="none"}>
                             <IcArrow size={13} color={T.blu}/> {t("projects.open_project")}
                           </button>
-                          {isAdmin&&<button onClick={()=>{setCardMenu(null);setDupOf(p);}}
+                          {canCreateProject&&<button onClick={()=>{setCardMenu(null);setDupOf(p);}}
                             style={{width:"100%",padding:"8px 12px",border:"none",background:"none",textAlign:"left",fontSize:12,color:T.t1,cursor:"pointer",display:"flex",alignItems:"center",gap:8,borderBottom:"1px solid "+T.b1}}
                             onMouseEnter={e=>e.currentTarget.style.background=T.ambL} onMouseLeave={e=>e.currentTarget.style.background="none"}>
                             <IcCopy size={13} color={T.amb}/> {t("projects.copy_project")}
@@ -3831,7 +3845,7 @@ function ProjectsPage({onSelectProject}){
 
                   {/* Finance */}
                   <div style={{display:"flex",gap:0,marginTop:7,paddingTop:7,borderTop:`1px solid ${T.b1}`,alignItems:"center"}}>
-                    {[["BOQ",`₹${fmt(p.boq)}`,T.t1],["Spent",`₹${fmt(p.expense)}`,T.amb],["Margin",`${margin>0?"+":""}₹${fmt(Math.abs(margin))}`,margin>0?T.grn:T.red]].map(([lbl,val,vc],i)=>(
+                    {[["BOQ",money(p.boqHidden,p.boq),T.t1],["Spent",money(p.expenseHidden,p.expense),T.amb],["Margin",(p.boqHidden||p.expenseHidden)?"—":`${margin>0?"+":""}₹${fmt(Math.abs(margin))}`,margin>0?T.grn:T.red]].map(([lbl,val,vc],i)=>(
                       <div key={lbl} style={{flex:1,paddingRight:6,borderRight:i<2?`1px solid ${T.b1}`:"none",paddingLeft:i>0?8:0}}>
                         <div style={{fontSize:8.5,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",marginBottom:1}}>{lbl}</div>
                         <div style={{fontSize:11,fontWeight:700,color:vc,fontVariantNumeric:"tabular-nums"}}>{val}</div>
@@ -3887,12 +3901,12 @@ function ProjectsPage({onSelectProject}){
                   </div>
                   <div style={{height:4,background:T.b1,borderRadius:4,overflow:"hidden"}}><div style={{height:"100%",width:`${p.progress}%`,background:progClr(p.progress),borderRadius:4}}/></div>
                 </div>
-                <span style={{fontSize:12,fontWeight:600,color:T.t1,fontVariantNumeric:"tabular-nums"}}>₹{fmt(p.boq)}</span>
-                <span style={{fontSize:12,fontWeight:600,color:T.amb,fontVariantNumeric:"tabular-nums"}}>₹{fmt(p.expense)}</span>
-                <span style={{fontSize:12,fontWeight:700,color:margin>0?T.grn:T.red,fontVariantNumeric:"tabular-nums"}}>{margin>0?"+":""}₹{fmt(Math.abs(margin))}</span>
+                <span style={{fontSize:12,fontWeight:600,color:T.t1,fontVariantNumeric:"tabular-nums"}}>{money(p.boqHidden,p.boq)}</span>
+                <span style={{fontSize:12,fontWeight:600,color:T.amb,fontVariantNumeric:"tabular-nums"}}>{money(p.expenseHidden,p.expense)}</span>
+                <span style={{fontSize:12,fontWeight:700,color:margin>0?T.grn:T.red,fontVariantNumeric:"tabular-nums"}}>{(p.boqHidden||p.expenseHidden)?"—":`${margin>0?"+":""}₹${fmt(Math.abs(margin))}`}</span>
                 <div style={{display:"flex",alignItems:"center",justifyContent:"flex-end",gap:5}}>
                   <span style={{fontSize:10.5,color:T.t4}}>{p.end}</span>
-                  {isAdmin&&<button onClick={e=>{e.stopPropagation();setDupOf(p);}} style={{background:"none",border:`1px solid ${T.b1}`,borderRadius:5,padding:"2px 6px",cursor:"pointer",display:"flex",alignItems:"center",gap:3,fontSize:9.5,color:T.t3,transition:"all .12s"}} onMouseEnter={e=>{e.currentTarget.style.background=T.ambL;e.currentTarget.style.color=T.amb;e.currentTarget.style.borderColor=T.ambM;}} onMouseLeave={e=>{e.currentTarget.style.background="none";e.currentTarget.style.color=T.t3;e.currentTarget.style.borderColor=T.b1;}}><IcCopy size={10} color="currentColor"/> {t("mom.copy")}</button>}
+                  {canCreateProject&&<button onClick={e=>{e.stopPropagation();setDupOf(p);}} style={{background:"none",border:`1px solid ${T.b1}`,borderRadius:5,padding:"2px 6px",cursor:"pointer",display:"flex",alignItems:"center",gap:3,fontSize:9.5,color:T.t3,transition:"all .12s"}} onMouseEnter={e=>{e.currentTarget.style.background=T.ambL;e.currentTarget.style.color=T.amb;e.currentTarget.style.borderColor=T.ambM;}} onMouseLeave={e=>{e.currentTarget.style.background="none";e.currentTarget.style.color=T.t3;e.currentTarget.style.borderColor=T.b1;}}><IcCopy size={10} color="currentColor"/> {t("mom.copy")}</button>}
                 </div>
               </div>
             );

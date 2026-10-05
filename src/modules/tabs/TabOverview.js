@@ -3,7 +3,7 @@ import api from "../../config/api";
 import { T, fmt, STAGES, STAGE_S } from "../shared/tokens";
 import { Pill, PBar, Stat, Panel, PHead } from "../shared/ui";
 import { t } from "../../i18n";
-import { canSeeFinancials } from "../../utils/perms";
+import { canSeeFinancials, can, canAny, canEntry } from "../../utils/perms";
 import { todayISO } from "../../utils/today";
 import { cld } from "../../utils/cloudinary";
 
@@ -102,6 +102,19 @@ function CashBars({data, height=160}){
 }
 
 function TabOverview({proj, onRequestPayment}) {
+  // ── Roles & Access (5 Oct 2026): Overview ka darwaza Overview row se, par har
+  // hissa apne module ki VIEW se — jiska adhikar nahi wo hissa dikhta hi nahi,
+  // aur uski API bhi nahi maangi jaati (server bhi ab Overview ke naam par
+  // finance / MR / alignment nahi kholta).
+  const canTasks = can("Tasks", "view");
+  const canTeam  = can("Attendance", "view");
+  const canMat   = canAny(["Material", "Procurement", "Warehouse"], "view");
+  const canFin   = canAny(["Transaction", "Finance"], "view");
+  const canPnl   = canSeeFinancials();
+  const canPipe  = canAny(["Tenders", "Mapping"], "view");
+  const canPhotos = can("Files", "view");
+  const showFinance = canFin || canPnl;
+  const canReqPay = !!onRequestPayment && canEntry("Finance");
   const [view, setView]   = useState("operations"); // operations | finance
   const [txns, setTxns]   = useState([]);
   const [tasks, setTasks] = useState([]);
@@ -114,9 +127,11 @@ function TabOverview({proj, onRequestPayment}) {
   const [media, setMedia] = useState(null);      // null = loading
   const [mBucket, setMBucket] = useState("week");  // MEDIA_BUCKETS ki id
   const [mView, setMView] = useState(-1);        // index into the visible list
-  // Hatane ka haq server tay karta hai (admin/PM, ya apni daali hui cheez).
+  // Hatane ka haq server tay karta hai: can_remove = Files → Delete (kisi ki
+  // bhi), aur har photo ka apna can_remove = apni aaj ki daali (Files Entry).
   // Client sirf button chhupata hai — asli rok backend par hai.
   const [mCan, setMCan] = useState(false);
+  const canRemove = (m) => mCan || !!m?.can_remove;
   const [pnl, setPnl]     = useState(null); // accrual P&L for this project (shared /finance/project-pnl formula)
   const [pipe, setPipe]   = useState(null); // tender site: is site ki pipeline ka MB-progress
   const [loading, setLoading] = useState(true);
@@ -126,27 +141,29 @@ function TabOverview({proj, onRequestPayment}) {
   // effect chup-chaap kuch nahi karta.
   useEffect(()=>{
     let dead = false;
-    if (!proj?.tender_id || !proj?.id) { setPipe(null); return; }
+    if (!proj?.tender_id || !proj?.id || !canPipe) { setPipe(null); return; }
     api.get(`/tenders/${proj.tender_id}/alignments-progress`).then(r=>{
       if (dead || !r?.success) return;
       const s = r.data?.by_site?.[proj.id];
       if (s && s.length_m > 0) setPipe(s);
     }).catch(()=>{});
     return ()=>{ dead = true; };
-  }, [proj?.tender_id, proj?.id]);
+  }, [proj?.tender_id, proj?.id, canPipe]);
 
   useEffect(()=>{
     const pid = proj?.id;
     if(!pid){ setLoading(false); return; }
     let alive=true;
+    // Jo hissa dikhna hi nahi, uski API bhi nahi (server 403 deta).
+    const skip = Promise.resolve(null);
     Promise.all([
-      api.get(`/finance/transactions?project_id=${pid}&limit=2000`).catch(()=>null),
-      api.get(`/tasks?project_id=${pid}`).catch(()=>null),
-      api.get(`/procurement/mrs?project_id=${pid}`).catch(()=>null),
-      api.get(`/projects/${pid}/workforce`).catch(()=>null),
-      api.get(`/finance/payment-requests?project_id=${pid}`).catch(()=>null),
+      canFin ? api.get(`/finance/transactions?project_id=${pid}&limit=2000`).catch(()=>null) : skip,
+      canTasks ? api.get(`/tasks?project_id=${pid}`).catch(()=>null) : skip,
+      canMat ? api.get(`/procurement/mrs?project_id=${pid}`).catch(()=>null) : skip,
+      canTeam ? api.get(`/projects/${pid}/workforce`).catch(()=>null) : skip,
+      canFin ? api.get(`/finance/payment-requests?project_id=${pid}`).catch(()=>null) : skip,
       // "Financial Reports" ke bina ye 403 dega — maangte hi nahi.
-      canSeeFinancials() ? api.get(`/finance/project-pnl?project_id=${pid}`).catch(()=>null) : Promise.resolve(null),
+      canPnl ? api.get(`/finance/project-pnl?project_id=${pid}`).catch(()=>null) : skip,
     ]).then(([t,tk,m,wf,pr,pl])=>{
       if(!alive) return;
       if(t?.success)  setTxns(t.data||[]);
@@ -161,10 +178,11 @@ function TabOverview({proj, onRequestPayment}) {
     }).finally(()=>{ if(alive) setLoading(false); });
     // Separate from the Promise.all above so a slow media list never holds up
     // the KPI row.
-    api.get(`/projects/${pid}/media?type=all`)
+    if (canPhotos) api.get(`/projects/${pid}/media?type=all`)
       .then(r=>{ if(alive){ setMedia(r?.success && Array.isArray(r.data) ? r.data : []); setMCan(!!r?.can_remove); } })
       .catch(()=>{ if(alive) setMedia([]); });
     return ()=>{ alive=false; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   },[proj?.id]);
 
   /* ── Site media helpers ── */
@@ -262,6 +280,9 @@ function TabOverview({proj, onRequestPayment}) {
   // nahi — sirf tab txn ka jod.
   const spentAmt = pnl ? num(pnl.cost) : (proj?.expense != null ? num(proj.expense) : fin.spent);
   const margin = num(proj?.boq) - spentAmt;
+  // Server ne BOQ (Budget VIEW nahi) ya laagat (Financial Reports VIEW nahi) null bheji — "—".
+  const boqHidden = !!proj?._raw && proj._raw.boq_value === null;
+  const spentHidden = !pnl && !!proj?._raw && proj._raw.spent === null;
   const signed = (n)=>`${n<0?"−":""}₹${fmt(Math.abs(n))}`; // clean ±₹ display
   // Asli end_date ("YYYY-MM-DD") se — pehle card ka "May 2027" (proj.end) padha
   // jaata tha, jo Chrome me 1 May ban jaata (KEWAL SAHU 254 ki jagah 230 din,
@@ -281,7 +302,7 @@ function TabOverview({proj, onRequestPayment}) {
   /* ── Toggle switch ── */
   const Switch=(
     <div style={{display:"inline-flex", background:T.surface, border:`1px solid ${T.b1}`, borderRadius:10, padding:3}}>
-      {[{v:"operations",l:t("app.operations_team"),c:T.pur},{v:"finance",l:t("common.finance"),c:T.blu}].map(t=>(
+      {[{v:"operations",l:t("app.operations_team"),c:T.pur},...(showFinance?[{v:"finance",l:t("common.finance"),c:T.blu}]:[])].map(t=>(
         <button key={t.v} onClick={()=>setView(t.v)}
           style={{padding:"8px 18px", border:"none", background:view===t.v?t.c:"transparent", color:view===t.v?"#fff":T.t3, borderRadius:8, fontSize:12.5, fontWeight:700, cursor:"pointer", transition:"all .15s", fontFamily:"inherit"}}>
           {t.l}
@@ -296,7 +317,7 @@ function TabOverview({proj, onRequestPayment}) {
       {/* ── Header: toggle + request payment ── */}
       <div style={{display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, flexWrap:"wrap"}}>
         {Switch}
-        {onRequestPayment && (
+        {canReqPay && (
           <button onClick={onRequestPayment}
             style={{padding:"8px 16px", borderRadius:8, border:"none", background:T.blu, color:"#fff", fontSize:12.5, fontWeight:700, cursor:"pointer", display:"inline-flex", alignItems:"center", gap:7, fontFamily:"inherit", boxShadow:`0 2px 8px ${T.blu}40`}}>
             <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
@@ -308,21 +329,21 @@ function TabOverview({proj, onRequestPayment}) {
       {/* ══════════════════ OPERATIONS & TEAM ══════════════════ */}
       {view==="operations" && (<>
         {/* KPI row */}
-        <div style={{display:"grid", gridTemplateColumns:`repeat(${pipe?7:6},1fr)`, gap:10}}>
+        <div style={{display:"grid", gridTemplateColumns:`repeat(${2 + (pipe?1:0) + (canTasks?2:0) + (canTeam?1:0) + (canMat?1:0)},1fr)`, gap:10}}>
           <Stat label={t("common.progress")}      value={`${proj?.progress||0}%`}   note="Physical completion" color={T.blu}/>
           {/* Tender site: MB wala sach alag tile me — bill isi se banta hai */}
           {pipe && <Stat label={t("overview.pipeline_mb_se")} value={`${pipe.pct||0}%`}
             note={`${pipe.done_m>=1000?(pipe.done_m/1000).toFixed(2)+" km":Math.round(pipe.done_m)+" m"} / ${pipe.length_m>=1000?(pipe.length_m/1000).toFixed(2)+" km":Math.round(pipe.length_m)+" m"}`}
             color={T.ind}/>}
           <Stat label={t("overview.days_left")}     value={daysLeft}                  note={daysNote}            color={T.pur}/>
-          <Stat label={t("overview.open_tasks")}    value={String(ops.open.length)}   note={t("overview.n_in_progress", { n: ops.ongoing.length })} color={T.amb}/>
-          <Stat label={t("overview.team_on_site")}  value={String(team.length)}       note="Workforce assigned"  color={T.grn}/>
-          <Stat label={t("overview.material_due")}  value={String(ops.matPending)}    note="Requests in pipeline" color={T.slt}/>
-          <Stat label={t("common.overdue")}       value={String(ops.overdue.length)} note="Tasks need action"  color={ops.overdue.length?T.red:T.grn}/>
+          {canTasks && <Stat label={t("overview.open_tasks")}    value={String(ops.open.length)}   note={t("overview.n_in_progress", { n: ops.ongoing.length })} color={T.amb}/>}
+          {canTeam && <Stat label={t("overview.team_on_site")}  value={String(team.length)}       note="Workforce assigned"  color={T.grn}/>}
+          {canMat && <Stat label={t("overview.material_due")}  value={String(ops.matPending)}    note="Requests in pipeline" color={T.slt}/>}
+          {canTasks && <Stat label={t("common.overdue")}       value={String(ops.overdue.length)} note="Tasks need action"  color={ops.overdue.length?T.red:T.grn}/>}
         </div>
 
-        {/* Progress + Ongoing tasks */}
-        <div style={{display:"grid", gridTemplateColumns:"1fr 1.4fr", gap:14}}>
+        {/* Progress + Ongoing tasks — Tasks VIEW */}
+        {canTasks && <div style={{display:"grid", gridTemplateColumns:"1fr 1.4fr", gap:14}}>
           {/* Progress donut */}
           <Panel>
             <PHead title={t("app.project_progress")}/>
@@ -374,12 +395,12 @@ function TabOverview({proj, onRequestPayment}) {
               }
             </div>
           </Panel>
-        </div>
+        </div>}
 
-        {/* Material + Team */}
-        <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:14}}>
+        {/* Material (Material/Procurement/Warehouse VIEW) + Team (Attendance VIEW) */}
+        {(canMat || canTeam) && <div style={{display:"grid", gridTemplateColumns:(canMat && canTeam)?"1fr 1fr":"1fr", gap:14}}>
           {/* Material pipeline */}
-          <Panel>
+          {canMat && <Panel>
             <PHead title={t("mrdetail.material_status")} action={
               ops.matPending>0 ? <Pill label={`${ops.matPending} in pipeline`} c={T.amb} bg={T.ambL}/> : <Pill label={t("overview.all_clear")} c={T.grn} bg={T.grnL}/>
             }/>
@@ -409,10 +430,10 @@ function TabOverview({proj, onRequestPayment}) {
                 )
               }
             </div>
-          </Panel>
+          </Panel>}
 
           {/* Team / workforce */}
-          <Panel>
+          {canTeam && <Panel>
             <PHead title={t("overview.team_on_site")} action={<Pill label={`${team.length} assigned`} c={T.pur} bg={T.purL}/>}/>
             <div style={{padding:"6px 0 4px", maxHeight:240, overflowY:"auto"}}>
               {team.length===0
@@ -433,11 +454,11 @@ function TabOverview({proj, onRequestPayment}) {
                   })
               }
             </div>
-          </Panel>
-        </div>
+          </Panel>}
+        </div>}
 
-        {/* ── SITE PHOTOS & VIDEOS (full width, bottom) ── */}
-        <Panel>
+        {/* ── SITE PHOTOS & VIDEOS (full width, bottom) — Files VIEW ── */}
+        {canPhotos && <Panel>
           <PHead title={t("overview.site_photos_videos")} action={
             <div style={{display:"flex", gap:6}}>
               {MEDIA_BUCKETS.map(b=>(
@@ -471,7 +492,7 @@ function TabOverview({proj, onRequestPayment}) {
                         background:"linear-gradient(transparent, rgba(0,0,0,.75))", color:"white", fontSize:9.5,
                         whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"}}>{m.task_name}</div>
                     )}
-                    {mCan && (
+                    {canRemove(m) && (
                       <button onClick={(e)=>{e.stopPropagation(); archiveMedia(m.ref||m.id);}} title={t("overview.hatao_archive")}
                         style={{position:"absolute", top:5, right:5, width:21, height:21, borderRadius:"50%",
                           border:"none", background:"rgba(15,23,42,.62)", color:"white", fontSize:11, fontWeight:700,
@@ -482,25 +503,26 @@ function TabOverview({proj, onRequestPayment}) {
               </div>
             )}
           </div>
-        </Panel>
+        </Panel>}
 
         {mView>=0 && mediaShown[mView] && (
           <MediaLightbox items={mediaShown} index={mView} onIndex={setMView} onClose={()=>setMView(-1)} isVid={isVid}
-            onRemove={mCan ? archiveMedia : null}/>
+            onRemove={canRemove(mediaShown[mView]) ? archiveMedia : null}/>
         )}
       </>)}
 
       {/* ══════════════════ FINANCE ══════════════════ */}
-      {view==="finance" && (<>
-        {/* KPI row */}
-        <div style={{display:"grid", gridTemplateColumns:"repeat(6,1fr)", gap:10}}>
-          <Stat label={t("app.boq_value")}   value={`₹${fmt(num(proj?.boq))}`}        note="Total contract"      color={T.slt}/>
+      {view==="finance" && showFinance && (<>
+        {/* KPI row — Fin Activity / Finance VIEW. BOQ = Budget VIEW, laagat = Financial
+            Reports VIEW (server null bhejta hai to "—"). */}
+        {canFin && <div style={{display:"grid", gridTemplateColumns:"repeat(6,1fr)", gap:10}}>
+          <Stat label={t("app.boq_value")}   value={boqHidden?"—":`₹${fmt(num(proj?.boq))}`}        note="Total contract"      color={T.slt}/>
           <Stat label={t("common.received")}    value={`₹${fmt(fin.received)}`}          note={num(proj?.boq)?`${Math.round(fin.received/num(proj.boq)*100)}% of BOQ`:"Money in"} color={T.grn}/>
-          <Stat label={t("app.spent")}       value={signed(spentAmt)} note={num(proj?.boq)?`${Math.round(spentAmt/num(proj.boq)*100)}% utilised`:"Money out"} color={T.amb}/>
-          <Stat label={t("common.margin")}      value={signed(margin)}                  note={num(proj?.boq)?`${Math.round(margin/num(proj.boq)*100)}% buffer`:""} color={margin>=0?T.grn:T.red}/>
-          <Stat label={t("overview.receivable")}  value={`₹${fmt(Math.max(0,num(proj?.boq)-fin.received))}`} note="Yet to collect" color={T.blu}/>
+          <Stat label={t("app.spent")}       value={spentHidden?"—":signed(spentAmt)} note={!spentHidden&&num(proj?.boq)?`${Math.round(spentAmt/num(proj.boq)*100)}% utilised`:"Money out"} color={T.amb}/>
+          <Stat label={t("common.margin")}      value={(boqHidden||spentHidden)?"—":signed(margin)}                  note={!(boqHidden||spentHidden)&&num(proj?.boq)?`${Math.round(margin/num(proj.boq)*100)}% buffer`:""} color={margin>=0?T.grn:T.red}/>
+          <Stat label={t("overview.receivable")}  value={boqHidden?"—":`₹${fmt(Math.max(0,num(proj?.boq)-fin.received))}`} note="Yet to collect" color={T.blu}/>
           <Stat label={t("payroll.payable")}     value={`₹${fmt(fin.payable)}`}           note={`${fin.pendingPay.length} request${fin.pendingPay.length===1?"":"s"}`} color={fin.payable?T.red:T.grn}/>
-        </div>
+        </div>}
 
         {/* Project P&L (invoice-basis) — actual profit/loss, distinct from BOQ "Margin" above.
             Numbers come from /finance/project-pnl (same shared formula as the Sahayak bot). */}
@@ -531,8 +553,8 @@ function TabOverview({proj, onRequestPayment}) {
           </Panel>
         )}
 
-        {/* Cashflow + Expense breakdown */}
-        <div style={{display:"grid", gridTemplateColumns:"1.7fr 1fr", gap:14}}>
+        {/* Cashflow + Expense breakdown — Fin Activity / Finance VIEW */}
+        {canFin && <div style={{display:"grid", gridTemplateColumns:"1.7fr 1fr", gap:14}}>
           <Panel>
             <PHead title={t("overview.cash_flow_monthly")} action={
               <div style={{display:"flex", gap:12}}>
@@ -544,8 +566,8 @@ function TabOverview({proj, onRequestPayment}) {
               <CashBars data={fin.bars}/>
               <div style={{display:"flex", justifyContent:"space-around", marginTop:10, paddingTop:10, borderTop:`1px solid ${T.b1}`}}>
                 <div style={{textAlign:"center"}}><div style={{fontSize:10, color:T.t4, textTransform:"uppercase", letterSpacing:".4px"}}>{t("common.received")}</div><div style={{fontSize:15, fontWeight:700, color:T.grn}}>₹{fmt(fin.received)}</div></div>
-                <div style={{textAlign:"center"}}><div style={{fontSize:10, color:T.t4, textTransform:"uppercase", letterSpacing:".4px"}}>{t("app.spent")}</div><div style={{fontSize:15, fontWeight:700, color:T.red}}>{signed(spentAmt)}</div></div>
-                <div style={{textAlign:"center"}}><div style={{fontSize:10, color:T.t4, textTransform:"uppercase", letterSpacing:".4px"}}>{t("common.net")}</div><div style={{fontSize:15, fontWeight:700, color:fin.received-spentAmt>=0?T.blu:T.red}}>{signed(fin.received-spentAmt)}</div></div>
+                <div style={{textAlign:"center"}}><div style={{fontSize:10, color:T.t4, textTransform:"uppercase", letterSpacing:".4px"}}>{t("app.spent")}</div><div style={{fontSize:15, fontWeight:700, color:T.red}}>{spentHidden?"—":signed(spentAmt)}</div></div>
+                <div style={{textAlign:"center"}}><div style={{fontSize:10, color:T.t4, textTransform:"uppercase", letterSpacing:".4px"}}>{t("common.net")}</div><div style={{fontSize:15, fontWeight:700, color:fin.received-spentAmt>=0?T.blu:T.red}}>{spentHidden?"—":signed(fin.received-spentAmt)}</div></div>
               </div>
             </div>
           </Panel>
@@ -569,10 +591,10 @@ function TabOverview({proj, onRequestPayment}) {
               </div>
             </div>
           </Panel>
-        </div>
+        </div>}
 
-        {/* Recent transactions + payment requests */}
-        <div style={{display:"grid", gridTemplateColumns:"1.3fr 1fr", gap:14}}>
+        {/* Recent transactions + payment requests — Fin Activity / Finance VIEW */}
+        {canFin && <div style={{display:"grid", gridTemplateColumns:"1.3fr 1fr", gap:14}}>
           <Panel>
             <PHead title={t("overview.recent_transactions")} action={<Pill label={`${txns.length} total`} c={T.slt} bg={T.sltL}/>}/>
             <div>
@@ -620,7 +642,7 @@ function TabOverview({proj, onRequestPayment}) {
               }
             </div>
           </Panel>
-        </div>
+        </div>}
       </>)}
 
     </div>

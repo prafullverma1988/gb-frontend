@@ -3,6 +3,7 @@ import api from "../../config/api";
 import { T } from "../shared/tokens";
 import { t } from "../../i18n";
 import { cld } from "../../utils/cloudinary";
+import { canEntry } from "../../utils/perms";
 
 /* ────────────────────────────────────────────────────────────────────
    FILES — construction site ka kaagaz-ghar
@@ -71,7 +72,10 @@ export default function TabProjectFiles({ projectId }) {
   const photos = hub?.photos || [];
   const issues = hub?.issue_photos || [];
   const cats = hub?.cats || [];
-  const canRemove = !!hub?.can_remove;
+  // Roles & Access (5 Oct 2026) — server tay karta hai: hub.can_remove = Files →
+  // Delete (kisi ki bhi file/photo), item.can_remove = apni aaj ki daali (Files Entry).
+  const canRemove = (item) => !!hub?.can_remove || !!item?.can_remove;
+  const canUpload = canEntry("Files");
 
   const shownDocs = useMemo(
     () => (sel === "docs" ? docs : docs.filter((d) => d.category === sel)),
@@ -115,7 +119,7 @@ export default function TabProjectFiles({ projectId }) {
             background: arch ? T.ambL : T.surface, color: arch ? T.amb : T.t3 }}>
           {arch ? t("project_files.chaalu_files") : t("project_files.archive")}
         </button>
-        {!arch && (
+        {!arch && canUpload && (
           <button onClick={() => setUp({ kind: "document", category: "other", title: "", file: null })}
             style={{ padding: "7px 14px", borderRadius: 7, border: "none", background: T.blu, color: "#fff",
               fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
@@ -164,7 +168,7 @@ export default function TabProjectFiles({ projectId }) {
 
       {view >= 0 && shownPhotos[view] && (
         <PhotoViewer items={shownPhotos} index={view} onIndex={setView} onClose={() => setView(-1)}
-          onRemove={arch || sel === "issues" || !canRemove ? null : remove} busy={busy} />
+          onRemove={arch || sel === "issues" || !canRemove(shownPhotos[view]) ? null : remove} busy={busy} />
       )}
 
       {up && (
@@ -234,11 +238,11 @@ function DocList({ items, arch, canRemove, busy, onRemove, onRestore }) {
             </span>
             <div style={{ display: "flex", gap: 4, justifyContent: "flex-end" }}>
               <a href={f.url} target="_blank" rel="noreferrer" style={miniBtn(T.blu, T.bluL, T.bluM)}>{t("machinery.kholo")}</a>
-              {arch ? (
+              {arch ? (canRemove(f) &&
                 <button onClick={() => onRestore(f.ref)} disabled={busy === f.ref} style={{ ...miniBtn(T.grn, T.grnL, T.grnM), cursor: "pointer" }}>
                   {busy === f.ref ? "…" : t("project_files.wapas")}
                 </button>
-              ) : canRemove ? (
+              ) : canRemove(f) ? (
                 <button onClick={() => onRemove(f.ref)} disabled={busy === f.ref} title={t("project_files.archive_me_daalo")}
                   style={{ ...miniBtn(T.red, T.redL, T.redM), cursor: "pointer" }}>
                   {busy === f.ref ? "…" : t("common.hatao")}
@@ -282,10 +286,10 @@ function PhotoGrid({ items, arch, canRemove, busy, onOpen, onRemove, onRestore, 
                 color: "#fff", padding: "1px 5px", borderRadius: 20, fontWeight: 700 }}>{m.status}</span>
             )}
           </div>
-          {!isIssue && (arch ? (
+          {!isIssue && (arch ? (canRemove(m) &&
             <button onClick={() => onRestore(m.ref)} disabled={busy === m.ref}
               style={{ position: "absolute", top: 5, right: 5, ...roundBtn("rgba(5,150,105,.92)") }}>↩</button>
-          ) : canRemove ? (
+          ) : canRemove(m) ? (
             <button onClick={() => onRemove(m.ref)} disabled={busy === m.ref} title={t("project_files.archive_me_daalo")}
               style={{ position: "absolute", top: 5, right: 5, ...roundBtn("rgba(15,23,42,.62)") }}>✕</button>
           ) : null)}

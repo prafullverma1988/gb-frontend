@@ -18,7 +18,7 @@ import { T, fmt, fmtN, localYMD, PROJ, STATUS_S, STAGES, STAGE_S } from "./share
 import { Pill, PBar, Stat, Panel, PHead, THead, AddBtn, SecBtn, FilterTabs, TabIc } from "./shared/ui";
 import { t } from "../i18n";
 import { BackClose } from "../utils/backNav";
-import { can } from "../utils/perms";
+import { can, canEntry, permRow } from "../utils/perms";
 
 // ── "Waiting on" label ─────────────────────────────────────────────────────
 // Backend /approvals/pending bhejta hai: _waitingOn (role label, escalation ke
@@ -660,7 +660,8 @@ function ProjectSettingsForm({ project, isAdmin, onClose }) {
       {/* Save covers every project-detail field, whichever tab it sits on.
           Geo-Location has its own save, so the button is hidden there. */}
       {msg && sec!=="geo" && <div style={{ fontSize:12, fontWeight:600, color:msg.startsWith("✓")?T.grn:T.red, marginBottom:8 }}>{msg}</div>}
-      {isAdmin && sec!=="geo" && (
+      {/* Server: PUT /projects/:id = role admin/PM + Projects → EDIT tick — button bhi dono par */}
+      {isAdmin && can("Projects", "edit") && sec!=="geo" && (
         <button onClick={saveDetails} disabled={saving}
           style={{ width:"100%", padding:"11px", borderRadius:8, background:saving?T.b2:T.blu, color:"white", border:"none", fontSize:13, fontWeight:700, cursor:saving?"not-allowed":"pointer", marginBottom:18 }}>
           {saving ? t("common.saving_2") : t("project_detail.save_project_details")}
@@ -746,10 +747,14 @@ function ProjectDetailPage({project=PROJ, onBack, onSwitchProject}) {
     // tenants ki saved permissions me in naye tabs ki row hai hi nahi — undefined
     // ko "mana" maan lete to ye tabs sabke liye achanak gayab ho jaate. Admin ke
     // ek save ke baad row ban jaati hai, tab se rok asar karti hai.
-    const row = _perms[mod];
-    if(row === undefined) return true;
+    // Naam ka milaan case-insensitive (server jaisa) — permRow.
+    const row = permRow(currentUser, mod);
+    if(row == null) return true;
     return !!row.view;
   };
+  // "Request Payment" = Finance → ENTRY (5 Oct 2026; transition: Entry YA Create) —
+  // server POST /finance/payment-requests bhi wahi maangta hai.
+  const canReqPay = canEntry("Finance");
   const activeTabs = _allTabs.filter(t => canSeeTab(t.id));
   // If current tab got hidden by permissions, fall back to the first visible tab.
   useEffect(() => {
@@ -846,7 +851,7 @@ function ProjectDetailPage({project=PROJ, onBack, onSwitchProject}) {
 
   const tabContent = {
     // ── Construction tabs (unchanged) ──
-    overview:    <TabOverview    proj={project} onRequestPayment={()=>setPaymentReq({})}/>,
+    overview:    <TabOverview    proj={project} onRequestPayment={canReqPay ? ()=>setPaymentReq({}) : undefined}/>,
     design:      <TabDesign project={project} isAdmin={isAdmin}/>,
     estimate:    <TabEstimate project={project}/>,
     budget:      <TabBudget project={project}/>,
@@ -854,7 +859,7 @@ function ProjectDetailPage({project=PROJ, onBack, onSwitchProject}) {
     transaction: <TabTransaction projectId={project.id} projectName={project.name}/>,
     todo:        <TabTodo projectId={project.id}/>,
     task:        <TabTasks projectId={project.id} isAdmin={isAdmin}/>,
-    attendance:  <TabAttendance project={project} onRequestPayment={(p)=>setPaymentReq(p||{})}/>,
+    attendance:  <TabAttendance project={project} onRequestPayment={canReqPay ? (p)=>setPaymentReq(p||{}) : undefined}/>,
     material:    <TabMaterial project={project}/>,
     subcon:      <TabSubcon projectId={project.id} project={project}/>,
     equipment:   <TabEquipment projectId={project.id}/>,
@@ -977,10 +982,10 @@ function ProjectDetailPage({project=PROJ, onBack, onSwitchProject}) {
                 </button>
               );
               return (<>
-                {/* Request Payment */}
-                <IconBtn title={t("project_detail.request_payment_for_subcon_labour_or")} onClick={()=>setPaymentReq({})}>
+                {/* Request Payment — Finance Entry */}
+                {canReqPay && <IconBtn title={t("project_detail.request_payment_for_subcon_labour_or")} onClick={()=>setPaymentReq({})}>
                   <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
-                </IconBtn>
+                </IconBtn>}
                 {/* Site Pulse */}
                 <IconBtn title={t("project_detail.site_pulse_live_activity_feed")} onClick={()=>setShowSitePulse(true)}>
                   <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>

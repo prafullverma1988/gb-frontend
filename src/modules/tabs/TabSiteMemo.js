@@ -4,6 +4,7 @@ import { T } from "../shared/tokens";
 import { Pill } from "../shared/ui";
 import { t } from "../../i18n";
 import { daysAgoISO } from "../../utils/today";
+import { can, canEntry, currentUser } from "../../utils/perms";
 
 // ── Site memo — ek module, do hisse (28 Sep 2026) ──────────────────
 // Memo: site ki poori kahani — har din ka note, kal ka plan, client/PMC ki
@@ -14,6 +15,20 @@ import { daysAgoISO } from "../../utils/today";
 //   Kisko dena hai, andar ke note, aur jisne kiya wo Work done. Roz ki To-do
 //   me nahi dikhta, koi timeline nahi.
 // Prafull: "web me ek hi module me de dena".
+
+// Roles & Access (5 Oct 2026) — server routes/site-notes.js ke hi niyam:
+// naya note / andar ka note = Site / DPR ENTRY (transition: Create bhi);
+// done / dobara kholna = Entry ya Edit; hatana = apna (Entry), Admin/PM, ya
+// Site / DPR → DELETE.
+const NOTE_MOD = "Site / DPR";
+const NOTE_BOSS = ["admin", "super_admin", "project_manager", "pm"];
+const canNoteEntry = () => canEntry(NOTE_MOD);
+const canNoteStatus = () => canEntry(NOTE_MOD) || can(NOTE_MOD, "edit");
+const canNoteDelete = (n) => {
+  const me = currentUser();
+  if (n?.created_by?.id != null && String(n.created_by.id) === String(me.id)) return canEntry(NOTE_MOD) || can(NOTE_MOD, "delete");
+  return (NOTE_BOSS.includes(me.role) && canEntry(NOTE_MOD)) || can(NOTE_MOD, "delete");
+};
 
 const REASON_KEYS = ["rain", "material", "machine", "labour", "power", "drawing", "permission", "client", "other"];
 const reasonLabel = (k) => (REASON_KEYS.includes(k) ? t("dpr.reason_" + k) : k);
@@ -210,9 +225,9 @@ function Notes({ projectId }) {
             <button onClick={() => setStatus("done")} style={seg(status === "done")}>{t("sitememo.ho_gaye")}</button>
           </div>
           <div style={{ fontSize: 11.5, color: T.t4, flex: 1 }}>{t("sitememo.notes_hint")}</div>
-          <button onClick={() => { setOpen(null); setForm({ title: "", detail: "", source: "internal", assignees: [] }); loadPeople(); }} style={btn()}>
+          {canNoteEntry() && <button onClick={() => { setOpen(null); setForm({ title: "", detail: "", source: "internal", assignees: [] }); loadPeople(); }} style={btn()}>
             {t("sitememo.naya_note")}
-          </button>
+          </button>}
         </div>
         {msg && <div style={{ ...card, background: T.bluL, borderColor: T.bluM, color: T.t2, fontSize: 12.5, padding: "8px 12px" }}>{msg}</div>}
         {err && <div style={{ ...card, background: T.redL, color: T.red, fontSize: 12.5 }}>{err}</div>}
@@ -297,11 +312,11 @@ function Notes({ projectId }) {
               <div style={{ fontSize: 10.5, color: T.t4 }}>{c.user_name || ""} · {whenTxt(c.created_at)}</div>
             </div>
           ))}
-          <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+          {canNoteEntry() && <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
             <input value={cmt} onChange={(e) => setCmt(e.target.value)} placeholder={t("sitememo.apna_note")} style={{ ...inp, flex: 1 }} />
             <button onClick={addComment} disabled={busy || !cmt.trim()} style={{ ...btn(), opacity: cmt.trim() ? 1 : .5 }}>{t("sitememo.add")}</button>
-          </div>
-          {open.status !== "done" ? (
+          </div>}
+          {!canNoteStatus() ? null : open.status !== "done" ? (
             <div style={{ display: "flex", gap: 6, marginTop: 14 }}>
               <input value={doneNote} onChange={(e) => setDoneNote(e.target.value)} placeholder={t("sitememo.done_note_hint")} style={{ ...inp, flex: 1 }} />
               <button onClick={() => markDone(true)} disabled={busy} style={btn("grn")}>{t("sitememo.work_done")}</button>
@@ -309,7 +324,7 @@ function Notes({ projectId }) {
           ) : (
             <button onClick={() => markDone(false)} disabled={busy} style={{ ...btn("ghost"), marginTop: 14 }}>{t("sitememo.dobara_kholo")}</button>
           )}
-          <button onClick={remove} disabled={busy} style={{ ...btn("red"), marginTop: 10 }}>{t("sitememo.hatao")}</button>
+          {canNoteDelete(open) && <button onClick={remove} disabled={busy} style={{ ...btn("red"), marginTop: 10 }}>{t("sitememo.hatao")}</button>}
         </div>
       )}
     </div>

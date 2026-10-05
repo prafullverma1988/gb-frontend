@@ -4,6 +4,12 @@ import SearchSelect from "../../components/SearchSelect";
 import { T } from "../shared/tokens";
 import { Pill, Panel, AddBtn } from "../shared/ui";
 import { t } from "../../i18n";
+import { canAny, currentUser } from "../../utils/perms";
+
+// Roles & Access (5 Oct 2026): todo = "To Do" row (transition me Tasks bhi —
+// server ["To Do","Tasks"] maanta hai). Jise todo diya hai wo apna todo
+// done / checklist tick bina Edit ke bhi kar sakta hai.
+const TODO_MODS = ["To Do", "Tasks"];
 
 function TabTodo({projectId}) {
   const CATS=["Civil","Electrical","Plumbing","Finishing","Documentation","Admin","Other"];
@@ -22,6 +28,11 @@ function TabTodo({projectId}) {
   const [newForm,setNewForm]=useState({text:"",priority:"Medium",assigneeId:"",due:"",cat:"Civil",checklist:[]});
   const [newCheckText,setNewCheckText]=useState("");
   const [pinging,setPinging]=useState(null); // todo id currently being pinged
+  const canAddTodo = canAny(TODO_MODS, "create");
+  const canEditTodo = canAny(TODO_MODS, "edit");
+  const canDelTodo = canAny(TODO_MODS, "delete");
+  const meId = currentUser().id;
+  const canTick = (todo) => canEditTodo || (todo?.assigneeId != null && String(todo.assigneeId) === String(meId));
 
   // Parse a todo row from API into local shape.
   // Handles BOTH `project_task` and `company_todo` source rows — backend
@@ -103,7 +114,7 @@ function TabTodo({projectId}) {
   // Toggle done/undone — source-aware.
   const toggle=async(id)=>{
     const todo=todos.find(t=>t.id===id);
-    if(!todo) return;
+    if(!todo || !canTick(todo)) return;
     const newStatus=todo.done?"todo":"done";
     setTodos(p=>p.map(t=>t.id===id?{...t,done:!t.done}:t));
     try{
@@ -126,7 +137,7 @@ function TabTodo({projectId}) {
   // One combined PUT keeps the checklist and status in lockstep server-side.
   const toggleCheck=async(todoId,ci)=>{
     const todo=todos.find(t=>t.id===todoId);
-    if(!todo) return;
+    if(!todo || !canTick(todo)) return;
     const updated=todo.checklist.map((c,i)=>({
       text:c.text||"",
       done: i===ci ? !c.done : !!c.done,
@@ -239,7 +250,7 @@ function TabTodo({projectId}) {
           <option value="All">{t("todo.all_priority")}</option>
           {PRIS.map(p=><option key={p}>{p}</option>)}
         </select>
-        <AddBtn label={t("todo.add_todo")} onClick={()=>setShowAdd(!showAdd)}/>
+        {canAddTodo && <AddBtn label={t("todo.add_todo")} onClick={()=>setShowAdd(!showAdd)}/>}
       </div>
 
       {/* Add form */}
@@ -378,12 +389,12 @@ function TabTodo({projectId}) {
                   )}
                 </div>
                 <div style={{display:"flex",gap:2,flexShrink:0,marginTop:1}}>
-                  <button onClick={()=>deleteTodo(todo.id)} title={t("common.delete")}
+                  {canDelTodo && <button onClick={()=>deleteTodo(todo.id)} title={t("common.delete")}
                     style={{background:"none",border:"none",cursor:"pointer",color:T.t4,padding:3,opacity:.5,transition:"opacity .15s"}}
                     onMouseEnter={e=>e.currentTarget.style.opacity=1}
                     onMouseLeave={e=>e.currentTarget.style.opacity=.5}>
                     <svg width={13} height={13} viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth={1.5}><path d="M3 4h8M5 4V3a1 1 0 011-1h2a1 1 0 011 1v1M6 7v3M8 7v3M4 4l.5 7a1 1 0 001 1h3a1 1 0 001-1L10 4"/></svg>
-                  </button>
+                  </button>}
                   <button onClick={()=>setExpandId(isExp?null:todo.id)}
                     style={{background:"none",border:"none",cursor:"pointer",color:T.t4,padding:3}}>
                     <svg width={14} height={14} viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth={1.5}>
@@ -412,12 +423,12 @@ function TabTodo({projectId}) {
                 <span style={{flex:1,fontSize:12.5,color:T.t3,textDecoration:"line-through"}}>{todo.text}</span>
                 <span style={{fontSize:10.5,color:T.t4}}>@{(todo.assignee||"").split(" ")[0]||"--"}</span>
                 {todo.checklist.length>0&&<span style={{fontSize:10,color:T.grn}}>✓ {todo.checklist.length}/{todo.checklist.length}</span>}
-                <button onClick={()=>deleteTodo(todo.id)} title={t("common.delete")}
+                {canDelTodo && <button onClick={()=>deleteTodo(todo.id)} title={t("common.delete")}
                   style={{background:"none",border:"none",cursor:"pointer",color:T.t4,padding:3,opacity:.4,flexShrink:0}}
                   onMouseEnter={e=>e.currentTarget.style.opacity=1}
                   onMouseLeave={e=>e.currentTarget.style.opacity=.4}>
                   <svg width={12} height={12} viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth={1.5}><path d="M3 4h8M5 4V3a1 1 0 011-1h2a1 1 0 011 1v1M6 7v3M8 7v3M4 4l.5 7a1 1 0 001 1h3a1 1 0 001-1L10 4"/></svg>
-                </button>
+                </button>}
               </div>
             ))}
           </Panel>

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from "react";
 import api from "../../config/api";
 import { T } from "../shared/tokens";
 import { t, Rich } from "../../i18n";
+import { can, canAny, canEntry, currentUser } from "../../utils/perms";
 
 // ── Budget tab — budget at chosen nodes, earned-value tracking ──
 // Budget lives on chosen "budget nodes" (usually parent/milestone tasks).
@@ -19,6 +20,19 @@ const inr = (n) => { const v = Math.round(Number(n) || 0); return (v < 0 ? "-₹
 const n2  = (n) => (Math.round((Number(n) || 0) * 100) / 100).toLocaleString("en-IN");
 const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
 const DEPTH_LABELS = ["Phase", "Package", "Activity", "Sub-task", "Detail", "Item"];
+// India ka din (server ka ownFreshEntry bhi isi se) — apni entry "aaj" ki hai ya nahi.
+const istDay = (v) => {
+  if (!v) return null;
+  const s = String(v);
+  const ms = new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(s) ? s : s.replace(" ", "T") + "Z").getTime();
+  return Number.isFinite(ms) ? new Date(ms + 5.5 * 3600 * 1000).toISOString().slice(0, 10) : null;
+};
+// Budget ka status (5 Oct 2026, Roles & Access) — server routes/budget.js.
+const BUDGET_LOCKED = ["submitted", "approved"];
+const STATUS_STYLE = {
+  draft: { c: T.slt, bg: T.sltL }, submitted: { c: T.amb, bg: T.ambL },
+  approved: { c: T.grn, bg: T.grnL }, rejected: { c: T.red, bg: T.redL },
+};
 
 export default function TabBudget({ project }) {
   const projectId = project?.id;
@@ -45,7 +59,22 @@ export default function TabBudget({ project }) {
   const [pDone, setPDone]   = useState("");
   const [pLines, setPLines] = useState([]);
   const [pSaving, setPSaving] = useState(false);
+  const [origLineCount, setOrigLineCount] = useState(0);   // drawer khulte waqt server par kitni lines thi
   const flash = (m, t = "ok") => { setToast({ m, t }); setTimeout(() => setToast(null), 2400); };
+  // ── Roles & Access (5 Oct 2026) — har button wahi tick jo server maangta hai ──
+  // Budget: Create = pehli baar banana, Edit = bana hua badalna (transition me
+  // Edit wala naya bhi bana sakta hai), Delete = "Budget hatao" (password +
+  // wajah), Approve = pass/reject (strict). Roz ki progress = Tasks Entry.
+  const [bStatus, setBStatus] = useState(null);     // { status, note, … } server se
+  const canCreateB  = can("Budget", "create");
+  const canEditB    = can("Budget", "edit");
+  const canDeleteB  = can("Budget", "delete");
+  const canApproveB = canAny("Budget", "approve", { strict: true });
+  const canProgress = canEntry("Tasks");
+  const canDelAnyProgress = can("Tasks", "delete");
+  const me = currentUser();
+  const status = bStatus?.status || "draft";
+  const locked = BUDGET_LOCKED.includes(status);
 
   // ── Library picker (per estimate category) ─────────────────────
   // Every category has a master list the company already maintains — the
@@ -131,7 +160,7 @@ export default function TabBudget({ project }) {
     if (!projectId) return;
     setLoading(true);
     const [pr, ur] = await Promise.all([api.get(`/budget/project/${projectId}`), api.get(`/budget/units`)]);
-    if (pr?.success) { setTasks(pr.data.tasks || []); setTotals(pr.data.totals || {}); }
+    if (pr?.success) { setTasks(pr.data.tasks || []); setTotals(pr.data.totals || {}); setBStatus(pr.data.budget || null); }
     if (ur?.success) setUnits(ur.data || []);
     setLoading(false);
   }, [projectId]);
@@ -213,6 +242,7 @@ export default function TabBudget({ project }) {
     if (!r?.success) return flash(r?.message || "Failed to open", "error");
     setHdr({ ...r.data.task });
     setLines((r.data.lines || []).map((l) => ({ ...l })));
+    setOrigLineCount((r.data.lines || []).length);
     setByCat(r.data.byCat || {});
     setActSrc(r.data.actual_sources ? { ...r.data.actual_sources, counts: r.data.actual_counts || {} } : null);
     setProgress(r.data.progress || []);
@@ -232,7 +262,11 @@ export default function TabBudget({ project }) {
   const addLine = () => setLines((p) => [...p, { category: cat, item_name: "", unit: hdr?.unit || "", qty_per_unit: 0, rate: 0 }]);
   const delLine = (idx) => setLines((p) => p.filter((_, i) => i !== idx));
 
+  // Is task ka budget pehle se hai? Tab badalna = Edit; nahi to banana = Create.
+  const taskHasBudget = selNode || origLineCount > 0;
+  const canWriteTask = !locked && (taskHasBudget ? canEditB : (canCreateB || canEditB));
   const saveAll = async () => {
+    if (!canWriteTask) return;
     setSaving(true);
     const h = await api.patch(`/budget/task/${sel}`, {
       unit: hdr.unit, scope_qty: hdr.scope_qty, billing_rate: hdr.billing_rate,
@@ -244,11 +278,52 @@ export default function TabBudget({ project }) {
     if (h?.success && ln?.success) { flash(t("budget.budget_saved")); setSel(null); load(); }
     else flash((h?.message || ln?.message) || "Save failed", "error");
   };
+  // "Budget hatao" — Budget Delete + company ka delete-password + wajah (server
+  // pehle ki lines audit me rakhta hai). whole = poore project ka.
+  const askReasonAndPassword = async (confirmMsg) => {
+    if (!(await window.confirmAsync(confirmMsg))) return null;
+    const reason = await window.promptAsync({ message: t("budget.hatane_ki_wajah"), multiline: true, okLabel: t("budget.aage") });
+    if (reason == null) return null;
+    if (String(reason).trim().length < 3) { flash(t("budget.wajah_kam_se_kam_3"), "error"); return null; }
+    const password = await window.promptAsync({ message: t("budget.delete_password_daalo"), password: true, okLabel: t("budget.remove_budget") });
+    if (!password) return null;
+    return { reason: String(reason).trim(), password };
+  };
   const removeNode = async () => {
-    if (!(await window.confirmAsync(t("budget.remove_budget_from_this_task_estimate")))) return;
-    await api.put(`/budget/task/${sel}/lines`, { lines: [] });
-    await api.patch(`/budget/task/${sel}`, { is_budget_node: 0 });
+    const ask = await askReasonAndPassword(t("budget.remove_budget_from_this_task_estimate"));
+    if (!ask) return;
+    const r = await api.del(`/budget/task/${sel}`, ask);
+    if (!r?.success) return flash(r?.message || t("budget.budget_hata_nahi"), "error");
     flash(t("budget.budget_removed")); setSel(null); load();
+  };
+  const removeAll = async () => {
+    const ask = await askReasonAndPassword(t("budget.poora_budget_hatao_confirm", { name: project?.name || "" }));
+    if (!ask) return;
+    const r = await api.del(`/budget/project/${projectId}`, ask);
+    if (!r?.success) return flash(r?.message || t("budget.budget_hata_nahi"), "error");
+    flash(t("budget.budget_removed")); load();
+  };
+  // Status ke kaam — submit (Create/Edit), approve/reject (Approve), reopen (Edit + wajah).
+  const statusAction = async (kind) => {
+    let body = {};
+    if (kind === "reject") {
+      const note = await window.promptAsync({ message: t("budget.reject_ki_wajah"), multiline: true, okLabel: t("budget.reject") });
+      if (note == null) return;
+      if (String(note).trim().length < 3) return flash(t("budget.wajah_kam_se_kam_3"), "error");
+      body = { note: String(note).trim() };
+    } else if (kind === "reopen") {
+      const reason = await window.promptAsync({ message: t("budget.reopen_ki_wajah"), multiline: true, okLabel: t("budget.reopen") });
+      if (reason == null) return;
+      if (String(reason).trim().length < 3) return flash(t("budget.wajah_kam_se_kam_3"), "error");
+      body = { reason: String(reason).trim() };
+    } else if (kind === "submit") {
+      if (!(await window.confirmAsync(t("budget.submit_confirm")))) return;
+    } else if (kind === "approve") {
+      if (!(await window.confirmAsync(t("budget.approve_confirm")))) return;
+    }
+    const r = await api.post(`/budget/project/${projectId}/${kind}`, body);
+    if (!r?.success) return flash(r?.message || "Failed", "error");
+    flash(r.message); load();
   };
 
   // actuals / variance — earned uses rolled-up % (from sub-tasks)
@@ -265,6 +340,7 @@ export default function TabBudget({ project }) {
   const setPLine = (idx, f, v) => setPLines((p) => p.map((l, i) => i === idx ? { ...l, [f]: v } : l));
   const pAmt = (l) => Number(l.qty || 0) * Number(l.rate || 0);
   const saveProgress = async () => {
+    if (!canProgress) return;
     if (!(Number(pDone) > 0) && !pLines.length) return flash(t("budget.enter_qty_done_or_actual_lines"), "error");
     setPSaving(true);
     const r = await api.post(`/budget/task/${sel}/progress`, {
@@ -275,7 +351,19 @@ export default function TabBudget({ project }) {
     if (r?.success) { flash(t("budget.recorded")); setPDone(""); setPLines([]); openTask(sel); load(); }
     else flash(r?.message || "Failed", "error");
   };
-  const delProgress = async (id) => { const r = await api.del(`/budget/progress/${id}`); if (r?.success) { openTask(sel); load(); } };
+  // Progress ✕ — pehle bina poochhe hard delete hota tha. Ab confirm + wajah;
+  // server apni aaj ki (Entry) ya Tasks Delete maangta hai aur poori entry audit me rakhta hai.
+  const canDelProgress = (p) => canDelAnyProgress
+    || (canProgress && p.created_by != null && String(p.created_by) === String(me.id) && istDay(p.created_at) === istDay(new Date().toISOString()));
+  const delProgress = async (id) => {
+    if (!(await window.confirmAsync(t("budget.entry_hatao_confirm")))) return;
+    const reason = await window.promptAsync({ message: t("budget.entry_hatane_ki_wajah"), multiline: true, okLabel: t("common.hatao") });
+    if (reason == null) return;
+    if (String(reason).trim().length < 3) return flash(t("budget.wajah_kam_se_kam_3"), "error");
+    const r = await api.del(`/budget/progress/${id}`, { reason: String(reason).trim() });
+    if (!r?.success) return flash(r?.message || "Failed", "error");
+    openTask(sel); load();
+  };
 
   const inp = { width: "100%", padding: "7px 9px", border: `1px solid ${T.b1}`, borderRadius: 7, fontSize: 12.5, color: T.t1, background: T.surfaceB, outline: "none", fontFamily: "inherit" };
   const td  = { padding: "7px 9px", borderBottom: `1px solid ${T.b1}`, fontSize: 12.5 };
@@ -298,6 +386,30 @@ export default function TabBudget({ project }) {
           </div>
         ))}
       </div>
+
+      {/* ── Budget ka status — Draft / Submitted / Approved / Rejected (poore project ka ek) ── */}
+      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", background: T.surface, border: `1px solid ${T.b1}`, borderRadius: 10, padding: "10px 14px", marginBottom: 14 }}>
+        <span style={{ fontSize: 12, fontWeight: 700, color: T.t3 }}>{t("budget.status_label")}</span>
+        <span style={{ fontSize: 11.5, fontWeight: 800, padding: "3px 10px", borderRadius: 12, color: (STATUS_STYLE[status] || STATUS_STYLE.draft).c, background: (STATUS_STYLE[status] || STATUS_STYLE.draft).bg }}>{t("budget.status_" + status)}</span>
+        {bStatus?.note && <span style={{ fontSize: 11.5, color: T.t3 }}>“{bStatus.note}”</span>}
+        {status === "submitted" && bStatus?.submitted_by_name && <span style={{ fontSize: 11, color: T.t4 }}>{t("budget.bheja_by", { name: bStatus.submitted_by_name })}</span>}
+        {(status === "approved" || status === "rejected") && bStatus?.approved_by_name && <span style={{ fontSize: 11, color: T.t4 }}>{t("budget.faisla_by", { name: bStatus.approved_by_name })}</span>}
+        <span style={{ flex: 1 }} />
+        {(canCreateB || canEditB) && !locked && Number(totals.budget_nodes || 0) > 0 && (
+          <button onClick={() => statusAction("submit")} style={{ height: 30, padding: "0 12px", borderRadius: 7, border: "none", background: T.blu, color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>{t("budget.submit_for_approval")}</button>
+        )}
+        {canApproveB && status === "submitted" && (<>
+          <button onClick={() => statusAction("approve")} style={{ height: 30, padding: "0 12px", borderRadius: 7, border: "none", background: T.grn, color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>{t("budget.approve")}</button>
+          <button onClick={() => statusAction("reject")} style={{ height: 30, padding: "0 12px", borderRadius: 7, border: `1px solid ${T.redM}`, background: T.redL, color: T.red, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>{t("budget.reject")}</button>
+        </>)}
+        {canEditB && locked && (
+          <button onClick={() => statusAction("reopen")} style={{ height: 30, padding: "0 12px", borderRadius: 7, border: `1px solid ${T.b1}`, background: T.surface, color: T.t2, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>{t("budget.reopen")}</button>
+        )}
+        {canDeleteB && !locked && Number(totals.budget_nodes || 0) > 0 && (
+          <button onClick={removeAll} style={{ height: 30, padding: "0 12px", borderRadius: 7, border: `1px solid ${T.redM}`, background: T.surface, color: T.red, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>{t("budget.poora_budget_hatao")}</button>
+        )}
+      </div>
+      {locked && <div style={{ fontSize: 11.5, color: T.amb, marginBottom: 10 }}>{t(status === "approved" ? "budget.locked_note_approved" : "budget.locked_note_submitted")}</div>}
 
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8, gap: 10, flexWrap: "wrap" }}>
         <div style={{ fontSize: 14, fontWeight: 700, color: T.t1 }}>{t("common.tasks")} <span style={{ fontSize: 12, fontWeight: 400, color: T.t4 }}>· {totals.budget_nodes || 0} budgeted</span></div>
@@ -385,6 +497,9 @@ export default function TabBudget({ project }) {
             </div>
 
             <div style={{ flex: 1, overflowY: "auto", padding: "14px 18px" }}>
+              {!canWriteTask && <div style={{ fontSize: 11.5, color: T.amb, background: T.ambL, borderRadius: 7, padding: "7px 10px", marginBottom: 10 }}>
+                {locked ? t(status === "approved" ? "budget.locked_note_approved" : "budget.locked_note_submitted") : t(taskHasBudget ? "budget.edit_ka_adhikar_nahi" : "budget.create_ka_adhikar_nahi")}</div>}
+              <fieldset disabled={!canWriteTask} style={{ border: "none", margin: 0, padding: 0, minWidth: 0 }}>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 12 }}>
                 <div><div style={{ fontSize: 11, color: T.t3, marginBottom: 4 }}>{t("common.unit")}</div>
                   <select value={hdr.unit || ""} onChange={(e) => setHdr({ ...hdr, unit: e.target.value })} style={{ ...inp, cursor: "pointer" }}>
@@ -404,6 +519,7 @@ export default function TabBudget({ project }) {
                 <span style={{ color: T.blu, fontWeight: 600 }}>{t("budget.scope_amount_revenue")}</span>
                 <span style={{ color: T.blu, fontWeight: 800, fontVariantNumeric: "tabular-nums" }}>{inr(scopeAmt)}</span>
               </div>
+              </fieldset>
 
               <div style={{ display: "flex", background: T.surfaceB, border: `1px solid ${T.b1}`, borderRadius: 8, padding: 3, marginBottom: 14 }}>
                 {[["plan", "Plan (estimate)"], ["actuals", "Actuals & variance"]].map(([m, l]) => (
@@ -420,6 +536,7 @@ export default function TabBudget({ project }) {
                         {c.label}<div style={{ fontSize: 10.5, fontWeight: 400, color: T.t4 }}>{inr(catTotal(c.id))}</div></button>
                     ))}
                   </div>
+                  <fieldset disabled={!canWriteTask} style={{ border: "none", margin: 0, padding: 0, minWidth: 0 }}>
                   <table style={{ width: "100%", borderCollapse: "collapse" }}>
                     <thead><tr>{["Item", "Unit", "Qty/unit", "Qty", "Rate ₹", "Amount ₹", ""].map((h, i) => <th key={i} style={{ ...th, textAlign: i >= 3 && i <= 5 ? "right" : "left" }}>{h}</th>)}</tr></thead>
                     <tbody>
@@ -438,7 +555,7 @@ export default function TabBudget({ project }) {
                     </tbody>
                   </table>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8, position: "relative", flexWrap: "wrap", gap: 6 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                    {canWriteTask && <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                       <button onClick={() => openPicker(cat)} style={{ fontSize: 12, color: T.ind, background: T.indL, border: `1px solid ${T.ind}33`, borderRadius: 7, padding: "5px 11px", cursor: "pointer", fontWeight: 700 }}>{t("budget.library_se")}</button>
                       <button onClick={addLine} style={{ fontSize: 12, color: T.blu, background: "none", border: "none", cursor: "pointer", fontWeight: 600 }}>{t("budget.khali_line")}</button>
                       {cat === "overhead" && (
@@ -447,8 +564,8 @@ export default function TabBudget({ project }) {
                           <button onClick={addOverheadPct} title={t("budget.material_labour_machinery_ke_total_par")} style={{ fontSize: 12, color: T.ind, background: "none", border: "none", cursor: "pointer", fontWeight: 600 }}>{t("budget.of_direct_cost")}</button>
                         </span>
                       )}
-                    </div>
-                    {selNode && <button onClick={removeNode} style={{ fontSize: 12, color: T.red, background: "none", border: "none", cursor: "pointer" }}>{t("budget.remove_budget")}</button>}
+                    </div>}
+                    {selNode && canDeleteB && !locked && <button onClick={removeNode} style={{ fontSize: 12, color: T.red, background: "none", border: "none", cursor: "pointer" }}>{t("budget.remove_budget")}</button>}
                     {pick && (
                       <>
                         <div onClick={() => setPick(null)} style={{ position: "fixed", inset: 0, zIndex: 640 }} />
@@ -479,6 +596,7 @@ export default function TabBudget({ project }) {
                       </>
                     )}
                   </div>
+                  </fieldset>
                 </>
               )}
 
@@ -525,7 +643,7 @@ export default function TabBudget({ project }) {
                     </div>
                   )}
 
-                  <div style={{ background: T.surfaceB, border: `1px solid ${T.b1}`, borderRadius: 10, padding: "12px 14px", marginBottom: 14 }}>
+                  {canProgress && <div style={{ background: T.surfaceB, border: `1px solid ${T.b1}`, borderRadius: 10, padding: "12px 14px", marginBottom: 14 }}>
                     <div style={{ fontSize: 12.5, fontWeight: 700, color: T.t1, marginBottom: 10 }}>{t("budget.record_actuals_dpr")}</div>
                     <div style={{ display: "flex", gap: 10, marginBottom: 10 }}>
                       <div style={{ flex: 1 }}><div style={{ fontSize: 11, color: T.t3, marginBottom: 4 }}>{t("common.date")}</div><input type="date" value={pDate} onChange={(e) => setPDate(e.target.value)} style={inp} /></div>
@@ -550,14 +668,14 @@ export default function TabBudget({ project }) {
                       </table>
                     )}
                     <button onClick={saveProgress} disabled={pSaving} style={{ width: "100%", padding: "9px", borderRadius: 8, border: "none", background: pSaving ? T.b2 : T.grn, color: "#fff", fontSize: 13, fontWeight: 700, cursor: pSaving ? "default" : "pointer", fontFamily: "inherit" }}>{pSaving ? t("common.saving_2") : t("budget.save_actuals")}</button>
-                  </div>
+                  </div>}
 
                   <div style={{ fontSize: 11, fontWeight: 700, color: T.t3, textTransform: "uppercase", letterSpacing: ".3px", marginBottom: 8 }}>{t("common.history")}</div>
                   {progress.length ? progress.map((p) => (
                     <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 0", borderBottom: `1px solid ${T.b1}`, fontSize: 12.5 }}>
                       <span style={{ color: T.t2 }}>{p.report_date}</span>
                       <span style={{ color: T.t1, fontWeight: 600 }}>{Number(p.done_qty) ? n2(p.done_qty) + " " + (hdr.unit || "") : t("budget.cost_entry")}</span>
-                      <span style={{ marginLeft: "auto" }}><button onClick={() => delProgress(p.id)} style={{ border: "none", background: "none", color: T.t4, cursor: "pointer", fontSize: 13 }}>✕</button></span>
+                      <span style={{ marginLeft: "auto" }}>{canDelProgress(p) && <button onClick={() => delProgress(p.id)} title={t("budget.entry_hatao")} style={{ border: "none", background: "none", color: T.t4, cursor: "pointer", fontSize: 13 }}>✕</button>}</span>
                     </div>
                   )) : <div style={{ fontSize: 12, color: T.t4 }}>{t("budget.no_actuals_recorded_yet")}</div>}
                 </>
@@ -569,7 +687,7 @@ export default function TabBudget({ project }) {
                 <>
                   <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 4 }}><span style={{ color: T.t3 }}>{t("budget.estimate_cost")}</span><span style={{ fontWeight: 700, color: T.amb }}>{inr(estimate)}</span></div>
                   <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 10 }}><span style={{ color: T.t3 }}>{t("common.margin")}</span><span style={{ fontWeight: 800, color: (scopeAmt - estimate) >= 0 ? T.grn : T.red }}>{inr(scopeAmt - estimate)} ({scopeAmt > 0 ? Math.round((scopeAmt - estimate) / scopeAmt * 100) : 0}%)</span></div>
-                  <button onClick={saveAll} disabled={saving} style={{ width: "100%", padding: "11px", borderRadius: 9, border: "none", background: saving ? T.b2 : T.blu, color: "#fff", fontSize: 14, fontWeight: 700, cursor: saving ? "default" : "pointer", fontFamily: "inherit" }}>{saving ? t("common.saving_2") : (selNode ? t("budget.save_budget") : t("budget.set_as_budget_node"))}</button>
+                  {canWriteTask && <button onClick={saveAll} disabled={saving} style={{ width: "100%", padding: "11px", borderRadius: 9, border: "none", background: saving ? T.b2 : T.blu, color: "#fff", fontSize: 14, fontWeight: 700, cursor: saving ? "default" : "pointer", fontFamily: "inherit" }}>{saving ? t("common.saving_2") : (selNode ? t("budget.save_budget") : t("budget.set_as_budget_node"))}</button>}
                 </>
               ) : (
                 <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}><span style={{ color: T.t3 }}>{t("budget.variance_earned_actual")}</span><span style={{ fontWeight: 800, color: (plannedTot - actualTot) >= 0 ? T.grn : T.red }}>{inr(plannedTot - actualTot)}</span></div>

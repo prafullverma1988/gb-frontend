@@ -12,7 +12,7 @@ import { T } from "../shared/tokens";
 import { t, Rich } from "../../i18n";
 import { isoDate, todayISO } from "../../utils/today";
 import { cld } from "../../utils/cloudinary";
-import { can as canPerm, canEntry as canPermEntry } from "../../utils/perms";
+import { can, canAny, canEntry, currentUser, can as canPerm, canEntry as canPermEntry } from "../../utils/perms";
 
 // Tasks ka CSV/Excel import — common sudhaar screen (components/ImportFileModal),
 // jaanch server par (POST /tasks/import/rows). Column NAAM se pehchane jaate hain,
@@ -179,6 +179,18 @@ const PT_DELAY_REASONS=[
 const PT_REASON_MAP=Object.fromEntries(PT_DELAY_REASONS.map(r=>[r.key,r]));
 
 function TabTasks({ projectId, isAdmin }) {
+  // ── Roles & Access (5 Oct 2026) — role ke naam (isAdmin) ki jagah wahi tick
+  // jo server maangta hai. isAdmin (admin/PM role) ab sirf plan-lock patti ke
+  // liye, jahan server abhi bhi role + Projects Edit maangta hai.
+  const coAdmin      = ["admin","super_admin"].includes(currentUser().role);
+  const canAddTask   = canAny(["Tasks","To Do"],"create");   // POST /tasks
+  const canEditTask  = canAny(["Tasks","To Do"],"edit");     // PUT /tasks/:id, move
+  const canDelTask   = canAny(["Tasks","To Do"],"delete");   // DELETE /tasks/:id
+  const canPlan      = can("Tasks","create");                // import, template, tender/map se plan
+  const canOverride  = can("Tasks","edit");                  // parent ka progress override
+  const canBoqImport = can("Estimate","create");             // BOQ wizard (routes/boq.js)
+  const canTaskCsv   = can("Tasks","export");                // Tasks CSV
+  const canPlanLock  = isAdmin && can("Projects","edit");    // lock-plan / lock-start
   const [tasks,setTasks]     = useState([]);
   // Chainage line par likha hai, task par nahi — isliye site ki lines ek
   // baar utha lete hain. Na mile (tender wala project na ho) to sab waisa
@@ -248,7 +260,8 @@ function TabTasks({ projectId, isAdmin }) {
     }).catch(()=>{ if(!dead) setAlignById({}); });
     return ()=>{ dead=true; };
   }, [projectId]);
-  const canEditSchedule = isAdmin || !proj?.plan_locked;
+  // Plan lock par sirf admin (server isPlanLocked) — PM ko button dikhta tha par server rokta tha.
+  const canEditSchedule = coAdmin || !proj?.plan_locked;
   const lockPlan = async () => {
     if(!await window.confirmAsync(t("tasks.plan_lock_karein_iske_baad_sirf"))) return;
     try { await api.post("/projects/"+projectId+"/lock-plan",{}); } catch(_){}
@@ -724,11 +737,11 @@ function TabTasks({ projectId, isAdmin }) {
                   style={{width:22,height:22,borderRadius:4,background:infoTask?.id===item.id?"#FEF3C7":T.surface,border:"1px solid "+(infoTask?.id===item.id?"#FCD34D":T.b1),cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
                   <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke={infoTask?.id===item.id?"#D97706":T.t3} strokeWidth={2}><circle cx={12} cy={12} r={10}/><path d="M12 16v-4M12 8h.01"/></svg>
                 </button>
-                {isAdmin&&depth<6&&<button onClick={()=>{setAddParent(item);setShowAdd(true);}} title={t("tasks.add_subtask")}
+                {canAddTask&&depth<6&&<button onClick={()=>{setAddParent(item);setShowAdd(true);}} title={t("tasks.add_subtask")}
                   style={{width:22,height:22,borderRadius:4,background:T.surface,border:"1px solid "+T.b1,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
                   <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke={T.grn} strokeWidth={2.5}><path d="M12 5v14M5 12h14"/></svg>
                 </button>}
-                {isAdmin&&<button onClick={()=>setEditTask(item)} title={t("common.edit_2")}
+                {canEditTask&&<button onClick={()=>setEditTask(item)} title={t("common.edit_2")}
                   style={{width:22,height:22,borderRadius:4,background:T.surface,border:"1px solid "+T.b1,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
                   <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke={T.blu} strokeWidth={2}><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                 </button>}
@@ -924,7 +937,7 @@ function TabTasks({ projectId, isAdmin }) {
 
       {/* Schedule lifecycle: Estimate → Plan Locked → Started */}
       <ScheduleLifecycleStrip
-        proj={proj} isAdmin={isAdmin}
+        proj={proj} isAdmin={canPlanLock} canUnlock={coAdmin && can("Projects","edit")}
         onSetStart={()=>setStartModal({mode:"anchor"})}
         onLockPlan={lockPlan} onUnlockPlan={unlockPlan}
         onLockStart={()=>setStartModal({mode:"lock"})} onUnlockStart={unlockStart}
@@ -1092,8 +1105,8 @@ function TabTasks({ projectId, isAdmin }) {
           ))}
           {levelFilter==="custom"&&<option value="custom">{t("budget.custom_view")}</option>}
         </select>
-        {/* CSV Export */}
-        <button onClick={()=>{
+        {/* CSV Export — Tasks → Export */}
+        {canTaskCsv&&<button onClick={()=>{
           const flat=ptFlatten(tasks);
           const headers=["Task No","Name","Category","Status","Assignee","Base Start","Base End","Actual Start","Actual End"];
           const rows=flat.map(t=>[t.task_no||t.no||"",t.name,t.category||"",t.status||"",t.assignee||"",t.baseStart||"",t.baseEnd||"",t.actualStart||"",t.actualEnd||""]);
@@ -1106,25 +1119,25 @@ function TabTasks({ projectId, isAdmin }) {
           style={{height:32,padding:"0 12px",borderRadius:6,border:`1.5px solid ${T.b1}`,background:T.surface,fontSize:12,color:T.t2,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
           <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
          {t("common.export")}
-        </button>
+        </button>}
         {/* Excel Import */}
-        {isAdmin&&<button onClick={()=>setShowTaskImport(true)} title={t("tasks.import_from_excel_csv")}
+        {canPlan&&<button onClick={()=>setShowTaskImport(true)} title={t("tasks.import_from_excel_csv")}
           style={{height:32,padding:"0 12px",borderRadius:6,border:`1.5px solid ${T.b1}`,background:T.surface,fontSize:12,color:T.t2,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
           <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
          {t("master_library.import")}
         </button>}
-        {isAdmin&&<button onClick={()=>setShowBoqWizard(true)} title={t("tasks.boq_excel_se_tasks_import_karein")}
+        {canBoqImport&&<button onClick={()=>setShowBoqWizard(true)} title={t("tasks.boq_excel_se_tasks_import_karein")}
           style={{height:32,padding:"0 12px",borderRadius:6,border:`1.5px solid ${T.ind}`,background:T.indL,fontSize:12,fontWeight:700,color:T.ind,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
           <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M9 17V7h6v10M4 21h16M6 21V5a2 2 0 012-2h8a2 2 0 012 2v16"/></svg>
          {t("tasks.import_boq")}
         </button>}
-        {isAdmin&&!!tenderPlan?.packages?.length&&<button onClick={()=>setShowTenderPlan(true)}
+        {canPlan&&!!tenderPlan?.packages?.length&&<button onClick={()=>setShowTenderPlan(true)}
           title={t("tasks.tender_ke_work_package_se_is")}
           style={{height:32,padding:"0 12px",borderRadius:6,border:`1.5px solid ${T.ind}`,background:T.indL,fontSize:12,fontWeight:700,color:T.ind,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
           <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M3 7h18M3 12h18M3 17h10"/></svg>
          {t("tasks.tender_se_plan_lao")}
         </button>}
-        {isAdmin&&!!mapPlan?.groups?.length&&<button onClick={()=>setShowMapPlan(true)}
+        {canPlan&&!!mapPlan?.groups?.length&&<button onClick={()=>setShowMapPlan(true)}
           title={t("tasks.map_par_khinchi_lines_aur_structures")}
           style={{height:32,padding:"0 12px",borderRadius:6,border:`1.5px solid #0E7490`,background:"#ECFEFF",fontSize:12,fontWeight:700,color:"#0E7490",cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
           <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M9 20l-5.4 1.8a1 1 0 01-1.3-1V6.2a1 1 0 01.7-.9L9 3m0 17l6-2m-6 2V3m6 15l5.4 1.8a1 1 0 001.3-1V4.8a1 1 0 00-.7-.9L15 2m0 16V2m-6 1l6-1"/></svg>
@@ -1135,11 +1148,11 @@ function TabTasks({ projectId, isAdmin }) {
           style={{height:32,padding:"0 12px",borderRadius:6,border:`1.5px solid #B45309`,background:"#FFFBEB",fontSize:12,fontWeight:700,color:"#B45309",cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
          {t("kal_ka_plan.kal_ka_plan")}
         </button>
-        {isAdmin&&<button onClick={()=>setShowTemplatePicker(true)}
+        {canPlan&&<button onClick={()=>setShowTemplatePicker(true)}
           style={{display:"flex",alignItems:"center",gap:5,padding:"5px 12px",borderRadius:6,background:"linear-gradient(135deg,#EC4899,#BE185D)",color:"white",fontSize:11.5,fontWeight:700,border:"none",cursor:"pointer"}}>
          {t("tasks.load_template")}
         </button>}
-        {isAdmin&&<button onClick={()=>{setAddParent(null);setShowAdd(true);}}
+        {canAddTask&&<button onClick={()=>{setAddParent(null);setShowAdd(true);}}
           style={{display:"flex",alignItems:"center",gap:5,padding:"5px 12px",borderRadius:6,background:T.blu,color:"white",fontSize:11.5,fontWeight:700,border:"none",cursor:"pointer"}}>
           <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2.5}><path d="M12 5v14M5 12h14"/></svg> {t("tasks.add_task")}
         </button>}
@@ -1493,22 +1506,22 @@ function TabTasks({ projectId, isAdmin }) {
               <div style={{fontSize:9.5,color:"#9CA3AF",fontFamily:"monospace"}}>{contextMenu.task.no}</div>
             </div>
             {[
-              {icon:"M5 15l7-7 7 7",label:t("tasks.move_up"),action:()=>{moveTask(contextMenu.task.id,"up");setContextMenu(null);}},
-              {icon:"M19 9l-7 7-7-7",label:t("tasks.move_down"),action:()=>{moveTask(contextMenu.task.id,"down");setContextMenu(null);}},
+              {icon:"M5 15l7-7 7 7",label:t("tasks.move_up"),action:()=>{moveTask(contextMenu.task.id,"up");setContextMenu(null);},ok:canEditTask},
+              {icon:"M19 9l-7 7-7-7",label:t("tasks.move_down"),action:()=>{moveTask(contextMenu.task.id,"down");setContextMenu(null);},ok:canEditTask},
               null, // divider
-              {icon:"M12 5v14M5 12h14",label:t("tasks.add_subtask"),action:()=>{setAddParent(contextMenu.task);setShowAdd(true);setContextMenu(null);},color:"#10B981",admin:true},
-              {icon:"M12 20h9M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z",label:t("tasks.edit_task"),action:()=>{setEditTask(contextMenu.task);setContextMenu(null);},admin:true},
+              {icon:"M12 5v14M5 12h14",label:t("tasks.add_subtask"),action:()=>{setAddParent(contextMenu.task);setShowAdd(true);setContextMenu(null);},color:"#10B981",ok:canAddTask},
+              {icon:"M12 20h9M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z",label:t("tasks.edit_task"),action:()=>{setEditTask(contextMenu.task);setContextMenu(null);},ok:canEditTask},
               // Leaf only — a parent's 100% has to come from its children (or a
               // reasoned override), never from a one-click shortcut. Qty wale
               // task ka % bhi haath se nahi — wo roz ki qty se banta hai; pehle
               // yahan 200 aata tha aur kuch nahi hota tha (TSK-23).
-              {icon:"M20 6L9 17l-5-5",label:t("tasks.mark_complete"),hide:contextMenu.task.children?.length>0||ptIsQtyTask(contextMenu.task),
+              {icon:"M20 6L9 17l-5-5",label:t("tasks.mark_complete"),hide:contextMenu.task.children?.length>0||ptIsQtyTask(contextMenu.task),ok:canEditTask,
                 action:async()=>{const r=await api.put("/tasks/"+contextMenu.task.id,{progress:100});setContextMenu(null);if(r.success)await refetchTasks();else alert(r.message||"Update failed");}},
               {icon:"M12 20h9M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z",label:t("tasks.override_progress"),
-                hide:!(contextMenu.task.children?.length>0),admin:true,color:"#4B45C4",
+                hide:!(contextMenu.task.children?.length>0),ok:canOverride,color:"#4B45C4",
                 action:()=>{setOverrideTask(contextMenu.task);setContextMenu(null);}},
               {icon:"M3 12a9 9 0 019-9 9 9 0 016.36 2.64L21 8M21 3v5h-5",label:t("tasks.reset_to_auto"),
-                hide:!(contextMenu.task.children?.length>0&&ptIsOverridden(contextMenu.task)),admin:true,
+                hide:!(contextMenu.task.children?.length>0&&ptIsOverridden(contextMenu.task)),ok:canOverride,
                 action:async()=>{const r=await api.del("/tasks/"+contextMenu.task.id+"/progress-override");setContextMenu(null);if(r.success)await refetchTasks();else alert(r.message||"Reset failed");}},
               null,
               {icon:"M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2",label:t("tasks.delete_task"),action:async()=>{
@@ -1532,8 +1545,8 @@ function TabTasks({ projectId, isAdmin }) {
                   +(d.affected>1?" "+t("tasks.del_toast_rows",{n:d.affected}):""));
                 else window.toast?.success(t("tasks.del_toast_deleted"));
                 await refetchTasks();
-              },color:"#EF4444",admin:true},
-            ].filter(item=>item===null||(!item.hide&&(!item.admin||isAdmin))).map((item,i)=>
+              },color:"#EF4444",ok:canDelTask},
+            ].filter(item=>item===null||(!item.hide&&item.ok!==false)).map((item,i)=>
               item === null
               ? <div key={i} style={{height:1,background:"#F3F4F6",margin:"4px 0"}}/>
               : <button key={i} onClick={item.action}
@@ -1834,7 +1847,8 @@ function TabTasks({ projectId, isAdmin }) {
 // BASELINE STRIP — header card showing current baseline status
 // ═══════════════════════════════════════════════════════════════
 // ── Schedule lifecycle strip (Estimate → Plan Locked → Started) ──
-function ScheduleLifecycleStrip({ proj, isAdmin, onSetStart, onLockPlan, onUnlockPlan, onLockStart, onUnlockStart }){
+// isAdmin = lock karne ka haq (role admin/PM + Projects Edit), canUnlock = kholna (role admin + Projects Edit) — server jaisa.
+function ScheduleLifecycleStrip({ proj, isAdmin, canUnlock, onSetStart, onLockPlan, onUnlockPlan, onLockStart, onUnlockStart }){
   if(!proj) return null;
   const stage = proj.start_locked ? "started" : proj.plan_locked ? "plan_locked" : "estimate";
   const fmt = (d)=> d ? new Date(d).toLocaleDateString("en-IN",{day:"numeric",month:"short",year:"numeric"}) : "—";
@@ -1866,9 +1880,9 @@ function ScheduleLifecycleStrip({ proj, isAdmin, onSetStart, onLockPlan, onUnloc
         </>}
         {stage==="plan_locked" && isAdmin && <>
           <Btn onClick={onLockStart} bg="linear-gradient(135deg,#EA580C,#C2410C)" color="white">{t("tasks.lock_start_date")}</Btn>
-          <Btn onClick={onUnlockPlan} bg="white" color="#64748B" bd="1px solid #CBD5E1">{t("tasks.unlock_plan")}</Btn>
+          {canUnlock && <Btn onClick={onUnlockPlan} bg="white" color="#64748B" bd="1px solid #CBD5E1">{t("tasks.unlock_plan")}</Btn>}
         </>}
-        {stage==="started" && isAdmin && <Btn onClick={onUnlockStart} bg="white" color="#64748B" bd="1px solid #CBD5E1">{t("tasks.unlock_start")}</Btn>}
+        {stage==="started" && canUnlock && <Btn onClick={onUnlockStart} bg="white" color="#64748B" bd="1px solid #CBD5E1">{t("tasks.unlock_start")}</Btn>}
         {!isAdmin && stage!=="started" && <span style={{fontSize:10.5,color:"#94A3B8",fontStyle:"italic"}}>{t("tasks.admin_pm_only")}</span>}
       </div>
     </div>
@@ -3422,7 +3436,7 @@ function TaskIssueDrawer({issues, loading, filter, setFilter, onClose, onStatusC
                       <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
                      {t("tasks.message")}
                     </button>
-                    {!isClosed&&(
+                    {!isClosed&&can("Tasks","edit")&&(
                       <button onClick={()=>handleClose(issue.id)} disabled={closingId===issue.id}
                         style={{display:"flex",alignItems:"center",gap:4,padding:"4px 10px",borderRadius:6,border:"1px solid #D1FAE5",background:"#ECFDF5",cursor:"pointer",fontSize:11,color:"#16A34A",fontWeight:600,marginLeft:"auto"}}>
                         <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}><path d="M20 6L9 17l-5-5"/></svg>
@@ -3509,7 +3523,18 @@ function TaskIssueChat({issueId}){
    din ki photos apne aap entry se jud jaati hain (A2). Neeche har entry ka
    geo-tag aur AI ka teen-cheez byora (qty + photo + note) bhi dikhta hai —
    AI sirf batata hai, rokta kuch nahi. */
+// India ka din — apni entry "aaj" ki hai ya nahi (server ka ownFreshEntry bhi isi se).
+const ptIstDay=(v)=>{ if(!v) return null; const s=String(v);
+  const ms=new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(s)?s:s.replace(" ","T")+"Z").getTime();
+  return Number.isFinite(ms)?new Date(ms+5.5*3600*1000).toISOString().slice(0,10):null; };
+// Roz ki progress = Tasks ENTRY (transition: Create bhi). Entry hatana = apni usi
+// din (Entry) ya Tasks DELETE — hamesha wajah ke saath (server audit me rakhta hai).
+const ptCanDelEntry=(e)=>{ const me=currentUser();
+  return can("Tasks","delete")
+    || (canEntry("Tasks") && e.created_by!=null && String(e.created_by)===String(me.id) && ptIstDay(e.created_at)===ptIstDay(new Date().toISOString())); };
 function QtyProgressBox({task,meIsPriv,onProgress,projectId,showMic=true,showNote=true}){
+  const canProgress=canEntry("Tasks");
+  const canAiCheck=canAny(["Budget","Tasks"],"edit");
   const scope=Number(task.scope_qty)||0;
   const unit=task.unit||"";
   const [entries,setEntries]=useState(null);   // null = load ho raha
@@ -3566,7 +3591,10 @@ function QtyProgressBox({task,meIsPriv,onProgress,projectId,showMic=true,showNot
   const del=async(e)=>{
     const ask=window.confirmAsync||(async(m)=>window.confirm(m));
     if(!await ask(`${e.done_qty} ${unit} ki entry (${new Date(e.report_date).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"})}) hatayein? % apne aap peeche jayega.`))return;
-    const r=await api.del("/budget/progress/"+e.id);
+    const reason=await window.promptAsync({message:t("tasks.entry_hatane_ki_wajah"),multiline:true,okLabel:t("tasks.entry_hatao")});
+    if(reason==null)return;
+    if(String(reason).trim().length<3){window.alert(t("tasks.wajah_kam_se_kam_3"));return;}
+    const r=await api.del("/budget/progress/"+e.id,{reason:String(reason).trim()});
     if(!r?.success){window.alert(r?.message||"Hata nahi saki");return;}
     push(done-Number(e.done_qty||0));
     load();
@@ -3641,8 +3669,8 @@ function QtyProgressBox({task,meIsPriv,onProgress,projectId,showMic=true,showNot
         </select>
       </div>
     )}
-    {/* Aaj ka kaam */}
-    <div style={{display:"flex",gap:7,marginBottom:8}}>
+    {/* Aaj ka kaam — Tasks Entry */}
+    {canProgress&&<div style={{display:"flex",gap:7,marginBottom:8}}>
       <input type="number" min="0" step="any" value={qty} onChange={e=>setQty(e.target.value)}
         placeholder={"Aaj kitna hua? ("+unit+")"}
         style={{flex:"0 0 150px",padding:"10px 11px",borderRadius:8,border:"1.5px solid #CBD5E1",fontSize:14,fontWeight:700,
@@ -3666,7 +3694,7 @@ function QtyProgressBox({task,meIsPriv,onProgress,projectId,showMic=true,showNot
           fontSize:13,fontWeight:700,cursor:Number(qty)>0?"pointer":"default",fontFamily:"inherit"}}>
         {saving?"…":t("machinery.darj_karo")}
       </button>
-    </div>
+    </div>}
     {recOn&&<div style={{fontSize:11,color:"#DC2626",marginBottom:8}}>{t("tasks.bol_rahe_ho_dabate_hi_sahayak")}</div>}
     {vBusy&&<div style={{fontSize:11,color:"#4B45C4",marginBottom:8}}>{t("tasks.sahayak_sun_raha_hai")}</div>}
     {vSug&&(
@@ -3704,15 +3732,15 @@ function QtyProgressBox({task,meIsPriv,onProgress,projectId,showMic=true,showNot
             {g&&<span style={{fontSize:9.5,fontWeight:700,color:g.c,background:g.bg,padding:"1px 7px",borderRadius:12}}>{g.t}{e.geo_flag==="verified"&&e.geo_m!=null?" · "+e.geo_m+" m":""}</span>}
             {Number(e.photo_n)>0&&<span style={{fontSize:10,color:"#64748B"}}>📷 {e.photo_n}</span>}
             <span style={{flex:1}}/>
-            {Number(e.photo_n)>0&&(
+            {Number(e.photo_n)>0&&canAiCheck&&(
               <button onClick={()=>aiCheck(e)} disabled={aiBusy===e.id}
                 style={{fontSize:10,padding:"2px 9px",borderRadius:12,border:"1px solid #C7D2FE",background:"#EEF2FF",
                   color:"#4B45C4",fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
                 {aiBusy===e.id?t("tasks.jaanch_chal_rahi"):ai?t("tasks.ai_dobara"):t("tasks.ai_jaanch")}
               </button>
             )}
-            <button onClick={()=>del(e)} title={t("tasks.entry_hatao")}
-              style={{border:"none",background:"none",cursor:"pointer",color:"#94A3B8",fontSize:13,padding:"0 2px",fontFamily:"inherit"}}>×</button>
+            {ptCanDelEntry(e)&&<button onClick={()=>del(e)} title={t("tasks.entry_hatao")}
+              style={{border:"none",background:"none",cursor:"pointer",color:"#94A3B8",fontSize:13,padding:"0 2px",fontFamily:"inherit"}}>×</button>}
           </div>
           {e.remarks&&e.remarks!=="Web se darj"&&e.remarks!=="Site se darj"&&(
             <div style={{fontSize:10.5,color:"#64748B",marginTop:3}}>"{e.remarks}"</div>)}
@@ -3748,6 +3776,13 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
   // apni aaj ki = Material Entry, kisi aur ki / purani = Material Delete; wajah zaroori.
   const canDeleteUsed = (createdById, createdAt) => canPerm("Material","delete")
     || (canPermEntry("Material") && createdById != null && Number(createdById) === meId && !!createdAt && isoDate(createdAt) === todayISO());
+  // Roles & Access (5 Oct 2026): progress / issue uthana = Tasks ENTRY (transition:
+  // Create bhi); issue ka status + task photo hatana = Tasks EDIT; issue hatana =
+  // Tasks DELETE, ya apna usi din (Entry).
+  const canTaskEntry = canEntry("Tasks");
+  const canTaskEdit  = can("Tasks","edit");
+  const canDelIssue  = (iss) => can("Tasks","delete")
+    || (canTaskEntry && iss.created_by!=null && Number(iss.created_by)===meId && ptIstDay(iss.created_at)===ptIstDay(new Date().toISOString()));
 
   const [prog,setProg]=useState(task.progress||0);
   const [saving,setSaving]=useState(false);
@@ -4123,7 +4158,7 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
                 dpr_task_actuals me ek nishaan, note ke saath. Isse pehle
                 seedha progress badal jaata tha aur DPR/Sahayak ko us din ke
                 % wale task ka pata hi nahi chalta tha. */}
-            <button onClick={async()=>{
+            {canTaskEntry&&<button onClick={async()=>{
               setSaving(true);
               const res=await api.post("/budget/task/"+task.id+"/progress",{
                 report_date:todayISO(),
@@ -4139,7 +4174,7 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
             }} disabled={saving||(isDrop&&!dropNoteOk)}
               style={{width:"100%",padding:"14px",borderRadius:10,background:(saving||(isDrop&&!dropNoteOk))?"#94A3B8":"#2563EB",color:"white",fontSize:15,fontWeight:700,border:"none",cursor:(saving||(isDrop&&!dropNoteOk))?"default":"pointer",letterSpacing:".2px"}}>
               {saving?t("common.saving"):t("tasks.save_progress")}
-            </button>
+            </button>}
           </>}
         </div>
 
@@ -4463,10 +4498,10 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
                   </div>
                   <div style={{padding:"7px 10px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                     <span style={{fontSize:10.5,color:"#94A3B8"}}>{new Date(p.created_at).toLocaleDateString("en-IN")}</span>
-                    <button onClick={async e=>{e.stopPropagation();if(await window.confirmAsync(t("tasks.delete_photo"))){const r=await api.del("/tasks/"+task.id+"/photos/"+p.id);if(r.success)setPhotos(prev=>prev.filter(x=>x.id!==p.id));}}}
+                    {canTaskEdit&&<button onClick={async e=>{e.stopPropagation();if(await window.confirmAsync(t("tasks.delete_photo"))){const r=await api.del("/tasks/"+task.id+"/photos/"+p.id);if(r.success)setPhotos(prev=>prev.filter(x=>x.id!==p.id));}}}
                       style={{background:"none",border:"none",cursor:"pointer",color:"#EF4444",padding:4,display:"flex"}}>
                       <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
-                    </button>
+                    </button>}
                   </div>
                 </div>
               ))}
@@ -4482,10 +4517,10 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
               <span style={{fontSize:12,fontWeight:700,color:"#1E293B",textTransform:"uppercase",letterSpacing:".5px"}}>{t("common.issues")}</span>
               {issues.length>0&&<span style={{background:"#FEE2E2",color:"#DC2626",fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:20}}>{issues.filter(i=>i.status==="Open"||i.status==="In Progress").length} open</span>}
             </div>
-            <button onClick={()=>setShowIssueForm(s=>!s)}
+            {canTaskEntry&&<button onClick={()=>setShowIssueForm(s=>!s)}
               style={{padding:"9px 16px",borderRadius:8,background:showIssueForm?"#F1F5F9":"#DC2626",color:showIssueForm?"#64748B":"white",border:"none",fontSize:13,fontWeight:600,cursor:"pointer",minHeight:40}}>
               {showIssueForm?t("common.cancel"):t("grn_issue.issue")}
-            </button>
+            </button>}
           </div>
           {showIssueForm&&(
             <div style={{background:"white",borderRadius:12,padding:"16px",border:"1.5px solid #FECACA",marginBottom:12}}>
@@ -4588,7 +4623,7 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
                     )}
                     {issue.photo_url&&<img src={cld(issue.photo_url, "card")} style={{width:"100%",borderRadius:8,marginBottom:10,cursor:"zoom-in",maxHeight:180,objectFit:"cover"}} onClick={()=>setFullPhoto({photo_url:issue.photo_url})}/>}
                     <TaskIssueChat issueId={issue.id}/>
-                    <div style={{marginBottom:9}}>
+                    {canTaskEdit&&<div style={{marginBottom:9}}>
                       <div style={{fontSize:10,fontWeight:600,color:"#94A3B8",marginBottom:6,textTransform:"uppercase",letterSpacing:".4px"}}>{t("tasks.change_status")}</div>
                       <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
                         {ISSUE_STATUS.map(s=>(
@@ -4598,9 +4633,9 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
                           </button>
                         ))}
                       </div>
-                    </div>
-                    <button onClick={async()=>{if(await window.confirmAsync(t("tasks.delete_issue"))){const r=await api.del("/tasks/"+task.id+"/issues/"+issue.id);if(r.success){setIssues(p=>p.filter(x=>x.id!==issue.id));setExpandedIssue(null);}}}}
-                      style={{fontSize:11,color:"#EF4444",background:"none",border:"none",cursor:"pointer",padding:0}}>{t("tasks.delete_issue_2")}</button>
+                    </div>}
+                    {canDelIssue(issue)&&<button onClick={async()=>{if(await window.confirmAsync(t("tasks.delete_issue"))){const r=await api.del("/tasks/"+task.id+"/issues/"+issue.id);if(r.success){setIssues(p=>p.filter(x=>x.id!==issue.id));setExpandedIssue(null);}else window.alert(r.message||t("tasks.del_fail"));}}}
+                      style={{fontSize:11,color:"#EF4444",background:"none",border:"none",cursor:"pointer",padding:0}}>{t("tasks.delete_issue_2")}</button>}
                   </div>
                 )}
               </div>

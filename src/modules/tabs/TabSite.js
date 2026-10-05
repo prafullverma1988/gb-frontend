@@ -4,6 +4,7 @@ import { T } from "../shared/tokens";
 import { Pill } from "../shared/ui";
 import DinKaByoraModal from "./DinKaByoraModal";
 import { canApproveAction } from "../../utils/approvalAuthority";
+import { can } from "../../utils/perms";
 import { t, getLang } from "../../i18n";
 import { todayISO, isoDate } from "../../utils/today";
 import { cld } from "../../utils/cloudinary";
@@ -12,6 +13,10 @@ import { cld } from "../../utils/cloudinary";
 // requirePerm(["Site / DPR","Projects"], "approve", {strict:true}). Yahan
 // pehle sirf role ka naam (admin/super_admin/PM) dekha jaata tha.
 const canApproveDpr = () => canApproveAction({ perm: [["Site / DPR", "Projects"], "approve", { strict: true }] });
+// Roles & Access (5 Oct 2026): DPR PDF = Site / DPR → EXPORT (server bhi yahi
+// maangta hai); client copy ke hisse tay karna = DPR ka format = Site / DPR → CREATE.
+const canDprPdf = () => can("Site / DPR", "export");
+const canDprFormat = () => can("Site / DPR", "create");
 
 // ── Site / DPR tab ──────────────────────────────────────────────
 // DPR ab bharne wala form nahi hai. Server din jod kar deta hai
@@ -298,23 +303,23 @@ function TabSite({ project }) {   // approve ka haq ab canApproveDpr() se, role 
           <span style={{ fontSize: 11.5, color: T.t4 }}>{t("site.bhara_hua_x", { s: day.completeness.score })}</span>
         )}
         <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
-          <button onClick={() => downloadPdf("full")} disabled={busy}
+          {canDprPdf() && <button onClick={() => downloadPdf("full")} disabled={busy}
             style={{ padding: "6px 13px", borderRadius: 7, border: `1px solid ${T.b1}`, background: T.surface,
               color: T.t2, fontSize: 11.5, fontWeight: 700, cursor: busy ? "default" : "pointer", fontFamily: "inherit" }}>
             {t("site.pdf")}
-          </button>
+          </button>}
           {/* Client PDF, aur ▾ se uske hisse — ek jude hue jode me */}
-          <div style={{ position: "relative", display: "flex" }}>
-            <button onClick={() => downloadPdf("client")} disabled={busy}
-              style={{ padding: "6px 11px", borderRadius: "7px 0 0 7px", border: `1px solid ${T.b1}`, borderRight: "none", background: T.surface,
+          {(canDprPdf() || canDprFormat()) && <div style={{ position: "relative", display: "flex" }}>
+            {canDprPdf() && <button onClick={() => downloadPdf("client")} disabled={busy}
+              style={{ padding: "6px 11px", borderRadius: canDprFormat() ? "7px 0 0 7px" : 7, border: `1px solid ${T.b1}`, borderRight: canDprFormat() ? "none" : `1px solid ${T.b1}`, background: T.surface,
                 color: T.t2, fontSize: 11.5, fontWeight: 700, cursor: busy ? "default" : "pointer", fontFamily: "inherit" }}>
               {t("site.client_pdf")}
-            </button>
-            <button onClick={() => setSecOpen((v) => !v)} title={t("site.client_copy_me_kya_jaaye")}
-              style={{ padding: "6px 8px", borderRadius: "0 7px 7px 0", border: `1px solid ${T.b1}`, background: T.surface,
+            </button>}
+            {canDprFormat() && <button onClick={() => setSecOpen((v) => !v)} title={t("site.client_copy_me_kya_jaaye")}
+              style={{ padding: "6px 8px", borderRadius: canDprPdf() ? "0 7px 7px 0" : 7, border: `1px solid ${T.b1}`, background: T.surface,
                 color: T.t3, fontSize: 11, cursor: "pointer", fontFamily: "inherit" }}>
               ▾
-            </button>
+            </button>}
             {secOpen && (
               <div style={{ position: "absolute", right: 0, top: "calc(100% + 6px)", zIndex: 30, width: 236, background: T.surface,
                 border: `1px solid ${T.b1}`, borderRadius: 9, boxShadow: "0 10px 28px rgba(15,23,42,.14)", padding: "10px 12px" }}>
@@ -330,7 +335,7 @@ function TabSite({ project }) {   // approve ka haq ab canApproveDpr() se, role 
                 <div style={{ fontSize: 10.5, color: T.t4, marginTop: 6, lineHeight: 1.4 }}>{t("site.client_copy_yaad_rehta")}</div>
               </div>
             )}
-          </div>
+          </div>}
           {canAct && (
             <button onClick={() => setRejOpen((v) => !v)} disabled={busy}
               style={{ padding: "6px 13px", borderRadius: 7, background: T.surface, color: T.red, border: `1px solid ${T.redM}`,
