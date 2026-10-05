@@ -9,7 +9,7 @@ import WeighChip from "../components/grn/WeighChip";
 import { indexOpenLines, kgIn, kgPerUnit, loadWeighmentsForPo } from "../components/grn/weigh";
 import ReceivingContacts, { hasReceivingContact } from "../components/ReceivingContacts";
 import { canApproveAction, approverRolesFor, useApprovalAuthority } from "../utils/approvalAuthority";
-import { can, canEntry } from "../utils/perms";
+import { can, canAny, canEntry } from "../utils/perms";
 import { t, Rich } from "../i18n";
 import { companyName } from "../utils/companyName";
 import { todayISO } from "../utils/today";
@@ -1422,14 +1422,15 @@ function CreatePOModal({onClose,onSave,prefillItems,prefillVendor,editPo,dbProje
         onClose={onClose}/>
       <MBody>
         {/* ── Top-right: Add new material vendor to Library ───────── */}
-        <div style={{display:"flex",justifyContent:"flex-end",marginBottom:8}}>
+        {/* Naya vendor = nayi party (POST /finance/parties) — Party YA Finance YA Library ka CREATE (5 Oct 2026) */}
+        {canAny(["Party","Finance","Library"], "create") && <div style={{display:"flex",justifyContent:"flex-end",marginBottom:8}}>
           <button onClick={()=>{ setShowAddVendor(s=>!s); if(!showAddVendor) setNewVendor({name:"",phone:"",city:""}); }}
             style={{display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:7,background:T.purL,border:`1.5px solid ${T.purM}`,color:T.pur,fontSize:11.5,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}
             onMouseEnter={e=>e.currentTarget.style.background=T.purM+"66"}
             onMouseLeave={e=>e.currentTarget.style.background=T.purL}>
             <IcAdd size={12} color={T.pur}/> {showAddVendor?t("common.cancel"):t("procurement.add_new_material_vendor_to_library")}
           </button>
-        </div>
+        </div>}
         {showAddVendor&&(
           <div style={{padding:"11px 12px",background:T.purL,border:`1.5px solid ${T.purM}`,borderRadius:8,marginBottom:11}}>
             <div style={{fontSize:11,fontWeight:700,color:T.pur,marginBottom:8,letterSpacing:".3px"}}>{t("procurement.add_new_material_vendor_to_library_2")}</div>

@@ -543,8 +543,11 @@ function NewTenderModal({onClose, onCreated}) {
 
   // Party dropdown — Client-type parties (department yahi se aata hai)
   // List ke aakhir me "+ Naya Department" — dropdown me na mile to yahin se jod do.
+  // Naya department = nayi party (POST /finance/parties) — server Party YA
+  // Finance YA Library ka CREATE maangta hai (5 Oct 2026); tick na ho to option nahi.
   const partyOpts = [...parties.map(p=>({v:String(p.id), l:p.name})),
-                     {v:NEW_PARTY, l:t("tenders.naya_department_jodo")}];
+                     ...(canAny(["Party","Finance","Library"], "create")
+                       ? [{v:NEW_PARTY, l:t("tenders.naya_department_jodo")}] : [])];
 
   return (
     <Modal title={t("tenders.naya_tender")} Icon={IcGavel} onClose={onClose} width={600}
@@ -816,8 +819,11 @@ function EditTenderModal({tender, boqBase = 0, onClose, onSaved, onDeleted}) {
 
 
   // List ke aakhir me "+ Naya Department" — dropdown me na mile to yahin se jod do.
+  // Naya department = nayi party (POST /finance/parties) — server Party YA
+  // Finance YA Library ka CREATE maangta hai (5 Oct 2026); tick na ho to option nahi.
   const partyOpts = [...parties.map(p=>({v:String(p.id), l:p.name})),
-                     {v:NEW_PARTY, l:t("tenders.naya_department_jodo")}];
+                     ...(canAny(["Party","Finance","Library"], "create")
+                       ? [{v:NEW_PARTY, l:t("tenders.naya_department_jodo")}] : [])];
   // Dropdown me sirf wahi stage jahan asli me ja sakte hain — mojooda stage
   // hamesha, baaki checkTransition se. Asli rok backend par hai; ye sirf
   // galat option dikhne se rokta hai.
