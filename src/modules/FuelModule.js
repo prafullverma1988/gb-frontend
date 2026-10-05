@@ -20,6 +20,7 @@ import { t, Rich } from "../i18n";
 import { BackClose } from "../utils/backNav";
 import { can, canAny, canEntry } from "../utils/perms";
 import { cld } from "../utils/cloudinary";
+import { loadPhotoPolicy, policyFor, fileInputProps } from "../utils/photoPolicy";
 
 // ── ICONS ─────────────────────────────────────────────────────────
 const Ic = ({ d, size = 18, color = "currentColor", sw = 1.8, fill = "none" }) => (
@@ -1223,10 +1224,21 @@ function DipActions({ row, onAsk }) {
   // Shift ke waqt li reading shift ka hissa hai — wo nahi hat'ti (server bhi rokta hai).
   const canDelete = may && !d.is_shift && !delPending;
   const shiftNote = may && d.is_shift;
-  if (!d.adjusted && !adjPending && !delPending && !backAdj && !backDel && !canAdjust && !canDelete && !shiftNote) return null;
+  // Site par li dipstick ki photo (phone se, 6 Oct 2026) — farq par faisla
+  // karne wala wahi dekhe jo naapa gaya. Click par badi photo naye tab me.
+  const photos = row.photos || [];
+  const pendingPh = Number(row.photos_pending) || 0;
+  if (!d.adjusted && !adjPending && !delPending && !backAdj && !backDel && !canAdjust && !canDelete && !shiftNote
+      && !photos.length && !pendingPh) return null;
   const muted = { fontSize: 10.5, color: T.t3 };
   return (
     <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", padding: "5px 15px 7px", borderBottom: `1px solid ${T.b1}`, background: T.surfaceB }}>
+      {photos.map((u, i) => (
+        <a key={i} href={cld(u, "view")} target="_blank" rel="noreferrer" title={t("fuel.dip_photo_label")}>
+          <img src={cld(u, "thumb")} alt="" style={{ height: 30, width: 30, objectFit: "cover", borderRadius: 5, border: `1px solid ${T.b1}`, display: "block" }} />
+        </a>
+      ))}
+      {pendingPh > 0 && <span style={muted}>{t("fuel.d_photos_pending", { n: pendingPh })}</span>}
       {d.adjusted && <Pill label={t("fuel.dip_adjust_hua_pill", { litres: d.adjust_req && d.adjust_req.adj_litres != null ? signedL(d.adjust_req.adj_litres) : "" })} c={T.grn} bg={T.grnL} />}
       {adjPending && <Pill label={t("fuel.dip_adjust_pending")} c={T.amb} bg={T.ambL} />}
       {delPending && <Pill label={t("fuel.dip_delete_pending")} c={T.amb} bg={T.ambL} />}
@@ -1398,6 +1410,13 @@ function BarrelTab({ stores, projects, onReload, onOpenLedger, onRefuel, dipPend
   const [f, setF] = useState({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  // Dipstick ki photo — Settings → Photo Settings → "Diesel stock check". Pehle
+  // yahan photo ki jagah hi nahi thi, aur setting "Zaroori" hote hi web se
+  // dipstick save hi nahi ho paati (server rokta hai). 6 Oct 2026.
+  const [photoPol, setPhotoPol] = useState(null);
+  const [dipUploading, setDipUploading] = useState(false);
+  useEffect(() => { loadPhotoPolicy().then(setPhotoPol); }, []);
+  const dipPol = policyFor(photoPol, "fuel_stock_check");
 
   // Jagah ki list server se — projects ke saath company ke warehouses (Settings →
   // Warehouse), aur ye ki is user ko drum shift karne ki permission hai ya nahi.
@@ -1429,9 +1448,22 @@ function BarrelTab({ stores, projects, onReload, onOpenLedger, onRefuel, dipPend
     setBusy(false);
   };
 
+  const pickDipPhoto = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setDipUploading(true); setError("");
+    try {
+      const url = await uploadToCloudinary(file);
+      setF((p) => ({ ...p, photo_url: url }));
+    } catch (ex) { setError(t("fuel.dip_photo_upload_fail", { msg: ex.message })); }
+    setDipUploading(false);
+  };
+
   const saveDip = async () => {
     setError("");
     if (f.physical_l === undefined || f.physical_l === "") { setError(t("fuel.naapa_hua_diesel_likhein")); return; }
+    if (dipUploading) return;
+    if (dipPol.mode === "required" && !f.photo_url) { setError(t("fuel.dip_photo_zaroori")); return; }
     setBusy(true);
     try {
       const r = await api.post("/fuel/stock-checks", {
@@ -1439,6 +1471,7 @@ function BarrelTab({ stores, projects, onReload, onOpenLedger, onRefuel, dipPend
         checked_at: toSqlDateTime(f.checked_at || nowLocal()),
         physical_l: parseFloat(f.physical_l),
         note: f.note || null,
+        photo_url: dipPol.mode !== "off" ? (f.photo_url || null) : null,
       });
       if (r?.success) { setDipFor(null); setF({}); onReload(); }
       else setError(r?.message || "Save failed");
@@ -1611,13 +1644,32 @@ function BarrelTab({ stores, projects, onReload, onOpenLedger, onRefuel, dipPend
 
       <Modal open={!!dipFor} onClose={() => setDipFor(null)} title={t("fuel.dipstick_check")} width={520}
         sub={dipFor ? `${dipFor.name} — ${t("fuel.kitaab_ke_hisaab_se_l", { l: fmtL(bookL) })}` : ""}
-        footer={<><Btn ghost onClick={() => setDipFor(null)}>{t("common.cancel")}</Btn><Btn onClick={saveDip} disabled={busy}>{busy ? t("common.saving") : t("fuel.record_karein")}</Btn></>}>
+        footer={<><Btn ghost onClick={() => setDipFor(null)}>{t("common.cancel")}</Btn><Btn onClick={saveDip} disabled={busy || dipUploading}>{busy ? t("common.saving") : t("fuel.record_karein")}</Btn></>}>
         <div style={{ display: "grid", gap: 12 }}>
           <Field label={t("fuel.kab_naapa")}><input type="datetime-local" value={f.checked_at || ""} onChange={(e) => setF((p) => ({ ...p, checked_at: e.target.value }))} style={inp} /></Field>
           <Field label={t("fuel.naapa_hua_diesel_l")}>
             <input value={f.physical_l ?? ""} inputMode="decimal" onChange={(e) => setF((p) => ({ ...p, physical_l: e.target.value.replace(/[^0-9.]/g, "") }))} style={inp} />
           </Field>
           {varianceBox}
+          {dipPol.mode !== "off" && (
+            <Field label={dipPol.mode === "required" ? t("fuel.dip_photo_label_zaroori") : t("fuel.dip_photo_label")}
+              hint={t("fuel.dip_photo_hint")}>
+              <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                <label style={{ ...inp, width: "auto", cursor: dipUploading ? "wait" : "pointer", display: "inline-flex", alignItems: "center", gap: 7, color: T.t2, fontWeight: 600 }}>
+                  <IcCamera size={14} color={T.t3} />
+                  {dipUploading ? t("fuel.upload_ho_raha_hai") : f.photo_url ? t("fuel.photo_badlein") : t("fuel.photo_chunein")}
+                  <input {...fileInputProps(dipPol)} onChange={pickDipPhoto} disabled={dipUploading} style={{ display: "none" }} />
+                </label>
+                {f.photo_url && (
+                  <>
+                    <img src={cld(f.photo_url, "thumb")} alt="" style={{ height: 38, width: 38, objectFit: "cover", borderRadius: 6, border: `1px solid ${T.b1}` }} />
+                    <button type="button" onClick={() => setF((p) => ({ ...p, photo_url: "" }))}
+                      style={{ background: "none", border: "none", color: T.t4, cursor: "pointer", fontSize: 11.5, fontFamily: "inherit" }}>{t("fuel.hatayein")}</button>
+                  </>
+                )}
+              </div>
+            </Field>
+          )}
           <Field label={t("common.note_optional")}><input value={f.note || ""} onChange={(e) => setF((p) => ({ ...p, note: e.target.value }))} style={inp} /></Field>
           {errorBox}
         </div>
