@@ -2256,6 +2256,8 @@ const dict = {
   "equipment.project_missing":                                 "प्रोजेक्ट नहीं मिला",
   "equipment.remark_kya_kaam_hua":                             "रिमार्क — क्या काम हुआ",
   "equipment.remove_name":                                     "{name} रिमूव करना है?",
+  "equipment.req_machine":                                     "मशीन: {name}",
+  "equipment.req_task":                                        "टास्क: {name}",
   "equipment.request_equipment":                               "इक्विपमेंट रिक्वेस्ट करो",
   "equipment.reserved_equipment":                              "रिजर्व्ड इक्विपमेंट",
   "equipment.reserved_fmtd_fmtd2":                             "रिज़र्व किया गया {fmtD} → {fmtD2}",

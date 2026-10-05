@@ -2259,6 +2259,8 @@ const dict = {
   "equipment.project_missing":                                 "Project nahi mila",
   "equipment.remark_kya_kaam_hua":                             "Remark — kya kaam hua",
   "equipment.remove_name":                                     "{name} remove karna hai?",
+  "equipment.req_machine":                                     "Machine: {name}",
+  "equipment.req_task":                                        "Task: {name}",
   "equipment.request_equipment":                               "Equipment request karo",
   "equipment.reserved_equipment":                              "Reserved Equipment",
   "equipment.reserved_fmtd_fmtd2":                             "Reserved {fmtD} → {fmtD2}",

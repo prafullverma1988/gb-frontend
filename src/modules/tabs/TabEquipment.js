@@ -433,10 +433,19 @@ function TabEquipment({ projectId }) {
                     <div>
                       <div style={{ fontSize: 12.5, fontWeight: 600, color: T.t1 }}>{rq.equipment_type || "—"}</div>
                       {rq.capacity && <div style={{ fontSize: 10.5, color: T.t4 }}>{rq.capacity}</div>}
+                      {/* Site ne library ki koi khaas machine maangi ho (mobile form, 5 Oct 2026) */}
+                      {rq.preferred_equipment_name && (
+                        <div style={{ fontSize: 10.5, color: T.t2, marginTop: 2 }}>
+                          {t("equipment.req_machine", { name: rq.preferred_equipment_name + (rq.preferred_registration_no ? " · " + rq.preferred_registration_no : "") })}
+                        </div>
+                      )}
                     </div>
                     <span style={{ fontSize: 11.5, color: T.t2 }}>{fmtD(rq.from_date)}</span>
                     <span style={{ fontSize: 11.5, color: T.t2 }}>{fmtD(rq.to_date)}</span>
-                    <span style={{ fontSize: 11.5, color: T.t3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{rq.reason || "—"}</span>
+                    <span title={[rq.task_name, rq.reason].filter(Boolean).join(" · ")}
+                      style={{ fontSize: 11.5, color: T.t3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {[rq.task_name ? t("equipment.req_task", { name: rq.task_name }) : null, rq.reason].filter(Boolean).join(" · ") || "—"}
+                    </span>
                     <span>{reqStatusPill(rq.status)}</span>
                   </div>
                 ))}
