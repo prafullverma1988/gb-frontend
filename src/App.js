@@ -1825,15 +1825,17 @@ function parseNotifLink(link){
   const [path,query]=raw.split("?");
   const parts=path.split("/").filter(Boolean);
   const module=parts[0]; if(!module) return null;
-  let projectId=null,tab=null,refId=null;
+  let projectId=null,tab=null,refId=null,incidentId=null;
   // "?id=<n>" on any other module ("/assets?id=12") → refId, the module
   // decides what to open with it (Assets: that voucher's drawer).
   if(query){ const m=/(?:^|&)id=(\d+)/.exec(query); if(m) refId=parseInt(m[1],10); }
+  // Asset gum/kabad report ("/assets?incident=12") — Nuksan tab ka drawer.
+  if(query){ const m=/(?:^|&)incident=(\d+)/.exec(query); if(m) incidentId=parseInt(m[1],10); }
   if(module==="projects"){
     if(parts[1]&&/^\d+$/.test(parts[1])){ projectId=parseInt(parts[1],10); tab=parts[2]||null; }
     else if(refId){ projectId=refId; }
   }
-  return {module,projectId,tab,refId};
+  return {module,projectId,tab,refId,incidentId};
 }
 
 function ProjectsWrapper({deepLink,onDeepLinkDone}){
@@ -2187,7 +2189,8 @@ function App(){
       return;
     }
     // Asset voucher notification ("/assets?id=12") → module opens that voucher.
-    if(parsed&&parsed.module==="assets"&&parsed.refId) setAssetDeepLink(parsed.refId);
+    if(parsed&&parsed.module==="assets"&&parsed.incidentId) setAssetDeepLink({incident:parsed.incidentId});
+    else if(parsed&&parsed.module==="assets"&&parsed.refId) setAssetDeepLink(parsed.refId);
     if(mod) setNav(mod);
   };
 

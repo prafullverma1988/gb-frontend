@@ -152,6 +152,9 @@ const sideText = (v, side) => {
   if (side === "from" && v.type === "opening") return { main: t("assets.type_opening"), sub: "" };
   // Adjust voucher ka koi "kahan se" nahi hota — wo ginti se paida hota hai.
   if (side === "from" && v.type === "adjust") return { main: t("assets.type_adjust"), sub: "" };
+  // Gum / kabad register se bahar jaate hain (kahin "pahunchte" nahi); mil gaya kahin se "aata" nahi.
+  if (side === "to" && (v.type === "lost" || v.type === "scrap")) return { main: typeLabel(v.type), sub: "" };
+  if (side === "from" && v.type === "found") return { main: typeLabel(v.type), sub: "" };
   return { main: "—", sub: "" };
 };
 // Ginti ki jagah — list aur drawer dono me ek hi shakl.
@@ -231,8 +234,8 @@ const StatusPill = ({ s }) => { const k = statusTone(s); return <Pill label={t("
 const CondPill = ({ c }) => { const k = condTone(c); return <Pill label={condLabel(c || "good")} c={k.c} bg={k.bg} />; };
 const TypePill = ({ ty }) => (
   <Pill label={typeLabel(ty)}
-    c={ty === "issue" ? T.ind : ty === "return" || ty === "repair_in" ? T.blu : ty === "grn" ? T.grn : ty === "repair_out" ? T.amb : T.t3}
-    bg={ty === "issue" ? T.indL : ty === "return" || ty === "repair_in" ? T.bluL : ty === "grn" ? T.grnL : ty === "repair_out" ? T.ambL : T.sltL} />
+    c={ty === "issue" ? T.ind : ty === "return" || ty === "repair_in" ? T.blu : ty === "grn" || ty === "found" ? T.grn : ty === "repair_out" || ty === "damage" ? T.amb : ty === "lost" ? T.red : T.t3}
+    bg={ty === "issue" ? T.indL : ty === "return" || ty === "repair_in" ? T.bluL : ty === "grn" || ty === "found" ? T.grnL : ty === "repair_out" || ty === "damage" ? T.ambL : ty === "lost" ? T.redL : T.sltL} />
 );
 
 const Btn = ({ children, onClick, c = T.ind, disabled, icon: Icon, size = "md", ghost, style = {}, title }) => (
@@ -672,7 +675,8 @@ function DashboardTab({ dash: companyDash, warehouses, onOpenVoucher, onGo }) {
     { l: t("assets.tile_overdue"), v: fmtN(k.overdue), sub: t("assets.tile_wh_overdue_sub"), c: N(k.overdue) ? T.red : T.grn, I: IcAlert },
     { l: t("assets.tile_verify"), v: fmtN(k.open_verifications), c: N(k.open_verifications) ? T.ind : T.grn, I: IcCount, go: "verify",
       sub: k.last_count_date ? t("assets.tile_wh_last_count", { d: fmtD(k.last_count_date) }) : t("assets.tile_wh_never_counted") },
-    { l: t("assets.tile_lost"), v: fmtN(k.lost_qty_fy), sub: t("assets.tile_wh_lost_sub"), c: N(k.lost_qty_fy) ? T.red : T.grn, I: IcTag },
+    { l: t("assets.tile_lost"), v: fmtN(k.lost_qty_fy), c: N(k.lost_qty_fy) ? T.red : T.grn, I: IcTag, go: "loss",
+      sub: N(k.loss_pending) ? t("assets.tile_lost_pending", { n: fmtN(k.loss_pending) }) : t("assets.tile_wh_lost_sub") },
   ] : [
     { l: t("assets.tile_total"), v: fmtN(totalItems), sub: t("assets.tile_total_sub", { s: N(k.serialized_items), b: N(k.bulk_items) }), c: T.ind, I: IcBox, go: "register" },
     { l: t("assets.tile_in_store"), v: fmtN(k.in_store_qty), sub: t("assets.tile_in_store_sub"), c: T.blu, I: IcStore, go: "custody" },
@@ -683,7 +687,8 @@ function DashboardTab({ dash: companyDash, warehouses, onOpenVoucher, onGo }) {
     { l: t("assets.tile_damaged"), v: fmtN(k.damaged_qty), sub: t("assets.tile_damaged_sub", { n: fmtN(k.under_repair) }), c: N(k.damaged_qty) ? T.amb : T.grn, I: IcAlert },
     // under_repair ab ginti nahi, qty hai (Phase 2) — vendor ke paas pada kul.
     { l: t("assets.tile_repair"), v: fmtN(k.under_repair), sub: t("assets.tile_repair_sub"), c: N(k.under_repair) ? T.amb : T.grn, I: IcTool, go: "movements" },
-    { l: t("assets.tile_lost"), v: fmtN(k.lost_qty_fy), sub: t("assets.tile_lost_sub"), c: N(k.lost_qty_fy) ? T.red : T.grn, I: IcTag },
+    { l: t("assets.tile_lost"), v: fmtN(k.lost_qty_fy), c: N(k.lost_qty_fy) ? T.red : T.grn, I: IcTag, go: "loss",
+      sub: N(k.loss_pending) ? t("assets.tile_lost_pending", { n: fmtN(k.loss_pending) }) : t("assets.tile_lost_sub") },
     { l: t("assets.tile_verify"), v: fmtN(k.open_verifications), sub: t("assets.tile_verify_sub"), c: N(k.open_verifications) ? T.ind : T.grn, I: IcCount, go: "verify" },
   ];
   const two = { display: "grid", gridTemplateColumns: isMobileWidth() ? "1fr" : "1fr 1fr", gap: 12, marginBottom: 12 };
@@ -1059,6 +1064,7 @@ function ItemDrawer({ item, cats, canEdit, onClose, onChanged, onOpenVoucher }) 
         <KV k={t("assets.in_store")} v={fmtN(item.in_store_qty)} />
         <KV k={t("assets.deployed")} v={fmtN(item.deployed_qty)} />
         <KV k={t("assets.damaged")} v={fmtN(item.damaged_qty)} />
+        {N(item.loss_pending_qty) > 0 && <KV k={t("assets.loss_pending_kv")} v={<span style={{ color: T.amb }}>{fmtN(item.loss_pending_qty)}</span>} />}
       </div>
       <SubTabs tabs={TABS} value={tab} onChange={setTab} />
 
@@ -3200,6 +3206,10 @@ function MovementsTab({ refreshKey, meta, pickers, canCreate, onIssue, onTransfe
           <option value="repair_in">{t("assets.type_repair_in")}</option>
           <option value="adjust">{t("assets.type_adjust")}</option>
           <option value="opening">{t("assets.type_opening")}</option>
+          <option value="lost">{t("assets.type_lost")}</option>
+          <option value="damage">{t("assets.type_damage")}</option>
+          <option value="scrap">{t("assets.type_scrap")}</option>
+          <option value="found">{t("assets.type_found")}</option>
         </PickSelect>
         <PickSelect value={fl.status} onChange={(e) => upd("status", e.target.value)} style={{ ...inp, width: 130 }}>
           <option value="">{t("assets.all_status")}</option>
@@ -3531,6 +3541,8 @@ function VerificationDrawer({ id, me, isAdmin, canApprove, onClose, onChanged, o
                         {net == null ? "—" : net > 0 ? `+${fmtN(net)}` : fmtN(net)}
                       </span>
                       {condChanged && <div style={{ fontSize: 10, color: T.amb }}>{t("assets.verify_cond_changed")}</div>}
+                      {/* Ginti ki kami sudhaar maani jaati hai, gum nahi — sach me gum hai to Gum report pehle. */}
+                      {draft && canCount && net != null && net < 0 && <div style={{ fontSize: 10, color: T.t4, marginTop: 2 }}>{t("assets.verify_lost_hint")}</div>}
                     </div>
                     <div style={{ minWidth: 0 }}>
                       <input value={c.r} readOnly={!draft || !canCount}
@@ -4142,6 +4154,630 @@ function RequestsTab({ refreshKey, meta, pickers, onNew, onOpen }) {
   );
 }
 
+// ══════════════════════════════════════════════════════════════════
+// NUKSAN — Gum (lost) · Toota (damage) · Kabad (scrap) — 6 Oct 2026
+// ══════════════════════════════════════════════════════════════════
+// Prafull: "koi saman site pe ya store me guma to lost report kaise generate
+// kare ... lost, damage aur kabad ka alag alag report". Report wahi bharta hai
+// jiske paas cheez hai — site par custodian, store me uska asset incharge;
+// admin/PM kahin ka bhi. Gum aur Kabad report bhejte hi us jagah se nikal
+// jaata hai aur Admin/PM ke approve par register se ghatta hai; "Wapas bhejo"
+// par wahin laut aata hai. Toota turant (photo ke saath). Ganit server ka
+// (routes/assets.js "Gum / Toota / Kabad") — yahan sirf dikhana aur bharna.
+const LOSS_FORM_REASONS = {
+  lost: ["misplaced", "theft", "unknown", "other"],
+  damage: ["wear", "accident", "misuse", "other"],
+  scrap: ["beyond_repair", "obsolete", "other"],
+};
+const incTone = (s) => (s === "pending" ? { c: T.amb, bg: T.ambL } : s === "accepted" ? { c: T.grn, bg: T.grnL } : { c: T.slt, bg: T.sltL });
+const IncStatusPill = ({ s, kind }) => {
+  const k = incTone(s);
+  return <Pill label={kind === "damage" && s === "accepted" ? t("assets.inc_status_done") : t("assets.inc_status_" + (s || "pending"))} c={k.c} bg={k.bg} />;
+};
+const reasonLabel = (r) => (r ? t("assets.inc_reason_" + r) : "—");
+const fyStartStr = () => {
+  const d = new Date();
+  return `${d.getMonth() >= 3 ? d.getFullYear() : d.getFullYear() - 1}-04-01`;
+};
+// Report ki jagah — store ka naam, ya site + kiske paas.
+const incPlace = (r) => r.from_warehouse_name
+  || [r.from_project_name, r.from_holder_name].filter(Boolean).join(" · ") || "—";
+const itemText = (r) => [r.name, r.spec].filter(Boolean).join(" ");
+
+function LossTab({ refreshKey, meta, pickers, canReport, onNew, onOpen }) {
+  const [kind, setKind] = useState("lost");
+  const [from, setFrom] = useState(fyStartStr());
+  const [to, setTo] = useState(todayStr());
+  const [wh, setWh] = useState("");
+  const [pj, setPj] = useState("");
+  const [status, setStatus] = useState("");
+  const [rep, setRep] = useState(null);
+  const [failed, setFailed] = useState("");
+  const [mine, setMine] = useState([]);          // mujhe approve karni hai
+  const [xlsErr, setXlsErr] = useState("");
+
+  useEffect(() => {
+    let alive = true;
+    setRep(null); setFailed("");
+    api.get("/assets/incident-report?" + qs({ kind, from, to, warehouse_id: wh, project_id: pj }))
+      .then((r) => { if (!alive) return; if (r && r.success) setRep(r.data); else setFailed((r && r.message) || t("assets.loss_load_failed")); })
+      .catch(() => { if (alive) setFailed(t("assets.loss_load_failed")); });
+    return () => { alive = false; };
+  }, [kind, from, to, wh, pj, refreshKey]);
+  useEffect(() => {
+    let alive = true;
+    api.get("/assets/incidents?for_me=1").then((r) => { if (alive) setMine(r && r.success ? r.data || [] : []); }).catch(() => {});
+    return () => { alive = false; };
+  }, [refreshKey]);
+
+  const doExport = async () => {
+    setXlsErr("");
+    try {
+      saveBlob(await fetchBlob("/assets/incident-report/export?" + qs({ kind, from, to, warehouse_id: wh, project_id: pj }), t("assets.export_failed")),
+        `asset-${kind}-${from}-${to}.xlsx`);
+    } catch (e) { setXlsErr(e.message || t("assets.export_failed")); }
+  };
+
+  const stores = (meta && meta.warehouses) || [];
+  const projects = (pickers && pickers.projects) || [];
+  // Kind badalte hi ek render tak purani report rehti hai — use nayi table me mat daalo.
+  const view = rep && rep.kind === kind ? rep : null;
+  const s = (view && view.summary) || {};
+  const rows = ((view && view.rows) || []).filter((r) => kind === "damage" || !status || r.status === status);
+  const grid = { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(170px,1fr))", gap: 10, marginBottom: 14 };
+
+  return (
+    <div>
+      <Notice>{t("assets.loss_guide")}</Notice>
+      {mine.length > 0 && (
+        <Panel title={t("assets.loss_pending_title", { n: mine.length })} style={{ marginBottom: 14, borderColor: "#EAD3A3" }}>
+          <div style={{ padding: "8px 15px", fontSize: 11.5, color: T.t3 }}>{t("assets.loss_pending_hint")}</div>
+          {mine.map((x) => (
+            <Row key={x.id} cols="110px 90px 1.2fr 1.4fr 110px" onClick={() => onOpen(x.id)}>
+              <span style={{ fontWeight: 700, color: T.t1 }}>{x.voucher_no}</span>
+              <span><TypePill ty={x.type} /></span>
+              <span>{incPlace(x)}</span>
+              <span style={{ color: T.t3 }}>{x.item_names || "—"}</span>
+              <span style={{ fontSize: 11, color: T.t4 }}>{x.created_by_name || ""} · {fmtD(x.date)}</span>
+            </Row>
+          ))}
+        </Panel>
+      )}
+
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
+        <Seg value={kind} onChange={(k) => { setKind(k); setStatus(""); }}
+          options={[{ k: "lost", l: t("assets.loss_kind_lost") }, { k: "damage", l: t("assets.loss_kind_damage") }, { k: "scrap", l: t("assets.loss_kind_scrap") }]} />
+        <span style={{ flex: 1 }} />
+        {canReport && <>
+          <Btn size="sm" c={T.red} icon={IcAlert} onClick={() => onNew("lost")}>{t("assets.loss_new_lost")}</Btn>
+          <Btn size="sm" c={T.amb} icon={IcTool} onClick={() => onNew("damage")}>{t("assets.loss_new_damage")}</Btn>
+          <Btn size="sm" c={T.slt} icon={IcTrash} onClick={() => onNew("scrap")}>{t("assets.loss_new_scrap")}</Btn>
+        </>}
+        <Btn size="sm" ghost icon={IcDown} onClick={doExport}>{t("assets.loss_excel")}</Btn>
+      </div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
+        <input type="date" value={from} max={to} onChange={(e) => setFrom(e.target.value)} style={{ ...inpSm, width: 140 }} title={t("assets.loss_from_date")} />
+        <input type="date" value={to} min={from} onChange={(e) => setTo(e.target.value)} style={{ ...inpSm, width: 140 }} title={t("assets.loss_to_date")} />
+        {stores.length > 1 && (
+          <PickSelect value={wh} onChange={(e) => { setWh(e.target.value); if (e.target.value) setPj(""); }} style={{ ...inpSm, width: 170 }}>
+            <option value="">{t("assets.loss_all_stores")}</option>
+            {stores.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+          </PickSelect>
+        )}
+        <PickSelect value={pj} onChange={(e) => { setPj(e.target.value); if (e.target.value) setWh(""); }} style={{ ...inpSm, width: 190 }}>
+          <option value="">{t("assets.loss_all_sites")}</option>
+          {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+        </PickSelect>
+        {kind !== "damage" && (
+          <PickSelect value={status} onChange={(e) => setStatus(e.target.value)} style={{ ...inpSm, width: 150 }}>
+            <option value="">{t("assets.loss_all_status")}</option>
+            {["pending", "accepted", "rejected"].map((x) => <option key={x} value={x}>{t("assets.inc_status_" + x)}</option>)}
+          </PickSelect>
+        )}
+      </div>
+      <ErrBox>{xlsErr}</ErrBox>
+      {failed && <ErrBox>{failed}</ErrBox>}
+      {!view && !failed && <Spinner />}
+
+      {view && kind === "lost" && (
+        <>
+          <div style={grid}>
+            <StatCard label={t("assets.loss_sum_reports")} value={fmtN(s.reports)} sub={t("assets.loss_sum_reports_sub", { n: fmtN(s.pending) })} color={T.ind} icon={IcDoc} />
+            <StatCard label={t("assets.loss_sum_lost_qty")} value={fmtN(s.qty)} sub={t("assets.loss_sum_value_sub", { v: rupee(s.value) })} color={T.red} icon={IcAlert} />
+            <StatCard label={t("assets.loss_sum_found")} value={fmtN(s.found_qty)} sub={s.found_value ? rupee(s.found_value) : ""} color={T.grn} icon={IcChk} />
+            <StatCard label={t("assets.loss_sum_pending_qty")} value={fmtN(s.pending_qty)} sub={t("assets.loss_sum_pending_qty_sub")} color={T.amb} icon={IcClock} />
+          </div>
+          <LossTable kind="lost" rows={rows} onOpen={onOpen} empty={t("assets.loss_empty_lost")} />
+          {(s.by_holder || []).length > 0 && (
+            <Panel title={t("assets.loss_by_holder_title")} style={{ marginTop: 14 }}>
+              <div style={{ padding: "8px 15px", fontSize: 11, color: T.t4 }}>{t("assets.loss_by_holder_hint")}</div>
+              {s.by_holder.map((h, i) => (
+                <Row key={i} cols="1.6fr 1fr 80px 110px 80px">
+                  <span style={{ fontWeight: 600, color: T.t1 }}>{h.holder}</span>
+                  <span style={{ color: T.t3 }}>{h.custodian || "—"}</span>
+                  <span>{fmtN(h.qty)}</span>
+                  <span>{h.value ? rupee(h.value) : "—"}</span>
+                  <span style={{ fontSize: 11, color: T.t4 }}>{t("assets.loss_n_reports", { n: h.reports })}</span>
+                </Row>
+              ))}
+            </Panel>
+          )}
+        </>
+      )}
+
+      {view && kind === "scrap" && (
+        <>
+          <div style={grid}>
+            <StatCard label={t("assets.loss_sum_reports")} value={fmtN(s.reports)} sub={t("assets.loss_sum_reports_sub", { n: fmtN(s.pending) })} color={T.ind} icon={IcDoc} />
+            <StatCard label={t("assets.loss_sum_scrap_qty")} value={fmtN(s.qty)} sub={t("assets.loss_sum_value_sub", { v: rupee(s.value) })} color={T.slt} icon={IcTrash} />
+            <StatCard label={t("assets.loss_sum_sale")} value={rupee(s.sale_amount)} sub={t("assets.loss_sum_sale_sub")} color={T.grn} icon={IcRupee} />
+          </div>
+          <LossTable kind="scrap" rows={rows} onOpen={onOpen} empty={t("assets.loss_empty_scrap")} />
+        </>
+      )}
+
+      {view && kind === "damage" && (
+        <>
+          <div style={grid}>
+            <StatCard label={t("assets.loss_sum_damaged_now")} value={fmtN(s.damaged_qty)} sub={t("assets.loss_sum_places", { n: fmtN(s.places) })} color={T.amb} icon={IcAlert} />
+            <StatCard label={t("assets.loss_sum_damaged_value")} value={s.damaged_value ? rupee(s.damaged_value) : "—"} sub={t("assets.loss_sum_damaged_value_sub")} color={T.amb} icon={IcRupee} />
+            <StatCard label={t("assets.loss_sum_dmg_events")} value={fmtN(s.events)} sub={t("assets.loss_sum_dmg_events_sub", { n: fmtN(s.events_qty) })} color={T.ind} icon={IcClock} />
+          </div>
+          <Panel title={t("assets.loss_damage_now_title")}>
+            <Scroll minWidth={840}>
+              <Row head cols="1.5fr 1fr 1.6fr 70px 90px 100px 90px">
+                <span>{t("assets.loss_col_place")}</span><span>{t("assets.loss_col_custodian")}</span><span>{t("assets.loss_col_item")}</span>
+                <span>{t("assets.loss_col_damaged")}</span><span>{t("assets.loss_col_since")}</span><span>{t("assets.loss_col_value")}</span><span />
+              </Row>
+              {rows.length === 0 && <Empty>{t("assets.loss_empty_damage_now")}</Empty>}
+              {rows.map((r) => (
+                <Row key={r.id} cols="1.5fr 1fr 1.6fr 70px 90px 100px 90px">
+                  <span style={{ color: T.t1, fontWeight: 600 }}>{holdingWhere(r)}{r.project_id ? <span style={{ fontWeight: 400, color: T.t3 }}> · {r.holder_name}</span> : null}</span>
+                  <span style={{ color: T.t3 }}>{r.custodian_name || "—"}</span>
+                  <span>{itemText(r)} {r.code ? <span style={{ fontSize: 10.5, color: T.t4 }}>{r.code}</span> : null}</span>
+                  <span style={{ fontWeight: 700, color: T.amb }}>{fmtN(r.qty_damaged)}</span>
+                  <span style={{ color: T.t3 }}>{fmtD(r.since)}</span>
+                  <span>{r.value ? rupee(r.value) : "—"}</span>
+                  <span>{canReport && <Btn size="sm" ghost onClick={() => onNew("scrap", { placeKey: groupKey(r), rowKey: r.id + ":damaged", qty: N(r.qty_damaged) })}>{t("assets.loss_act_scrap")}</Btn>}</span>
+                </Row>
+              ))}
+            </Scroll>
+            {rows.length > 0 && <div style={{ padding: "8px 15px", fontSize: 11, color: T.t4 }}>{t("assets.loss_damage_now_hint")}</div>}
+          </Panel>
+          <Panel title={t("assets.loss_damage_events_title")} style={{ marginTop: 14 }}>
+            <Scroll minWidth={760}>
+              <Row head cols="90px 110px 1.2fr 1.6fr 60px 1.4fr">
+                <span>{t("assets.loss_col_date")}</span><span>{t("assets.loss_col_no")}</span><span>{t("assets.loss_col_how")}</span>
+                <span>{t("assets.loss_col_item")}</span><span>{t("assets.loss_col_qty")}</span><span>{t("assets.loss_col_place")}</span>
+              </Row>
+              {(view.events || []).length === 0 && <Empty>{t("assets.loss_empty_damage_events")}</Empty>}
+              {(view.events || []).map((e, i) => (
+                <Row key={e.voucher_id + ":" + i} cols="90px 110px 1.2fr 1.6fr 60px 1.4fr" onClick={e.type === "damage" ? () => onOpen(e.voucher_id) : undefined}>
+                  <span style={{ color: T.t3 }}>{fmtD(e.date)}</span>
+                  <span style={{ fontWeight: 600 }}>{e.voucher_no}</span>
+                  <span>{t(e.type === "damage" ? "assets.loss_how_marked" : e.type === "repair_in" ? "assets.loss_how_repair" : "assets.loss_how_arrived")}</span>
+                  <span>{itemText(e)}</span>
+                  <span>{fmtN(e.qty)}</span>
+                  <span style={{ color: T.t3 }}>{e.to_warehouse_name || [e.to_project_name, e.to_holder_name].filter(Boolean).join(" · ") || "—"}</span>
+                </Row>
+              ))}
+            </Scroll>
+          </Panel>
+        </>
+      )}
+    </div>
+  );
+}
+
+// Gum / Kabad ki report — ek row = report ki ek cheez.
+function LossTable({ kind, rows, onOpen, empty }) {
+  const cols = "110px 80px 1.4fr 1.5fr 55px 95px 1fr 80px 120px";
+  return (
+    <Panel>
+      <Scroll minWidth={980}>
+        <Row head cols={cols}>
+          <span>{t("assets.loss_col_no")}</span><span>{t("assets.loss_col_date")}</span><span>{t("assets.loss_col_place")}</span>
+          <span>{t("assets.loss_col_item")}</span><span>{t("assets.loss_col_qty")}</span><span>{t("assets.loss_col_value")}</span>
+          <span>{t("assets.loss_col_reason")}</span>
+          <span>{t(kind === "lost" ? "assets.loss_col_found" : "assets.loss_col_sale")}</span>
+          <span>{t("assets.loss_col_status")}</span>
+        </Row>
+        {rows.length === 0 && <Empty>{empty}</Empty>}
+        {rows.map((r) => (
+          <Row key={r.line_id} cols={cols} onClick={() => onOpen(r.voucher_id)}>
+            <span style={{ fontWeight: 700, color: T.t1 }}>{r.voucher_no}</span>
+            <span style={{ color: T.t3 }}>{fmtD(r.noticed_on || r.date)}</span>
+            <span>
+              {incPlace(r)}
+              {r.from_custodian_name && r.from_project_id ? <div style={{ fontSize: 10.5, color: T.t4 }}>{t("assets.loss_custodian_of", { name: r.from_custodian_name })}</div> : null}
+            </span>
+            <span>{itemText(r)}{r.from_condition === "damaged" ? <span style={{ fontSize: 10.5, color: T.amb }}> · {t("assets.loss_bucket_damaged")}</span> : null}</span>
+            <span style={{ fontWeight: 700 }}>{fmtN(r.qty)}</span>
+            <span>{r.amount != null ? rupee(r.amount) : "—"}</span>
+            <span style={{ color: T.t3 }}>
+              {reasonLabel(r.reason)}
+              {r.source_voucher_no ? <div style={{ fontSize: 10.5, color: T.t4 }}>{t("assets.loss_d_source", { no: r.source_voucher_no })}</div> : null}
+            </span>
+            <span>{kind === "lost" ? (N(r.found_qty) ? fmtN(r.found_qty) : "—") : (r.first_line && r.sale_amount != null ? rupee(r.sale_amount) : "—")}</span>
+            <span><IncStatusPill s={r.status} kind={kind} /></span>
+          </Row>
+        ))}
+      </Scroll>
+    </Panel>
+  );
+}
+
+// Report bharna. Jagah ki list holdings se banti hai — jo cheez sach me is
+// aadmi ke paas hai (uski custody, uske store) wahi; admin/PM ko har jagah.
+// Har cheez theek aur toote ki alag row me (Return/Transfer jaisa).
+function LossForm({ open, kind, preset, meta, me, canAll, items, onClose, onSaved }) {
+  const toast = useToast();
+  const [hold, setHold] = useState(null);
+  const [place, setPlace] = useState("");
+  const [qty, setQty] = useState({});
+  const [rate, setRate] = useState({});
+  const [reason, setReason] = useState("");
+  const [noticed, setNoticed] = useState(todayStr());
+  const [lastSeen, setLastSeen] = useState("");
+  const [police, setPolice] = useState("");
+  const [note, setNote] = useState("");
+  const [saleAmt, setSaleAmt] = useState("");
+  const [saleTo, setSaleTo] = useState("");
+  const [photos, setPhotos] = useState([]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const pol = usePhotoPolicy(open, "asset_loss");
+
+  const all = (meta && meta.warehouses) || [];
+  const myIds = (meta && meta.my_warehouse_ids) || [];
+  useEffect(() => {
+    if (!open) return;
+    setPlace((preset && preset.placeKey) || ""); setQty(preset && preset.rowKey ? { [preset.rowKey]: String(preset.qty || "") } : {});
+    setRate({}); setReason(""); setNoticed(todayStr()); setLastSeen(""); setPolice(""); setNote("");
+    setSaleAmt(""); setSaleTo(""); setPhotos([]); setError("");
+  }, [open, kind, preset]);
+  useEffect(() => {
+    if (!open) return undefined;
+    let alive = true;
+    setHold(null);
+    const calls = canAll
+      ? [api.get("/assets/holdings").catch(() => null)]
+      : [api.get(`/assets/holdings?custodian_user_id=${me.id}`).catch(() => null),
+         ...all.filter((w) => myIds.includes(w.id)).map((w) => api.get(`/assets/holdings?warehouse_id=${w.id}`).catch(() => null))];
+    Promise.all(calls).then((rs) => {
+      if (!alive) return;
+      const rows = [];
+      rs.forEach((r) => { if (r && r.success) rows.push(...(r.data || [])); });
+      setHold(rows.filter((h) => h.holder_type !== "repair"));
+    });
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, canAll]);
+
+  const groups = useMemo(() => {
+    const m = new Map();
+    for (const h of hold || []) {
+      const k = groupKey(h);
+      if (!m.has(k)) m.set(k, {
+        key: k, warehouse_id: h.warehouse_id, project_id: h.project_id, holder_type: h.holder_type, holder_id: h.holder_id, custodian_user_id: h.custodian_user_id,
+        label: h.warehouse_id ? `${t("assets.warehouse")} · ${h.warehouse_name || ""}`
+          : `${h.project_name || ""} · ${h.holder_name || ""} (${holderLabel(h.holder_type)})${h.custodian_name && h.holder_type !== "user" ? " · " + t("assets.loss_custodian_of", { name: h.custodian_name }) : ""}`,
+        rows: [],
+      });
+      m.get(k).rows.push(h);
+    }
+    return [...m.values()].sort((a, b) => a.label.localeCompare(b.label));
+  }, [hold]);
+  const g = groups.find((x) => x.key === place);
+  const rows = useMemo(() => {
+    const b = bucketRows(g ? g.rows : []).filter((r) => (kind === "damage" ? r.bucket === "good" : true));
+    // Kabad aksar toote ka hota hai — toote wali rows upar.
+    return kind === "scrap" ? [...b.filter((r) => r.bucket === "damaged"), ...b.filter((r) => r.bucket === "good")] : b;
+  }, [g, kind]);
+  // Holding ki row me item ki kharid rate aati hai (purane server par na aaye to register se).
+  const costOf = (r) => {
+    if (N(r.purchase_cost) > 0) return N(r.purchase_cost);
+    const it = (items || []).find((x) => x.id === r.asset_item_id);
+    return it && N(it.purchase_cost) > 0 ? N(it.purchase_cost) : 0;
+  };
+  const needRate = kind !== "damage";
+  const photoReq = pol && pol.mode !== "off" && (kind !== "lost" || pol.mode === "required");
+
+  const save = async () => {
+    setError("");
+    if (!g) { setError(t("assets.loss_err_place")); return; }
+    const lines = [];
+    for (const r of rows) {
+      const q = N(qty[r.key]);
+      if (!(q > 0)) continue;
+      if (q > r.have + 0.0001) { setError(t("assets.loss_err_qty_have", { item: itemText(r), have: fmtN(r.have) })); return; }
+      const line = { asset_item_id: r.asset_item_id, qty: q, from_condition: r.bucket };
+      if (needRate && !costOf(r)) {
+        const rt = N(rate[r.asset_item_id]);
+        if (!(rt > 0)) { setError(t("assets.loss_err_rate", { item: itemText(r) })); return; }
+        line.rate = rt;
+      }
+      lines.push(line);
+    }
+    if (!lines.length) { setError(t("assets.loss_err_items")); return; }
+    if (!reason) { setError(t("assets.loss_err_reason")); return; }
+    if (!note.trim()) { setError(t("assets.loss_err_note")); return; }
+    if (photoReq && !photos.length) { setError(t("assets.loss_err_photo")); return; }
+    const place_ = g.warehouse_id ? { warehouse_id: g.warehouse_id }
+      : { project_id: g.project_id, holder_type: g.holder_type, holder_id: g.holder_id, custodian_user_id: g.custodian_user_id };
+    setBusy(true);
+    const r = await api.post("/assets/incidents", {
+      kind, place: place_, items: lines, reason, noticed_on: noticed, last_seen_on: kind === "lost" ? lastSeen || null : null,
+      police_ref: kind === "lost" && reason === "theft" ? police : null, note: note.trim(),
+      sale_amount: kind === "scrap" && saleAmt !== "" ? Number(saleAmt) : null, sale_to: kind === "scrap" ? saleTo : null,
+      photo_urls: photos,
+    }).catch(() => null);
+    setBusy(false);
+    if (r && r.success) { toast.success(r.message || t("assets.saved")); onSaved(r.data); onClose(); return; }
+    setError((r && r.message) || t("assets.save_failed"));
+  };
+
+  const cols = needRate ? "1.8fr 80px 90px 150px" : "1.8fr 80px 90px";
+  return (
+    <Modal open={open} onClose={onClose} width={760} title={t("assets.loss_form_title_" + kind)} sub={t("assets.loss_form_sub_" + kind)}
+      footer={<><Btn ghost onClick={onClose}>{t("assets.cancel")}</Btn>
+        <Btn c={kind === "lost" ? T.red : kind === "damage" ? T.amb : T.slt} onClick={save} disabled={busy}>{busy ? t("assets.saving") : t("assets.loss_submit_" + kind)}</Btn></>}>
+      <Notice tone={kind === "damage" ? undefined : "warn"}>{t("assets.loss_flow_" + kind)}</Notice>
+      <Field label={t("assets.loss_place")}>
+        {hold === null ? <Spinner /> : groups.length === 0 ? <div style={{ fontSize: 12, color: T.t3 }}>{t("assets.loss_no_places")}</div> : (
+          <PickSelect value={place} onChange={(e) => { setPlace(e.target.value); setQty({}); setRate({}); }} style={inp}>
+            <option value="">{t("assets.loss_place_ph")}</option>
+            {groups.map((x) => <option key={x.key} value={x.key}>{x.label}</option>)}
+          </PickSelect>
+        )}
+      </Field>
+      {g && (
+        <div style={{ marginTop: 12, border: `1px solid ${T.b1}`, borderRadius: 10, overflow: "hidden" }}>
+          <Row head cols={cols}>
+            <span>{t("assets.loss_col_item")}</span><span>{t("assets.loss_have_head")}</span><span>{t("assets.loss_col_qty")}</span>
+            {needRate && <span>{t("assets.loss_rate")}</span>}
+          </Row>
+          {rows.length === 0 && <Empty>{t(kind === "damage" ? "assets.loss_no_good_rows" : "assets.loss_no_rows")}</Empty>}
+          {rows.map((r) => {
+            const cost = costOf(r);
+            return (
+              <Row key={r.key} cols={cols}>
+                <span>
+                  <span style={{ fontWeight: 600, color: T.t1 }}>{itemText(r)}</span>
+                  <span style={{ fontSize: 10.5, color: r.bucket === "damaged" ? T.amb : T.t4 }}> · {t(r.bucket === "damaged" ? "assets.loss_bucket_damaged" : "assets.loss_bucket_good")}</span>
+                  {r.code ? <div style={{ fontSize: 10.5, color: T.t4 }}>{r.code}</div> : null}
+                </span>
+                <span style={{ color: T.t3 }}>{fmtN(r.have)} {r.unit || ""}</span>
+                <input value={qty[r.key] || ""} inputMode="decimal" placeholder="0"
+                  onChange={(e) => setQty((p) => ({ ...p, [r.key]: e.target.value.replace(/[^0-9.]/g, "") }))} style={inpSm} />
+                {needRate && (cost
+                  ? <span style={{ fontSize: 11, color: T.t3 }}>{t("assets.loss_rate_from_register", { r: rupee(cost) })}</span>
+                  : <input value={rate[r.asset_item_id] || ""} inputMode="decimal" placeholder={t("assets.loss_rate_ph")}
+                      onChange={(e) => setRate((p) => ({ ...p, [r.asset_item_id]: e.target.value.replace(/[^0-9.]/g, "") }))} style={inpSm} />)}
+              </Row>
+            );
+          })}
+          {needRate && rows.some((r) => !costOf(r)) && <div style={{ padding: "7px 14px", fontSize: 10.5, color: T.t4 }}>{t("assets.loss_rate_hint")}</div>}
+        </div>
+      )}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 14 }}>
+        <Field label={t("assets.loss_reason")} span={2}>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {LOSS_FORM_REASONS[kind].map((x) => (
+              <button key={x} type="button" onClick={() => setReason(x)}
+                style={{ padding: "6px 12px", borderRadius: 16, fontSize: 11.5, fontWeight: 600, cursor: "pointer", fontFamily: "inherit",
+                  border: `1.5px solid ${reason === x ? T.ind : T.b1}`, background: reason === x ? T.indL : T.surface, color: reason === x ? T.ind : T.t2 }}>
+                {reasonLabel(x)}
+              </button>
+            ))}
+          </div>
+        </Field>
+        <Field label={t("assets.loss_noticed")}><input type="date" value={noticed} max={todayStr()} onChange={(e) => setNoticed(e.target.value)} style={inp} /></Field>
+        {kind === "lost"
+          ? <Field label={t("assets.loss_last_seen")}><input type="date" value={lastSeen} max={noticed} onChange={(e) => setLastSeen(e.target.value)} style={inp} /></Field>
+          : <span />}
+        {kind === "lost" && reason === "theft" && (
+          <Field label={t("assets.loss_police")} span={2}><input value={police} maxLength={80} onChange={(e) => setPolice(e.target.value)} style={inp} /></Field>
+        )}
+        {kind === "scrap" && <>
+          <Field label={t("assets.loss_sale_amount")}><input value={saleAmt} inputMode="decimal" onChange={(e) => setSaleAmt(e.target.value.replace(/[^0-9.]/g, ""))} style={inp} /></Field>
+          <Field label={t("assets.loss_sale_to")} hint={t("assets.loss_sale_hint")}><input value={saleTo} maxLength={160} onChange={(e) => setSaleTo(e.target.value)} style={inp} /></Field>
+        </>}
+        <Field label={t("assets.loss_note")} span={2}>
+          <textarea value={note} maxLength={500} rows={3} placeholder={t("assets.loss_note_ph")} onChange={(e) => setNote(e.target.value)} style={{ ...inp, resize: "vertical" }} />
+        </Field>
+        <div style={{ gridColumn: "span 2" }}>
+          <PhotoStrip value={photos} onChange={setPhotos} pol={pol ? { ...pol, mode: photoReq ? "required" : pol.mode } : pol}
+            label={t("assets.loss_photo")} hint={t(kind === "lost" ? "assets.loss_photo_hint_lost" : "assets.loss_photo_hint_" + kind)} />
+        </div>
+      </div>
+      <ErrBox>{error}</ErrBox>
+    </Modal>
+  );
+}
+
+// Ek report — kya, kahan, kisne, kyun; aur faisla (approve / wapas) ya mil gaya.
+function IncidentDrawer({ id, onClose, onChanged, onOpenVoucher }) {
+  const toast = useToast();
+  const [d, setD] = useState(null);
+  const [failed, setFailed] = useState("");
+  const [mode, setMode] = useState(null);      // approve | reject | cancel | found
+  const [text, setText] = useState("");
+  const [rates, setRates] = useState({});
+  const [found, setFound] = useState({});      // item id → { q, c }
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const load = useCallback(async () => {
+    setFailed("");
+    const r = await api.get(`/assets/incidents/${id}`).catch(() => null);
+    if (r && r.success) setD(r.data); else { setD(null); setFailed((r && r.message) || t("assets.loss_load_failed")); }
+  }, [id]);
+  useEffect(() => { setD(null); setMode(null); setText(""); setRates({}); setFound({}); setError(""); load(); }, [load]);
+
+  const act = async (path, body) => {
+    setBusy(true); setError("");
+    const r = await api.post(`/assets/incidents/${id}/${path}`, body).catch(() => null);
+    setBusy(false);
+    if (r && r.success) { toast.success(r.message || t("assets.saved")); setMode(null); setText(""); setD(r.data || null); if (!r.data) load(); onChanged(); return; }
+    setError((r && r.message) || t("assets.save_failed"));
+  };
+  const submit = () => {
+    if (mode === "approve") {
+      act("approve", { note: text || null, rates: Object.fromEntries(Object.entries(rates).filter(([, v]) => N(v) > 0).map(([k, v]) => [k, N(v)])) });
+    } else if (mode === "reject") {
+      if (!text.trim()) { setError(t("assets.loss_reject_reason")); return; }
+      act("reject", { reason: text.trim() });
+    } else if (mode === "cancel") {
+      act("cancel", { reason: text.trim() || null });
+    } else if (mode === "found") {
+      const list = Object.entries(found).filter(([, v]) => N(v.q) > 0).map(([k, v]) => ({ asset_item_id: Number(k), qty: N(v.q), condition: v.c || "good" }));
+      if (!list.length) { setError(t("assets.loss_err_found_qty")); return; }
+      act("found", { items: list, note: text.trim() || null });
+    }
+  };
+
+  const kind = d ? d.type : "";
+  const noRate = d ? (d.items || []).filter((ln) => ln.rate == null) : [];
+  return (
+    <Drawer open onClose={onClose} width={700}
+      title={d ? d.voucher_no : t("assets.loading")}
+      head={d ? <><TypePill ty={d.type} /><IncStatusPill s={d.status} kind={d.type} /></> : null}
+      sub={d ? incPlace(d) : ""}
+      footer={d && !mode ? <>
+        <Btn ghost onClick={onClose}>{t("assets.close")}</Btn>
+        {d.can_cancel && <Btn ghost onClick={() => { setMode("cancel"); setError(""); }}>{t("assets.loss_cancel")}</Btn>}
+        {d.can_found && <Btn c={T.grn} icon={IcChk} onClick={() => { setMode("found"); setError(""); }}>{t("assets.loss_found")}</Btn>}
+        {d.can_approve && <Btn ghost onClick={() => { setMode("reject"); setError(""); }}>{t("assets.loss_reject")}</Btn>}
+        {d.can_approve && <Btn c={T.red} icon={IcChk} onClick={() => { setMode("approve"); setError(""); }}>{t("assets.loss_approve")}</Btn>}
+      </> : d && mode ? <>
+        <Btn ghost onClick={() => { setMode(null); setError(""); }}>{t("assets.cancel")}</Btn>
+        <Btn c={mode === "approve" ? T.red : mode === "found" ? T.grn : T.ind} onClick={submit} disabled={busy}>
+          {busy ? t("assets.saving") : t("assets.loss_do_" + mode)}
+        </Btn>
+      </> : <Btn ghost onClick={onClose}>{t("assets.close")}</Btn>}>
+      {failed && <ErrBox>{failed}</ErrBox>}
+      {!d && !failed && <Spinner />}
+      {d && (
+        <>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3,minmax(0,1fr))", gap: 12, padding: "10px 12px", background: T.surfaceB, border: `1px solid ${T.b1}`, borderRadius: 10, marginBottom: 14 }}>
+            <KV k={t("assets.loss_d_place")} v={incPlace(d)} />
+            <KV k={t("assets.loss_d_custodian")} v={d.from_custodian_name} />
+            <KV k={t("assets.loss_d_by")} v={d.created_by_name} />
+            <KV k={t("assets.loss_d_date")} v={fmtD(d.date)} />
+            <KV k={t("assets.loss_d_noticed")} v={fmtD(d.noticed_on)} />
+            <KV k={t("assets.loss_d_reason")} v={reasonLabel(d.reason)} />
+            {d.type === "lost" && d.last_seen_on && <KV k={t("assets.loss_d_last_seen")} v={fmtD(d.last_seen_on)} />}
+            {d.police_ref && <KV k={t("assets.loss_d_police")} v={d.police_ref} />}
+            {d.type === "scrap" && <KV k={t("assets.loss_d_sale")} v={d.sale_amount != null ? rupee(d.sale_amount) : "—"} />}
+            {d.type === "scrap" && <KV k={t("assets.loss_d_sale_to")} v={d.sale_to} />}
+            {d.total_value != null && <KV k={t("assets.loss_col_value")} v={rupee(d.total_value)} />}
+            {d.status !== "pending" && d.type !== "damage" && (
+              <KV k={t("assets.loss_d_decided")} v={t("assets.loss_d_decided_by", { by: d.accepted_by_name || "—", at: fmtD(d.accepted_at) })} />
+            )}
+          </div>
+          {d.source_voucher_no && (
+            <Notice>
+              <span style={{ cursor: "pointer", textDecoration: "underline" }} onClick={() => onOpenVoucher(d.source_voucher_id)}>
+                {t("assets.loss_d_source", { no: d.source_voucher_no })}
+              </span>
+            </Notice>
+          )}
+          <Field label={t("assets.loss_d_note")}><div style={{ fontSize: 12.5, color: T.t1, whiteSpace: "pre-wrap" }}>{d.note || d.remarks || "—"}</div></Field>
+          {d.decision_note && <div style={{ marginTop: 10 }}><Field label={t("assets.loss_d_decision_note")}><div style={{ fontSize: 12.5 }}>{d.decision_note}</div></Field></div>}
+          {d.reject_reason && <div style={{ marginTop: 10 }}><Field label={t(d.status === "cancelled" ? "assets.loss_d_cancel_reason" : "assets.loss_d_reject_reason")}><div style={{ fontSize: 12.5, color: T.red }}>{d.reject_reason}</div></Field></div>}
+
+          <Panel title={t("assets.loss_d_lines")} style={{ marginTop: 14 }}>
+            <Row head cols="1.8fr 90px 70px 100px 110px">
+              <span>{t("assets.loss_col_item")}</span><span>{t("assets.loss_d_bucket")}</span><span>{t("assets.loss_col_qty")}</span>
+              <span>{t("assets.loss_rate")}</span><span>{t("assets.loss_col_value")}</span>
+            </Row>
+            {(d.items || []).map((ln) => (
+              <Row key={ln.id} cols="1.8fr 90px 70px 100px 110px">
+                <span><span style={{ fontWeight: 600, color: T.t1 }}>{itemText(ln)}</span>{ln.code ? <div style={{ fontSize: 10.5, color: T.t4 }}>{ln.code}</div> : null}</span>
+                <span style={{ color: (ln.from_condition || "good") === "damaged" ? T.amb : T.t3 }}>{t((ln.from_condition || "good") === "damaged" ? "assets.loss_bucket_damaged" : "assets.loss_bucket_good")}</span>
+                <span style={{ fontWeight: 700 }}>{fmtN(ln.qty)} {ln.unit || ""}</span>
+                <span>{ln.rate != null ? rupee(ln.rate) : "—"}</span>
+                <span>{ln.amount != null ? rupee(ln.amount) : "—"}</span>
+              </Row>
+            ))}
+          </Panel>
+
+          {(d.photos || []).length > 0 && (
+            <div style={{ marginTop: 14 }}>
+              <Field label={t("assets.loss_d_photos")}>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  {d.photos.map((u) => (
+                    <a key={u} href={u} target="_blank" rel="noreferrer"><img src={cld(u, "thumb")} alt="" style={{ width: 64, height: 64, objectFit: "cover", borderRadius: 8, border: `1.5px solid ${T.b2}`, display: "block" }} /></a>
+                  ))}
+                </div>
+                {d.photos_pending > 0 && <div style={{ fontSize: 10.5, color: T.t4, marginTop: 4 }}>{t("assets.grn_photos_pending", { n: d.photos_pending })}</div>}
+              </Field>
+            </div>
+          )}
+
+          {d.type === "lost" && (d.found_items || []).some((x) => N(x.found_qty) > 0) && (
+            <Panel title={t("assets.loss_d_found_title")} style={{ marginTop: 14 }}>
+              {(d.found_items || []).map((x) => (
+                <div key={x.asset_item_id} style={{ padding: "8px 15px", fontSize: 12, borderBottom: `1px solid ${T.b1}` }}>
+                  {t("assets.loss_d_found_line", { item: itemText(x), lost: fmtN(x.lost_qty), found: fmtN(x.found_qty), left: fmtN(x.left) })}
+                </div>
+              ))}
+              {(d.found || []).map((f) => (
+                <div key={f.id} style={{ padding: "6px 15px", fontSize: 11, color: T.t3 }}>
+                  {f.voucher_no} · {fmtD(f.date)} · {f.created_by_name || ""}{f.note ? " · " + f.note : ""}
+                </div>
+              ))}
+            </Panel>
+          )}
+
+          {mode && (
+            <div style={{ marginTop: 16, padding: 14, border: `1.5px solid ${mode === "approve" ? "#EAD3A3" : T.b1}`, borderRadius: 10, background: T.surfaceB }}>
+              {mode === "approve" && <>
+                <div style={{ fontSize: 12, color: T.t2, marginBottom: 10 }}>{t("assets.loss_approve_confirm")}</div>
+                {noRate.map((ln) => (
+                  <div key={ln.id} style={{ marginBottom: 8 }}>
+                    <Field label={t("assets.loss_approve_rate", { item: itemText(ln) })}>
+                      <input value={rates[ln.asset_item_id] || ""} inputMode="decimal" style={inpSm}
+                        onChange={(e) => setRates((p) => ({ ...p, [ln.asset_item_id]: e.target.value.replace(/[^0-9.]/g, "") }))} />
+                    </Field>
+                  </div>
+                ))}
+                <Field label={t("assets.loss_approve_note")}><input value={text} maxLength={300} onChange={(e) => setText(e.target.value)} style={inp} /></Field>
+              </>}
+              {mode === "reject" && <>
+                <div style={{ fontSize: 12, color: T.t2, marginBottom: 10 }}>{t("assets.loss_reject_hint")}</div>
+                <Field label={t("assets.loss_reject_reason")}><input value={text} maxLength={300} onChange={(e) => setText(e.target.value)} style={inp} /></Field>
+              </>}
+              {mode === "cancel" && <>
+                <div style={{ fontSize: 12, color: T.t2, marginBottom: 10 }}>{t("assets.loss_cancel_confirm")}</div>
+                <Field label={t("assets.loss_cancel_reason")}><input value={text} maxLength={300} onChange={(e) => setText(e.target.value)} style={inp} /></Field>
+              </>}
+              {mode === "found" && <>
+                <div style={{ fontSize: 12, color: T.t2, marginBottom: 10 }}>{t("assets.loss_found_hint", { place: incPlace(d) })}</div>
+                {(d.found_items || []).filter((x) => N(x.left) > 0).map((x) => (
+                  <div key={x.asset_item_id} style={{ display: "grid", gridTemplateColumns: "1.6fr 90px 130px", gap: 8, alignItems: "center", marginBottom: 8 }}>
+                    <span style={{ fontSize: 12.5 }}>{itemText(x)} <span style={{ fontSize: 10.5, color: T.t4 }}>{t("assets.loss_found_left", { n: fmtN(x.left) })}</span></span>
+                    <input value={(found[x.asset_item_id] || {}).q || ""} inputMode="decimal" placeholder="0" style={inpSm}
+                      onChange={(e) => setFound((p) => ({ ...p, [x.asset_item_id]: { ...(p[x.asset_item_id] || {}), q: e.target.value.replace(/[^0-9.]/g, "") } }))} />
+                    <PickSelect value={(found[x.asset_item_id] || {}).c || "good"} style={inpSm}
+                      onChange={(e) => setFound((p) => ({ ...p, [x.asset_item_id]: { ...(p[x.asset_item_id] || {}), c: e.target.value } }))}>
+                      <option value="good">{t("assets.loss_bucket_good")}</option>
+                      <option value="damaged">{t("assets.loss_bucket_damaged")}</option>
+                    </PickSelect>
+                  </div>
+                ))}
+                <Field label={t("assets.loss_found_note")}><input value={text} maxLength={300} onChange={(e) => setText(e.target.value)} style={inp} /></Field>
+              </>}
+            </div>
+          )}
+          <ErrBox>{error}</ErrBox>
+        </>
+      )}
+    </Drawer>
+  );
+}
+
 function AssetsModule({ deepLink, onDeepLinkDone }) {
   const me = useMemo(() => getUser() || {}, []);
   const isAdmin = ["admin", "super_admin"].includes(String(me.role || "").toLowerCase());
@@ -4184,6 +4820,10 @@ function AssetsModule({ deepLink, onDeepLinkDone }) {
   const [issuePreset, setIssuePreset] = useState(null);
   const [openReqCount, setOpenReqCount] = useState(0);
   const [addOpen, setAddOpen] = useState(false);
+  // Nuksan: report bharna (gum / toota / kabad) aur ek report kholna.
+  const [lossKind, setLossKind] = useState(null);
+  const [lossPreset, setLossPreset] = useState(null);
+  const [incidentId, setIncidentId] = useState(null);
   // Export "abhi kya kahan pada hai" ki Excel deta hai. Ise wapas import nahi
   // karna — server bhi rok deta hai; qty sudhaarne ka rasta Ginti hai.
   const [exportErr, setExportErr] = useState("");
@@ -4218,7 +4858,9 @@ function AssetsModule({ deepLink, onDeepLinkDone }) {
   // seedha URL se khula ho to query bhi dekh lo.
   useEffect(() => {
     if (!deepLink) return;
-    setVoucherId(Number(deepLink)); setTab("movements");
+    // Gum/kabad ki notification (/assets?incident=<id>) — App.js object bhejta hai.
+    if (typeof deepLink === "object" && deepLink.incident) { setIncidentId(Number(deepLink.incident)); setTab("loss"); }
+    else { setVoucherId(Number(deepLink)); setTab("movements"); }
     if (onDeepLinkDone) onDeepLinkDone();
   }, [deepLink, onDeepLinkDone]);
   useEffect(() => {
@@ -4231,6 +4873,8 @@ function AssetsModule({ deepLink, onDeepLinkDone }) {
       // hai, isliye alag param.
       const rq = q.get("req");
       if (rq && /^\d+$/.test(rq)) { setRequestId(Number(rq)); setTab("requests"); }
+      const inc = q.get("incident");
+      if (inc && /^\d+$/.test(inc)) { setIncidentId(Number(inc)); setTab("loss"); }
     } catch (_) { /* URL na padh paaye to kuch nahi */ }
   }, []);
 
@@ -4248,6 +4892,7 @@ function AssetsModule({ deepLink, onDeepLinkDone }) {
   const cats = (meta && meta.categories) || [];
   const pendingCount = dash && dash.tiles ? N(dash.tiles.awaiting_accept) : 0;
   const openVerifCount = dash && dash.tiles ? N(dash.tiles.open_verifications) : 0;
+  const lossPendingCount = dash && dash.tiles ? N(dash.tiles.loss_pending) : 0;
   const TABS = [
     { id: "dashboard", l: t("assets.tab_dashboard"), I: IcChart },
     { id: "register", l: t("assets.tab_register"), I: IcList },
@@ -4255,6 +4900,7 @@ function AssetsModule({ deepLink, onDeepLinkDone }) {
     { id: "requests", l: t("assets.tab_requests"), I: IcHand, badge: openReqCount || null },
     { id: "movements", l: t("assets.tab_movements"), I: IcTrns, badge: pendingCount || null },
     { id: "verify", l: t("assets.tab_verify"), I: IcCount, badge: openVerifCount || null },
+    { id: "loss", l: t("assets.tab_loss"), I: IcAlert, badge: lossPendingCount || null },
     { id: "custody", l: t("assets.tab_custody"), I: IcUser },
     { id: "rent", l: t("assets.tab_rent"), I: IcRupee },
   ];
@@ -4310,11 +4956,21 @@ function AssetsModule({ deepLink, onDeepLinkDone }) {
           <VerificationsTab refreshKey={refreshKey} meta={meta} pickers={pickers} canCreate={canEntryA}
             onNew={() => setNewVerify(true)} onOpen={setVerifyId} onOpenVoucher={openVoucherInMovements} />
         )}
+        {tab === "loss" && (
+          <LossTab refreshKey={refreshKey} meta={meta} pickers={pickers} canReport={String(me.role || "").toLowerCase() !== "viewer"}
+            onNew={(k, p) => { setLossPreset(p || null); setLossKind(k); }} onOpen={setIncidentId} />
+        )}
         {tab === "custody" && <CustodyTab refreshKey={refreshKey} meta={meta} pickers={pickers} onOpenItem={setOpenItem} />}
         {tab === "rent" && <RentTab refreshKey={refreshKey} />}
       </div>
 
       {voucherId && <VoucherDrawer id={voucherId} me={me} onClose={() => setVoucherId(null)} onChanged={refresh} />}
+      {incidentId && (
+        <IncidentDrawer id={incidentId} onClose={() => setIncidentId(null)} onChanged={refresh}
+          onOpenVoucher={(vid) => { setIncidentId(null); openVoucherInMovements(vid); }} />
+      )}
+      <LossForm open={!!lossKind} kind={lossKind || "lost"} preset={lossPreset} meta={meta} me={me} canAll={isAdmin || canApprove} items={items}
+        onClose={() => { setLossKind(null); setLossPreset(null); }} onSaved={(d) => { refresh(); if (d && d.id) setIncidentId(d.id); }} />
       {verifyId && (
         <VerificationDrawer id={verifyId} me={me} isAdmin={isAdmin} canApprove={canApprove}
           onClose={() => setVerifyId(null)} onChanged={refresh}
