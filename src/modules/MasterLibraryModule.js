@@ -802,7 +802,31 @@ function MaterialMasterSection() {
   // Use real categories from backend, fallback to empty
   const catNames = matCats.map(c => c.name);
   const allCats = ["All", ...catNames];
-  const units = ["Kg", "Bag (50kg)", "CFT", "Sq.Ft", "Piece", "Meter", "Litre", "Sheet (8x4)", "Quintal", "MT", "Running Ft", "Brass", "Bundle", "Nos"];
+  // Unit Library ke UOM se (6 Oct 2026, Prafull: "unit hardcoded hai, library se
+  // nahi aa raha"). Material par chhota roop (symbol: Kg / CFT / Nos) save hota
+  // hai, dikhta "Kg — Kilogram". UOM library khaali ya na aaye to purani list.
+  // Material par pehle se likhi unit (jaise "bundal") list me na ho to bhi
+  // dikhti hai — edit karte waqt gum na ho.
+  const FALLBACK_UNITS = ["Kg", "Bag (50kg)", "CFT", "Sq.Ft", "Piece", "Meter", "Litre", "Sheet (8x4)", "Quintal", "MT", "Running Ft", "Brass", "Bundle", "Nos"];
+  const [uoms, setUoms] = useState([]);
+  useEffect(() => {
+    api.get("/library/uom").then((r) => { if (r && r.success && Array.isArray(r.data)) setUoms(r.data); }).catch(() => {});
+  }, []);
+  const uomOpts = uoms
+    .map((u) => { const sym = String(u.symbol || u.name || "").trim(); const nm = String(u.name || "").trim();
+      return sym ? { value: sym, nm, label: nm && nm.toLowerCase() !== sym.toLowerCase() ? sym + " — " + nm : sym } : null; })
+    .filter(Boolean);
+  const baseUnitOpts = uomOpts.length ? uomOpts : FALLBACK_UNITS.map((u) => ({ value: u, label: u }));
+  // Symbol ya poora naam — "kg" → Kg, "Piece" → Pcs, "Litre" → Ltr.
+  const ciHit = (u) => { const k = String(u || "").trim().toLowerCase(); return baseUnitOpts.find((o) => o.value.toLowerCase() === k) || baseUnitOpts.find((o) => o.nm && o.nm.toLowerCase() === k); };
+  const unitOpts = form.unit && !ciHit(form.unit) ? [...baseUnitOpts, { value: form.unit, label: form.unit }] : baseUnitOpts;
+  const units = baseUnitOpts.map((o) => o.value);   // import template ki list
+  // Purani likhi unit ka sirf case alag ("kg") → library wala roop ("Kg"), taaki chuna hua dikhe.
+  useEffect(() => {
+    const h = form.unit ? ciHit(form.unit) : null;
+    if (h && h.value !== form.unit) upd("unit", h.value);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.unit, uoms]);
 
   const filtered = materials.filter(m => {
     const cat = m.category || m.category_name || "";
@@ -915,7 +939,7 @@ function MaterialMasterSection() {
         </div>
         <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 14 }}>
           <FormSelect label={t("common.category")} value={form.category} onChange={v => upd("category", v)} options={catNames} half required />
-          <FormSelect label={t("common.unit")} value={form.unit} onChange={v => upd("unit", v)} options={units} half required />
+          <FormSelect label={t("common.unit")} value={form.unit} onChange={v => upd("unit", v)} options={unitOpts} half required />
         </div>
         <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 14 }}>
           <FormField label={t("master_library.hsn_code")} value={form.hsnCode} onChange={v => upd("hsnCode", v)} placeholder="e.g. 2523" half />

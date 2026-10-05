@@ -193,8 +193,19 @@ const TYPE_CONFIG = {
     addTitle: "Add new material (saved to Library)",
     fields: [
       { key: "name", get label() { return t("library_select.material_name"); }, flex: 2, autoFocus: true, required: true },
+      // Unit Library ke UOM se (6 Oct 2026) — symbol save, "Kg — Kilogram" dikhe.
+      // UOM khaali / na aaye to purani list (options).
       { key: "unit", get label() { return t("common.unit"); },            flex: 1, type: "select",
-        options: ["Bags", "MT", "Nos", "Sqft", "Mtrs", "Kg", "Sheets", "Ltrs", "Cu.m", "Ton", "RFT", "Brass", "CFT"] },
+        options: ["Bags", "MT", "Nos", "Sqft", "Mtrs", "Kg", "Sheets", "Ltrs", "Cu.m", "Ton", "RFT", "Brass", "CFT"],
+        optionsFrom: async () => {
+          const r = await api.get("/library/uom");
+          if (!r || !r.success || !Array.isArray(r.data)) return null;
+          const out = r.data.map((u) => {
+            const sym = String(u.symbol || u.name || "").trim(); const nm = String(u.name || "").trim();
+            return sym ? { value: sym, label: nm && nm.toLowerCase() !== sym.toLowerCase() ? sym + " — " + nm : sym } : null;
+          }).filter(Boolean);
+          return out.length ? out : null;
+        } },
     ],
     fetch: async () => {
       const r = await api.get("/library/materials");
@@ -247,6 +258,16 @@ export default function LibrarySelect({
   const cacheEntry = _cache[type] || (_cache[type] = { items: null, loading: false, listeners: new Set() });
   const [items, setItems] = useState(cacheEntry.items || []);
   const [showAdd, setShowAdd] = useState(false);
+  // Field ki apni options (jaise material ki unit UOM library se) — form khulte hi.
+  const [dynOpts, setDynOpts] = useState({});
+  useEffect(() => {
+    if (!showAdd) return undefined;
+    let alive = true;
+    (cfg.fields || []).filter((fd) => typeof fd.optionsFrom === "function").forEach((fd) => {
+      fd.optionsFrom().then((list) => { if (alive && list) setDynOpts((p) => ({ ...p, [fd.key]: list })); }).catch(() => {});
+    });
+    return () => { alive = false; };
+  }, [showAdd, cfg]);
   const [form, setForm] = useState({});
   const [saving, setSaving] = useState(false);
 
@@ -385,7 +406,9 @@ export default function LibrarySelect({
                     style={fldStyle}
                   >
                     <option value="">{f.label}</option>
-                    {(f.options || []).map((o) => <option key={o} value={o}>{o}</option>)}
+                    {(dynOpts[f.key] || f.options || []).map((o) => (typeof o === "string"
+                      ? <option key={o} value={o}>{o}</option>
+                      : <option key={o.value} value={o.value}>{o.label}</option>))}
                   </select>
                 ) : (
                   <input
