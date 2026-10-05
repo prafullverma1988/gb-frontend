@@ -68,10 +68,83 @@ function TabEquipment({ projectId }) {
   const updLog = (k, v) => setLogForm(p => ({ ...p, [k]: v }));
 
   // Request form
-  const emptyReq = { equipment_type: "Earthwork", capacity: "", from_date: "", to_date: "", duration_approx: "", reason: "" };
+  const emptyReq = { equipment_type: "Earthwork", capacity: "", from_date: "", to_date: "", duration_approx: "", reason: "", task_id: "" };
   const [reqForm, setReqForm] = useState(emptyReq);
   const [reqSaving, setReqSaving] = useState(false);
   const updReq = (k, v) => setReqForm(p => ({ ...p, [k]: v }));
+
+  // Request form ki madad (5 Oct 2026 — mobile jaisa): project ki CITY ki library
+  // machine (koi khaas machine maangni ho to — zaroori nahi; GET
+  // /equipment/request/recommend), duration dates se, aur "kis kaam ke liye" me
+  // project ka task bhi aur likha hua bhi.
+  const REQ_TYPES = ["Earthwork","Lifting","Concrete","Steel","Safety","Transport","Pumping","Compaction"];
+  const [reqRec, setReqRec] = useState({ loading: false, failed: false, city: "", machines: [] });
+  const [reqMachQ, setReqMachQ] = useState("");
+  const [reqPref, setReqPref] = useState(null);
+  const [reqTasks, setReqTasks] = useState([]);
+  const [reqTaskQ, setReqTaskQ] = useState("");
+  useEffect(() => {
+    if (!showReqForm || !projectId) return undefined;
+    let alive = true;
+    setReqRec((r) => ({ ...r, loading: true, failed: false }));
+    api.get("/equipment/request/recommend?project_id=" + projectId)
+      .then((r) => {
+        if (!alive) return;
+        if (r && r.success && r.data) setReqRec({ loading: false, failed: false, city: r.data.city_name || "", machines: r.data.machines || [] });
+        else setReqRec({ loading: false, failed: true, city: "", machines: [] });
+      })
+      .catch(() => { if (alive) setReqRec({ loading: false, failed: true, city: "", machines: [] }); });
+    // Sirf asli kaam — todo (title wala) aur parent task nahi
+    api.get("/tasks?project_id=" + projectId)
+      .then((r) => {
+        if (!alive) return;
+        const all = r && r.success && Array.isArray(r.data) ? r.data : [];
+        const byId = Object.fromEntries(all.map((x) => [x.id, x]));
+        const parents = new Set(all.map((x) => x.parent_id).filter(Boolean));
+        setReqTasks(all.filter((x) => !x.title && x.name && x.is_active !== 0 && !parents.has(x.id))
+          .map((x) => ({ id: x.id, name: x.name, parent: byId[x.parent_id] ? byId[x.parent_id].name : "" })));
+      })
+      .catch(() => { if (alive) setReqTasks([]); });
+    return () => { alive = false; };
+  }, [showReqForm, projectId]);
+  const reqKind = (m) => String(m.category || m.type || m.machine_type || "").trim();
+  const reqCap = (m) => String(m.capacity || (Number(m.capacity_qty) ? `${Number(m.capacity_qty)} ${m.capacity_unit || ""}` : "")).trim();
+  // Kitne din — dono din shaamil (6 se 8 Oct = 3 din)
+  const reqDays = (reqForm.from_date && reqForm.to_date)
+    ? Math.round((Date.parse(reqForm.to_date + "T00:00:00Z") - Date.parse(reqForm.from_date + "T00:00:00Z")) / 86400000) + 1
+    : null;
+  const reqBadRange = reqDays !== null && reqDays < 1;
+  useEffect(() => {
+    if (reqDays && reqDays > 0) setReqForm((p) => ({ ...p, duration_approx: t("equipment.req_n_din", { n: reqDays }) }));
+  }, [reqDays]);
+  const regKey = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  const reqMachines = reqRec.machines
+    .filter((m) => {
+      const q = reqMachQ.trim().toLowerCase();
+      if (!q) return true;
+      return String(m.name || "").toLowerCase().includes(q) || String(m.code || "").toLowerCase().includes(q)
+        || (!!regKey(q) && regKey(m.registration_no).includes(regKey(q)));
+    })
+    .sort((a, b) => ((reqKind(b).toLowerCase() === reqForm.equipment_type.toLowerCase()) - (reqKind(a).toLowerCase() === reqForm.equipment_type.toLowerCase()))
+      || String(a.name).localeCompare(String(b.name)));
+  const pickReqMachine = (m) => {
+    setReqPref(m);
+    setReqForm((p) => {
+      const n = { ...p };
+      const c = reqCap(m);
+      if (c && !String(p.capacity || "").trim()) n.capacity = c;
+      const ty = REQ_TYPES.find((x) => x.toLowerCase() === reqKind(m).toLowerCase());
+      if (ty) n.equipment_type = ty;
+      return n;
+    });
+  };
+  const reqTaskOpts = (() => {
+    const q = reqTaskQ.trim().toLowerCase();
+    const list = reqTasks.filter((x) => !q || x.name.toLowerCase().includes(q) || x.parent.toLowerCase().includes(q));
+    const sel = reqTasks.find((x) => String(x.id) === String(reqForm.task_id));
+    return sel && !list.includes(sel) ? [sel, ...list] : list;   // chuna hua task khoj me na bhi ho to dikhe
+  })();
+  const resetReq = () => { setReqForm(emptyReq); setReqPref(null); setReqMachQ(""); setReqTaskQ(""); };
 
   const SC = { "On Site": { c: T.grn, bg: T.grnL }, "Returned": { c: T.t3, bg: T.surfaceB } };
   const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
@@ -185,6 +258,8 @@ function TabEquipment({ projectId }) {
   const saveRequest = async () => {
     if (!projectId) return;
     if (!reqForm.equipment_type) return;
+    if (!reqForm.task_id && !String(reqForm.reason || "").trim()) { window.alert(t("equipment.req_task_ya_kaam")); return; }
+    if (reqBadRange) { window.alert(t("equipment.req_to_before_from")); return; }
     setReqSaving(true);
     try {
       const res = await api.post("/equipment/request", {
@@ -194,11 +269,13 @@ function TabEquipment({ projectId }) {
         from_date: reqForm.from_date || null,
         to_date: reqForm.to_date || null,
         duration_approx: reqForm.duration_approx,
-        reason: reqForm.reason,
+        reason: String(reqForm.reason || "").trim() || null,
+        preferred_equipment_id: reqPref ? reqPref.id : null,
+        task_id: reqForm.task_id ? Number(reqForm.task_id) : null,
       });
       if (res && res.success) {
         setShowReqForm(false);
-        setReqForm(emptyReq);
+        resetReq();
         loadRequests();
       } else {
         window.alert((res && res.message) || t("equipment.save_failed"));
@@ -307,6 +384,8 @@ function TabEquipment({ projectId }) {
     load();
   };
 
+  // Gaadi number ka chhota dabba (machine list me pehchaan)
+  const regBadge = { fontSize: 10, fontWeight: 800, letterSpacing: .3, padding: "1px 6px", borderRadius: 4, color: T.blu, background: T.bluL, whiteSpace: "nowrap", flexShrink: 0 };
   const inp = { width: "100%", padding: "9px 11px", borderRadius: 7, border: `1.5px solid ${T.b1}`,
     fontSize: 13, outline: "none", fontFamily: "inherit", color: T.t1, background: T.surface, boxSizing: "border-box" };
 
@@ -387,11 +466,11 @@ function TabEquipment({ projectId }) {
           <div>
             {showReqForm && (
               <div style={{ padding: "12px 15px", borderBottom: `1px solid ${T.b1}`, background: T.bluL + "55" }}>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 10 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr 1fr", gap: 10 }}>
                   <div>
                     <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>{t("equipment.equipment_type")}</div>
                     <select value={reqForm.equipment_type} onChange={e => updReq("equipment_type", e.target.value)} style={inp}>
-                      {["Earthwork","Lifting","Concrete","Steel","Safety","Transport","Pumping","Compaction"].map(o => <option key={o} value={o}>{o}</option>)}
+                      {REQ_TYPES.map(o => <option key={o} value={o}>{o}</option>)}
                     </select>
                   </div>
                   <div>
@@ -404,18 +483,83 @@ function TabEquipment({ projectId }) {
                   </div>
                   <div>
                     <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>{t("common.to")}</div>
-                    <input type="date" value={reqForm.to_date} onChange={e => updReq("to_date", e.target.value)} style={inp} />
+                    <input type="date" value={reqForm.to_date} min={reqForm.from_date || undefined} onChange={e => updReq("to_date", e.target.value)} style={inp} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>{t("equipment.req_duration")}</div>
+                    <input value={reqForm.duration_approx} onChange={e => updReq("duration_approx", e.target.value)} readOnly={reqDays > 0}
+                      title={reqDays > 0 ? t("equipment.req_dates_se") : undefined}
+                      placeholder={t("equipment.req_duration_ph")} style={{ ...inp, ...(reqDays > 0 ? { background: T.bg, color: T.t2 } : {}) }} />
                   </div>
                 </div>
-                <div style={{ marginTop: 10 }}>
-                  <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>{t("equipment.reason_notes")}</div>
-                  <input value={reqForm.reason} onChange={e => updReq("reason", e.target.value)} placeholder={t("equipment.site_needs_jcb_for_excavation")} style={inp} />
+                {reqBadRange && <div style={{ fontSize: 11, color: T.red, marginTop: 6 }}>{t("equipment.req_to_before_from")}</div>}
+
+                {/* Recommended Machine — project ki city ki library machine */}
+                <div style={{ marginTop: 12 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10 }}>
+                    <div style={{ fontSize: 10, color: T.t4, fontWeight: 600 }}>{t("equipment.req_recommended")}</div>
+                    {!reqRec.loading && !reqRec.failed && (
+                      <span style={{ fontSize: 10.5, color: T.t4 }}>{t("equipment.req_city_n", { city: reqRec.city || "—", n: reqRec.machines.length })}</span>
+                    )}
+                  </div>
+                  <div style={{ fontSize: 10.5, color: T.t4, margin: "2px 0 6px" }}>{t("equipment.req_machine_hint")}</div>
+                  {reqRec.loading && <div style={{ fontSize: 11.5, color: T.t4, padding: "6px 0" }}>{t("common.loading")}</div>}
+                  {!reqRec.loading && reqRec.failed && <div style={{ fontSize: 11.5, color: T.t4, padding: "6px 0" }}>{t("equipment.req_machine_load_fail")}</div>}
+                  {!reqRec.loading && !reqRec.failed && reqRec.machines.length === 0 && (
+                    <div style={{ fontSize: 11.5, color: T.t4, padding: "6px 0" }}>{t("equipment.req_no_machine")}</div>
+                  )}
+                  {reqPref ? (
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", borderRadius: 8, border: `1.5px solid ${T.blu}`, background: T.surface }}>
+                      <div style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                        <span style={{ fontSize: 12.5, fontWeight: 700, color: T.t1 }}>{reqPref.name}</span>
+                        {reqPref.registration_no && <span style={regBadge}>{reqPref.registration_no}</span>}
+                        {[reqKind(reqPref), reqCap(reqPref)].filter(Boolean).length > 0 && (
+                          <span style={{ fontSize: 11, color: T.t3 }}>{[reqKind(reqPref), reqCap(reqPref)].filter(Boolean).join(" · ")}</span>
+                        )}
+                      </div>
+                      <button type="button" onClick={() => setReqPref(null)}
+                        style={{ padding: "5px 12px", borderRadius: 7, border: `1px solid ${T.b1}`, background: T.surface, fontSize: 11.5, fontWeight: 600, color: T.t3, cursor: "pointer", fontFamily: "inherit" }}>
+                        {t("equipment.req_hatao")}
+                      </button>
+                    </div>
+                  ) : (!reqRec.loading && reqRec.machines.length > 0 && (
+                    <div style={{ border: `1px solid ${T.b1}`, borderRadius: 8, background: T.surface, overflow: "hidden" }}>
+                      <input value={reqMachQ} onChange={e => setReqMachQ(e.target.value)} placeholder={t("equipment.req_machine_search")}
+                        style={{ ...inp, border: "none", borderBottom: `1px solid ${T.b1}`, borderRadius: 0 }} />
+                      <div style={{ maxHeight: 176, overflowY: "auto" }}>
+                        {reqMachines.length === 0 && <div style={{ fontSize: 11.5, color: T.t4, padding: "8px 12px" }}>{t("equipment.req_no_match")}</div>}
+                        {reqMachines.map((m, i) => (
+                          <div key={m.id} role="button" onClick={() => pickReqMachine(m)}
+                            style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 12px", cursor: "pointer", borderTop: i ? `1px solid ${T.b1}` : "none" }}>
+                            <span style={{ fontSize: 12, fontWeight: 600, color: T.t1 }}>{m.name}</span>
+                            {m.registration_no && <span style={regBadge}>{m.registration_no}</span>}
+                            <span style={{ flex: 1, minWidth: 0, fontSize: 10.5, color: T.t4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                              {[reqKind(m), reqCap(m), m.ownership].filter(Boolean).join(" · ")}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Kis kaam ke liye — project ka task, aur/ya apne shabdon me */}
+                <div style={{ marginTop: 12 }}>
+                  <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>{t("equipment.req_kis_kaam")}</div>
+                  <div style={{ display: "grid", gridTemplateColumns: "0.6fr 1.2fr 1.6fr", gap: 10 }}>
+                    <input value={reqTaskQ} onChange={e => setReqTaskQ(e.target.value)} placeholder={t("equipment.req_task_filter")} style={inp} />
+                    <select value={reqForm.task_id} onChange={e => updReq("task_id", e.target.value)} style={inp}>
+                      <option value="">{reqTasks.length ? t("equipment.req_task_none") : t("equipment.req_no_task")}</option>
+                      {reqTaskOpts.map(x => <option key={x.id} value={x.id}>{x.parent ? x.parent + " › " : ""}{x.name}</option>)}
+                    </select>
+                    <input value={reqForm.reason} onChange={e => updReq("reason", e.target.value)} placeholder={t("equipment.site_needs_jcb_for_excavation")} style={inp} />
+                  </div>
                 </div>
                 <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 10 }}>
-                  <button onClick={() => { setShowReqForm(false); setReqForm(emptyReq); }} type="button"
+                  <button onClick={() => { setShowReqForm(false); resetReq(); }} type="button"
                     style={{ padding: "7px 14px", borderRadius: 7, border: `1px solid ${T.b1}`, background: T.surface, fontSize: 12, fontWeight: 600, color: T.t3, cursor: "pointer", fontFamily: "inherit" }}>{t("common.cancel")}</button>
-                  <button onClick={saveRequest} disabled={reqSaving} type="button"
-                    style={{ padding: "7px 16px", borderRadius: 7, border: "none", background: reqSaving ? T.b1 : T.blu, color: reqSaving ? T.t4 : "white", fontSize: 12, fontWeight: 700, cursor: reqSaving ? "not-allowed" : "pointer", fontFamily: "inherit" }}>
+                  <button onClick={saveRequest} disabled={reqSaving || reqBadRange || (!reqForm.task_id && !String(reqForm.reason || "").trim())} type="button"
+                    style={{ padding: "7px 16px", borderRadius: 7, border: "none", background: (reqSaving || reqBadRange || (!reqForm.task_id && !String(reqForm.reason || "").trim())) ? T.b1 : T.blu, color: (reqSaving || reqBadRange || (!reqForm.task_id && !String(reqForm.reason || "").trim())) ? T.t4 : "white", fontSize: 12, fontWeight: 700, cursor: reqSaving ? "not-allowed" : "pointer", fontFamily: "inherit" }}>
                     {reqSaving ? t("common.saving") : t("equipment.submit_request")}
                   </button>
                 </div>
