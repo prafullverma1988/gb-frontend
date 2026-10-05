@@ -77,7 +77,9 @@ function TabMaterial({ project }) {
   const canGrn = canEntry(["Procurement","Material"]);
   const canRecvWh = canEntry(["Warehouse","Material"]);
   const canUse = canEntry("Material");
-  const canDelAnyUsed = can("Material","delete");
+  // PM / Admin doosre ki entry bhi hata sakte hain (server utils/entryBoss.js), wajah ke saath.
+  const canDelAnyUsed = can("Material","delete")
+    || ["admin","super_admin","project_manager"].includes(String(meUser?.role||"").toLowerCase());
   const canDeleteUsed = (createdById, createdAt) => canDelAnyUsed
     || (canUse && createdById != null && Number(createdById) === meId && !!createdAt && isoDate(createdAt) === todayISO());
   // Kharch entry hatane se pehle wajah (server: kam se kam 3 akshar).

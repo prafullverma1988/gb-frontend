@@ -185,7 +185,9 @@ function TabTasks({ projectId, isAdmin }) {
   const coAdmin      = ["admin","super_admin"].includes(currentUser().role);
   const canAddTask   = canAny(["Tasks","To Do"],"create");   // POST /tasks
   const canEditTask  = canAny(["Tasks","To Do"],"edit");     // PUT /tasks/:id, move
-  const canDelTask   = canAny(["Tasks","To Do"],"delete");   // DELETE /tasks/:id
+  // Plan task hatana sirf Tasks DELETE se — To Do ka Delete sirf todo hatata hai
+  // (server: title nahi = plan task = Tasks DELETE, review fix 5 Oct 2026).
+  const canDelTask   = can("Tasks","delete");                // DELETE /tasks/:id (plan task)
   const canPlan      = can("Tasks","create");                // import, template, tender/map se plan
   const canOverride  = can("Tasks","edit");                  // parent ka progress override
   const canBoqImport = can("Estimate","create");             // BOQ wizard (routes/boq.js)
@@ -3529,8 +3531,11 @@ const ptIstDay=(v)=>{ if(!v) return null; const s=String(v);
   return Number.isFinite(ms)?new Date(ms+5.5*3600*1000).toISOString().slice(0,10):null; };
 // Roz ki progress = Tasks ENTRY (transition: Create bhi). Entry hatana = apni usi
 // din (Entry) ya Tasks DELETE — hamesha wajah ke saath (server audit me rakhta hai).
+// PM / Admin doosre ki galat entry bhi hata sakte hain (server utils/entryBoss.js —
+// live role admin/super_admin/project_manager), wajah phir bhi zaroori.
+const ptIsBoss=()=>["admin","super_admin","project_manager"].includes(String(currentUser().role||"").toLowerCase());
 const ptCanDelEntry=(e)=>{ const me=currentUser();
-  return can("Tasks","delete")
+  return can("Tasks","delete") || ptIsBoss()
     || (canEntry("Tasks") && e.created_by!=null && String(e.created_by)===String(me.id) && ptIstDay(e.created_at)===ptIstDay(new Date().toISOString())); };
 function QtyProgressBox({task,meIsPriv,onProgress,projectId,showMic=true,showNote=true}){
   const canProgress=canEntry("Tasks");
@@ -3774,14 +3779,14 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
   const meIsPriv = ["admin","super_admin","project_manager"].includes((meUser?.role || "").toLowerCase());
   // Maal-kharch entry hatana (SUPPLY, Roles & Access 5 Oct 2026 — routes/tasks.js):
   // apni aaj ki = Material Entry, kisi aur ki / purani = Material Delete; wajah zaroori.
-  const canDeleteUsed = (createdById, createdAt) => canPerm("Material","delete")
+  const canDeleteUsed = (createdById, createdAt) => canPerm("Material","delete") || meIsPriv
     || (canPermEntry("Material") && createdById != null && Number(createdById) === meId && !!createdAt && isoDate(createdAt) === todayISO());
   // Roles & Access (5 Oct 2026): progress / issue uthana = Tasks ENTRY (transition:
   // Create bhi); issue ka status + task photo hatana = Tasks EDIT; issue hatana =
   // Tasks DELETE, ya apna usi din (Entry).
   const canTaskEntry = canEntry("Tasks");
   const canTaskEdit  = can("Tasks","edit");
-  const canDelIssue  = (iss) => can("Tasks","delete")
+  const canDelIssue  = (iss) => can("Tasks","delete") || meIsPriv
     || (canTaskEntry && iss.created_by!=null && Number(iss.created_by)===meId && ptIstDay(iss.created_at)===ptIstDay(new Date().toISOString()));
 
   const [prog,setProg]=useState(task.progress||0);

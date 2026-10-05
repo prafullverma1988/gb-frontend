@@ -18,7 +18,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import api, { API_BASE, getToken } from "../config/api";
 import { t } from "../i18n";
 import { useMapLibrary, styleOf, typesFor, StyleSwatch } from "./mapStyles";
-import { canAny, canEntry } from "../utils/perms";
+import { can, canAny, canEntry } from "../utils/perms";
 
 // ── THEME (MapLibraryModule jaisa) ────────────────────────────────
 const T = {
@@ -1344,7 +1344,7 @@ export default function SiteMarkingEditor({ lib, loadMaps, onClose, onSaved }) {
             })}
           </div>
         )}
-        {fr.stretches >= 2 && !fr.tukde && (
+        {fr.stretches >= 2 && !fr.tukde && can("Tasks", "create") && canAny(["Tenders", "Mapping"], "edit") && (
           <Btn size="sm" onClick={() => askSplit(fr)} disabled={splitBusy} style={{ marginTop: 8 }}>{t("map_draw.tukde_banao")}</Btn>
         )}
         {splitDone && splitDone.task_id === fr.id && (
@@ -1824,7 +1824,9 @@ export default function SiteMarkingEditor({ lib, loadMaps, onClose, onSaved }) {
 
   const donePanel = () => {
     const fr = selTask ? ((taskList || []).find((x) => x.id === selTask.id) || selTask) : null;
-    const offer = !!(linked && fr && fr.stretches >= 2 && !(fr.tukde > 0) && !(splitDone && splitDone.task_id === fr.id));
+    // Tukde karna = plan badalna: server Tasks CREATE + (Tenders YA Mapping) EDIT maangta hai.
+    const canSplit = can("Tasks", "create") && canAny(["Tenders", "Mapping"], "edit");
+    const offer = !!(canSplit && linked && fr && fr.stretches >= 2 && !(fr.tukde > 0) && !(splitDone && splitDone.task_id === fr.id));
     return (
       <>
         <div style={{ ...card, background: T.grnL, borderColor: T.grnM }}>

@@ -4151,6 +4151,9 @@ const DRAW_MENU = (custom=[]) => [
 ];
 
 function MapTab({tenderId, sites}) {
+  // Map se task jodna / tukde karna = plan badalna: server Tasks CREATE + (Tenders YA
+  // Mapping) EDIT maangta hai (routes/tasks.js mapNeedsTaskCreate, 5 Oct 2026).
+  const canMapPlan = can("Tasks","create") && canAny(["Tenders","Mapping"],"edit");
   const toast = useToast();
   const apiKey = process.env.REACT_APP_GOOGLE_MAPS_KEY;
   const mapDiv  = useRef(null);
@@ -5520,9 +5523,9 @@ function MapTab({tenderId, sites}) {
                       {d.project_name} · {alignLabel(d.kind, d.atype)} · {fmtKm(d.length_m)}
                     </div>
                   </div>
-                  <button onClick={()=>setPickFor({ mode:"task", aid: d.__aid })} title={t("tenders.is_jagah_par_koi_kaam_jodo")}
+                  {canMapPlan && <button onClick={()=>setPickFor({ mode:"task", aid: d.__aid })} title={t("tenders.is_jagah_par_koi_kaam_jodo")}
                     style={{border:`1px solid ${T.ind}`, background:T.surface, color:T.ind, borderRadius:7,
-                      padding:"2px 8px", fontSize:10.5, fontWeight:800, cursor:"pointer", whiteSpace:"nowrap"}}>{t("tenders.kaam")}</button>
+                      padding:"2px 8px", fontSize:10.5, fontWeight:800, cursor:"pointer", whiteSpace:"nowrap"}}>{t("tenders.kaam")}</button>}
                   <button onClick={()=>setPanel(null)} style={{border:"none", background:"none", cursor:"pointer",
                     fontSize:15, color:T.t4, lineHeight:1, padding:2}}>✕</button>
                 </div>
@@ -5678,7 +5681,7 @@ function MapTab({tenderId, sites}) {
                   </div>
                 </div>
                 <div style={{display:"flex", gap:6, flexShrink:0}}>
-                  {r.stretches >= 2 && !r.tukde && (
+                  {canMapPlan && r.stretches >= 2 && !r.tukde && (
                     <button onClick={()=>openSplit(r)} title={t("tenders.tukdo_me_baanto_title")}
                       style={{border:`1px solid ${T.amb}`, background:T.surface, color:T.amb, borderRadius:7, padding:"3px 9px", fontSize:11, fontWeight:700, cursor:"pointer"}}>
                       {t("tenders.tukde_btn", { n: r.stretches })}
@@ -5698,8 +5701,8 @@ function MapTab({tenderId, sites}) {
                       <button onClick={()=>armMark(r, "point")} title={t("tenders.bahut_chhota_sirf_pin")}
                         style={{border:`1px solid ${T.b1}`, background:T.surface, color:T.t2, borderRadius:7, padding:"3px 8px", fontSize:11, fontWeight:700, cursor:"pointer"}}>{t("tenders.pin")}</button>
                     </>)}
-                    <button onClick={()=>setPickFor({ mode:"line", row:r })} title={t("tenders.bani_hui_line_pin_se_jodo")}
-                      style={{border:`1px solid ${T.b1}`, background:T.surface, color:T.t2, borderRadius:7, padding:"3px 9px", fontSize:11, fontWeight:700, cursor:"pointer"}}>{t("tenders.jodo")}</button>
+                    {canMapPlan && <button onClick={()=>setPickFor({ mode:"line", row:r })} title={t("tenders.bani_hui_line_pin_se_jodo")}
+                      style={{border:`1px solid ${T.b1}`, background:T.surface, color:T.t2, borderRadius:7, padding:"3px 9px", fontSize:11, fontWeight:700, cursor:"pointer"}}>{t("tenders.jodo")}</button>}
                     <button onClick={()=>unNa(r, true)} title={t("tenders.ye_kaam_map_par_nahi_aata")}
                       style={{border:`1px solid ${T.b1}`, background:T.surface, color:T.t4, borderRadius:7, padding:"3px 7px", fontSize:11, cursor:"pointer"}}>✕</button>
                   </>)}
@@ -5707,7 +5710,7 @@ function MapTab({tenderId, sites}) {
                     <button onClick={()=>unNa(r, false)}
                       style={{border:`1px solid ${T.b1}`, background:T.surface, color:T.t2, borderRadius:7, padding:"3px 9px", fontSize:11, fontWeight:700, cursor:"pointer"}}>{t("tenders.wapas_lao")}</button>
                   )}
-                  {r.bucket === "mapped" && r.alignment_id && (
+                  {canMapPlan && r.bucket === "mapped" && r.alignment_id && (
                     <button onClick={async()=>{ const rr = await api.post(`/tasks/${r.task_id}/map-link`, { alignment_id: null }); if (rr?.success) { toast.success("Link hata"); load(); } else toast.error(rr?.message || "Nahi hata"); }}
                       style={{border:`1px solid ${T.b1}`, background:T.surface, color:T.t4, borderRadius:7, padding:"3px 9px", fontSize:11, cursor:"pointer"}}>{t("tenders.link_hatao")}</button>
                   )}
@@ -5772,8 +5775,8 @@ function MapTab({tenderId, sites}) {
                   <button onClick={()=>{ setTaskMark(null); armMark(r, "point"); }} title={t("tenders.bahut_chhota_hai_sirf_pin")}
                     style={{border:`1px solid ${T.b1}`, background:T.surface, color:T.t2, borderRadius:7, padding:"5px 11px", fontSize:11.5, fontWeight:700, cursor:"pointer", flexShrink:0}}>{t("tenders.pin")}</button>
                 </>)}
-                <button onClick={()=>{ setTaskMark(null); setPickFor({ mode:"line", row:r }); }}
-                  style={{border:`1px solid ${T.b1}`, background:T.surface, color:T.t2, borderRadius:7, padding:"5px 11px", fontSize:11.5, fontWeight:700, cursor:"pointer", flexShrink:0}}>{t("tenders.bani_hui_se_jodo")}</button>
+                {canMapPlan && <button onClick={()=>{ setTaskMark(null); setPickFor({ mode:"line", row:r }); }}
+                  style={{border:`1px solid ${T.b1}`, background:T.surface, color:T.t2, borderRadius:7, padding:"5px 11px", fontSize:11.5, fontWeight:700, cursor:"pointer", flexShrink:0}}>{t("tenders.bani_hui_se_jodo")}</button>}
               </div>
             ))}
           </div>
@@ -5914,7 +5917,7 @@ function MapTab({tenderId, sites}) {
           footer={<>
             <SecBtn label={t("tenders.baad_me")} onClick={()=>setKmlLink(null)}/>
             <PrimBtn label={`Jodo (${sel.length} × ${w ? w.linear_steps : 0} = ${sel.length * (w ? w.linear_steps : 0)} task)`}
-              disabled={!sel.length || !w}
+              disabled={!canMapPlan || !sel.length || !w}
               onClick={async()=>{
                 const qty_by_alignment = {};
                 sel.forEach((f) => { const q = Number(f.qty); if (Number.isFinite(q) && q > 0) qty_by_alignment[f.id] = q; });

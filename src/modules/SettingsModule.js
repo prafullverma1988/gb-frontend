@@ -150,9 +150,13 @@ const PERM_STRICT = {
   "Budget": ["approve"],
   "Attendance": ["approve"],
   "Team & HR": ["approve"],
-  "Fuel": ["approve"],
+  "Fuel": ["approve", "delete"],
   "Equipment": ["approve"],
   "Finance": ["delete"],
+  // Review fix (5 Oct 2026): pehle sirf Admin ke delete — ab tick se, par row na ho to BAND.
+  "Procurement": ["delete"],   // MR / GRN delete
+  "Warehouse": ["delete"],     // issue / transfer delete
+  "Projects": ["delete"],      // project archive
 };
 
 // Har row/box ka matlab — teeno bhasha me (t()). Box ke teen roop:

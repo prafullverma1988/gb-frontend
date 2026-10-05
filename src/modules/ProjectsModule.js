@@ -2973,7 +2973,8 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
           :<div style={{display:"flex",gap:6,marginTop:8}}>
           <button onClick={()=>walReject(it)} disabled={!!act} style={{flex:1,padding:"6px",borderRadius:6,background:T.redL,border:"1px solid "+T.redM,color:T.red,fontSize:11,fontWeight:700,cursor:act?"not-allowed":"pointer"}}>{act==="rejecting"?"...":t("common.reject")}</button>
           <button onClick={()=>walAsk(it)} disabled={!!act} style={{flex:1,padding:"6px",borderRadius:6,background:T.bluL,border:"1px solid "+T.blu,color:T.blu,fontSize:11,fontWeight:700,cursor:act?"not-allowed":"pointer"}}>{act==="asking"?"...":t("projects.ask_info")}</button>
-          <button onClick={()=>walApprove(it,clar)} disabled={!!act||blocked} style={{flex:1,padding:"6px",borderRadius:6,background:blocked?T.b1:T.grn,border:"none",color:blocked?T.t4:"white",fontSize:11,fontWeight:700,cursor:(act||blocked)?"not-allowed":"pointer"}}>{act==="approving"?"...":t("common.approve")}</button>
+          {/* Apna banaya kharcha khud approve nahi (server self_blocked deta hai) */}
+          {!it.self_blocked&&<button onClick={()=>walApprove(it,clar)} disabled={!!act||blocked} style={{flex:1,padding:"6px",borderRadius:6,background:blocked?T.b1:T.grn,border:"none",color:blocked?T.t4:"white",fontSize:11,fontWeight:700,cursor:(act||blocked)?"not-allowed":"pointer"}}>{act==="approving"?"...":t("common.approve")}</button>}
         </div>}
       </div>
     );

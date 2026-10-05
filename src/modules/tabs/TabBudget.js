@@ -71,8 +71,10 @@ export default function TabBudget({ project }) {
   const canDeleteB  = can("Budget", "delete");
   const canApproveB = canAny("Budget", "approve", { strict: true });
   const canProgress = canEntry("Tasks");
-  const canDelAnyProgress = can("Tasks", "delete");
   const me = currentUser();
+  // PM / Admin doosre ki entry bhi hata sakte hain (server utils/entryBoss.js), wajah ke saath.
+  const canDelAnyProgress = can("Tasks", "delete")
+    || ["admin", "super_admin", "project_manager"].includes(String(me?.role || "").toLowerCase());
   const status = bStatus?.status || "draft";
   const locked = BUDGET_LOCKED.includes(status);
 
