@@ -5,6 +5,7 @@ import SearchSelect from "../../components/SearchSelect";
 import { T, fmtN, localYMD } from "../shared/tokens";
 import { Pill, THead } from "../shared/ui";
 import { t, Rich } from "../../i18n";
+import { can, canEntry } from "../../utils/perms";
 
 // Name-wise entry ka rate. Web `dailyRate` likhta hai, mobile app `rate` —
 // sirf dailyRate padhne se app se bhari hazri web history me ₹0 dikhti thi.
@@ -12,6 +13,14 @@ const entryRate = (e) => Number(e && (e.dailyRate || e.rate || e.daily_rate)) ||
 
 function TabAttendance({ project, onRequestPayment }) {
   const projectId = project?.id || 1;
+
+  // Roles & Access (5 Oct 2026) — Attendance row. Hazri lagana = Entry (ya
+  // Create); pehle se lagi hazri ke liye server har din ki row par
+  // can_change bhejta hai (apni aaj ki = haan; kisi aur ki / purani = sirf
+  // Edit tick se). Roster me naya aadmi = Create.
+  const canMark = canEntry("Attendance");
+  const canSaveRec = (rec) => canMark && (!rec || rec.can_change !== false);
+  const canAddWf = can("Attendance", "create");
 
   // ── Settings from localStorage ──────────────────────────────────
   const [attSett] = useState(() => {
@@ -296,13 +305,20 @@ function TabAttendance({ project, onRequestPayment }) {
     try {
       const r = await api.post(`/projects/${projectId}/attendance`, payload);
       if(r.success) {
-        setAttRecs(prev=>[...prev.filter(rec=>{
+        const sameRec = (rec) => {
           const rd = String(rec.date||"").split("T")[0];
-          return !(rd===attDate&&rec.type===labType
+          return rd===attDate&&rec.type===labType
             &&(rec.subcon_id||null)===(sc?.id||null)
-            &&(rec.vendor_id||null)===(vd?.id||null));
-        }), {...payload, id:r.data?.id}]);
+            &&(rec.vendor_id||null)===(vd?.id||null);
+        };
+        // Server ke niyam se: nayi row apni aaj ki (badal + hata sakte ho);
+        // purani row ka hatana jaisa pehle tha waisa.
+        const before = attRecs.find(sameRec);
+        setAttRecs(prev=>[...prev.filter(rec=>!sameRec(rec)),
+          {...payload, id:r.data?.id, can_change:true, can_remove: before ? before.can_remove : true}]);
         setEditingAtt(false);
+      } else if (r.message) {
+        alert(r.message);
       }
     } catch(e) {}
     setAttSaving(false);
@@ -463,11 +479,11 @@ function TabAttendance({ project, onRequestPayment }) {
             <button onClick={()=>setShowWfPanel(p=>!p)}
               style={{padding:"6px 12px",borderRadius:6,border:`1px solid ${T.b1}`,background:showWfPanel?T.surfaceB:T.surface,color:T.t3,fontSize:11.5,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>
               <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>{t("attendance.workforce_showwfpanel", { showWfPanel: showWfPanel?"▲":"▼" })}</button>
-            <button onClick={()=>{ setShowAddWf(true); setLibSearch(""); setSelectedLibIds(new Set()); setShowNewWf(false); setWfForm({name:"",role:"Labour",category:"Unskilled",dailyRate:"",phone:"",city:""}); }}
+            {canAddWf&&<button onClick={()=>{ setShowAddWf(true); setLibSearch(""); setSelectedLibIds(new Set()); setShowNewWf(false); setWfForm({name:"",role:"Labour",category:"Unskilled",dailyRate:"",phone:"",city:""}); }}
               style={{padding:"6px 13px",borderRadius:6,background:TYPE_COLORS[labType],color:"white",border:"none",fontSize:12,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
               <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}><path d="M12 5v14M5 12h14"/></svg>
              {t("common.add_worker")}
-            </button>
+            </button>}
           </>}
           <button onClick={()=>setShowHistory(p=>!p)}
             style={{padding:"6px 12px",borderRadius:6,border:`1px solid ${showHistory?TYPE_COLORS[labType]:T.b1}`,background:showHistory?TYPE_BG[labType]:T.surface,color:showHistory?TYPE_COLORS[labType]:T.t3,fontSize:11.5,cursor:"pointer"}}>
@@ -716,8 +732,9 @@ function TabAttendance({ project, onRequestPayment }) {
                   <>
                     {savedRecCount&&<span style={{fontSize:10.5,padding:"2px 8px",borderRadius:10,background:T.grnL,color:T.grn,fontWeight:700,border:`1px solid ${T.grnM}`}}>{t("attendance.saved")}</span>}
                     {totalCount>0&&<span style={{fontSize:11.5,color:T.t3,fontWeight:600}}>{t("common.total_2")} <b style={{color:T.grn}}>{totalCount}</b></span>}
-                    <button onClick={()=>setEditingAtt(true)}
-                      style={{padding:"7px 16px",borderRadius:7,border:`1.5px solid ${TYPE_COLORS[labType]}`,background:TYPE_BG[labType],color:TYPE_COLORS[labType],fontSize:12,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>{t("attendance.savedreccount_attendance", { savedRecCount: savedRecCount?"Edit":"Mark" })}</button>
+                    {!canSaveRec(savedRecCount)&&<span style={{fontSize:11,color:T.t4,fontWeight:600}}>{canMark?t("attendance.hazri_kisi_aur_ki"):t("attendance.sirf_dekh_sakte")}</span>}
+                    {canSaveRec(savedRecCount)&&<button onClick={()=>setEditingAtt(true)}
+                      style={{padding:"7px 16px",borderRadius:7,border:`1.5px solid ${TYPE_COLORS[labType]}`,background:TYPE_BG[labType],color:TYPE_COLORS[labType],fontSize:12,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>{t("attendance.savedreccount_attendance", { savedRecCount: savedRecCount?"Edit":"Mark" })}</button>}
                   </>
                 );
                 return(
@@ -775,13 +792,14 @@ function TabAttendance({ project, onRequestPayment }) {
                       {isDirty&&<span style={{marginLeft:6,padding:"1px 7px",borderRadius:10,background:T.ambL,color:T.amb,fontSize:9.5,fontWeight:700,border:`1px solid ${T.ambM}`}}>{t("attendance.unsaved")}</span>}
                       {!isDirty&&savedRec&&<span style={{marginLeft:6,padding:"1px 7px",borderRadius:10,background:T.grnL,color:T.grn,fontSize:9.5,fontWeight:700,border:`1px solid ${T.grnM}`}}>{t("attendance.saved")}</span>}
                     </span>
-                    {labType==="company"&&currentWF.length>0&&markedCount<total&&(
+                    {!canSaveRec(savedRec)&&<span style={{fontSize:11,color:T.t4,fontWeight:600}}>{canMark?t("attendance.hazri_kisi_aur_ki"):t("attendance.sirf_dekh_sakte")}</span>}
+                    {canSaveRec(savedRec)&&labType==="company"&&currentWF.length>0&&markedCount<total&&(
                       <button onClick={()=>setTodayEntries(prev=>prev.map(e=>e.status?e:({...e,status:"P",hours:8})))}
                         style={{padding:"6px 12px",borderRadius:6,border:`1.5px solid ${T.grn}`,background:T.grnL,color:T.grn,fontSize:11.5,fontWeight:700,cursor:"pointer"}}>
                        {t("attendance.mark_remaining_present")}
                       </button>
                     )}
-                    {savedRec&&!isDirty&&(
+                    {canSaveRec(savedRec)&&savedRec&&!isDirty&&(
                       <button onClick={async()=>{
                         // Unfreeze: enable editing by clearing all statuses
                         if(!await window.confirmAsync(t("attendance.edit_attendance_for_this_date_tum"))) return;
@@ -792,7 +810,7 @@ function TabAttendance({ project, onRequestPayment }) {
                        {t("payroll.edit_attendance")}
                       </button>
                     )}
-                    {markedCount>0&&(
+                    {canSaveRec(savedRec)&&markedCount>0&&(
                       <button onClick={saveAttendance} disabled={attSaving||!allMarked||!isDirty}
                         title={!allMarked?t("attendance.mark_all_workers_first"):(!isDirty?t("attendance.no_changes_to_save"):t("attendance.save_attendance"))}
                         style={{padding:"7px 18px",borderRadius:7,border:"none",background:(allMarked&&isDirty)?TYPE_COLORS[labType]:"#ccc",color:"white",fontSize:12.5,fontWeight:700,cursor:(allMarked&&isDirty)?"pointer":"not-allowed",opacity:attSaving?.6:1,boxShadow:(allMarked&&isDirty)?`0 2px 8px ${TYPE_COLORS[labType]}55`:"none"}}>
@@ -825,11 +843,12 @@ function TabAttendance({ project, onRequestPayment }) {
             }
             return false;
           })();
-          const isFrozen = !!savedRec2 && !isDirty2;
+          // Badal nahi sakte (Entry nahi, ya kisi aur ki / purani hazri + Edit nahi) = sirf dekhna
+          const isFrozen = (!!savedRec2 && !isDirty2) || !canSaveRec(savedRec2);
           return currentWF.length===0
             ?<div style={{padding:"22px 15px",textAlign:"center",color:T.t4,fontSize:12.5}}>{t("attendance.register_workforce_first_to_mark_name")}</div>
             :<div>
-              {isFrozen&&(
+              {isFrozen&&canSaveRec(savedRec2)&&(
                 <div style={{padding:"6px 14px",background:T.grnL,borderBottom:`1px solid ${T.grnM}`,fontSize:11,color:T.grn,fontWeight:600,display:"flex",alignItems:"center",gap:6}}>
                   <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
                  {t("attendance.saved_locked_click")} <b style={{margin:"0 2px"}}>{t("attendance.edit_attendance")}</b> {t("attendance.above_to_change")}
@@ -862,10 +881,11 @@ function TabAttendance({ project, onRequestPayment }) {
                   <span style={{fontSize:12,color:T.t3}}>{e.role}</span>
 
                   {/* Status — pill when frozen, buttons when editing */}
-                  {isFrozen ? (
+                  {isFrozen ? (e.status ?
                     <Pill label={e.status==="P"?t("attendance.present"):e.status==="H"?t("attendance.half_day"):t("attendance.absent")}
                       c={e.status==="P"?T.grn:e.status==="H"?T.amb:T.red}
                       bg={e.status==="P"?T.grnL:e.status==="H"?T.ambL:T.redL}/>
+                    : <span style={{fontSize:12,color:T.t4}}>—</span>
                   ) : (
                     <div style={{display:"inline-flex", padding:2, background:"#F1F5F9", border:`1px solid ${T.b1}`, borderRadius:8, gap:0}}>
                       {[
@@ -904,7 +924,9 @@ function TabAttendance({ project, onRequestPayment }) {
                   <span style={{fontSize:12.5,color:T.t1,fontWeight:600,textAlign:"right",fontVariantNumeric:"tabular-nums"}}>₹{e.dailyRate||0}</span>
 
                   {/* Edit/Lock indicator */}
-                  {isFrozen
+                  {isFrozen&&!savedRec2
+                    ?<span style={{fontSize:12,color:T.t4}}>—</span>
+                    :isFrozen
                     ?<span title={t("attendance.saved_locked")} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"4px 10px",borderRadius:14,border:`1px solid ${T.grnM}`,background:T.grnL,color:T.grn,fontSize:10.5,fontWeight:700,textTransform:"uppercase",letterSpacing:".4px"}}>
                         <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
                        {t("attendance.saved_3")}

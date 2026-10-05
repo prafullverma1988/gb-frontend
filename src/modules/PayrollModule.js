@@ -4,6 +4,7 @@ import SearchSelect from "../components/SearchSelect";
 import { t, Rich } from "../i18n";
 import { companyNameHtml } from "../utils/companyName";
 import { canApproveAction } from "../utils/approvalAuthority";
+import { can, canEntry } from "../utils/perms";
 import { todayISO } from "../utils/today";
 import { apiMonth, rowOf, slipOf, payStateOf, tilesOf } from "../utils/salarySheet";
 
@@ -13,10 +14,22 @@ import { apiMonth, rowOf, slipOf, payStateOf, tilesOf } from "../utils/salaryShe
 // Roles & Access se approve mila hai (Ratna ke site account, computer operator)
 // usse button chhupa rehta tha, aur jis PM ke paas bit nahi tha use dikhta tha
 // aur dabane par "is kaam ki ijazat nahi" milta tha.
-const canApproveHR  = () => canApproveAction({ perm: ["Team & HR", "approve"] });      // salary/attendance edit, leave
-const canApproveAtt = () => canApproveAction({ perm: ["Attendance", "approve"] });     // day-lock
-// Attendance session review par server requireRole("admin","manager") BHI lagata hai.
-const canReviewAtt  = () => canApproveAction({ roles: ["admin", "super_admin", "manager"], perm: ["Attendance", "approve"] });
+const canApproveHR  = () => canApproveAction({ perm: ["Team & HR", "approve"] });      // salary edit (workflow ho to engine bhi)
+// 5 Oct 2026 (Roles & Access): in faislon par server ab SIRF tick dekhta hai
+// (pehle admin role bhi) — strict: jis role ki row hi nahi use nahi.
+const canDecideHR   = () => canApproveAction({ perm: ["Team & HR", "approve", { strict: true }] });   // chhutti, hazri-edit request
+const canApproveAtt = () => canApproveAction({ perm: ["Attendance", "approve", { strict: true }] });  // din approve
+// Bahar-fence punch review — pehle requireRole("admin","manager") ("manager"
+// slug hai hi nahi = sirf admin); ab Attendance ka Approve tick.
+const canReviewAtt  = () => canApproveAtt();
+// Hazri lagana = Attendance Entry (transition me Create bhi). Kisi aur ki /
+// purani hazri badalna = Edit — wo khaane server `noEdit` me batata hai.
+const canMarkAtt    = () => canEntry("Attendance");
+const canEditAtt    = () => can("Attendance", "edit");                 // din lock / unlock
+// Hazri badalne ki request — kisi aur ke liye: Attendance Entry/Create (ya Team & HR Create)
+const canAttRequest = () => canEntry(["Attendance", "Team & HR"]);
+// Payroll ka CSV, salary slip print, salary sheet = Team & HR ka Export tick
+const canHrExport   = () => can("Team & HR", "export");
 
 // ── ICONS ──────────────────────────────────────────────────────────
 const Ic=({d,size=18,color="currentColor",sw=1.8,fill="none"})=>(
@@ -475,7 +488,7 @@ function PendingReviewQueue({onChanged}){
 // Sub-tabs: Pending Approvals (default) / All Leaves / Balance / Holidays.
 // Self-service apply mobile app me hai; web par sirf on-behalf entry (modal).
 function LeaveTab({staff,month,year,isAdmin,onAttendanceChanged,holidays,setHolidays}){
-  const [subTab,setSubTab]=useState(isAdmin?"pending":"all");
+  const [subTab,setSubTab]=useState(canDecideHR()?"pending":"all");
   const [showApply,setShowApply]=useState(false);
   const [coverApp,setCoverApp]=useState(null);   // pending app being reviewed in Coverage Check modal
   const [types,setTypes]=useState([]);
@@ -567,7 +580,7 @@ function LeaveTab({staff,month,year,isAdmin,onAttendanceChanged,holidays,setHoli
       else alert(r.message);
     }catch(e){ alert(e.message); }
   };
-  // Admin-only: cancel an APPROVED leave — restores balance + unmarks 'L' days
+  // Team & HR Approve tick (5 Oct 2026; pehle sirf admin): cancel an APPROVED leave — restores balance + unmarks 'L' days
   const cancelApproved=async(a)=>{
     if(!await window.confirmAsync(`${a.staff_name} ki approved leave (${fmtDate(a.from_date)} → ${fmtDate(a.to_date)}) cancel karein? Balance restore hoga aur grid ke 'L' days unmark ho jayenge.`)) return;
     const reason=await window.promptAsync(t("payroll.cancel_reason_required"));
@@ -604,7 +617,7 @@ function LeaveTab({staff,month,year,isAdmin,onAttendanceChanged,holidays,setHoli
     <div>
       {/* Sub-tabs */}
       <div style={{display:"flex",gap:6,marginBottom:14,borderBottom:`1px solid ${T.b1}`,paddingBottom:6,alignItems:"center"}}>
-        {SUB_TABS.filter(s=>!s.adminOnly||isAdmin).map(s=>{
+        {SUB_TABS.filter(s=>!s.adminOnly||canDecideHR()).map(s=>{
           const active=subTab===s.id;
           return(
             <button key={s.id} onClick={()=>setSubTab(s.id)}
@@ -735,10 +748,10 @@ function LeaveTab({staff,month,year,isAdmin,onAttendanceChanged,holidays,setHoli
                 <span style={{color:T.t2}}>{fmtDate(a.to_date)}</span>
                 <span style={{fontSize:10,padding:"2px 8px",borderRadius:10,background:bg,color:stC,fontWeight:700,justifySelf:"start"}}>{a.status}</span>
                 <div style={{display:"flex",gap:4,justifyContent:"flex-end"}}>
-                  {a.status==="Pending"&&(a.applied_by===currentUser.id||isAdmin)&&(
+                  {a.status==="Pending"&&(a.applied_by===currentUser.id||canDecideHR())&&(
                     <button onClick={()=>cancel(a.id)} style={{padding:"3px 8px",borderRadius:5,background:T.sltL,border:`1px solid ${T.b1}`,color:T.t3,fontSize:10.5,fontWeight:600,cursor:"pointer"}}>{t("common.cancel")}</button>
                   )}
-                  {a.status==="Approved"&&isAdmin&&(
+                  {a.status==="Approved"&&canDecideHR()&&(
                     <button onClick={()=>cancelApproved(a)} title={t("payroll.balance_restore_l_days_unmark_honge")}
                       style={{padding:"3px 8px",borderRadius:5,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:10.5,fontWeight:600,cursor:"pointer"}}>{t("common.cancel")}</button>
                   )}
@@ -750,7 +763,7 @@ function LeaveTab({staff,month,year,isAdmin,onAttendanceChanged,holidays,setHoli
       )}
 
       {/* ─── PENDING APPROVALS (jiske paas Team & HR ka approve hai) ─── */}
-      {!loading && subTab==="pending" && canApproveHR() && (
+      {!loading && subTab==="pending" && canDecideHR() && (
         <div>
           {pendingApps.length===0?(
             <div style={{background:T.grnL,border:`1px solid ${T.grnM}`,borderRadius:9,padding:30,textAlign:"center"}}>
@@ -1012,7 +1025,15 @@ function HolidayCalendarTab({holidays,setHolidays,month,year,isAdmin}){
   };
   const del=async(id)=>{
     if(!await window.confirmAsync(t("payroll.delete_this_holiday"))) return;
-    try{ await api.del(`/payroll/holidays/${id}`); await reload(); }
+    // Hatane ki wajah zaroori — server purani row ke saath audit me rakhta hai
+    const why=await window.promptAsync(t("payroll.hatane_ki_wajah"));
+    if(why===null) return;
+    if(String(why).trim().length<3){ alert(t("payroll.wajah_kam_se_kam_3")); return; }
+    try{
+      const r=await api.del(`/payroll/holidays/${id}?reason=${encodeURIComponent(String(why).trim())}`);
+      if(r&&r.success===false) alert(r.message||t("common.something_went_wrong"));
+      await reload();
+    }
     catch(e){ alert(e.message); }
   };
   const bulkSeed=async()=>{
@@ -1322,7 +1343,7 @@ function PunchReviewStrip({onActed}){
 // ek click me sahi status select (no cycle-toggle mistakes), bulk "sab P".
 // App users (GPS punch) alag read-only table — unki attendance geo-tag
 // se aati hai, yahan sirf dikhti hai; review PunchReviewStrip me hota hai.
-function DayAttendanceView({staff,att,setAtt,month,year,onAttChange,holidays=[],punchDays={},notes={},dayLocks={},isAdmin,onLocksChanged}){
+function DayAttendanceView({staff,att,setAtt,month,year,onAttChange,holidays=[],punchDays={},notes={},dayLocks={},noEdit={},onLocksChanged}){
   const now=new Date();
   const isCurMonth=now.getMonth()===month&&now.getFullYear()===year;
   const daysInMonth=new Date(year,month+1,0).getDate();
@@ -1342,7 +1363,10 @@ function DayAttendanceView({staff,att,setAtt,month,year,onAttChange,holidays=[],
   const dow=dateObj.getDay();
   const holiday=holidays.find(h=>{const d=new Date(h.holiday_date);return d.getDate()===day&&d.getMonth()===month&&d.getFullYear()===year;});
   const lock=dayLocks[dateISO]||null;   // {status:'locked'|'approved',...}
-  const blocked=(holiday&&!holiday.is_optional)||maxDay===0||!!lock;
+  // Hazri lagana = Attendance Entry (ya Create) — bina uske sirf dekhna.
+  const blocked=(holiday&&!holiday.is_optional)||maxDay===0||!!lock||!canMarkAtt();
+  // Kisi aur ki / purani hazri aur Edit tick nahi — server `noEdit` me batata hai.
+  const cellLocked=(id)=>!!noEdit[id]?.[day];
 
   const manual=staff.filter(s=>!s.isAppUser);
   const appUsers=staff.filter(s=>s.isAppUser);
@@ -1363,7 +1387,7 @@ function DayAttendanceView({staff,att,setAtt,month,year,onAttChange,holidays=[],
   const [bulking,setBulking]=useState(false);
   const [locking,setLocking]=useState(false);
   const [showEditReq,setShowEditReq]=useState(false);
-  const unmarkedManual=manual.filter(s=>!getStatus(s.id));
+  const unmarkedManual=manual.filter(s=>!getStatus(s.id)&&!cellLocked(s.id));
   const bulkPresent=async()=>{
     if(blocked||unmarkedManual.length===0) return;
     if(!await window.confirmAsync(`${unmarkedManual.length} unmarked staff ko ${fmtDate(dateObj)} ke liye Present mark karein?`)) return;
@@ -1394,9 +1418,13 @@ function DayAttendanceView({staff,att,setAtt,month,year,onAttChange,holidays=[],
   };
   const unlockDay=async()=>{
     if(!await window.confirmAsync(`${fmtDate(dateObj)} ka lock hatayein? Marking wapas khul jayegi.`)) return;
+    // Lock hatana = Attendance Edit + wajah (server audit me rakhta hai)
+    const why=await window.promptAsync(t("payroll.unlock_ki_wajah"));
+    if(why===null) return;
+    if(String(why).trim().length<3){ alert(t("payroll.wajah_kam_se_kam_3")); return; }
     setLocking(true);
     try{
-      const r=await api.del(`/payroll/attendance/day-locks?date=${dateISO}`);
+      const r=await api.del(`/payroll/attendance/day-locks?date=${dateISO}&reason=${encodeURIComponent(String(why).trim())}`);
       if(r.success){ onLocksChanged&&onLocksChanged(); }
       else alert(r.message||"Unlock failed");
     }catch(e){ alert(e.message); }
@@ -1453,7 +1481,7 @@ function DayAttendanceView({staff,att,setAtt,month,year,onAttChange,holidays=[],
         </div>
         {/* Lock-flow actions */}
         {maxDay>0&&!(holiday&&!holiday.is_optional)&&(
-          !lock?(
+          !lock?(canEditAtt()&&
             <button disabled={locking} onClick={lockDay}
               style={{fontSize:11,fontWeight:700,color:"#fff",background:T.sb,border:"none",borderRadius:8,padding:"7px 14px",cursor:"pointer"}}>
              {t("payroll.din_lock_karo")}
@@ -1466,11 +1494,11 @@ function DayAttendanceView({staff,att,setAtt,month,year,onAttChange,holidays=[],
                  {t("payroll.approve_day")}
                 </button>
               )}
-              <button onClick={()=>setShowEditReq(true)}
+              {canAttRequest()&&<button onClick={()=>setShowEditReq(true)}
                 style={{fontSize:11,fontWeight:700,color:T.blu,background:T.bluL,border:`1px solid ${T.blu}33`,borderRadius:8,padding:"7px 14px",cursor:"pointer"}}>
                {t("payroll.edit_request")}
-              </button>
-              {isAdmin&&(
+              </button>}
+              {canEditAtt()&&(
                 <button disabled={locking} onClick={unlockDay} title={t("payroll.lock_hatao_marking_wapas_khulegi")}
                   style={{fontSize:11,fontWeight:700,color:T.t3,background:T.surface,border:`1px solid ${T.b1}`,borderRadius:8,padding:"7px 12px",cursor:"pointer"}}>
                  {t("payroll.unlock")}
@@ -1515,8 +1543,8 @@ function DayAttendanceView({staff,att,setAtt,month,year,onAttChange,holidays=[],
               </div>
               {isLeave?(
                 <Chip v="L"/>
-              ):blocked?(
-                <Chip v={v}/>
+              ):blocked||cellLocked(emp.id)?(
+                <span title={cellLocked(emp.id)?t("payroll.hazri_kisi_aur_ki"):undefined}><Chip v={v}/></span>
               ):(
                 <div style={{display:"flex",gap:5}}>
                   {["P","A","H"].map(s=>{
@@ -1557,8 +1585,8 @@ function DayAttendanceView({staff,att,setAtt,month,year,onAttChange,holidays=[],
                 <div style={{fontSize:10,color:T.t4}}>{emp.role||"—"}{note&&<span style={{color:T.amb,fontWeight:600}}> · 📝 {note}</span>}</div>
               </div>
               {punched&&<span style={{fontSize:9.5,fontWeight:700,color:"#0D9488",background:"#F0FDFA",border:"1px solid #99F6E4",borderRadius:10,padding:"2px 8px"}}>{t("payroll.gps_punch")}</span>}
-              {isLeave||blocked?(
-                <Chip v={v}/>
+              {isLeave||blocked||cellLocked(emp.id)?(
+                <span title={cellLocked(emp.id)?t("payroll.hazri_kisi_aur_ki"):undefined}><Chip v={v}/></span>
               ):(
                 <div style={{display:"flex",gap:5,alignItems:"center"}}>
                   {!v&&<span style={{fontSize:10,color:T.t4,marginRight:2}}>{t("payroll.manual_reason")}</span>}
@@ -1688,7 +1716,7 @@ function StaffEditRequestsStrip({staff,onActed}){
                 </div>
                 <div style={{fontSize:10.5,color:T.t3,marginTop:2}}>📝 {r.reason||"—"} <span style={{color:T.t4}}>{t("payroll.by_r", { r: r.requester_name||"?" })}</span></div>
               </div>
-              {canApproveHR()?<>
+              {canDecideHR()?<>
                 <button disabled={acting===r.id} onClick={()=>act(r.id,"rejected")}
                   style={{padding:"5px 11px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:11,fontWeight:700,cursor:"pointer"}}>{t("common.reject")}</button>
                 <button disabled={acting===r.id} onClick={()=>act(r.id,"approved")}
@@ -1702,7 +1730,8 @@ function StaffEditRequestsStrip({staff,onActed}){
   );
 }
 
-function MonthlyAttGrid({staff,att,setAtt,month,year,onAttChange,holidays=[],punchDays={},dayLocks={}}){
+function MonthlyAttGrid({staff,att,setAtt,month,year,onAttChange,holidays=[],punchDays={},dayLocks={},noEdit={}}){
+  const canMark=canMarkAtt();
   const daysInMonth=new Date(year,month+1,0).getDate();
   // Locked/approved days is month me — cells read-only (change = edit request via Day View)
   const lockedDaySet=new Set(Object.keys(dayLocks).map(d=>{
@@ -1810,14 +1839,16 @@ function MonthlyAttGrid({staff,att,setAtt,month,year,onAttChange,holidays=[],pun
               const cellColor=isHolBlock?T.red:isFuture?T.b2:isHalfL?"#B45309":sc.c;
               const isAppUser=!!emp.isAppUser;
               const isDayLocked=lockedDaySet.has(d);
-              const editable=!isFuture&&!isHolBlock&&!isAppUser&&!isDayLocked;
+              // Kisi aur ki / purani hazri + Edit tick nahi (server ka noEdit), ya Entry hi nahi
+              const notMine=!!noEdit[emp.id]?.[d];
+              const editable=canMark&&!notMine&&!isFuture&&!isHolBlock&&!isAppUser&&!isDayLocked;
               const cellKey=`${emp.id}_${d}`;
               const menuOpen=selCell===cellKey;
               return(
                 <div key={d}
                   onClick={()=>editable&&setSelCell(menuOpen?null:cellKey)}
                   style={{position:"relative",width:28,height:28,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",background:cellBg,borderRadius:4,cursor:editable?"pointer":"default",fontSize:9.5,fontWeight:700,color:cellColor,border:`1px solid ${menuOpen?T.blu:isHolBlock?"#FCA5A5":isFuture?"transparent":isHalfL?"#FDE68A":sc.bg}`,transition:"all .1s",margin:"0 1px",zIndex:menuOpen?30:"auto"}}
-                  title={hol?`Holiday: ${hol.name}${hol.is_optional?" (Optional)":""}`:isDayLocked?`${emp.name} - Day ${d} · 🔒 Din locked — change Edit Request se (Day View)`:isAppUser?`${emp.name} - Day ${d} · App user — GPS punch se auto; manual mark Day View me reason ke saath`:isHalfL?`${emp.name} - Day ${d} · Half-day leave`:punchDays[emp.id]?.[d]?`${emp.name} - Day ${d} · 📍 GPS punch (mobile)`:`${emp.name} - Day ${d}`}>
+                  title={notMine&&!isFuture?t("payroll.hazri_kisi_aur_ki"):hol?`Holiday: ${hol.name}${hol.is_optional?" (Optional)":""}`:isDayLocked?`${emp.name} - Day ${d} · 🔒 Din locked — change Edit Request se (Day View)`:isAppUser?`${emp.name} - Day ${d} · App user — GPS punch se auto; manual mark Day View me reason ke saath`:isHalfL?`${emp.name} - Day ${d} · Half-day leave`:punchDays[emp.id]?.[d]?`${emp.name} - Day ${d} · 📍 GPS punch (mobile)`:`${emp.name} - Day ${d}`}>
                   {isHolBlock?"H":isFuture?"":isHalfL?"L½":sc.label}
                   {/* GPS-punch source badge — auto-Present from mobile punch */}
                   {!isFuture&&!isHolBlock&&punchDays[emp.id]?.[d]&&(
@@ -1947,9 +1978,9 @@ function SalarySlipModal({emp,item,month,year,locked,workingDays,onClose}){
           <div style={{fontSize:14,fontWeight:700,color:"white"}}>{item.staff_name||emp.name}</div>
           <div style={{fontSize:10.5,color:"rgba(255,255,255,0.5)"}}>{item.staff_id} · {emp.designation||emp.role||item.designation} · {MONTHS[month]} {year}</div>
         </div>
-        <button onClick={printSlip} style={{display:"flex",alignItems:"center",gap:5,padding:"6px 11px",borderRadius:6,background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.2)",color:"white",fontSize:11.5,fontWeight:600,cursor:"pointer"}}>
+        {canHrExport()&&<button onClick={printSlip} style={{display:"flex",alignItems:"center",gap:5,padding:"6px 11px",borderRadius:6,background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.2)",color:"white",fontSize:11.5,fontWeight:600,cursor:"pointer"}}>
           <IcPrint size={13} color="white"/> {t("payroll.print_slip")}
-        </button>
+        </button>}
         <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)",display:"flex"}}><IcX size={14}/></button>
       </div>
 
@@ -2042,9 +2073,9 @@ function SalarySlipModal({emp,item,month,year,locked,workingDays,onClose}){
 
       <div style={{padding:"11px 18px",borderTop:`1px solid ${T.b1}`,background:T.surfaceB,display:"flex",gap:7,flexShrink:0}}>
         <button onClick={onClose} style={{flex:1,padding:"9px",borderRadius:7,background:T.surface,border:`1px solid ${T.b1}`,fontSize:12.5,fontWeight:600,color:T.t3,cursor:"pointer"}}>{t("common.close")}</button>
-        <button onClick={printSlip} style={{flex:2,padding:"9px",borderRadius:7,background:T.blu,color:"white",fontSize:12.5,fontWeight:700,border:"none",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+        {canHrExport()&&<button onClick={printSlip} style={{flex:2,padding:"9px",borderRadius:7,background:T.blu,color:"white",fontSize:12.5,fontWeight:700,border:"none",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
           <IcPrint size={14} color="white"/> {t("payroll.print_download_slip")}
-        </button>
+        </button>}
       </div>
     </div>
   </>);
@@ -2205,7 +2236,7 @@ function EditAttendanceModal({workers,att,month,year,onClose,onSubmitted}){
 }
 
 // ── PENDING APPROVALS DRAWER (admin) ──────────────────────────────
-function ApprovalQueueModal({onClose,onProcessed,isAdmin}){
+function ApprovalQueueModal({onClose,onProcessed}){
   const [items,setItems]=useState([]);
   const [loading,setLoading]=useState(true);
   const [actingId,setActingId]=useState(null);
@@ -2258,7 +2289,7 @@ function ApprovalQueueModal({onClose,onProcessed,isAdmin}){
                 </tbody>
               </table>
             </div>
-            {canApproveHR()&&(<>
+            {canDecideHR()&&(<>
               <input value={notes[req.id]||""} onChange={e=>setNotes(p=>({...p,[req.id]:e.target.value}))} placeholder={t("common.note_optional")}
                 style={{width:"100%",padding:"6px 10px",border:`1px solid ${T.b1}`,borderRadius:5,fontSize:11.5,marginBottom:6,fontFamily:"inherit"}}/>
               <div style={{display:"flex",gap:6,justifyContent:"flex-end"}}>
@@ -2266,7 +2297,7 @@ function ApprovalQueueModal({onClose,onProcessed,isAdmin}){
                 <button disabled={actingId===req.id} onClick={()=>act(req.id,"approved")} style={{padding:"6px 14px",borderRadius:6,background:T.grn,border:"none",color:"white",fontSize:11.5,fontWeight:700,cursor:"pointer"}}>{actingId===req.id?"…":t("common.approve")}</button>
               </div>
             </>)}
-            {!canApproveHR()&&<div style={{fontSize:11,color:T.t4,fontStyle:"italic"}}>{t("common.awaiting_admin_approval")}</div>}
+            {!canDecideHR()&&<div style={{fontSize:11,color:T.t4,fontStyle:"italic"}}>{t("common.awaiting_admin_approval")}</div>}
           </div>
         ))}
       </div>
@@ -2275,7 +2306,8 @@ function ApprovalQueueModal({onClose,onProcessed,isAdmin}){
 }
 
 // ── DAILY WAGES SECTION ───────────────────────────────────────────
-function DailyWagesTab({workers,att,setAtt,selProject,setSelProject,month,year,onDailyAttChange,isAdmin,onResync}){
+function DailyWagesTab({workers,att,setAtt,selProject,setSelProject,month,year,onDailyAttChange,noEdit={},onResync}){
+  const canMark=canMarkAtt();
   const [selWorker,setSelWorker]=useState(null);
   const [view,setView]=useState("grid");
   const [syncing,setSyncing]=useState(false);
@@ -2315,6 +2347,8 @@ function DailyWagesTab({workers,att,setAtt,selProject,setSelProject,month,year,o
   };
 
   const toggleDailyAtt=(wId,day,field,val)=>{
+    // Entry nahi, ya kisi aur ki / purani hazri + Edit tick nahi — server bhi mana karta
+    if(!canMark||noEdit[wId]?.[day]) return;
     setAtt(p=>{
       const cur=p[wId]?.[day]||{status:"A",ot:0};
       const updated={...cur,[field]:val};
@@ -2353,21 +2387,21 @@ function DailyWagesTab({workers,att,setAtt,selProject,setSelProject,month,year,o
           ))}
         </div>
         <div style={{marginLeft:"auto",display:"flex",gap:8,alignItems:"center"}}>
-          <button onClick={()=>{
+          {canHrExport()&&<button onClick={()=>{
             const headers=["Worker","Trade","Project","Rate/Day","Rate OT","Days Present","OT Hours","Total Pay"];
             const rows=filteredWorkers.map(w=>{const c=calcWorkerPay(w);return[w.name,w.trade,w.project,w.ratePerDay,w.rateOT,c.presentDays,c.otHours,c.total];});
             exportCSV(headers,rows,`Daily_Wages_${MONTHS[month]}_${year}.csv`);
           }} style={{display:"flex",alignItems:"center",gap:4,padding:"6px 12px",borderRadius:7,background:T.sltL,border:`1px solid ${T.b1}`,color:T.t2,fontSize:12,fontWeight:600,cursor:"pointer"}}>
             <IcDown size={12} color={T.t2}/> {t("common.export")}
-          </button>
-          <button onClick={doResync} disabled={syncing} title={t("payroll.re_sync_from_project_attendance")}
+          </button>}
+          {can("Team & HR","edit")&&<button onClick={doResync} disabled={syncing} title={t("payroll.re_sync_from_project_attendance")}
             style={{display:"flex",alignItems:"center",gap:4,padding:"6px 12px",borderRadius:7,background:syncing?T.sltL:T.bluL,border:`1px solid ${T.bluM}`,color:T.blu,fontSize:12,fontWeight:600,cursor:syncing?"wait":"pointer"}}>
             {syncing?t("payroll.syncing"):t("payroll.re_sync")}
-          </button>
-          <button onClick={()=>setShowEditModal(true)} title={t("payroll.bulk_edit_attendance_sends_to_admin")}
+          </button>}
+          {canAttRequest()&&<button onClick={()=>setShowEditModal(true)} title={t("payroll.bulk_edit_attendance_sends_to_admin")}
             style={{display:"flex",alignItems:"center",gap:4,padding:"6px 12px",borderRadius:7,background:T.ambL,border:`1px solid ${T.ambM}`,color:T.amb,fontSize:12,fontWeight:600,cursor:"pointer"}}>
            {t("payroll.edit_attendance")}
-          </button>
+          </button>}
           <button onClick={()=>setShowApprovalModal(true)} title={t("payroll.view_pending_approvals")}
             style={{position:"relative",display:"flex",alignItems:"center",gap:4,padding:"6px 12px",borderRadius:7,background:T.purL,border:`1px solid ${T.purM}`,color:T.pur,fontSize:12,fontWeight:600,cursor:"pointer"}}>
             {t("payroll.approvals_tab")}
@@ -2508,6 +2542,7 @@ function DailyWagesTab({workers,att,setAtt,selProject,setSelProject,month,year,o
                           <div key={d} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
                             <div style={{fontSize:9,color:T.pur}}>D{d}</div>
                             <input type="number" min={0} max={4} value={dayAtt.ot||0}
+                              disabled={!canMark||!!noEdit[w.id]?.[d]} title={noEdit[w.id]?.[d]?t("payroll.hazri_kisi_aur_ki"):undefined}
                               onChange={e=>toggleDailyAtt(w.id,d,"ot",Number(e.target.value))}
                               style={{width:30,height:22,borderRadius:4,border:`1px solid ${T.purM}`,background:"white",textAlign:"center",fontSize:10.5,outline:"none",fontFamily:"inherit"}}/>
                           </div>
@@ -2525,7 +2560,7 @@ function DailyWagesTab({workers,att,setAtt,selProject,setSelProject,month,year,o
       {showEditModal&&<EditAttendanceModal workers={filteredWorkers} att={att} month={month} year={year}
         onClose={()=>setShowEditModal(false)}
         onSubmitted={()=>{loadPendingCount();setSyncMsg("✓ Request sent for approval");setTimeout(()=>setSyncMsg(""),4000);}}/>}
-      {showApprovalModal&&<ApprovalQueueModal isAdmin={isAdmin}
+      {showApprovalModal&&<ApprovalQueueModal
         onClose={()=>setShowApprovalModal(false)}
         onProcessed={()=>{loadPendingCount(); if(onResync) onResync();}}/>}
     </div>
@@ -3157,13 +3192,13 @@ function MonthlySalaryTab({staff,month,year,onViewSlip,workingDays,isAdmin,isApp
             style={{display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:7,background:T.grn,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:"pointer"}}>
             <IcChk size={13} color="white"/> {isApprover?t("payroll.open_create_salary"):t("payroll.salary_ledger")}
           </button>}
-          <button onClick={()=>{
+          {canHrExport()&&<button onClick={()=>{
             const headers=["Employee","ID","Designation","Dept","Pay Type","Basic","Gross","PF","ESI","TDS","Net Pay"];
             const rows=filtered.map(({it,r,emp})=>[emp.name,it.staff_id,emp.designation||emp.role||"",emp.dept,r.payType,r.basic,r.gross,r.pf,r.esi,r.tds,r.net]);
             exportCSV(headers,rows,`Monthly_Salary_${MONTHS[month]}_${year}.csv`);
           }} style={{display:"flex",alignItems:"center",gap:4,padding:"6px 12px",borderRadius:7,background:T.sltL,border:`1px solid ${T.b1}`,color:T.t2,fontSize:12,fontWeight:600,cursor:"pointer"}}>
             <IcDown size={12} color={T.t2}/> {t("common.export")}
-          </button>
+          </button>}
         </div>
       </div>
 
@@ -3450,13 +3485,13 @@ function AdvancesTab({advances,setAdvances,staff,isAdmin}){
           </div>
         </div>
         <div style={{display:"flex",gap:8}}>
-          <button onClick={()=>{
+          {canHrExport()&&<button onClick={()=>{
             const headers=["Adv ID","Employee","Amount","Date","Reason","Status"];
             const rows=advances.map(a=>[a.id,a.name,a.amount,a.date,a.reason,a.status]);
             exportCSV(headers,rows,"Advances_Export.csv");
           }} style={{display:"flex",alignItems:"center",gap:4,padding:"6px 12px",borderRadius:7,background:T.sltL,border:`1px solid ${T.b1}`,color:T.t2,fontSize:12,fontWeight:600,cursor:"pointer"}}>
             <IcDown size={12} color={T.t2}/> {t("common.export")}
-          </button>
+          </button>}
           {isAdmin&&<button onClick={()=>setShowAdd(!showAdd)}
             style={{display:"flex",alignItems:"center",gap:5,padding:"6px 13px",borderRadius:7,background:T.blu,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:"pointer"}}>
             <IcAdd size={13} color="white"/> {t("payroll.new_advance")}
@@ -5908,7 +5943,7 @@ function RunFinalize({preview,adjs,finalized,items,month,year,busy,onFinalize,on
                   return <Pill label={t("common.pending")} c={T.amb} bg={T.ambL}/>;
                 })()}
                 {it.pay_status!=="paid"&&isAdmin&&<button onClick={()=>onMarkPaid(it)} style={{fontSize:11,fontWeight:600,color:T.grn,background:T.grnL,border:`1px solid ${T.grn}33`,borderRadius:7,padding:"5px 11px",cursor:"pointer"}}>{t("payroll.settle_pay")}</button>}
-                <button onClick={()=>onPayslip(it)} style={{fontSize:11,fontWeight:600,color:T.blu,background:"none",border:"none",cursor:"pointer"}}>{t("payroll.payslip")}</button>
+                {canHrExport()&&<button onClick={()=>onPayslip(it)} style={{fontSize:11,fontWeight:600,color:T.blu,background:"none",border:"none",cursor:"pointer"}}>{t("payroll.payslip")}</button>}
               </div>
             ))}
           </RWCard>
@@ -5973,14 +6008,17 @@ function OverviewTab({isAdmin,setTab,onOpenSalary}){
     .sort((a,b)=>(a.project?0:1)-(b.project?0:1)||b.total-a.total);
   const absentCount=(day,project)=>day.onLeave.filter(l=>(l.project||"").trim().toLowerCase()===(project||"").trim().toLowerCase()).length;
 
+  // Action center: server sirf faisla karne walon ko `actions` bhejta hai (admin,
+  // ya Team & HR / Attendance ka Approve tick — 5 Oct 2026). Har line usi ko
+  // jo us par kaam kar sake; salary run / settle pehle jaisa sirf admin.
   const actions=ov.actions;
   const actionRows=actions?[
-    actions.pendingLeaves>0&&{c:T.amb,l:`${actions.pendingLeaves} leave approval${actions.pendingLeaves>1?"s":""} pending`,btn:"Review",go:()=>setTab("office-leave")},
-    actions.pendingAttEdits>0&&{c:T.blu,l:`${actions.pendingAttEdits} attendance edit request${actions.pendingAttEdits>1?"s":""}`,btn:"Review",go:()=>setTab("office-att")},
-    actions.pendingReviews>0&&{c:T.red,l:t("payroll.pendingreviews_outside_geofence_punch_review_pending", { pendingReviews: actions.pendingReviews }),btn:"Review",go:()=>setTab("office-att")},
-    actions.settleRequests.count>0&&{c:T.grn,l:t("payroll.n_salary_settle_requests_amt",{n:actions.settleRequests.count,amt:fmtN(actions.settleRequests.amount)}),sub:t("payroll.finance_staff_wallets_me_confirm_hote")},
-    !actions.run.finalized&&{c:T.pur,l:t("payroll.months_payroll_run_pending", { MONTHS: MONTHS[actions.run.month-1] }),btn:"Start Run",go:()=>onOpenSalary("run")},
-    actions.run.finalized&&{c:T.grn,l:t("payroll.months_payroll_finalized", { MONTHS: MONTHS[actions.run.month-1] }),btn:"View",go:()=>onOpenSalary("run")},
+    canDecideHR()&&actions.pendingLeaves>0&&{c:T.amb,l:`${actions.pendingLeaves} leave approval${actions.pendingLeaves>1?"s":""} pending`,btn:"Review",go:()=>setTab("office-leave")},
+    canDecideHR()&&actions.pendingAttEdits>0&&{c:T.blu,l:`${actions.pendingAttEdits} attendance edit request${actions.pendingAttEdits>1?"s":""}`,btn:"Review",go:()=>setTab("office-att")},
+    canReviewAtt()&&actions.pendingReviews>0&&{c:T.red,l:t("payroll.pendingreviews_outside_geofence_punch_review_pending", { pendingReviews: actions.pendingReviews }),btn:"Review",go:()=>setTab("office-att")},
+    isAdmin&&actions.settleRequests.count>0&&{c:T.grn,l:t("payroll.n_salary_settle_requests_amt",{n:actions.settleRequests.count,amt:fmtN(actions.settleRequests.amount)}),sub:t("payroll.finance_staff_wallets_me_confirm_hote")},
+    isAdmin&&!actions.run.finalized&&{c:T.pur,l:t("payroll.months_payroll_run_pending", { MONTHS: MONTHS[actions.run.month-1] }),btn:"Start Run",go:()=>onOpenSalary("run")},
+    isAdmin&&actions.run.finalized&&{c:T.grn,l:t("payroll.months_payroll_finalized", { MONTHS: MONTHS[actions.run.month-1] }),btn:"View",go:()=>onOpenSalary("run")},
   ].filter(Boolean):[];
 
   const selected=selDay!=null?ov.days[selDay]:null;
@@ -5989,7 +6027,7 @@ function OverviewTab({isAdmin,setTab,onOpenSalary}){
     <div style={{display:"grid",gap:12,maxWidth:1080}}>
 
       {/* ─── ACTION CENTER ─── */}
-      {isAdmin&&actions&&(
+      {actions&&(
         <div style={{background:T.surface,border:`1px solid ${T.b1}`,borderRadius:10,padding:"4px 16px"}}>
           <div style={{fontSize:11,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".5px",padding:"10px 0 4px"}}>{t("payroll.action_center")}</div>
           {actionRows.length===0&&<div style={{padding:"10px 0 14px",fontSize:12.5,color:T.grn,fontWeight:600}}>{t("payroll.sab_clear_koi_pending_action_nahi")}</div>}
@@ -6154,6 +6192,8 @@ function PayrollModule(){
   const [monthlyAtt,setMonthlyAtt]=useState({});
   const [punchDays,setPunchDays]=useState({});   // {staffId:{day:true}} — GPS punch source badge
   const [attNotes,setAttNotes]=useState({});     // {staffId:{day:note}} — app-user manual-mark reasons
+  const [attNoEdit,setAttNoEdit]=useState({});   // {staffId:{day:true}} — kisi aur ki hazri, Edit tick nahi (server)
+  const [dailyNoEdit,setDailyNoEdit]=useState({}); // {workerId:{day:true}} — wahi, daily wages
   const [dayLocks,setDayLocks]=useState({});     // {"YYYY-MM-DD": lockRow} — day-lock/approve flow
   const [attFilter,setAttFilter]=useState("all"); // all | sal (salary staff) | app (app users)
   const [attSearch,setAttSearch]=useState("");
@@ -6270,7 +6310,9 @@ function PayrollModule(){
       setMonthlyAtt(mRes.data||{});
       setPunchDays(mRes.punchDays||{});
       setAttNotes(mRes.notes||{});
+      setAttNoEdit(mRes.noEdit||{});
       setDailyAtt(dRes.data||{});
+      setDailyNoEdit(dRes.noEdit||{});
       setDayLocks(lRes.data||{});
     }catch(err){console.error("Load attendance:",err);}
   },[month,year]);
@@ -6308,7 +6350,10 @@ function PayrollModule(){
   };
   const onDailyAttChange=(wId,day,status,ot)=>{
     const m=month+1;const dateStr=`${year}-${String(m).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
-    api.post("/payroll/attendance/daily",{worker_id:wId,date:dateStr,status,ot_hours:ot||0}).catch(err=>console.error(err));
+    // Server mana kare (kisi aur ki / purani hazri + Edit tick nahi) to wahi sandesh, grid wapas server jaisa
+    api.post("/payroll/attendance/daily",{worker_id:wId,date:dateStr,status,ot_hours:ot||0})
+      .then(r=>{ if(r&&r.success===false){ alert(r.message||t("common.something_went_wrong")); loadAttendance(); } })
+      .catch(err=>console.error(err));
   };
 
   if(loading) return(
@@ -6421,8 +6466,8 @@ function PayrollModule(){
             style={{display:"flex",alignItems:"center",padding:"5px 8px",borderRadius:6,border:"none",background:tab===settingsTabId?"rgba(255,255,255,0.14)":"none",color:tab===settingsTabId?"white":"rgba(255,255,255,0.45)",cursor:"pointer"}}>
             <IcSet size={15} color="currentColor"/>
           </button>
-          {/* Export */}
-          <button onClick={()=>{
+          {/* Export — payroll ke saare CSV = Team & HR ka Export tick (5 Oct 2026) */}
+          {canHrExport()&&<button onClick={()=>{
             if(tab==="office-salary"&&salarySub==="monthly"){
               // wahi salary-sheet jo table/slip/run — pehle yahan bhi apna formula tha (PF 12% hamesha) [HR-03]
               api.get(`/payroll/run/salary-sheet?month=${apiMonth(month)}&year=${year}`).then(r=>{
@@ -6444,7 +6489,7 @@ function PayrollModule(){
             }
           }} style={{display:"flex",alignItems:"center",gap:4,padding:"5px 10px",borderRadius:6,border:"1px solid rgba(255,255,255,0.18)",background:"rgba(255,255,255,0.07)",color:"rgba(255,255,255,0.7)",fontSize:11.5,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap"}}>
             <IcDown size={12} color="currentColor"/> {t("common.export")}
-          </button>
+          </button>}
 
           {/* Month + Year picker */}
           <div style={{display:"flex",gap:5,padding:"6px 0",alignItems:"center"}}>
@@ -6466,8 +6511,8 @@ function PayrollModule(){
         {/* ─── OFFICE STAFF MODE ─── */}
         {mode==="office" && tab==="office-att" && (
           <>
-          {isApprover&&<PunchReviewStrip onActed={loadAttendance}/>}
-          {isApprover&&<StaffEditRequestsStrip staff={staff} onActed={loadAttendance}/>}
+          {canReviewAtt()&&<PunchReviewStrip onActed={loadAttendance}/>}
+          {canDecideHR()&&<StaffEditRequestsStrip staff={staff} onActed={loadAttendance}/>}
           {/* View toggle + search — Day view (marking) | Month grid (overview) */}
           <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:12,flexWrap:"wrap"}}>
             <div style={{display:"inline-flex",background:T.surface,border:`1px solid ${T.b1}`,borderRadius:9,padding:3}}>
@@ -6495,14 +6540,14 @@ function PayrollModule(){
             <DayAttendanceView
               staff={staff.filter(s=>!attSearch||s.name.toLowerCase().includes(attSearch.toLowerCase()))}
               att={monthlyAtt} setAtt={setMonthlyAtt} month={month} year={year} onAttChange={onMonthlyAttChange} holidays={holidays} punchDays={punchDays}
-              notes={attNotes} dayLocks={dayLocks} isAdmin={isApprover} onLocksChanged={loadAttendance}/>
+              notes={attNotes} dayLocks={dayLocks} noEdit={attNoEdit} onLocksChanged={loadAttendance}/>
           ):(
             <MonthlyAttGrid
               staff={staff
                 .filter(s=>attFilter==="all"?true:attFilter==="sal"?s.salaryEnabled!==false:s.isAppUser)
                 .filter(s=>!attSearch||s.name.toLowerCase().includes(attSearch.toLowerCase()))}
               att={monthlyAtt} setAtt={setMonthlyAtt} month={month} year={year} onAttChange={onMonthlyAttChange} holidays={holidays} punchDays={punchDays}
-              dayLocks={dayLocks}/>
+              dayLocks={dayLocks} noEdit={attNoEdit}/>
           )}
           </>
         )}
@@ -6576,7 +6621,7 @@ function PayrollModule(){
           <DailyWorkersTab workers={workers} setWorkers={setWorkers} isAdmin={isAdmin}/>
         )}
         {mode==="daily" && tab==="daily-att" && (
-          <DailyWagesTab workers={workers} att={dailyAtt} setAtt={setDailyAtt} selProject={selProject} setSelProject={setSelProject} month={month} year={year} onDailyAttChange={onDailyAttChange} isAdmin={isApprover} onResync={loadAttendance}/>
+          <DailyWagesTab workers={workers} att={dailyAtt} setAtt={setDailyAtt} selProject={selProject} setSelProject={setSelProject} month={month} year={year} onDailyAttChange={onDailyAttChange} noEdit={dailyNoEdit} onResync={loadAttendance}/>
         )}
         {mode==="daily" && tab==="daily-payments" && (
           <DailyPaymentsTab workers={workers} isAdmin={isAdmin} attMonth={dailyAtt} month={month} year={year}/>
