@@ -33,6 +33,7 @@ const chartBase = { textStyle: { fontFamily: ECHART_FONT } };
 export default function RoadDesignDetail({ designId, onBack, onChanged, tenderMode, pick }) {
   const toast = useToast();
   const mayEdit = canRoad("edit");
+  const mayExport = canRoad("export");
 
   const [head, setHead] = useState(null);       // { design, zones, levels, latest_run }
   const [sub, setSub] = useState("levels");     // levels | zones | result
@@ -266,8 +267,9 @@ export default function RoadDesignDetail({ designId, onBack, onChanged, tenderMo
                 {busy ? t("road.btn_wait") : t("road.run_calc")}
               </button>
             )}
-            <button onClick={() => downloadSheet("xlsx")} disabled={busy} style={btn("ghost")}>{t("road.download_sheet")}</button>
-            <button onClick={() => downloadSheet("pdf")} disabled={busy} style={btn("ghost")}>{t("road.download_pdf")}</button>
+            {/* Sheet Excel/PDF = Road Levels ka Export tick (5 Oct 2026) — server bhi wahi maangta hai. */}
+            {mayExport && <button onClick={() => downloadSheet("xlsx")} disabled={busy} style={btn("ghost")}>{t("road.download_sheet")}</button>}
+            {mayExport && <button onClick={() => downloadSheet("pdf")} disabled={busy} style={btn("ghost")}>{t("road.download_pdf")}</button>}
             {pick && (
               <button onClick={pick.onPick} disabled={busy || pick.busy}
                 style={{ ...btn("primary"), background: T.grn, borderColor: T.grn, opacity: busy || pick.busy ? .6 : 1 }}>

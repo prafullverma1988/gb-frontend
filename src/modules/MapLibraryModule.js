@@ -22,6 +22,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import api from "../config/api";
 import { t } from "../i18n";
 import { useBackClose } from "../utils/backNav";
+import { can, canEntry } from "../utils/perms";
 import SiteMarkingEditor from "./SiteMarkingEditor";
 import { useMapLibrary, styleOf, lineOpts, markerIcon, MapLibraryDialog, typeName, typesFor, StyleSwatch } from "./mapStyles";
 
@@ -1332,7 +1333,9 @@ function MapLibraryModule() {
             {lib.status === "ok" && view === "library" && (
               <Btn onClick={() => setLibOpen(true)}>🎨 {t("map_style.button")}</Btn>
             )}
-            {lib.status === "ok" && view === "library" && (
+            {/* Editor ke do raaste: library marking = Mapping "Entry" (transition me
+                Create bhi), kaam ki line = Tenders Create. Dono band hon to button hi nahi. */}
+            {lib.status === "ok" && view === "library" && (canEntry("Mapping") || can("Tenders", "create")) && (
               <Btn tone="primary" icon={IcPlus} onClick={() => setDrawing(true)}>{t("map_library.nayi_marking")}</Btn>
             )}
             <Btn icon={IcRefresh} onClick={refresh} disabled={refreshing}>{t("common.refresh")}</Btn>

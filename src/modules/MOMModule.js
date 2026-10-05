@@ -4,6 +4,7 @@ import SearchSelect from "../components/SearchSelect";
 import ExportMenu from "../components/DataExport";
 import { t } from "../i18n";
 import { companyNameHtml } from "../utils/companyName";
+import { can } from "../utils/perms";
 
 // ── ICONS ──────────────────────────────────────────────────────
 const Ic=({d,size=18,color="currentColor",sw=1.8,fill="none"})=>(
@@ -250,9 +251,10 @@ function MOMDetailDrawer({mom,onClose,onUpdate}){
             </div>
           </div>
           <div style={{display:"flex",gap:5,flexShrink:0}}>
-            <button onClick={printMOM} style={{display:"flex",alignItems:"center",gap:4,padding:"6px 10px",borderRadius:6,background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.2)",color:"white",fontSize:11.5,fontWeight:600,cursor:"pointer"}}>
+            {/* Print = MOM ka Export tick (5 Oct 2026). WhatsApp share View par hi. */}
+            {can("MOM","export")&&<button onClick={printMOM} style={{display:"flex",alignItems:"center",gap:4,padding:"6px 10px",borderRadius:6,background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.2)",color:"white",fontSize:11.5,fontWeight:600,cursor:"pointer"}}>
               <IcPrint size={12} color="white"/> {t("mom.print")}
-            </button>
+            </button>}
             <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)",display:"flex"}}><IcX size={15}/></button>
           </div>
         </div>
@@ -1385,8 +1387,8 @@ function MOMModule({projectId=null,projectName="",embedded=false}={}){
             <option value="All">{t("common.all_types")}</option>
             {MEETING_TYPES.map(t=><option key={t} style={{color:T.t1,background:T.surface}}>{t}</option>)}
           </select>
-          {/* Export */}
-          <ExportMenu
+          {/* Export — MOM ka Export tick (5 Oct 2026) */}
+          {can("MOM","export")&&<ExportMenu
             filename="moms"
             title={t("app.minutes_of_meeting")}
             columns={[
@@ -1405,7 +1407,7 @@ function MOMModule({projectId=null,projectName="",embedded=false}={}){
               {key:"status",label:t("common.status")},
             ]}
             rows={filtered}
-          />
+          />}
           {/* Meeting Mode (AI) */}
           <button onClick={()=>setShowMeetingMode(true)} title={t("mom.ai_record_meeting_auto_action_items")}
             style={{display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:6,background:T.pur,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:"pointer",whiteSpace:"nowrap"}}>

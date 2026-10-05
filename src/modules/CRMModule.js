@@ -10,6 +10,7 @@ import ImportFileModal from "../components/ImportFileModal";
 import { t } from "../i18n";
 import { companyName } from "../utils/companyName";
 import { todayISO, isoDate } from "../utils/today";
+import { can } from "../utils/perms";
 
 // ── ICONS ──────────────────────────────────────────────────────────
 const Ic=({d,size=18,color="currentColor",sw=1.8,fill="none"})=>(
@@ -741,13 +742,20 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab}
     }catch(e){alert(e.message||"Error accepting quotation");}
   };
 
+  // Roles & Access (5 Oct 2026): hatane par wajah zaroori — server poori row
+  // audit me rakhta hai. Wajah na ho / chhoti ho to server 400 deta hai.
   const deleteQuotation=async(qid)=>{
-    if(!await window.confirmAsync(t("crm.delete_this_quotation"))) return;
+    const reason=await window.promptAsync({message:t("crm.delete_this_quotation")+"\n\n"+t("crm.quotation_delete_wajah"),okLabel:t("common.delete")});
+    if(reason==null||!reason.trim()) return;
     try{
-      const res=await api.del("/crm/quotations/"+qid);
+      const res=await api.del("/crm/quotations/"+qid,{reason:reason.trim()});
       if(res.success) setQuotations(p=>p.filter(q=>q.id!==qid));
+      else if(res.message) alert(res.message);
     }catch(e){alert(e.message||"Error deleting");}
   };
+  // Server jo tick maangta hai, button bhi wahi (Final = Approve; transition me Edit bhi).
+  const canFinalQ=can("CRM","approve")||can("CRM","edit");
+  const canDeleteQ=can("CRM","delete");
 
   const addNote=async()=>{
     if(!newNote.trim()) return;
@@ -942,17 +950,17 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab}
                       style={{padding:"5px 11px",borderRadius:5,border:`1px solid ${T.bluM}`,background:T.bluL,color:T.blu,fontSize:11,fontWeight:600,cursor:"pointer"}}>
                      {t("crm.view_pdf")}
                     </button>
-                    {lead.stage==="converted"&&q.status!=="accepted"&&(
+                    {lead.stage==="converted"&&q.status!=="accepted"&&canFinalQ&&(
                       <button onClick={()=>acceptQuotation(q.id)}
                         style={{padding:"5px 11px",borderRadius:5,border:`1px solid ${T.grnM}`,background:T.grnL,color:T.grn,fontSize:11,fontWeight:600,cursor:"pointer"}}>
                        {t("crm.mark_as_final")}
                       </button>
                     )}
                     {q.status==="accepted"&&<span style={{padding:"5px 11px",fontSize:11,fontWeight:700,color:T.grn}}>{t("crm.final_quotation")}</span>}
-                    <button onClick={()=>deleteQuotation(q.id)}
+                    {canDeleteQ&&<button onClick={()=>deleteQuotation(q.id)}
                       style={{padding:"5px 11px",borderRadius:5,border:`1px solid ${T.redM}`,background:T.redL,color:T.red,fontSize:11,fontWeight:600,cursor:"pointer",marginLeft:"auto"}}>
                      {t("common.delete")}
-                    </button>
+                    </button>}
                   </div>
                 </div>
               );
@@ -4461,7 +4469,9 @@ function CRMModule(){
         const lead=leads.find(l=>l.id===id);
         if(lead) setQuotPromptLead({...lead,...update});
       }
-      if(update.stage==="converted"){
+      // Final quotation chunna = CRM Approve (transition me Edit bhi) — jiske
+      // paas nahi uske liye ye popup kholna bekaar, server mana karega.
+      if(update.stage==="converted"&&(can("CRM","approve")||can("CRM","edit"))){
         const lead=leads.find(l=>l.id===id);
         if(lead) setSelectFinalLead({...lead,...update});
       }
@@ -4577,7 +4587,9 @@ function CRMModule(){
             style={{display:"flex",alignItems:"center",gap:5,padding:"6px 13px",borderRadius:6,background:"rgba(124,58,237,0.15)",border:"1px solid rgba(124,58,237,0.4)",color:"#C4B5FD",fontSize:12,fontWeight:700,cursor:"pointer"}}>
            {t("design_overview.design_status")}
           </button>
-          <ExportMenu
+          {/* Export = CRM ka Export tick (5 Oct 2026). Import usi menu me tha —
+              wo Create ka kaam hai, isliye Export na ho to alag button. */}
+          {can("CRM","export")?<ExportMenu
             filename="crm-leads"
             title={t("crm.crm_leads")}
             columns={[
@@ -4596,8 +4608,13 @@ function CRMModule(){
               {key:"notes",label:t("common.notes")},
             ]}
             rows={[...(canConstruction?leads:[]),...(canSolar?solarLeads:[])]}
-            onImportClick={()=>setShowLeadImport(true)}
-          />
+            onImportClick={can("CRM","create")?()=>setShowLeadImport(true):undefined}
+          />:can("CRM","create")&&(
+            <button onClick={()=>setShowLeadImport(true)}
+              style={{display:"flex",alignItems:"center",gap:5,padding:"6px 13px",borderRadius:6,background:T.surfaceB,border:`1px solid ${T.b1}`,color:T.t2,fontSize:12,fontWeight:600,cursor:"pointer"}}>
+             {t("crm.import_leads_btn")}
+            </button>
+          )}
           <button onClick={()=>setShowTemplates(true)}
             style={{display:"flex",alignItems:"center",gap:5,padding:"6px 13px",borderRadius:6,background:T.surfaceB,border:`1px solid ${T.b1}`,color:T.t2,fontSize:12,fontWeight:600,cursor:"pointer"}}>
            {t("crm.templates_2")}

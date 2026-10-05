@@ -18,6 +18,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import api, { API_BASE, getToken } from "../config/api";
 import { t } from "../i18n";
 import { useMapLibrary, styleOf, typesFor, StyleSwatch } from "./mapStyles";
+import { canAny, canEntry } from "../utils/perms";
 
 // ── THEME (MapLibraryModule jaisa) ────────────────────────────────
 const T = {
@@ -677,8 +678,13 @@ const failMsg = (r, fb) => (!r || r._networkError ? t("map_library.net_error") :
 
 export default function SiteMarkingEditor({ lib, loadMaps, onClose, onSaved }) {
   const perms = (lib && lib.perms) || {};
+  // Library me marking = Mapping ka "Entry" tick (5 Oct 2026; transition me
+  // Create bhi) — wahi jo server POST /map-library par maangta hai.
+  const canFree = canEntry("Mapping");
+  // Kaam/site ki KML server se aati hai — Tenders YA Mapping ka Export.
+  const canServerKml = canAny(["Tenders", "Mapping"], "export");
   // ── mode: free (library) | task (project ka tender naksha) ──
-  const [mode, setMode] = useState(perms.create ? "free" : "task");
+  const [mode, setMode] = useState(canFree ? "free" : "task");
   const [step, setStep] = useState("setup");      // setup | draw | save | done
   const [err, setErr] = useState("");
   const [ask, setAsk] = useState(null);           // { msg, yes, no, onYes, onNo }
@@ -1245,9 +1251,9 @@ export default function SiteMarkingEditor({ lib, loadMaps, onClose, onSaved }) {
   const modeSwitch = (
     <div style={{ display: "flex", gap: 4, background: T.surfaceB, border: `1px solid ${T.b1}`, borderRadius: 8, padding: 3, marginBottom: 10 }}>
       {[["free", t("map_draw.mode_free")], ["task", t("map_draw.mode_task")]].map(([m, l]) => (
-        <button key={m} type="button" disabled={m === "free" && !perms.create}
+        <button key={m} type="button" disabled={m === "free" && !canFree}
           onClick={() => { setMode(m); setErr(""); if (m === "free") { setSelTask(null); } }}
-          style={{ flex: 1, padding: "7px 8px", borderRadius: 6, border: "none", cursor: m === "free" && !perms.create ? "not-allowed" : "pointer", fontFamily: "inherit", fontSize: 12.5, fontWeight: mode === m ? 700 : 500, background: mode === m ? T.surface : "transparent", color: mode === m ? T.ind : T.t3, boxShadow: mode === m ? "0 1px 2px rgba(0,0,0,.08)" : "none" }}>
+          style={{ flex: 1, padding: "7px 8px", borderRadius: 6, border: "none", cursor: m === "free" && !canFree ? "not-allowed" : "pointer", fontFamily: "inherit", fontSize: 12.5, fontWeight: mode === m ? 700 : 500, background: mode === m ? T.surface : "transparent", color: mode === m ? T.ind : T.t3, boxShadow: mode === m ? "0 1px 2px rgba(0,0,0,.08)" : "none" }}>
           {l}
         </button>
       ))}
@@ -1713,7 +1719,7 @@ export default function SiteMarkingEditor({ lib, loadMaps, onClose, onSaved }) {
       <>
         {summary}
         {!tenderReady && projectPicker}
-        {!tenderReady && perms.create && (
+        {!tenderReady && canFree && (
           <Btn size="sm" onClick={() => { setMode("free"); setSelTask(null); setErr(""); }} style={{ marginBottom: 10 }}>{t("map_draw.library_me_hi_rakho")}</Btn>
         )}
         {tenderReady && (taskList || []).length > 0 && (
@@ -1861,7 +1867,7 @@ export default function SiteMarkingEditor({ lib, loadMaps, onClose, onSaved }) {
           </div>
         )}
         {milaan()}
-        {(saved.free ? perms.export : true) && (
+        {(saved.free ? perms.export : canServerKml) && (
           <Btn onClick={downloadKml} style={{ width: "100%", marginBottom: 8 }}>{saved.free ? t("map_draw.is_marking_ki_kml") : selTask ? t("map_draw.kaam_ki_kml") : t("map_draw.site_ki_kml")}</Btn>
         )}
         {!saved.free && selTask && kind === "line" && (

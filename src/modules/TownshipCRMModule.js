@@ -532,10 +532,8 @@ export default function TownshipCRMModule() {
           <div style={{ fontSize:11, color:"rgba(255,255,255,0.55)", marginTop:2 }}>{t("township_crm.project_project2_total_units_phase_1", { project: project.city || "—", project2: project.state || "—", total: UNIT_SUMMARY_LIVE.total, project3: project.rera_no || "—" })}</div>
         </div>
         <div style={{ display:"flex", gap:8 }}>
-          {/* Export — visual only per spec */}
-          <button style={{ padding:"7px 13px", fontSize:12.5, fontWeight:500, borderRadius:6,
-            background:"rgba(255,255,255,0.08)", color:"#FFFFFF",
-            border:"1px solid rgba(255,255,255,0.18)", cursor:"pointer" }}>{t("common.export")}</button>
+          {/* "Export" button yahan tha par kuch karta nahi tha (visual only) — 5 Oct
+              2026 ko hataya. Asli export banega to Township CRM ke Export tick ke saath. */}
           <button onClick={() => setShowAddUnit(true)} style={{ padding:"7px 13px", fontSize:12.5,
             fontWeight:500, borderRadius:6, background:T.pri, color:"#FFFFFF",
             border:`1px solid ${T.pri}`, cursor:"pointer" }}>{t("township_crm.add_unit")}</button>

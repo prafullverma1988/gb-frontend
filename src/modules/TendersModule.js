@@ -24,6 +24,7 @@ import { useToast } from "../components/Toast";
 import { CreateTransactionModal } from "./FinanceModule";
 import { t, Rich } from "../i18n";
 import { BackClose } from "../utils/backNav";
+import { can, canAny, canEntry } from "../utils/perms";
 import { useMapLibrary, styleOf, lineOpts, markerIcon, MapLibraryDialog } from "./mapStyles";
 // xlsx (~400 KB) sirf BOQ file kholte waqt chahiye — Tenders khulte hi nahi (PERF-05).
 // loadFile() pehle loadXlsx() await karta hai; baaki helper (sheetToAoa,
@@ -5162,7 +5163,8 @@ function MapTab({tenderId, sites}) {
             border:`1px solid ${T.b1}`, background:T.surface, fontSize:12, color:T.t2, cursor:"pointer", whiteSpace:"nowrap", fontFamily:"inherit"}}>
             🎨 {t("map_style.button")}
           </button>
-          {items.length > 0 && (
+          {/* KML download = Export tick (5 Oct 2026) — server bhi Tenders YA Mapping ka Export maangta hai. */}
+          {items.length > 0 && canAny(["Tenders","Mapping"], "export") && (
             <button onClick={async ()=>{
               // Authed download — export me wahi site-filter jo screen par hai
               // (wahi niyam jo reports ke exports par hai: jo dikh raha wahi jaata hai).
@@ -5319,11 +5321,12 @@ function MapTab({tenderId, sites}) {
                   color: photosOn ? "#6D28D9" : T.t2, fontWeight: photosOn ? 700 : 400}}>{t("tenders.photos_photoson", { photosOn: photosOn ? "on" : "" })}</button>
               {/* Purani photos (WhatsApp wali bhi) apni jagah khud bataati
                   hain — aadmi se "kaunsi line?" poochhna bekaar hai. */}
-              <button onClick={()=>setLocatePhoto(true)}
+              {/* Photo locate/attach = Tenders "Entry" (transition me Create bhi) — server jaisa. */}
+              {canEntry("Tenders") && <button onClick={()=>setLocatePhoto(true)}
                 style={{fontSize:12, padding:"7px 12px", borderRadius:7, cursor:"pointer", fontFamily:"inherit",
                   border:`1px solid ${T.b1}`, background:T.surface, color:T.t2}}>
                {t("tenders.photo_se_jagah")}
-              </button>
+              </button>}
               {/* F — jagah ka search: type karte hi suggestions (Google mile
                   to Google, warna OSM), Enter par pehla; click par wahi */}
               <div style={{position:"relative", flex:"1 1 190px", minWidth:170, maxWidth:280}}>
@@ -6719,10 +6722,11 @@ function MeasurementsTab({tenderId, sites, boqItems, bills}) {
   return (<>
     <Panel style={{marginBottom:11}}>
       <PHead title={t("tenders.measurements_mb")} sub={rows.length ? `${rows.length} entry` : undefined}
-        action={<div style={{display:"flex", gap:8}}>
+        action={canEntry("Tenders") ? <div style={{display:"flex", gap:8}}>
+          {/* MB entry / DPR se draft-commit = Tenders "Entry" (transition me Create bhi) — 5 Oct 2026 */}
           <SecBtn label={t("tenders.mb_draft_dpr_se_2")} Icon={IcTable} onClick={()=>setDraftOpen(true)}/>
           <PrimBtn label={t("tenders.nayi_measurement")} Icon={IcAdd} onClick={()=>setModal({})}/>
-        </div>}/>
+        </div> : undefined}/>
 
       {/* Filters */}
       <div style={{padding:"9px 14px", borderBottom:`1px solid ${T.b1}`, background:T.surfaceB,
@@ -6813,16 +6817,16 @@ function MeasurementsTab({tenderId, sites, boqItems, bills}) {
                 {locked ? (
                   <span title={LOCK_MSG} style={{fontSize:10, color:T.amb, cursor:"help", fontWeight:600}}>{t("tenders.locked")}</span>
                 ) : (<>
-                  <button onClick={()=>setModal({edit:m})} title={t("common.edit_2")}
+                  {can("Tenders","edit") && <button onClick={()=>setModal({edit:m})} title={t("common.edit_2")}
                     style={{width:26, height:26, borderRadius:6, border:`1px solid ${T.b1}`, background:T.surfaceB,
                       cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center"}}>
                     <IcEdit size={12} color={T.t3}/>
-                  </button>
-                  <button onClick={()=>del(m)} title={t("common.delete")}
+                  </button>}
+                  {can("Tenders","delete") && <button onClick={()=>del(m)} title={t("common.delete")}
                     style={{width:26, height:26, borderRadius:6, border:`1px solid ${T.b1}`, background:T.surfaceB,
                       cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center"}}>
                     <IcTrash size={12} color={T.red}/>
-                  </button>
+                  </button>}
                 </>)}
               </div>
             </div>
@@ -7583,7 +7587,8 @@ function RaBillDrawer({tenderId, tender, billId, onClose, onChanged, onReceive, 
           </>)}
           {d.status === "submitted" && (<>
             <PrimBtn label={t("tenders.receive")} Icon={IcRupee} color={T.grn} onClick={()=>onReceive(d)}/>
-            <SecBtn label={t("mom.print")} Icon={IcDoc} onClick={print}/>
+            {/* Print = Tenders ka Export tick (5 Oct 2026) */}
+            {can("Tenders","export") && <SecBtn label={t("mom.print")} Icon={IcDoc} onClick={print}/>}
             <SecBtn label={t("tenders.cancel_bill")} Icon={IcX} color={T.red} onClick={cancel} disabled={busy}/>
           </>)}
           {d.status === "cancelled" && (
