@@ -10566,6 +10566,7 @@ const dict = {
   "todo.loading_todos":                                        "Loading todos…",
   "todo.new_todo_item":                                        "New Todo Item",
   "todo.no_todos_yet_add_your_first":                          "Koi todos nahi hain — apna pehla add karo!",
+  "todo.save_nahi_hua":                                        "Save nahi hua — dobara koshish karo",
 
   // ── township_crm ────────────────────────────────────────────
   "township_crm.absorbpct_absorbed":                           "{absorbPct}% absorbed",
