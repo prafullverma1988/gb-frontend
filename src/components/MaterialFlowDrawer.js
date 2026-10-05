@@ -16,7 +16,11 @@
 //   grnId       — the grn_entries.id to load (or null = drawer closed)
 //   onClose
 //   onChanged   — called after any edit so parent can reload ledger
-//   isAdmin
+//   isAdmin     — false = sirf dekhna. Har button par wahi tick bhi lagta hai
+//                 jo server maangta hai (Roles & Access, 5 Oct 2026):
+//                 shikayat = Procurement/Material Entry, band karna = Procurement
+//                 Approve, GRN sudhaar = Procurement/Material Edit, GRN hatana =
+//                 Procurement Delete (wajah zaroori), MR sudhaar = Procurement Edit
 //   onEditMR    — optional callback to open MRDetailDrawer with the linked MR
 
 import React, { useState, useEffect } from "react";
@@ -27,6 +31,7 @@ import ActivityLog from "./ActivityLog";
 import { t } from "../i18n";
 import { BackClose } from "../utils/backNav";
 import { cld } from "../utils/cloudinary";
+import { can, canAny, canEntry } from "../utils/perms";
 
 const T = {
   surface: "#FFFFFF", surfaceB: "#F8F9FB",
@@ -59,6 +64,11 @@ const fmtN = (n) => {
 
 export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin = true, onEditMR }) {
   const open = !!grnId;
+  const mayIssue   = canEntry(["Procurement", "Material"]);
+  const mayResolve = isAdmin && can("Procurement", "approve");
+  const mayEditGrn = isAdmin && canAny(["Procurement", "Material"], "edit");
+  const mayDelGrn  = isAdmin && can("Procurement", "delete");
+  const mayEditMr  = isAdmin && can("Procurement", "edit");
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
@@ -169,9 +179,9 @@ export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin 
 
   const handleGrnDelete = async () => {
     if (grnDeleting) return;
-    const reason = await window.promptAsync(`Delete GRN ${data?.grn?.grn_number}?\n\nYe inventory se bhi qty hata dega. Reason batao (compulsory):`);
+    const reason = await window.promptAsync(t("material_flow.delete_grn_reason_ask", { grn: data?.grn?.grn_number || "" }));
     if (reason == null) return;
-    if (!reason.trim()) { setErr(t("material_flow.delete_reason_compulsory_hai")); return; }
+    if (reason.trim().length < 3) { setErr(t("material_flow.delete_reason_compulsory_hai")); return; }
     setGrnDeleting(true); setErr("");
     try {
       const res = await api.del("/procurement/grns/" + grnId, { reason: reason.trim() });
@@ -518,7 +528,7 @@ export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin 
                     <span style={{ width: 22, height: 22, borderRadius: "50%", background: openIssueCount > 0 ? T.redL : T.b1, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 12 }}>⚠️</span>
                     <span style={{ fontSize: 12, fontWeight: 700, color: openIssueCount > 0 ? T.red : T.t3 }}>{t("material_flow.issues_issues", { issues: issues.length > 0 ? `(${openIssueCount} open / ${issues.length} total)` : "" })}</span>
                     <div style={{ flex: 1 }}/>
-                    {!showIssueForm && grn && (
+                    {!showIssueForm && grn && mayIssue && (
                       <button onClick={() => setShowIssueForm(true)}
                         style={{ padding: "4px 10px", borderRadius: 5, background: T.redL, border: `1px solid ${T.redM}`, color: T.red, fontSize: 10.5, fontWeight: 700, cursor: "pointer" }}>
                        {t("material_flow.create_issue")}
@@ -610,7 +620,7 @@ export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin 
                                 {iss.resolution_note && <div style={{ fontSize: 11, color: T.t2 }}>{iss.resolution_note}</div>}
                               </div>
                             )}
-                            {!resolved && isAdmin && (
+                            {!resolved && mayResolve && (
                               <button onClick={() => handleResolveIssue(iss.id)}
                                 style={{ marginTop: 5, padding: "3px 9px", borderRadius: 4, background: T.grn, border: "none", color: "white", fontSize: 10, fontWeight: 700, cursor: "pointer" }}>
                                {t("material_flow.mark_resolved")}
@@ -656,7 +666,7 @@ export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin 
         </div>
 
         {/* Footer — admin actions */}
-        {!loading && data && isAdmin && (
+        {!loading && data && (mayEditGrn || mayDelGrn || (mr && onEditMR && mayEditMr)) && (
           <div style={{ padding: "12px 20px", borderTop: `1px solid ${T.b1}`, background: T.surfaceB, flexShrink: 0, display: "flex", gap: 8, flexWrap: "wrap" }}>
             {grnEditing ? (
               <>
@@ -671,16 +681,16 @@ export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin 
               </>
             ) : (
               <>
-                <button onClick={() => setGrnEditing(true)}
+                {mayEditGrn && <button onClick={() => setGrnEditing(true)}
                   style={{ padding: "9px 12px", borderRadius: 7, background: T.grnL, border: `1px solid ${T.grnM}`, color: T.grn, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
                  {t("material_flow.edit_grn")}
-                </button>
-                <button onClick={handleGrnDelete} disabled={grnDeleting}
+                </button>}
+                {mayDelGrn && <button onClick={handleGrnDelete} disabled={grnDeleting}
                   style={{ padding: "9px 12px", borderRadius: 7, background: T.redL, border: `1px solid ${T.redM}`, color: T.red, fontSize: 12, fontWeight: 700, cursor: grnDeleting ? "not-allowed" : "pointer" }}>
                   {grnDeleting ? t("common.deleting") : t("material_flow.delete_grn")}
-                </button>
+                </button>}
                 <div style={{ flex: 1 }}/>
-                {mr && onEditMR && (
+                {mr && onEditMR && mayEditMr && (
                   <button onClick={() => onEditMR(mr)}
                     style={{ padding: "9px 14px", borderRadius: 7, background: T.blu, border: "none", color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
                    {t("material_flow.edit_mr")}

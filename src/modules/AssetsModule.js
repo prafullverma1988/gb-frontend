@@ -34,6 +34,7 @@ import { t } from "../i18n";
 import { BackClose } from "../utils/backNav";
 import { loadPhotoPolicy, policyFor, fileInputProps } from "../utils/photoPolicy";
 import { cld } from "../utils/cloudinary";
+import { can, canAny, canEntry } from "../utils/perms";
 
 // ── ICONS ─────────────────────────────────────────────────────────
 const Ic = ({ d, size = 18, color = "currentColor", sw = 1.8, fill = "none" }) => (
@@ -874,7 +875,7 @@ function DashboardTab({ dash: companyDash, warehouses, onOpenVoucher, onGo }) {
 // ══════════════════════════════════════════════════════════════════
 // REGISTER
 // ══════════════════════════════════════════════════════════════════
-function RegisterTab({ items, cats, warehouses, canEdit, canCreate, onOpenItem, onCats, onIncharge, onImport, onExport, exportErr, onAddAsset }) {
+function RegisterTab({ items, cats, warehouses, canSetup, canCreate, canExport, onOpenItem, onCats, onIncharge, onImport, onExport, exportErr, onAddAsset }) {
   const [q, setQ] = useState("");
   const [tracking, setTracking] = useState("");
   const [cat, setCat] = useState("");
@@ -911,11 +912,11 @@ function RegisterTab({ items, cats, warehouses, canEdit, canCreate, onOpenItem, 
     <Panel title={t("assets.register_title", { n: rows.length })}
       action={
         <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
-          {canEdit && <Btn size="sm" ghost icon={IcTag} onClick={onCats}>{t("assets.btn_categories")}</Btn>}
-          {canEdit && <Btn size="sm" ghost icon={IcUser} onClick={onIncharge}>{t("assets.btn_incharge")}</Btn>}
+          {canSetup && <Btn size="sm" ghost icon={IcTag} onClick={onCats}>{t("assets.btn_categories")}</Btn>}
+          {canSetup && <Btn size="sm" ghost icon={IcUser} onClick={onIncharge}>{t("assets.btn_incharge")}</Btn>}
           {canCreate && <Btn size="sm" icon={IcAdd} onClick={onAddAsset}>{t("assets.btn_add_asset")}</Btn>}
           {canCreate && <Btn size="sm" ghost icon={IcDown} onClick={onImport}>{t("assets.btn_import")}</Btn>}
-          <Btn size="sm" ghost icon={IcSheet} onClick={onExport}>{t("assets.btn_export")}</Btn>
+          {canExport && <Btn size="sm" ghost icon={IcSheet} onClick={onExport}>{t("assets.btn_export")}</Btn>}
         </div>}>
       <div style={{ display: "flex", gap: 8, padding: "10px 14px", borderBottom: `1px solid ${T.b1}`, flexWrap: "wrap", alignItems: "center" }}>
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("assets.search_ph")} style={{ ...inp, width: 240 }} />
@@ -2117,7 +2118,7 @@ function PurchasePanels({ refreshKey, canCreate, onNewBuy, onReceive }) {
   );
 }
 
-function GrnTab({ refreshKey, canCreate, onNew, onNewBuy, onReceive, onOpenVoucher }) {
+function GrnTab({ refreshKey, canCreate, canEntry: canGrn, onNew, onNewBuy, onReceive, onOpenVoucher }) {
   const [rows, setRows] = useState(null);
   useEffect(() => {
     let alive = true;
@@ -2132,7 +2133,7 @@ function GrnTab({ refreshKey, canCreate, onNew, onNewBuy, onReceive, onOpenVouch
     {/* Kharid ka raasta GRN ke saath hi — dono ka kaam ek hai: maal aane ka
         intezaar, aur aane par uthana. */}
     <PurchasePanels refreshKey={refreshKey} canCreate={canCreate} onNewBuy={onNewBuy} onReceive={onReceive} />
-    <Panel title={t("assets.grn_title")} action={canCreate && <Btn size="sm" icon={IcAdd} onClick={onNew}>{t("assets.grn_new")}</Btn>}>
+    <Panel title={t("assets.grn_title")} action={canGrn && <Btn size="sm" icon={IcAdd} onClick={onNew}>{t("assets.grn_new")}</Btn>}>
       {rows == null && <Spinner />}
       {rows && rows.length === 0 && <Empty>{t("assets.grn_empty")}<br /><span style={{ fontSize: 11.5 }}>{t("assets.grn_empty_hint")}</span></Empty>}
       {rows && rows.length > 0 && (
@@ -2159,7 +2160,7 @@ function GrnTab({ refreshKey, canCreate, onNew, onNewBuy, onReceive, onOpenVouch
 // ══════════════════════════════════════════════════════════════════
 // VOUCHER DRAWER — detail + accept / reject / cancel
 // ══════════════════════════════════════════════════════════════════
-function VoucherDrawer({ id, onClose, onChanged }) {
+function VoucherDrawer({ id, me, onClose, onChanged }) {
   const toast = useToast();
   const [v, setV] = useState(null);
   const [failed, setFailed] = useState("");
@@ -2214,8 +2215,17 @@ function VoucherDrawer({ id, onClose, onChanged }) {
   };
   const doCancel = async () => {
     if (!window.confirm(t("assets.cancel_confirm", { no: v.voucher_no }))) return;
+    // Kisi aur ka voucher = Assets Delete tick, wajah zaroori (server: 3 akshar).
+    let reason = "";
+    if (me && v.created_by !== me.id) {
+      const ask = window.promptAsync || ((m) => Promise.resolve(window.prompt(m)));
+      const x = await ask(t("assets.cancel_reason_ask"));
+      if (x == null) return;
+      if (x.trim().length < 3) { toast.error(t("assets.cancel_reason_short")); return; }
+      reason = x.trim();
+    }
     setBusy(true);
-    const r = await api.post(`/assets/vouchers/${v.id}/cancel`, {});
+    const r = await api.post(`/assets/vouchers/${v.id}/cancel`, reason ? { reason } : {});
     setBusy(false);
     if (r && r.success) { toast.success(r.message || t("assets.cancelled_ok")); setV(r.data); onChanged(); }
     else toast.error((r && r.message) || t("assets.action_failed"));
@@ -3317,7 +3327,7 @@ function NewVerificationModal({ open, meta, pickers, me, onClose, onCreated, onO
   );
 }
 
-function VerificationDrawer({ id, me, isAdmin, canApprove, canEdit, onClose, onChanged, onOpenVoucher }) {
+function VerificationDrawer({ id, me, isAdmin, canApprove, onClose, onChanged, onOpenVoucher }) {
   const toast = useToast();
   const [v, setV] = useState(null);
   const [failed, setFailed] = useState("");
@@ -3337,9 +3347,9 @@ function VerificationDrawer({ id, me, isAdmin, canApprove, canEdit, onClose, onC
   const draft = v && v.status === "draft";
   const pending = v && v.status === "pending";
   const canCount = !!(v && v.can_count);
-  // Approve ke liye Assets me approve AUR edit — dono ka haq. Wahi jaanch server
-  // par bhi lagti hai; yahan sirf button chhupane ke liye.
-  const canDecide = !!(pending && canApprove && canEdit);
+  // Approve / wapas bhejna = Assets ka Approve tick (5 Oct 2026 se Edit ki
+  // shart hati). Wahi jaanch server par bhi; yahan sirf button chhupane ke liye.
+  const canDecide = !!(pending && canApprove);
   const canCancel = !!((draft || pending) && v && (isAdmin || v.created_by === me.id));
 
   // Line ki abhi ki value: pehle jo haath se bhara, warna server se aayi.
@@ -3947,7 +3957,7 @@ function NewRequestModal({ open, meta, pickers, items, me, onClose, onCreated })
   );
 }
 
-function RequestDrawer({ id, onClose, onChanged, onIssue, onOpenVoucher }) {
+function RequestDrawer({ id, canIssue = true, onClose, onChanged, onIssue, onOpenVoucher }) {
   const toast = useToast();
   const [r, setR] = useState(null);
   const [failed, setFailed] = useState("");
@@ -3985,7 +3995,7 @@ function RequestDrawer({ id, onClose, onChanged, onIssue, onOpenVoucher }) {
         {r.can_close && <Btn ghost disabled={busy}
           onClick={() => { if (window.confirm(t("assets.req_close_confirm", { no: r.request_no }))) act("close", {}, t("assets.req_closed_ok")); }}>{t("assets.req_close_btn")}</Btn>}
         {r.can_reject && <Btn c={T.red} ghost style={{ color: T.red, borderColor: "#F1C2C6" }} onClick={() => { setMode("reject"); setError(""); }}>{t("assets.req_reject_btn")}</Btn>}
-        {r.can_issue && <Btn icon={IcOut} onClick={() => onIssue(r)}>{t("assets.req_issue_btn")}</Btn>}
+        {r.can_issue && canIssue && <Btn icon={IcOut} onClick={() => onIssue(r)}>{t("assets.req_issue_btn")}</Btn>}
       </>;
 
   const cols = "1.7fr 90px 90px 1.3fr";
@@ -4134,11 +4144,17 @@ function RequestsTab({ refreshKey, meta, pickers, onNew, onOpen }) {
 function AssetsModule({ deepLink, onDeepLinkDone }) {
   const me = useMemo(() => getUser() || {}, []);
   const isAdmin = ["admin", "super_admin"].includes(String(me.role || "").toLowerCase());
-  // Permission row na ho (Settings me abhi tak Assets ki row nahi bani) to
-  // khula — backend bhi yahi karta hai (requirePerm fail-open).
-  const permRow = (me.module_permissions || {}).Assets;
-  const can = (k) => isAdmin || permRow === undefined || !!(permRow && permRow[k]);
-  const canCreate = can("create"), canEdit = can("edit"), canApprove = can("approve");
+  // Roles & Access (5 Oct 2026): shared helper (utils/perms) — server jaisa.
+  // Row na ho to khula, par Viewer sirf dekhta hai (pehle yahan Viewer ko bhi
+  // har button milta tha aur server 403 deta tha).
+  //   Create = opening / naya asset / import / kharid ki maang
+  //   Entry  = voucher (GRN, issue, transfer, return, repair), ginti (transition me Create bhi)
+  //   category / incharge = Create (transition me Edit bhi)
+  //   Edit = asset sudhaar · Approve = ginti manzoor · Export = poori list ki Excel
+  const canCreate = can("Assets", "create", me), canEdit = can("Assets", "edit", me), canApprove = can("Assets", "approve", me);
+  const canEntryA = canEntry("Assets", me);
+  const canSetup = canAny("Assets", "create", {}, me) || canEdit;
+  const canExport = can("Assets", "export", me);
 
   const [tab, setTab] = useState("dashboard");
   const [loading, setLoading] = useState(true);
@@ -4270,7 +4286,7 @@ function AssetsModule({ deepLink, onDeepLinkDone }) {
 
         {tab === "dashboard" && <DashboardTab dash={dash} warehouses={(meta && meta.warehouses) || []} onOpenVoucher={setVoucherId} onGo={setTab} />}
         {tab === "register" && (
-          <RegisterTab items={items} cats={cats} warehouses={(meta && meta.warehouses) || []} canEdit={canEdit} canCreate={canCreate} onOpenItem={setOpenItem}
+          <RegisterTab items={items} cats={cats} warehouses={(meta && meta.warehouses) || []} canSetup={canSetup} canCreate={canCreate} canExport={canExport} onOpenItem={setOpenItem}
             onCats={() => setCatsOpen(true)} onIncharge={() => setInchOpen(true)} onImport={() => setImportOpen(true)} onAddAsset={() => setAddOpen(true)}
             onExport={doExport} exportErr={exportErr} />
         )}
@@ -4279,32 +4295,32 @@ function AssetsModule({ deepLink, onDeepLinkDone }) {
             onNew={() => setNewRequest(true)} onOpen={setRequestId} />
         )}
         {tab === "grn" && (
-          <GrnTab refreshKey={refreshKey} canCreate={canCreate} onOpenVoucher={setVoucherId}
+          <GrnTab refreshKey={refreshKey} canCreate={canCreate} canEntry={canEntryA} onOpenVoucher={setVoucherId}
             onNew={() => setGrnOpen(true)}
             onNewBuy={() => setBuyOpen(true)}
             onReceive={setRecvOrder} />
         )}
         {tab === "movements" && (
-          <MovementsTab refreshKey={refreshKey} meta={meta} pickers={pickers} canCreate={canCreate}
+          <MovementsTab refreshKey={refreshKey} meta={meta} pickers={pickers} canCreate={canEntryA}
             onIssue={() => setIssueOpen(true)} onTransfer={() => setMoveKind("transfer")} onReturn={() => setMoveKind("return")}
             onRepairOut={() => setRepairKind("out")} onRepairIn={() => setRepairKind("in")} onOpenVoucher={setVoucherId} />
         )}
         {tab === "verify" && (
-          <VerificationsTab refreshKey={refreshKey} meta={meta} pickers={pickers} canCreate={canCreate}
+          <VerificationsTab refreshKey={refreshKey} meta={meta} pickers={pickers} canCreate={canEntryA}
             onNew={() => setNewVerify(true)} onOpen={setVerifyId} onOpenVoucher={openVoucherInMovements} />
         )}
         {tab === "custody" && <CustodyTab refreshKey={refreshKey} meta={meta} pickers={pickers} onOpenItem={setOpenItem} />}
         {tab === "rent" && <RentTab refreshKey={refreshKey} />}
       </div>
 
-      {voucherId && <VoucherDrawer id={voucherId} onClose={() => setVoucherId(null)} onChanged={refresh} />}
+      {voucherId && <VoucherDrawer id={voucherId} me={me} onClose={() => setVoucherId(null)} onChanged={refresh} />}
       {verifyId && (
-        <VerificationDrawer id={verifyId} me={me} isAdmin={isAdmin} canApprove={canApprove} canEdit={canEdit}
+        <VerificationDrawer id={verifyId} me={me} isAdmin={isAdmin} canApprove={canApprove}
           onClose={() => setVerifyId(null)} onChanged={refresh}
           onOpenVoucher={(vid) => { setVerifyId(null); openVoucherInMovements(vid); }} />
       )}
       {requestId && (
-        <RequestDrawer id={requestId} onClose={() => setRequestId(null)} onChanged={refresh}
+        <RequestDrawer id={requestId} canIssue={canEntryA} onClose={() => setRequestId(null)} onChanged={refresh}
           onOpenVoucher={(vid) => { setRequestId(null); openVoucherInMovements(vid); }}
           onIssue={(r) => {
             setRequestId(null);

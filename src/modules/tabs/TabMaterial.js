@@ -14,6 +14,8 @@ import { T, fmtN, STAGES, STAGE_S } from "../shared/tokens";
 import { Pill, Panel, THead } from "../shared/ui";
 import { t } from "../../i18n";
 import { cld } from "../../utils/cloudinary";
+import { can, canAny, canEntry } from "../../utils/perms";
+import { isoDate, todayISO } from "../../utils/today";
 
 // Dual-unit billing toggle ab components/grn/DualUnitToggle.js me hai —
 // site aur godown dono ke GRN me wahi switch chalta hai.
@@ -64,8 +66,27 @@ function TabMaterial({ project }) {
   // Current logged-in user (for owner-only delete on used entries)
   const meUser = (() => { try { return JSON.parse(localStorage.getItem("gb_user")) || {}; } catch { return {}; } })();
   const meId = Number(meUser?.id) || null;
-  const meIsPriv = ["admin","super_admin","project_manager"].includes((meUser?.role || "").toLowerCase());
-  const canDeleteUsed = (createdById) => meIsPriv || (createdById != null && Number(createdById) === meId);
+  // Roles & Access (5 Oct 2026) — har button wahi tick maange jo server maangta hai:
+  //   MR banana  = Material YA Procurement ka Create
+  //   GRN / maal aaya = Procurement YA Material ka Entry (transition me Create bhi)
+  //   godown / transfer ka maal receive = Warehouse YA Material ka Entry
+  //   maal kharch (Mark Used) = Material Entry
+  //   kharch entry hatana = apni aaj ki → Material Entry; kisi aur ki / purani →
+  //   Material Delete; dono me wajah (routes/tasks.js)
+  const canNewMR = canAny(["Material","Procurement"], "create");
+  const canGrn = canEntry(["Procurement","Material"]);
+  const canRecvWh = canEntry(["Warehouse","Material"]);
+  const canUse = canEntry("Material");
+  const canDelAnyUsed = can("Material","delete");
+  const canDeleteUsed = (createdById, createdAt) => canDelAnyUsed
+    || (canUse && createdById != null && Number(createdById) === meId && !!createdAt && isoDate(createdAt) === todayISO());
+  // Kharch entry hatane se pehle wajah (server: kam se kam 3 akshar).
+  const askUsedReason = async (qty, unit) => {
+    const r = await window.promptAsync(t("material.used_delete_reason_ask", { qty, unit: unit || "" }));
+    if (r == null) return null;
+    if (r.trim().length < 3) { alert(t("material.used_delete_reason_short")); return null; }
+    return r.trim();
+  };
 
   // ── Tab state ──────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState("requests"); // requests | ledger | inventory
@@ -884,7 +905,7 @@ function TabMaterial({ project }) {
                       ))}
                     </div>
                     {filtered.map((u,i)=>{
-                      const showDel = u.id && u.task_id && canDeleteUsed(u.created_by_id ?? u.created_by);
+                      const showDel = u.id && u.task_id && canDeleteUsed(u.created_by_id ?? u.created_by, u.created_at);
                       return (
                       <div key={u.id||i} style={{display:"grid",gridTemplateColumns:"85px 1fr 75px 90px 1fr 32px",padding:"9px 16px",gap:8,borderBottom:"1px solid "+T.b1,alignItems:"center",background:i%2===0?T.surface:"white"}}>
                         <div style={{fontSize:11.5,color:T.t3}}>{u.used_date?new Date(u.used_date).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}):"—"}</div>
@@ -903,8 +924,9 @@ function TabMaterial({ project }) {
                           {showDel?(
                             <button title={t("material.delete_this_usage_entry")}
                               onClick={async()=>{
-                                if(!await window.confirmAsync("Is used entry ko delete kar dein? ("+u.used_qty+" "+(u.unit||"")+")")) return;
-                                const r=await api.del("/tasks/"+u.task_id+"/used-log/"+u.id);
+                                const reason=await askUsedReason(u.used_qty, u.unit);
+                                if(reason==null) return;
+                                const r=await api.del("/tasks/"+u.task_id+"/used-log/"+u.id,{reason});
                                 if(r.success){
                                   setUsedLog(prev=>prev.filter(x=>x.id!==u.id));
                                   setLedgerLoaded(false);
@@ -1027,10 +1049,10 @@ function TabMaterial({ project }) {
                                   })}
                                 </div>
                                 <div style={{display:"flex",justifyContent:"flex-end"}}>
-                                  <button onClick={()=>handleReceiveIssue(iss)} disabled={issueReceiving}
+                                  {canRecvWh&&<button onClick={()=>handleReceiveIssue(iss)} disabled={issueReceiving}
                                     style={{padding:"7px 16px",borderRadius:6,background:T.grn,border:"none",color:"white",fontSize:12,fontWeight:700,cursor:issueReceiving?"not-allowed":"pointer",display:"flex",alignItems:"center",gap:5}}>
                                     {issueReceiving?"...":t("material.receive_grn_bana_do")}
-                                  </button>
+                                  </button>}
                                 </div>
                               </>
                             )}
@@ -1091,10 +1113,10 @@ function TabMaterial({ project }) {
                                   })}
                                 </div>
                                 <div style={{display:"flex",justifyContent:"flex-end"}}>
-                                  <button onClick={()=>handleReceiveTransfer(tr)} disabled={trReceiving}
+                                  {canRecvWh&&<button onClick={()=>handleReceiveTransfer(tr)} disabled={trReceiving}
                                     style={{padding:"7px 16px",borderRadius:6,background:T.grn,border:"none",color:"white",fontSize:12,fontWeight:700,cursor:trReceiving?"not-allowed":"pointer",display:"flex",alignItems:"center",gap:5}}>
                                     {trReceiving?"...":t("material.receive_grn_bana_do")}
-                                  </button>
+                                  </button>}
                                 </div>
                               </>
                             )}
@@ -1170,16 +1192,16 @@ function TabMaterial({ project }) {
             ))}
           </div>
           <span style={{fontSize:11,color:T.t4}}>{t("material.filtered_items_rs_fmtn", { filtered: filtered.length, fmtN: fmtN(totalAmt) })}</span>
-          <button onClick={()=>setShowModal(true)}
+          {canNewMR&&<button onClick={()=>setShowModal(true)}
             style={{padding:"7px 13px",borderRadius:7,background:T.blu,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
             <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2.5}><path d="M12 5v14M5 12h14"/></svg>
            {t("common.new_request")}
-          </button>
-          <button onClick={()=>setShowGRN(true)}
+          </button>}
+          {canGrn&&<button onClick={()=>setShowGRN(true)}
             style={{padding:"7px 13px",borderRadius:7,background:T.grn,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
             <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2.5}><path d="M20 6L9 17l-5-5"/></svg>
            {t("common.record_grn")}
-          </button>
+          </button>}
         </div>
 
         {/* TILE VIEW */}
@@ -1347,7 +1369,7 @@ function TabMaterial({ project }) {
                             </button>
                           ))}
                           <div style={{flex:1}}/>
-                          {mat.balance>0&&(
+                          {mat.balance>0&&canUse&&(
                             <button onClick={()=>{
                               setLedgerMarkUsedFor(markUsedOpen?null:mat.material_name);
                               if(!markUsedOpen) setInvUsedForm(p=>({...p,[mat.material_name]:{qty:"",remark:"",used_date:today}}));
@@ -1427,7 +1449,7 @@ function TabMaterial({ project }) {
                           const balLow=row.runBal>=0&&row.runBal<mat.total_received*0.2;
                           const balColor=balNeg?T.red:balLow?T.amb:T.grn;
                           const dateStr=row._date?row._date.toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}):"—";
-                          const showDel = !isGRN && row.used_log_id && row.task_id && canDeleteUsed(row.created_by_id);
+                          const showDel = !isGRN && row.used_log_id && row.task_id && canDeleteUsed(row.created_by_id, row.created_at);
                           return(
                             <div key={ri}
                               onClick={()=>{ if(isGRN && row.grn_id) setFlowGrnId(row.grn_id); }}
@@ -1471,8 +1493,9 @@ function TabMaterial({ project }) {
                                   <button title={t("material.delete_this_usage_entry")}
                                     onClick={async(e)=>{
                                       e.stopPropagation();
-                                      if(!await window.confirmAsync("Is used entry ko delete kar dein? ("+row.qty+" "+(row.unit||mat.unit||"")+" — "+(row.task_name||"Project level")+")")) return;
-                                      const r=await api.del("/tasks/"+row.task_id+"/used-log/"+row.used_log_id);
+                                      const reason=await askUsedReason(row.qty, row.unit||mat.unit);
+                                      if(reason==null) return;
+                                      const r=await api.del("/tasks/"+row.task_id+"/used-log/"+row.used_log_id,{reason});
                                       if(r.success){
                                         const rr=await api.get("/tasks/project/"+projectId+"/material-ledger");
                                         if(rr.success) setLedger(rr.data||[]);
@@ -1577,7 +1600,7 @@ function TabMaterial({ project }) {
                         <div style={{height:"100%",width:pct+"%",background:pct>=100?T.red:pct>60?T.amb:T.grn,borderRadius:2,transition:"width .4s"}}/>
                       </div>}
                       {/* Mark Used button */}
-                      {bal>0&&<button onClick={()=>{
+                      {bal>0&&canUse&&<button onClick={()=>{
                         setInvExpandedMat(isExpanded?null:item.material_name);
                         if(!isExpanded) setInvUsedForm(p=>({...p,[item.material_name]:{qty:"",remark:"",used_date:today}}));
                       }}
@@ -1649,7 +1672,7 @@ function TabMaterial({ project }) {
           TAB 4: TRANSFER — site-to-site material transfer with approval
       ══════════════════════════════════════════════════════ */}
       {activeTab==="transfer"&&(
-        <MaterialTransferTab projectId={projectId} projectName={projectName} isAdmin={meIsPriv}/>
+        <MaterialTransferTab projectId={projectId} projectName={projectName}/>
       )}
 
       {/* ── MATERIAL LEDGER DRAWER (material click → GRN/Used/MR tabs) ── */}

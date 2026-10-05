@@ -9,6 +9,7 @@ import WeighChip from "../components/grn/WeighChip";
 import { indexOpenLines, kgIn, kgPerUnit, loadWeighmentsForPo } from "../components/grn/weigh";
 import ReceivingContacts, { hasReceivingContact } from "../components/ReceivingContacts";
 import { canApproveAction, approverRolesFor, useApprovalAuthority } from "../utils/approvalAuthority";
+import { can, canEntry } from "../utils/perms";
 import { t, Rich } from "../i18n";
 import { companyName } from "../utils/companyName";
 import { todayISO } from "../utils/today";
@@ -965,7 +966,7 @@ function PODetailDrawer({po,onClose,onApprove,onShare,onGRN,onEdit,onCancel,onSe
           </button>
         )}
         {/* Record GRN — order hone ke baad hi; aadha aaya ho (PartiallyReceived) to baaki bhi */}
-        {poCanReceive(d)&&(
+        {poCanReceive(d)&&onGRN&&(
           <button onClick={()=>onGRN(d)} style={{flex:"1 1 110px",padding:"8px",borderRadius:7,background:T.ambL,color:T.amb,border:"1.5px solid "+T.amb,fontSize:11.5,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:4}}>
             <IcGRN size={12} color={T.amb}/> {t("common.record_grn")}
           </button>
@@ -1068,15 +1069,15 @@ function RFQDetailDrawer({rfq,onClose,onPunch,onLock,onPublish,onCreatePO}){
           {rfq.vendors.map((v,vi)=>(
             <div key={vi} style={{padding:"9px 14px",borderBottom:`1px solid ${T.b1}`,display:"flex",alignItems:"center",gap:10}}>
               <span style={{flex:1,fontSize:12.5,fontWeight:500,color:T.t1}}>{v.name}</span>
-              <button onClick={()=>onPunch(vi)} style={{display:"flex",alignItems:"center",gap:4,padding:"5px 11px",borderRadius:6,background:T.purL,border:`1px solid ${T.purM}`,color:T.pur,fontSize:11,fontWeight:600,cursor:"pointer"}}><IcPen size={12} color={T.pur}/> {t("procurement.punch_quote")}</button>
-              {!rfq.locked&&v.status==="Submitted"&&<button onClick={()=>onLock(v.name)} style={{display:"flex",alignItems:"center",gap:4,padding:"5px 11px",borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:11,fontWeight:600,cursor:"pointer"}}><IcLock size={12} color={T.grn}/> {t("procurement.lock_quote")}</button>}
+              {onPunch&&<button onClick={()=>onPunch(vi)} style={{display:"flex",alignItems:"center",gap:4,padding:"5px 11px",borderRadius:6,background:T.purL,border:`1px solid ${T.purM}`,color:T.pur,fontSize:11,fontWeight:600,cursor:"pointer"}}><IcPen size={12} color={T.pur}/> {t("procurement.punch_quote")}</button>}
+              {!rfq.locked&&v.status==="Submitted"&&onLock&&<button onClick={()=>onLock(v.name)} style={{display:"flex",alignItems:"center",gap:4,padding:"5px 11px",borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:11,fontWeight:600,cursor:"pointer"}}><IcLock size={12} color={T.grn}/> {t("procurement.lock_quote")}</button>}
             </div>
           ))}
         </div>
       </div>
       <div style={{padding:"12px 16px",borderTop:`1px solid ${T.b1}`,background:T.surface,display:"flex",gap:7,flexShrink:0}}>
-        {rfq.status==="Draft"&&<button onClick={()=>onPublish(rfq.id)} style={{flex:1,padding:"8px",borderRadius:7,background:T.bluL,color:T.blu,border:`1px solid ${T.bluM}`,fontSize:12,fontWeight:600,cursor:"pointer"}}>{t("procurement.publish_rfq")}</button>}
-        {rfq.locked&&<button onClick={()=>onCreatePO&&onCreatePO(rfq)} style={{flex:1,padding:"8px",borderRadius:7,background:T.grn,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}><IcPO size={13} color="white"/> {t("procurement.create_po")}</button>}
+        {rfq.status==="Draft"&&onPublish&&<button onClick={()=>onPublish(rfq.id)} style={{flex:1,padding:"8px",borderRadius:7,background:T.bluL,color:T.blu,border:`1px solid ${T.bluM}`,fontSize:12,fontWeight:600,cursor:"pointer"}}>{t("procurement.publish_rfq")}</button>}
+        {rfq.locked&&onCreatePO&&<button onClick={()=>onCreatePO(rfq)} style={{flex:1,padding:"8px",borderRadius:7,background:T.grn,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}><IcPO size={13} color="white"/> {t("procurement.create_po")}</button>}
         <button onClick={onClose} style={{flex:1,padding:"8px",borderRadius:7,background:T.surfaceB,color:T.t3,border:`1px solid ${T.b1}`,fontSize:12,fontWeight:600,cursor:"pointer"}}>{t("common.close")}</button>
       </div>
     </div>
@@ -2002,8 +2003,18 @@ function ProcurementModule(){
     if(!wfOn[wfModule]) return true;         // workflow band → legacy path
     return apprMy[kind].has(String(id));
   };
-  const canApproveMR=(id)=>canApproveAction({workflow:"Material Request"})&&_myTurn("mr","Material Request",id);
-  const canApprovePO=(id)=>canApproveAction({workflow:"Purchase Order (PO)"})&&_myTurn("po","Purchase Order (PO)",id);
+  // Server: MR/PO approve = Procurement ka Approve tick + chain ki baari.
+  const canApproveMR=(id)=>canApproveAction({workflow:"Material Request",perm:["Procurement","approve"]})&&_myTurn("mr","Material Request",id);
+  const canApprovePO=(id)=>canApproveAction({workflow:"Purchase Order (PO)",perm:["Procurement","approve"]})&&_myTurn("po","Purchase Order (PO)",id);
+  // Roles & Access (5 Oct 2026) — har button wahi tick maange jo server maangta hai.
+  //   Create  = PO / RFQ / quote punch            (routes/procurement.js)
+  //   Entry   = maal aaya (mark-received), GRN    — Procurement YA Material (transition me Create bhi)
+  //   Edit    = order dena, MR band, PO sudhaar, RFQ publish/lock
+  //   Approve = MR/PO manzoori, PO cancel
+  const pCreate=can("Procurement","create");
+  const pEdit=can("Procurement","edit");
+  const pApprove=can("Procurement","approve");
+  const pReceive=canEntry(["Procurement","Material"]);
   // Projects from API (for dropdowns)
   const [dbProjects, setDbProjects] = useState([]);
   const projLoaded = useRef(false);
@@ -2427,8 +2438,8 @@ function ProcurementModule(){
             ))}
           </div>
           <div style={{display:"flex",gap:6}}>
-            {tab==="po"&&<button onClick={()=>{setCreatePOPrefill(null);setShowCreatePO(true);}} style={{display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:6,background:T.blu,color:"white",fontSize:11.5,fontWeight:700,border:"none",cursor:"pointer"}}><IcAdd size={13} color="white"/> {t("procurement.create_po")}</button>}
-            {tab==="rfq"&&<button onClick={()=>setShowCreateRFQ(true)} style={{display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:6,background:T.blu,color:"white",fontSize:11.5,fontWeight:700,border:"none",cursor:"pointer"}}><IcAdd size={13} color="white"/> {t("procurement.new_rfq")}</button>}
+            {tab==="po"&&pCreate&&<button onClick={()=>{setCreatePOPrefill(null);setShowCreatePO(true);}} style={{display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:6,background:T.blu,color:"white",fontSize:11.5,fontWeight:700,border:"none",cursor:"pointer"}}><IcAdd size={13} color="white"/> {t("procurement.create_po")}</button>}
+            {tab==="rfq"&&pCreate&&<button onClick={()=>setShowCreateRFQ(true)} style={{display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:6,background:T.blu,color:"white",fontSize:11.5,fontWeight:700,border:"none",cursor:"pointer"}}><IcAdd size={13} color="white"/> {t("procurement.new_rfq")}</button>}
           </div>
         </div>
       </div>
@@ -2487,7 +2498,7 @@ function ProcurementModule(){
                 </button>
               )}
               {/* Bulk order button */}
-              {selectedItems.length>0&&(
+              {selectedItems.length>0&&pEdit&&(
                 <button onClick={()=>setShowBulkOrder(true)}
                   style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:5,padding:"6px 14px",borderRadius:6,background:T.blu,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:"pointer",boxShadow:`0 2px 8px ${T.blu}44`}}>
                   <IcFlow size={13} color="white"/>{t("procurement.order_selecteditems_itemselecteditems2", { selectedItems: selectedItems.length, selectedItems2: selectedItems.length>1?"s":"" })}</button>
@@ -2596,9 +2607,9 @@ function ProcurementModule(){
                         <span style={{width:6,height:6,borderRadius:"50%",background:T.blu,flexShrink:0}}/>
                         <span style={{fontSize:12,fontWeight:700,color:T.t1}}>{project}</span>
                         <span style={{fontSize:10,color:T.t4,background:T.surface,padding:"1px 7px",borderRadius:10,border:`1px solid ${T.b1}`}}>{items.length} item{items.length>1?"s":""}</span>
-                        <button onClick={()=>{setCreatePOPrefill(items);setShowCreatePO(true);}} style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:4,padding:"4px 10px",borderRadius:5,background:T.bluL,border:`1px solid ${T.bluM}`,color:T.blu,fontSize:10.5,fontWeight:600,cursor:"pointer"}}>
+                        {pCreate&&<button onClick={()=>{setCreatePOPrefill(items);setShowCreatePO(true);}} style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:4,padding:"4px 10px",borderRadius:5,background:T.bluL,border:`1px solid ${T.bluM}`,color:T.blu,fontSize:10.5,fontWeight:600,cursor:"pointer"}}>
                           <IcPO size={11} color={T.blu}/> {t("procurement.create_po")}
-                        </button>
+                        </button>}
                       </div>
                       {items.map((m,idx)=>(
                         <div key={m.id} style={{display:"grid",gridTemplateColumns:"30px 54px 1fr 110px 130px 110px",padding:"11px 14px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",gap:12,background:selected[m.id]?"#EFF6FF":"none",transition:"background 0.1s",cursor:"pointer"}}
@@ -2625,9 +2636,9 @@ function ProcurementModule(){
                             {m.inStock>0?<span style={{fontSize:10.5,fontWeight:600,color:T.grn,background:T.grnL,padding:"3px 9px",borderRadius:10,border:`1px solid ${T.grnM}`}}>{t("procurement.stock_instock", { inStock: m.inStock })}</span>:<span style={{fontSize:10.5,color:T.t4}}>{t("procurement.no_stock")}</span>}
                           </div>
                           <div style={{display:"flex",gap:5,justifyContent:"flex-end"}}>
-                            <button onClick={()=>{setSelected({[String(m.id)]:true});setShowBulkOrder(true);}} style={{display:"flex",alignItems:"center",gap:4,padding:"5px 11px",borderRadius:5,background:T.ambL,border:`1px solid ${T.ambM}`,color:T.amb,fontSize:11,fontWeight:700,cursor:"pointer"}}>
+                            {pEdit&&<button onClick={()=>{setSelected({[String(m.id)]:true});setShowBulkOrder(true);}} style={{display:"flex",alignItems:"center",gap:4,padding:"5px 11px",borderRadius:5,background:T.ambL,border:`1px solid ${T.ambM}`,color:T.amb,fontSize:11,fontWeight:700,cursor:"pointer"}}>
                               <IcTruck size={11} color={T.amb}/> {t("procurement.order")}
-                            </button>
+                            </button>}
                           </div>
                         </div>
                       ))}
@@ -2671,18 +2682,18 @@ function ProcurementModule(){
                         <div style={{fontSize:10.5,color:T.t4}}>{m.isFromWarehouse?t("procurement.from_warehouse_stock"):`ETA: ${m.expectedDelivery||"TBD"}`}</div>
                       </div>
                       <div style={{position:"relative",display:"flex",justifyContent:"flex-end"}}>
-                        <button onClick={(e)=>{e.stopPropagation();setRowMenu(rowMenu===m.id?null:m.id);}} title={t("common.actions")}
-                          style={{width:30,height:30,borderRadius:6,background:rowMenu===m.id?T.surfaceB:"none",border:`1px solid ${rowMenu===m.id?T.b1:"transparent"}`,color:T.t3,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,lineHeight:1,fontWeight:700}}>⋮</button>
+                        {(pReceive||pEdit)&&<button onClick={(e)=>{e.stopPropagation();setRowMenu(rowMenu===m.id?null:m.id);}} title={t("common.actions")}
+                          style={{width:30,height:30,borderRadius:6,background:rowMenu===m.id?T.surfaceB:"none",border:`1px solid ${rowMenu===m.id?T.b1:"transparent"}`,color:T.t3,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,lineHeight:1,fontWeight:700}}>⋮</button>}
                         {rowMenu===m.id&&(<>
                           <div onClick={(e)=>{e.stopPropagation();setRowMenu(null);}} style={{position:"fixed",inset:0,zIndex:50}}/>
                           <div style={{position:"absolute",right:0,top:34,background:T.surface,border:`1px solid ${T.b1}`,borderRadius:8,boxShadow:"0 8px 24px rgba(0,0,0,0.14)",zIndex:51,width:200,overflow:"hidden"}}>
-                            <button onClick={(e)=>{e.stopPropagation();setRowMenu(null);setMarkRecvTgt(m);}}
+                            {pReceive&&<button onClick={(e)=>{e.stopPropagation();setRowMenu(null);setMarkRecvTgt(m);}}
                               style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"10px 13px",border:"none",background:"none",color:T.grn,fontSize:12.5,fontWeight:600,cursor:"pointer",textAlign:"left"}}
                               onMouseEnter={e=>e.currentTarget.style.background=T.grnL} onMouseLeave={e=>e.currentTarget.style.background="none"}>
                               <IcChk size={14} color={T.grn}/> {t("procurement.mark_received")}
-                            </button>
-                            <div style={{height:1,background:T.b1}}/>
-                            {isPartialOpen(m)?(
+                            </button>}
+                            {pReceive&&pEdit&&<div style={{height:1,background:T.b1}}/>}
+                            {!pEdit?null:isPartialOpen(m)?(
                               <button onClick={(e)=>{e.stopPropagation();closeBalance(m);}}
                                 style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"10px 13px",border:"none",background:"none",color:T.amb,fontSize:12.5,fontWeight:600,cursor:"pointer",textAlign:"left"}}
                                 onMouseEnter={e=>e.currentTarget.style.background=T.ambL} onMouseLeave={e=>e.currentTarget.style.background="none"}>
@@ -2866,10 +2877,10 @@ function ProcurementModule(){
                     <span style={{fontSize:13,fontWeight:600,color:T.t1}}>₹{fmtN(po.amount)}</span>
                     <div style={{display:"flex",gap:4}}>
                       {po.approval==="Draft"&&canApprovePO(po.id)&&<button onClick={e=>{e.stopPropagation();approvePO(po.id);}} title={t("procurement.approve_po")} style={{width:26,height:26,borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><IcChk size={13} color={T.grn}/></button>}
-                      {po.approval==="Revision"&&<button onClick={e=>{e.stopPropagation();setEditPo(po);setShowCreatePO(true);}} title={t("procurement.edit_po_and_resubmit_for_approval")} style={{height:26,padding:"0 9px",borderRadius:6,background:"#DBEAFE",border:"1px solid #93C5FD",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:3,color:"#1D4ED8",fontSize:10.5,fontWeight:700}}>{t("procurement.edit_resubmit_2")}</button>}
+                      {po.approval==="Revision"&&pEdit&&<button onClick={e=>{e.stopPropagation();setEditPo(po);setShowCreatePO(true);}} title={t("procurement.edit_po_and_resubmit_for_approval")} style={{height:26,padding:"0 9px",borderRadius:6,background:"#DBEAFE",border:"1px solid #93C5FD",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:3,color:"#1D4ED8",fontSize:10.5,fontWeight:700}}>{t("procurement.edit_resubmit_2")}</button>}
                       {/* Approve ke baad agla kadam ORDER hai (vendor ko bhejo) — receive tab jab order ho chuka */}
-                      {poCanOrder(po)&&<button onClick={e=>{e.stopPropagation();setSendToVendorTarget(po);}} title={t("procurement.send_to_vendor")} style={{height:26,padding:"0 9px",borderRadius:6,background:T.bluL,border:`1px solid ${T.blu}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:4,color:T.blu,fontSize:10.5,fontWeight:700,whiteSpace:"nowrap"}}><IcTruck size={12} color={T.blu}/>{t("procurement.order_btn")}</button>}
-                      {poCanReceive(po)&&<button onClick={e=>{e.stopPropagation();setGrnTarget(po);}} title={t("common.record_grn")} style={{width:26,height:26,borderRadius:6,background:T.ambL,border:`1px solid ${T.ambM}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><IcGRN size={13} color={T.amb}/></button>}
+                      {poCanOrder(po)&&pEdit&&<button onClick={e=>{e.stopPropagation();setSendToVendorTarget(po);}} title={t("procurement.send_to_vendor")} style={{height:26,padding:"0 9px",borderRadius:6,background:T.bluL,border:`1px solid ${T.blu}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:4,color:T.blu,fontSize:10.5,fontWeight:700,whiteSpace:"nowrap"}}><IcTruck size={12} color={T.blu}/>{t("procurement.order_btn")}</button>}
+                      {poCanReceive(po)&&pReceive&&<button onClick={e=>{e.stopPropagation();setGrnTarget(po);}} title={t("common.record_grn")} style={{width:26,height:26,borderRadius:6,background:T.ambL,border:`1px solid ${T.ambM}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><IcGRN size={13} color={T.amb}/></button>}
                     </div>
                   </div>
                   {po.reviewNote&&(po.approval==="Revision"||po.approval==="Rejected")&&(
@@ -2909,8 +2920,8 @@ function ProcurementModule(){
                       <div style={{height:"100%",width:rfq.vendors.length?`${(submitted/rfq.vendors.length)*100}%`:"0%",background:T.blu,borderRadius:2}}/>
                     </div>
                     <div style={{display:"flex",gap:5,marginTop:6,justifyContent:"flex-end"}}>
-                      {rfq.status==="Draft"&&<button onClick={e=>{e.stopPropagation();publishRFQ(rfq.id);}} style={{padding:"3px 10px",borderRadius:5,background:T.bluL,border:`1px solid ${T.bluM}`,color:T.blu,fontSize:10.5,fontWeight:600,cursor:"pointer"}}>{t("procurement.publish")}</button>}
-                      {rfq.locked&&<button onClick={e=>{e.stopPropagation();createPOFromRFQ(rfq);}} style={{padding:"3px 10px",borderRadius:5,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:10.5,fontWeight:600,cursor:"pointer"}}>{t("procurement.create_po_2")}</button>}
+                      {rfq.status==="Draft"&&pEdit&&<button onClick={e=>{e.stopPropagation();publishRFQ(rfq.id);}} style={{padding:"3px 10px",borderRadius:5,background:T.bluL,border:`1px solid ${T.bluM}`,color:T.blu,fontSize:10.5,fontWeight:600,cursor:"pointer"}}>{t("procurement.publish")}</button>}
+                      {rfq.locked&&pCreate&&<button onClick={e=>{e.stopPropagation();createPOFromRFQ(rfq);}} style={{padding:"3px 10px",borderRadius:5,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:10.5,fontWeight:600,cursor:"pointer"}}>{t("procurement.create_po_2")}</button>}
                     </div>
                   </div>
                 </div>
@@ -2924,10 +2935,10 @@ function ProcurementModule(){
       </div>
 
       {/* ═══ MODALS ═══ */}
-      {selPO&&<PODetailDrawer po={selPO} onClose={()=>setSelPO(null)} onApprove={canApprovePO(selPO.id)?(id)=>{approvePO(id);setSelPO(p=>p?{...p,approval:"Approved"}:p);}:null} onShare={(po)=>{setShareTarget(po);setSelPO(null);}} onGRN={(po)=>{setGrnTarget(po);setSelPO(null);}}
-        onSendToVendor={(po)=>{setSendToVendorTarget(po);}}
-        onEdit={(po)=>{setEditPo(po);setShowCreatePO(true);setSelPO(null);}}
-        onCancel={async(po)=>{
+      {selPO&&<PODetailDrawer po={selPO} onClose={()=>setSelPO(null)} onApprove={canApprovePO(selPO.id)?(id)=>{approvePO(id);setSelPO(p=>p?{...p,approval:"Approved"}:p);}:null} onShare={(po)=>{setShareTarget(po);setSelPO(null);}} onGRN={pReceive?(po)=>{setGrnTarget(po);setSelPO(null);}:null}
+        onSendToVendor={pEdit?(po)=>{setSendToVendorTarget(po);}:null}
+        onEdit={pEdit?(po)=>{setEditPo(po);setShowCreatePO(true);setSelPO(null);}:null}
+        onCancel={!pApprove?null:async(po)=>{
           const res=await api.patch("/procurement/pos/"+po.id+"/cancel",{});
           if(res.success){
             setPOs(p=>p.map(x=>x.id===po.id?{...x,poStatus:"Cancelled"}:x));
@@ -2946,7 +2957,7 @@ function ProcurementModule(){
           setSelPO(p=>p&&p.id===sendToVendorTarget.id?{...p,orderStatus:"Ordered"}:p);
         }}/>}
       {grnTarget&&<GRNModal po={grnTarget} onClose={()=>setGrnTarget(null)} onSave={saveGRN}/>}
-      {selRFQ&&<RFQDetailDrawer rfq={selRFQ} onClose={()=>setSelRFQ(null)} onPunch={(vi)=>{setPunchTarget(selRFQ);setPunchVendorIdx(vi);setSelRFQ(null);}} onLock={(vName)=>{lockRFQ(selRFQ.id,vName);setSelRFQ(r=>r?{...r,locked:vName}:r);}} onPublish={(id)=>{publishRFQ(id);setSelRFQ(r=>r?{...r,status:"Published",bidStart:"Today",bidEnd:"+5 days"}:r);}} onCreatePO={(r)=>{setSelRFQ(null);createPOFromRFQ(r);}}/>}
+      {selRFQ&&<RFQDetailDrawer rfq={selRFQ} onClose={()=>setSelRFQ(null)} onPunch={pCreate?(vi)=>{setPunchTarget(selRFQ);setPunchVendorIdx(vi);setSelRFQ(null);}:null} onLock={pEdit?(vName)=>{lockRFQ(selRFQ.id,vName);setSelRFQ(r=>r?{...r,locked:vName}:r);}:null} onPublish={pEdit?(id)=>{publishRFQ(id);setSelRFQ(r=>r?{...r,status:"Published",bidStart:"Today",bidEnd:"+5 days"}:r);}:null} onCreatePO={pCreate?(r)=>{setSelRFQ(null);createPOFromRFQ(r);}:null}/>}
       {punchTarget&&punchVendorIdx!=null&&<PunchQuoteModal rfq={punchTarget} vendorIndex={punchVendorIdx} onSave={(vi,rates)=>savePunch(punchTarget.id,vi,rates)} onClose={()=>{setPunchTarget(null);setPunchVendorIdx(null);}}/>}
       {showCreateRFQ&&<CreateRFQModal dbProjects={dbProjects} dbVendors={dbVendors} onClose={()=>setShowCreateRFQ(false)} onSave={async(form,validItems,vendors)=>{
         const res=await api.post("/procurement/rfqs",{

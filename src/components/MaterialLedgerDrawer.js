@@ -10,7 +10,8 @@
 //   projectId  — for the MR fetch + mark-used POST
 //   onClose    — close the drawer
 //   onChanged  — called after mark-used / used-delete so parent reloads
-//   canDeleteUsed — fn(created_by_id) => bool
+//   canDeleteUsed — fn(created_by_id, created_at) => bool (apni aaj ki = Material
+//                   Entry, warna Material Delete — Roles & Access, 5 Oct 2026)
 //   onGrnClick — optional fn(grn_id) — opens the material flow drawer
 
 import { useState, useEffect, useMemo } from "react";
@@ -18,6 +19,7 @@ import api from "../config/api";
 import { t } from "../i18n";
 import { todayISO } from "../utils/today";
 import { BackClose } from "../utils/backNav";
+import { canEntry } from "../utils/perms";
 
 const T = {
   surface: "#FFFFFF", surfaceB: "#F8F9FB",
@@ -112,7 +114,7 @@ export default function MaterialLedgerDrawer({ material, projectId, onClose, onC
         party: u.task_name || "Project level", sub: u.remark || "",
         by: u.used_by || u.user_name || "", qty: Number(u.qty) || 0,
         used_log_id: u.used_log_id, task_id: u.task_id, created_by_id: u.created_by_id,
-        unit: u.unit,
+        created_at: u.created_at, unit: u.unit,
       })),
     ];
     entries.sort((a, b) => ts(a.date) - ts(b.date));   // oldest-first for running bal
@@ -145,9 +147,12 @@ export default function MaterialLedgerDrawer({ material, projectId, onClose, onC
   };
 
   const handleDeleteUsed = async (row) => {
-    if (!await window.confirmAsync(`Used entry delete karein? (${row.qty} ${row.unit || material.unit || ""})`)) return;
+    // Wajah zaroori (server: kam se kam 3 akshar, audit me jaati hai).
+    const reason = await window.promptAsync(t("material.used_delete_reason_ask", { qty: row.qty, unit: row.unit || material.unit || "" }));
+    if (reason == null) return;
+    if (reason.trim().length < 3) { setErr(t("material.used_delete_reason_short")); return; }
     try {
-      const r = await api.del(`/tasks/${row.task_id}/used-log/${row.used_log_id}`);
+      const r = await api.del(`/tasks/${row.task_id}/used-log/${row.used_log_id}`, { reason: reason.trim() });
       if (r?.success) { onChanged && onChanged(); onClose && onClose(); }
       else setErr(r?.message || "Delete failed");
     } catch (e) { setErr(e?.message || "Network error"); }
@@ -246,7 +251,7 @@ export default function MaterialLedgerDrawer({ material, projectId, onClose, onC
                 : visibleLedger.map((e, i) => {
                   const isGRN = e._t === "grn";
                   const balNeg = e.bal < 0;
-                  const showDel = !isGRN && e.used_log_id && e.task_id && canDeleteUsed && canDeleteUsed(e.created_by_id);
+                  const showDel = !isGRN && e.used_log_id && e.task_id && canDeleteUsed && canDeleteUsed(e.created_by_id, e.created_at);
                   return (
                     <div key={i}
                       onClick={() => isGRN && e.grn_id && onGrnClick && onGrnClick(e.grn_id)}
@@ -343,7 +348,7 @@ export default function MaterialLedgerDrawer({ material, projectId, onClose, onC
           )}
           <div style={{ padding: "11px 14px", display: "flex", gap: 8 }}>
             {material.balance > 0 ? (
-              !markUsed ? (
+              !canEntry("Material") ? null : !markUsed ? (
                 <button onClick={() => setMarkUsed(true)}
                   style={{ flex: 1, padding: "9px", borderRadius: 7, background: T.grnL, border: `1px solid ${T.grnM}`, color: T.grn, fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>
                  {t("material_ledger.mark_used")}

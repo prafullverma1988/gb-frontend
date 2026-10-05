@@ -7,7 +7,8 @@
 //   mr         — material request object (or null = drawer closed)
 //   onClose    — close drawer
 //   onChanged  — called after a successful edit / delete so parent reloads
-//   isAdmin    — boolean; non-admins only see read-only details
+//   isAdmin    — boolean; false = sirf dekhna. Iske upar Procurement ka Edit
+//                tick bhi chahiye (server PUT /procurement/mrs/:id wahi maangta hai).
 //   vendors    — party list (Procurement ka dbVendors) — "Vendor ko photo bhejo"
 //                me MR ke vendor ka number yahin se milta hai (na mile to WhatsApp
 //                me chat khud chuno)
@@ -21,6 +22,7 @@ import { BackClose } from "../utils/backNav";
 import { cld } from "../utils/cloudinary";
 import { companyName } from "../utils/companyName";
 import { requirementText, waUrl, vendorPhone } from "../utils/vendorShare";
+import { can } from "../utils/perms";
 
 const T = {
   surface: "#FFFFFF", surfaceB: "#F8F9FB",
@@ -53,8 +55,11 @@ const isoDate = (d) => {
   try { const dt = new Date(d); if (isNaN(dt)) return ""; return dt.toISOString().slice(0, 10); } catch { return ""; }
 };
 
-export default function MRDetailDrawer({ mr, onClose, onChanged, isAdmin = true, vendors = [] }) {
+export default function MRDetailDrawer({ mr, onClose, onChanged, isAdmin: allowEdit = true, vendors = [] }) {
   const open = !!mr;
+  // Sudhaar / band karna = Procurement Edit (Roles & Access, 5 Oct 2026) —
+  // pehle har kisi ko button dikhta tha aur server 403 deta tha.
+  const isAdmin = allowEdit && can("Procurement", "edit");
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({});
   const [savingState, setSavingState] = useState(false);

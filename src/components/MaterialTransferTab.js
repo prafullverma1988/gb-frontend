@@ -5,8 +5,14 @@
 // Flow:
 //   • Site team clicks "+ New Transfer" → picks destination project +
 //     items from THIS project's available stock → submits.
-//   • Created as status 'PendingApproval' (requires_approval = !isAdmin).
-//     Admin/PM see Approve / Reject buttons on the card.
+//   • Created as status 'PendingApproval' (requires_approval = !direct).
+//     Warehouse ka Approve tick wale ko Approve / Reject dikhta hai.
+//
+// Ticks (Roles & Access, 5 Oct 2026 — server routes/warehouse.js jaisa):
+//   + New Transfer / Receive = Warehouse YA Material ka Entry (transition me Create)
+//   Approve / Reject         = Warehouse ka Approve tick (admin/PM role ki shart hati)
+//   Seedha bhejna (bina approval) = admin/PM role ya Approve tick, aur godown
+//   (Warehouse) ka Entry/Create — warna server khud approval me daal deta hai.
 //   • On Approve → source project stock debits, status → 'Pending'
 //     (in transit). On Reject → status 'Rejected' + reason.
 //   • Destination site sees a "Receive" button on Pending transfers
@@ -16,8 +22,8 @@
 
 import { useState, useEffect, useCallback } from "react";
 import api from "../config/api";
-import { canApproveAction } from "../utils/approvalAuthority";
 import { t } from "../i18n";
+import { can, canEntry, currentUser } from "../utils/perms";
 
 const T = {
   surface: "#FFFFFF", surfaceB: "#F8F9FB",
@@ -43,7 +49,13 @@ const fmtDate = (d) => {
   try { return new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "2-digit" }); } catch { return d; }
 };
 
-export default function MaterialTransferTab({ projectId, projectName, isAdmin = false }) {
+export default function MaterialTransferTab({ projectId, projectName }) {
+  const me = currentUser();
+  const mayTransfer = canEntry(["Warehouse", "Material"]);
+  const mayApprove = can("Warehouse", "approve");
+  // PM ka "seedha bhejna" purana role-grant hai (OR) — wo rehta hai.
+  const isAdmin = (["admin", "super_admin", "project_manager"].includes(String(me?.role || "").toLowerCase()) || mayApprove)
+    && canEntry("Warehouse");
   const [transfers, setTransfers] = useState([]);
   const [loading, setLoading]     = useState(true);
   const [showNew, setShowNew]     = useState(false);
@@ -93,10 +105,10 @@ export default function MaterialTransferTab({ projectId, projectName, isAdmin = 
         <div style={{ fontSize: 12.5, color: T.t3, fontWeight: 600 }}>
           {loading ? t("common.loading_2") : `${transfers.length} transfer${transfers.length === 1 ? "" : "s"}`}
         </div>
-        <button onClick={() => setShowNew(true)}
+        {mayTransfer && <button onClick={() => setShowNew(true)}
           style={{ padding: "8px 14px", borderRadius: 7, background: T.blu, color: "#fff", border: "none", fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>
          {t("material_transfer.new_transfer")}
-        </button>
+        </button>}
       </div>
 
       {err && (
@@ -119,17 +131,10 @@ export default function MaterialTransferTab({ projectId, projectName, isAdmin = 
           const itemsTxt = (tr.items || []).map(it => `${it.material_name} ${it.qty} ${it.unit || ""}`.trim()).join("  ·  ");
           const totalVal = tr.total_value || (tr.items || []).reduce((s, it) => s + (Number(it.qty)||0)*(Number(it.rate)||0), 0);
           const busy = !!acting[tr.id];
-          // Server par ye POST /warehouse/transfers/:id/approve|reject hai, aur
-          // wahan DO rok hain: requirePerm("Warehouse","approve") AUR route ke
-          // andar ek role-list (admin / super_admin / project_manager). Screen
-          // par bhi theek wahi dono — pehle sirf isAdmin dekha jaata tha, to
-          // jis PM ke paas approve ka tick nahi tha use button milta tha aur
-          // dabane par 403.
-          const canApprove = canApproveAction({
-            roles: ["admin", "super_admin", "project_manager"],
-            perm: ["Warehouse", "approve"],
-          }) && tr.status === "PendingApproval";
-          const canReceive = tr.status === "Pending" && isIncoming;
+          // Server: POST /warehouse/transfers/:id/approve|reject = sirf
+          // Warehouse ka Approve tick (5 Oct 2026 se role-list hati).
+          const canApprove = mayApprove && tr.status === "PendingApproval";
+          const canReceive = tr.status === "Pending" && isIncoming && mayTransfer;
           return (
             <div key={tr.id} style={{ background: T.surface, border: `1px solid ${T.b1}`, borderLeft: `3px solid ${meta.c}`, borderRadius: 9, padding: "11px 13px" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 7 }}>

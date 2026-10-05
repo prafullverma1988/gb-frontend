@@ -12,6 +12,7 @@ import { T } from "../shared/tokens";
 import { t, Rich } from "../../i18n";
 import { isoDate, todayISO } from "../../utils/today";
 import { cld } from "../../utils/cloudinary";
+import { can as canPerm, canEntry as canPermEntry } from "../../utils/perms";
 
 // Tasks ka CSV/Excel import — common sudhaar screen (components/ImportFileModal),
 // jaanch server par (POST /tasks/import/rows). Column NAAM se pehchane jaate hain,
@@ -3743,7 +3744,10 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
   const meUser = (() => { try { return JSON.parse(localStorage.getItem("gb_user")) || {}; } catch { return {}; } })();
   const meId = Number(meUser?.id) || null;
   const meIsPriv = ["admin","super_admin","project_manager"].includes((meUser?.role || "").toLowerCase());
-  const canDeleteUsed = (createdById) => meIsPriv || (createdById != null && Number(createdById) === meId);
+  // Maal-kharch entry hatana (SUPPLY, Roles & Access 5 Oct 2026 — routes/tasks.js):
+  // apni aaj ki = Material Entry, kisi aur ki / purani = Material Delete; wajah zaroori.
+  const canDeleteUsed = (createdById, createdAt) => canPerm("Material","delete")
+    || (canPermEntry("Material") && createdById != null && Number(createdById) === meId && !!createdAt && isoDate(createdAt) === todayISO());
 
   const [prog,setProg]=useState(task.progress||0);
   const [saving,setSaving]=useState(false);
@@ -4263,7 +4267,7 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
             <div style={{marginBottom:10}}>
               <div style={{fontSize:10,fontWeight:600,color:"#64748B",textTransform:"uppercase",letterSpacing:".4px",marginBottom:6}}>{t("tasks.recent_usage")}</div>
               {usedLog.slice(0,3).map((u,i)=>{
-                const showDel = u.id && canDeleteUsed(u.created_by);
+                const showDel = u.id && canDeleteUsed(u.created_by, u.created_at);
                 return (
                 <div key={u.id||i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 11px",background:"#F0FDF4",borderRadius:7,marginBottom:5,border:"1px solid #BBF7D0",gap:8}}>
                   <span style={{fontSize:12,fontWeight:600,color:"#065F46",flex:1,minWidth:0,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{u.material_name}</span>
@@ -4271,8 +4275,10 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
                   {showDel?(
                     <button title={t("tasks.delete_this_used_entry")}
                       onClick={async()=>{
-                        if(!await window.confirmAsync("Is used entry ko delete kar dein? ("+u.used_qty+" "+(u.unit||"")+")")) return;
-                        const r=await api.del("/tasks/"+task.id+"/used-log/"+u.id);
+                        const reason=await window.promptAsync(t("material.used_delete_reason_ask",{qty:u.used_qty,unit:u.unit||""}));
+                        if(reason==null) return;
+                        if(reason.trim().length<3){ alert(t("material.used_delete_reason_short")); return; }
+                        const r=await api.del("/tasks/"+task.id+"/used-log/"+u.id,{reason:reason.trim()});
                         if(r.success){
                           setUsedLog(p=>p.filter(x=>x.id!==u.id));
                         } else {

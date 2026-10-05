@@ -9,6 +9,7 @@
 import { useState, useEffect, useCallback } from "react";
 import api from "../config/api";
 import { TransfersTab, NewTransferModal, TransferDetailDrawer } from "../modules/WarehouseModule";
+import { can, canEntry } from "../utils/perms";
 
 const fmtDate = (d) => {
   if (!d) return "—";
@@ -17,9 +18,11 @@ const fmtDate = (d) => {
 };
 
 export default function CompanyTransfersTab() {
-  // Admin/PM gate (mirrors WarehouseModule) — controls delete on the drawer.
-  const meUser = (() => { try { return JSON.parse(localStorage.getItem("gb_user")) || {}; } catch { return {}; } })();
-  const isAdmin = ["admin", "super_admin", "project_manager"].includes((meUser?.role || "").toLowerCase());
+  // Ticks — server (routes/warehouse.js) jaisa, WarehouseModule ke saath ek
+  // (Roles & Access, 5 Oct 2026): naya transfer / receive = Warehouse YA
+  // Material Entry; hatana = Warehouse Delete (admin/PM role ki shart hati).
+  const mayMove = canEntry(["Warehouse", "Material"]);
+  const mayDelete = can("Warehouse", "delete");
 
   const [transfers, setTransfers] = useState([]);
   const [stock, setStock]         = useState([]);
@@ -54,13 +57,13 @@ export default function CompanyTransfersTab() {
 
   return (
     <div style={{ flex: 1, overflow: "auto" }}>
-      <TransfersTab transfers={transfers} onNew={() => setNewOpen(true)} onSelect={t => setDetail(t)} />
+      <TransfersTab transfers={transfers} onNew={mayMove ? () => setNewOpen(true) : undefined} onSelect={t => setDetail(t)} />
       {newOpen && (
         <NewTransferModal stock={stock} projects={projects}
           onClose={() => setNewOpen(false)} onSaved={() => { setNewOpen(false); load(); }} />
       )}
       {detail && (
-        <TransferDetailDrawer transfer={detail} canDelete={isAdmin} canReceive={true}
+        <TransferDetailDrawer transfer={detail} canDelete={mayDelete} canReceive={mayMove}
           onClose={() => setDetail(null)}
           onDeleted={() => { setDetail(null); load(); }}
           onReceived={() => { setDetail(null); load(); }} />

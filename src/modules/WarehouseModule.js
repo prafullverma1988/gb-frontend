@@ -10,7 +10,7 @@ import { BackClose } from "../utils/backNav";
 import { WarehouseLedgerTab, WarehouseLedgerDrawer } from "./WarehouseLedger";
 import { AllGodownsView } from "./WarehouseConsolidated";
 import { WarehouseGintiTab, DisposalModal, DisposalsPanel } from "./WarehouseGinti";
-import { can } from "../utils/perms";
+import { can, canAny, canEntry } from "../utils/perms";
 
 // ── ICONS ──────────────────────────────────────────────────────────────
 const Ic=({d,size=18,color="currentColor",sw=1.8,fill="none"})=>(
@@ -1752,10 +1752,10 @@ function MaterialDetailDrawer({material,onClose,onEdit,onDelete,onIssue,onAddSto
         </div>
 
         <div style={{padding:"10px 18px",borderBottom:`1px solid ${T.b1}`,flexShrink:0,display:"flex",gap:7,flexWrap:"wrap"}}>
-          <Btn onClick={()=>onIssue(material)} c={T.amb} icon={IcOut} size="sm">{t("mom.issue")}</Btn>
-          <Btn onClick={()=>onAddStock(material)} c={T.grn} icon={IcIn} size="sm">{t("warehouse.add_stock")}</Btn>
-          <GhostBtn onClick={()=>onEdit(material)} icon={IcEdit} c={T.blu}>{t("common.edit_2")}</GhostBtn>
-          <GhostBtn onClick={()=>onDelete(material)} icon={IcTrash} c={T.red}>{t("common.delete")}</GhostBtn>
+          {onIssue&&<Btn onClick={()=>onIssue(material)} c={T.amb} icon={IcOut} size="sm">{t("mom.issue")}</Btn>}
+          {onAddStock&&<Btn onClick={()=>onAddStock(material)} c={T.grn} icon={IcIn} size="sm">{t("warehouse.add_stock")}</Btn>}
+          {onEdit&&<GhostBtn onClick={()=>onEdit(material)} icon={IcEdit} c={T.blu}>{t("common.edit_2")}</GhostBtn>}
+          {onDelete&&<GhostBtn onClick={()=>onDelete(material)} icon={IcTrash} c={T.red}>{t("common.delete")}</GhostBtn>}
         </div>
 
         <div style={{flex:1,overflowY:"auto",padding:"12px 18px"}}>
@@ -1978,7 +1978,7 @@ function StockTab({stock,grns,issues,onSelect,onAddMaterial,onAddStock,onIssue,o
         {onDispose&&stock.some(m=>Number(m.qty_damaged)>0||Number(m.qty_scrap)>0||Number(m.qty_repair)>0)&&(
           <GhostBtn onClick={onDispose} c={T.amb}>{t("warehouse.gt_dispose_btn")}</GhostBtn>
         )}
-        <Btn onClick={onAddMaterial} c={T.blu} icon={IcAdd} size="sm">{t("warehouse.new_material")}</Btn>
+        {onAddMaterial&&<Btn onClick={onAddMaterial} c={T.blu} icon={IcAdd} size="sm">{t("warehouse.new_material")}</Btn>}
       </div>
 
       {/* ── Summary strip ── */}
@@ -2248,7 +2248,7 @@ function GrnTab({grns,onNew,onVerify}){
     <div>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
         <span style={{fontSize:12,fontWeight:600,color:T.t2}}>{t("warehouse.grns_receipts", { grns: grns.length })}</span>
-        <Btn onClick={onNew} c={T.blu} icon={IcAdd} size="sm">{t("warehouse.new_grn")}</Btn>
+        {onNew&&<Btn onClick={onNew} c={T.blu} icon={IcAdd} size="sm">{t("warehouse.new_grn")}</Btn>}
       </div>
       {grns.length===0?<Empty label={t("warehouse.koi_grn_nahi")} sub={t("warehouse.naya_grn_bana_ke_material_receive")}/>:(
         <div style={{background:T.surface,borderRadius:9,border:`1px solid ${T.b1}`,overflow:"hidden"}}>
@@ -2399,7 +2399,7 @@ function GRNDetailDrawer({grn,onClose,onVerify}){
           <span style={{fontSize:10.5,color:T.t4}}>{isReturn?t("warehouse.project_se_return"):t("warehouse.vendor_delivery")}</span>
           <div style={{display:"flex",gap:8}}>
             <GhostBtn onClick={onClose}>{t("common.close")}</GhostBtn>
-            {grn.status!=="Verified"&&!isReturn&&(
+            {grn.status!=="Verified"&&!isReturn&&onVerify&&(
               <Btn onClick={()=>{onVerify(grn.dbId);onClose();}} c={T.grn} icon={IcChk} size="sm">{t("warehouse.verify_accept")}</Btn>
             )}
           </div>
@@ -2446,7 +2446,7 @@ function IssueTab({issues,projects,onNew,onSelect}){
           );
         })}
         <div style={{flex:1}}/>
-        <Btn onClick={onNew} c={T.amb} icon={IcOut} size="sm">{t("warehouse.issue_material")}</Btn>
+        {onNew&&<Btn onClick={onNew} c={T.amb} icon={IcOut} size="sm">{t("warehouse.issue_material")}</Btn>}
       </div>
       {filtered.length===0?<Empty label={t("warehouse.koi_issue_nahi")} sub={t("warehouse.stock_se_material_project_ko_bhejne")}/>:(
         <div style={{background:T.surface,borderRadius:9,border:`1px solid ${T.b1}`,overflow:"hidden"}}>
@@ -2483,6 +2483,15 @@ function IssueTab({issues,projects,onNew,onSelect}){
 }
 
 // ── ISSUE DETAIL DRAWER ──────────────────────────────────────────
+// Issue / transfer hatane ki wajah — server (routes/warehouse.js) kam se kam
+// 3 akshar maangta hai aur audit_logs me poori tasveer ke saath rakhta hai.
+async function askDeleteReason(){
+  const r=await window.promptAsync(t("warehouse.delete_reason_ask"));
+  if(r==null) return null;
+  if(r.trim().length<3){ alert(t("warehouse.delete_reason_short")); return null; }
+  return r.trim();
+}
+
 function IssueDetailDrawer({issue,onClose,canDelete,canReceive,onDeleted,onReceived}){
   const [detail,setDetail]=useState(issue);
   const [loading,setLoading]=useState(true);
@@ -2506,8 +2515,10 @@ function IssueDetailDrawer({issue,onClose,canDelete,canReceive,onDeleted,onRecei
 
   const handleDelete=async()=>{
     if(!await window.confirmAsync(`${detail?.id} ko delete karein? Source warehouse stock restore hoga${detail?.status==="Received"||detail?.status==="Partial"?" + dest project ka GRN bhi hatega":""}. Yeh undo nahi ho sakta.`)) return;
+    // Wajah zaroori (Roles & Access, 5 Oct 2026) — audit me poori tasveer ke saath.
+    const reason=await askDeleteReason(); if(reason==null) return;
     setDeleting(true);
-    const r=await api.del(`/warehouse/issues/${detail.dbId}`);
+    const r=await api.del(`/warehouse/issues/${detail.dbId}`,{reason});
     setDeleting(false);
     if(r.success){onDeleted&&onDeleted();onClose();}
     else alert(r.message||"Delete failed");
@@ -2860,7 +2871,7 @@ function MRTab({mrs,onNew,onIssue,onApprove,onReject,onClose,onOrder,onGrn,onSen
                          {t("warehouse.stock")}
                         </button>
                       )}
-                      <Btn onClick={()=>onIssue(mr)} c={T.amb} size="sm" icon={IcOut}>{t("warehouse.issue_from_stock")}</Btn>
+                      {onIssue&&<Btn onClick={()=>onIssue(mr)} c={T.amb} size="sm" icon={IcOut}>{t("warehouse.issue_from_stock")}</Btn>}
                       {onPassToProc&&(
                         <button onClick={()=>onPassToProc(mr)}
                           title={t("warehouse.stock_kam_hai_fulfill_nahi_ho")}
@@ -2929,7 +2940,7 @@ function RequestsTab({mrs,projects,users,library,procMode="direct",onSubMR,onApp
       </div>
       {sub==="warehouse"
         ? <MRTab mrs={whMrs} mode="warehouse" procMode={procMode}
-            onNew={()=>onSubMR.openNew()}
+            onNew={onSubMR.openNew?()=>onSubMR.openNew():undefined}
             onOrder={onSubMR.openOrder} onGrn={onSubMR.openGrn}
             onSendToProc={onSubMR.sendToProcurement}
             onApprove={onApprove} onReject={onReject} onClose={onClose}/>
@@ -2981,7 +2992,7 @@ function MaterialInTab({grns,mrs,projects,users,library,procMode="direct",onNewG
       {sub==="received"
         ? <GrnTab grns={grns} onNew={onNewGRN} onVerify={onVerifyGRN}/>
         : <MRTab mrs={whMrs} mode="warehouse" procMode={procMode}
-            onNew={()=>onSubMR.openNew()}
+            onNew={onSubMR.openNew?()=>onSubMR.openNew():undefined}
             onOrder={onSubMR.openOrder} onGrn={onSubMR.openGrn}
             onSendToProc={onSubMR.sendToProcurement}
             onApprove={onApprove} onReject={onReject} onClose={onClose}/>
@@ -3048,7 +3059,7 @@ export function TransfersTab({transfers,onNew,onSelect}){
           </button>
         ))}
         <div style={{flex:1}}/>
-        <Btn onClick={onNew} c={T.cyn} icon={IcTrns} size="sm">{t("warehouse.new_transfer")}</Btn>
+        {onNew&&<Btn onClick={onNew} c={T.cyn} icon={IcTrns} size="sm">{t("warehouse.new_transfer")}</Btn>}
       </div>
       {filtered.length===0?<Empty label={t("warehouse.koi_transfer_nahi")} sub={t("warehouse.ek_project_se_dusre_project_me")}/>:(
         <div style={{background:T.surface,borderRadius:9,border:`1px solid ${T.b1}`,overflow:"hidden"}}>
@@ -3108,8 +3119,9 @@ export function TransferDetailDrawer({transfer,onClose,canDelete,canReceive,onDe
   const handleDelete=async()=>{
     // (MAT-17) Ab server store wale sire bhi ulte karta hai — text wahi bataye jo sach me hota hai.
     if(!await window.confirmAsync(t("warehouse.transfer_delete_confirm", { id: detail.id }))) return;
+    const reason=await askDeleteReason(); if(reason==null) return;
     setDeleting(true);
-    const r=await api.del(`/warehouse/transfers/${detail.dbId}`);
+    const r=await api.del(`/warehouse/transfers/${detail.dbId}`,{reason});
     setDeleting(false);
     if(r.success){onDeleted&&onDeleted();onClose();}
     else alert(r.message||"Delete failed");
@@ -3341,19 +3353,27 @@ function WarehouseModule(){
   const [dispSeq,setDispSeq]=useState(0);               // nikasi list dobara laao
   const [gintiPending,setGintiPending]=useState(0);     // approval baaki ginti — tab ka badge
 
-  // Current user (for admin-only actions)
+  // Current user
   const meUser = (() => { try { return JSON.parse(localStorage.getItem("gb_user")) || {}; } catch { return {}; } })();
-  const isAdmin = ["admin","super_admin","project_manager"].includes((meUser?.role || "").toLowerCase());
-  // Only super_admin / admin can approve MRs (PM excluded from approval-grant authority)
-  // Warehouse MR approve/reject andar se PATCH /warehouse/mr/:id hai, jo
-  // requirePerm("Warehouse","edit") maangta hai. Pehle yahan sirf role ka naam
-  // dekha jaata tha (admin/super_admin), isliye jis store keeper ko Warehouse
-  // ka edit diya gaya hai usko apne hi warehouse ki MR par button nahi milta
-  // tha — jabki server use haan kehta.
-  const canApproveMR = canApproveAction({ perm: ["Warehouse", "edit"] }, meUser);
-  // Ginti / nikasi (3 Oct 2026): banana = Warehouse create; approve = admin ya
+  // Roles & Access (5 Oct 2026) — har button wahi tick maange jo server
+  // (routes/warehouse.js, warehouse-ginti.js) maangta hai:
+  //   Create = store, naya material, add-stock
+  //   Entry  = GRN (har tarah), issue, store MR, procurement ko bhejna,
+  //            transfer, ginti bharna, nikasi (transition me Create bhi)
+  //   Edit   = material sudhaar, GRN verify, MR order / band karna
+  //   Delete = material, issue, transfer hatana (wajah ke saath) — admin/PM
+  //            role ki shart hati, sirf tick
+  const whCreate = can("Warehouse", "create", meUser);
+  const whEntry = canEntry("Warehouse", meUser);
+  const whEdit = can("Warehouse", "edit", meUser);
+  const whDelete = can("Warehouse", "delete", meUser);
+  const whRecv = canEntry(["Warehouse", "Material"], meUser);
+  // Store MR manzoori = PATCH /warehouse/mr/:id (Approved/Rejected) — server
+  // Warehouse ka Approve maangta hai, transition me Edit bhi.
+  const canApproveMR = canAny("Warehouse", "approve", {}, meUser) || whEdit;
+  // Ginti / nikasi: bharna = Warehouse Entry; approve = admin ya
   // Warehouse ka Approve tick — STRICT (row hi nahi = nahi), server jaisa.
-  const canGintiCreate = can("Warehouse", "create", meUser);
+  const canGintiCreate = whEntry;
   const canGintiApprove = canApproveAction({ perm: ["Warehouse", "approve", { strict: true }] }, meUser);
 
   // Approve / Reject — inline buttons on Pending MR rows (shown when canApproveMR).
@@ -3650,7 +3670,7 @@ function WarehouseModule(){
         {tab==="godown"&&<AllGodownsView activeId={whId}
           godownsView={<WarehousesTab data={whOverview} activeId={whId} onOpen={switchWarehouse}/>}
           onGoto={id=>{switchWarehouse(id);setTab("stock");}}/>}
-        {tab==="stock"&&<StockTab stock={stock} grns={grns} issues={issues} onSelect={m=>setMatDetail(m)} onAddMaterial={()=>setMatModalOpen({})} onAddStock={m=>setAddStockTarget(m)} onIssue={m=>setIssueTarget(m)} onQuickRequest={m=>{setMrPrefill({name:m.name,unit:m.unit});setMrNewOpen(true);}}
+        {tab==="stock"&&<StockTab stock={stock} grns={grns} issues={issues} onSelect={m=>setMatDetail(m)} onAddMaterial={whCreate?()=>setMatModalOpen({}):undefined} onAddStock={whCreate?m=>setAddStockTarget(m):undefined} onIssue={whEntry?m=>setIssueTarget(m):undefined} onQuickRequest={whEntry?m=>{setMrPrefill({name:m.name,unit:m.unit});setMrNewOpen(true);}:undefined}
           onDispose={canGintiCreate?()=>setDisposeOpen(true):null}/>}
         {/* Kharab / Kabad nikasi ki list (approve yahin) + "Repair me" — key=whId: store badla to dobara */}
         {tab==="stock"&&<DisposalsPanel key={whId} refreshKey={dispSeq} canApprove={canGintiApprove} meId={meUser?.id}
@@ -3660,19 +3680,19 @@ function WarehouseModule(){
         {tab==="ledger"&&<WarehouseLedgerTab key={whId} onOpen={m=>setLedgerMat(m)}/>}
         {tab==="grn"&&<MaterialInTab grns={grns} mrs={mrs} projects={projects} users={users} library={library}
           procMode={procMode}
-          onNewGRN={()=>setGrnNewOpen(true)} onVerifyGRN={handleVerifyGRN}
-          onApprove={canApproveMR?approveMR:undefined} onReject={canApproveMR?rejectMR:undefined} onClose={closeMR}
+          onNewGRN={whEntry?()=>setGrnNewOpen(true):undefined} onVerifyGRN={whEdit?handleVerifyGRN:undefined}
+          onApprove={canApproveMR?approveMR:undefined} onReject={canApproveMR?rejectMR:undefined} onClose={whEdit?closeMR:undefined}
           onSubMR={{
-            openNew:()=>setMrNewOpen(true),
-            openOrder:(mr)=>setOrderMR(mr),
-            openGrn:(mr)=>setGrnMR(mr),
-            sendToProcurement:async(mr)=>{
+            openNew:whEntry?()=>setMrNewOpen(true):undefined,
+            openOrder:whEdit?(mr)=>setOrderMR(mr):undefined,
+            openGrn:whEntry?(mr)=>setGrnMR(mr):undefined,
+            sendToProcurement:!whEntry?undefined:async(mr)=>{
               if(!await window.confirmAsync(t("warehouse.id_ko_procurement_team_ke_paas", { id: mr.id }))) return;
               const r=await api.post(`/warehouse/mr/${mr.dbId}/send-to-procurement`);
               if(r.success){ alert(r.message||"Sent to procurement"); loadAll(); }
               else alert(r.message||"Failed");
             },
-            passToProcurement:async(mr)=>{
+            passToProcurement:!whEntry?undefined:async(mr)=>{
               const reason = await window.promptAsync(t("warehouse.id_ye_mr_procurement_ko_wapas", { id: mr.id }), "Stock kam hai / fulfill nahi ho sakta");
               if(reason===null) return;
               const r=await api.post(`/warehouse/mr/${mr.dbId}/pass-to-procurement`, {reason});
@@ -3681,12 +3701,12 @@ function WarehouseModule(){
             },
           }}/>}
         {tab==="issue"&&<MaterialOutTab issues={issues} mrs={mrs} projects={projects}
-          onNewIssue={()=>setIssueNewOpen(true)} onSelectIssue={iss=>setIssueDetail(iss)}
-          onApprove={canApproveMR?approveMR:undefined} onReject={canApproveMR?rejectMR:undefined} onClose={closeMR}
+          onNewIssue={whEntry?()=>setIssueNewOpen(true):undefined} onSelectIssue={iss=>setIssueDetail(iss)}
+          onApprove={canApproveMR?approveMR:undefined} onReject={canApproveMR?rejectMR:undefined} onClose={whEdit?closeMR:undefined}
           onCheckStock={checkStockMR}
           onSubMR={{
-            openIssue:(mr)=>setIssueFromMR(mr),
-            passToProcurement:async(mr)=>{
+            openIssue:whEntry?(mr)=>setIssueFromMR(mr):undefined,
+            passToProcurement:!whEntry?undefined:async(mr)=>{
               const reason = await window.promptAsync(t("warehouse.id_ye_mr_procurement_ko_wapas", { id: mr.id }), "Stock kam hai / fulfill nahi ho sakta");
               if(reason===null) return;
               const r=await api.post(`/warehouse/mr/${mr.dbId}/pass-to-procurement`, {reason});
@@ -3696,20 +3716,20 @@ function WarehouseModule(){
           }}/>}
         {tab==="mr"&&<RequestsTab mrs={mrs} projects={projects} users={users} library={library}
           procMode={procMode}
-          onApprove={canApproveMR?approveMR:undefined} onReject={canApproveMR?rejectMR:undefined} onClose={closeMR}
+          onApprove={canApproveMR?approveMR:undefined} onReject={canApproveMR?rejectMR:undefined} onClose={whEdit?closeMR:undefined}
           onCheckStock={checkStockMR}
           onSubMR={{
-            openNew:()=>setMrNewOpen(true),
-            openIssue:(mr)=>setIssueFromMR(mr),
-            openOrder:(mr)=>setOrderMR(mr),
-            openGrn:(mr)=>setGrnMR(mr),
-            sendToProcurement:async(mr)=>{
+            openNew:whEntry?()=>setMrNewOpen(true):undefined,
+            openIssue:whEntry?(mr)=>setIssueFromMR(mr):undefined,
+            openOrder:whEdit?(mr)=>setOrderMR(mr):undefined,
+            openGrn:whEntry?(mr)=>setGrnMR(mr):undefined,
+            sendToProcurement:!whEntry?undefined:async(mr)=>{
               if(!await window.confirmAsync(t("warehouse.id_ko_procurement_team_ke_paas", { id: mr.id }))) return;
               const r=await api.post(`/warehouse/mr/${mr.dbId}/send-to-procurement`);
               if(r.success){ alert(r.message||"Sent to procurement"); loadAll(); }
               else alert(r.message||"Failed");
             },
-            passToProcurement:async(mr)=>{
+            passToProcurement:!whEntry?undefined:async(mr)=>{
               const reason = await window.promptAsync(t("warehouse.id_ye_mr_procurement_ko_wapas", { id: mr.id }), "Stock kam hai / fulfill nahi ho sakta");
               if(reason===null) return;
               const r=await api.post(`/warehouse/mr/${mr.dbId}/pass-to-procurement`, {reason});
@@ -3717,17 +3737,17 @@ function WarehouseModule(){
               else alert(r.message||"Pass-to-procurement failed");
             },
           }}/>}
-        {tab==="transfer"&&<TransfersTab transfers={transfers} onNew={()=>setTransferNewOpen(true)} onSelect={t=>setTransferDetail(t)}/>}
+        {tab==="transfer"&&<TransfersTab transfers={transfers} onNew={whRecv?()=>setTransferNewOpen(true):undefined} onSelect={t=>setTransferDetail(t)}/>}
       </div>
 
       {ledgerMat&&<WarehouseLedgerDrawer material={ledgerMat} godownName={activeWh?.name} onClose={()=>setLedgerMat(null)}/>}
       {matDetail&&(
         <MaterialDetailDrawer material={matDetail}
           onClose={()=>setMatDetail(null)}
-          onEdit={(m)=>{setMatDetail(null);setMatModalOpen({material:m});}}
-          onDelete={handleDeleteMaterial}
-          onIssue={(m)=>{setMatDetail(null);setIssueTarget(m);}}
-          onAddStock={(m)=>{setMatDetail(null);setAddStockTarget(m);}}/>
+          onEdit={whEdit?(m)=>{setMatDetail(null);setMatModalOpen({material:m});}:undefined}
+          onDelete={whDelete?handleDeleteMaterial:undefined}
+          onIssue={whEntry?(m)=>{setMatDetail(null);setIssueTarget(m);}:undefined}
+          onAddStock={whCreate?(m)=>{setMatDetail(null);setAddStockTarget(m);}:undefined}/>
       )}
       {matModalOpen&&(
         <MaterialFormModal material={matModalOpen.material} library={library} onClose={()=>setMatModalOpen(null)} onSaved={()=>loadAll()}/>
@@ -3764,14 +3784,14 @@ function WarehouseModule(){
       )}
       {transferDetail&&(
         <TransferDetailDrawer transfer={transferDetail}
-          canDelete={isAdmin} canReceive={true}
+          canDelete={whDelete} canReceive={whRecv}
           onClose={()=>setTransferDetail(null)}
           onDeleted={()=>loadAll()}
           onReceived={()=>loadAll()}/>
       )}
       {issueDetail&&(
         <IssueDetailDrawer issue={issueDetail}
-          canDelete={isAdmin} canReceive={true}
+          canDelete={whDelete} canReceive={whRecv}
           onClose={()=>setIssueDetail(null)}
           onDeleted={()=>loadAll()}
           onReceived={()=>loadAll()}/>
