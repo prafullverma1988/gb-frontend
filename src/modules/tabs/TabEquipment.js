@@ -32,9 +32,10 @@ function TabEquipment({ projectId }) {
   const canLegacyAdd = can("Library", "create");
   const canLegacyEdit = can("Library", "edit");
   const canLegacyDel = can("Library", "delete");
-  // Library ki machine ka Receive / Release (site par aayi / gayi) — server
-  // POST /equipment/receive, /release/:id par Equipment CREATE maangta hai.
-  const canEqCreate = can("Equipment", "create");
+  // Library ki machine ka Receive / Release (site par aayi / gayi) — roz ka
+  // site ka kaam: server POST /equipment/receive, /release/:id par Equipment
+  // ENTRY ya CREATE maangta hai (6 Oct 2026).
+  const canReceive = canEntry("Equipment");
   // Top-level view toggle: existing Equipment sections vs Trip Tracking.
   const [view, setView] = useState("equipment");
   const [rows,    setRows]    = useState([]);
@@ -731,7 +732,7 @@ function TabEquipment({ projectId }) {
           count={rows.length}
           action={
             <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-              {canEqCreate && (
+              {canReceive && (
                 <button type="button" onClick={openReceive}
                   style={{ padding: "5px 12px", borderRadius: 7, cursor: "pointer", fontFamily: "inherit", fontSize: 12, fontWeight: 700,
                     border: `1.5px solid ${transitN ? T.grn : T.blu}`, background: transitN ? T.grnL : T.surface, color: transitN ? T.grn : T.blu,
@@ -961,7 +962,7 @@ function TabEquipment({ projectId }) {
                     <span style={{ fontSize: 10.5, fontWeight: 700, padding: "4px 10px", borderRadius: 8, background: sm.bg, color: sm.c }}>
                       {STATUS_LABEL[eq.status] || eq.status}
                     </span>
-                    {eq.status === "On Site" && canEqCreate && (
+                    {eq.status === "On Site" && canReceive && (
                       <button type="button" onClick={() => releaseEq(eq)}
                         style={{ fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 7, border: `1px solid ${T.b1}`, background: T.surface, color: T.t2, cursor: "pointer", fontFamily: "inherit" }}>
                         {t("equipment.rel_btn")}

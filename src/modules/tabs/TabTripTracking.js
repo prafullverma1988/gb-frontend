@@ -44,6 +44,11 @@ function canApproveTrip(u = currentUser()) {
   const row = eqRow(u);
   return !!row && row.approve === true;
 }
+// Route banana / badalna: Equipment Create / Edit ya Finance Create (office jo
+// rate aur bill sambhalta hai — accountant). Server: routeCreateGate / routeEditGate.
+function canRoute(action, u = currentUser()) {
+  return canEq(action, u) || canBillTrips(u);
+}
 function canBillTrips(u = currentUser()) {
   return canAny("Finance", "create", { strict: true }, u);
 }
@@ -654,7 +659,7 @@ function RoutesTab({ projectId }) {
     <Panel>
       <div style={{ padding: "10px 15px", borderBottom: `1px solid ${T.b1}`, background: T.surfaceB, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <span style={{ fontSize: 12.5, fontWeight: 700, color: T.t1 }}>{t("trip_tracking.routes_leads_list", { list: list.length ? `(${list.length})` : "" })}</span>
-        {canEq("create") && <AddBtn label={t("trip_tracking.new_route")} onClick={() => setForm({})} />}
+        {canRoute("create") && <AddBtn label={t("trip_tracking.new_route")} onClick={() => setForm({})} />}
       </div>
 
       {form && <RouteForm projectId={projectId} tasks={tasks} route={form.id ? form : null}
@@ -662,7 +667,7 @@ function RoutesTab({ projectId }) {
 
       {loading && <div style={{ textAlign: "center", padding: "30px 0", color: T.t4, fontSize: 13 }}>{t("common.loading_2")}</div>}
       {!loading && list.length === 0 && !form && (
-        <div style={{ textAlign: "center", padding: "34px 20px", color: T.t4, fontSize: 13 }}>{canEq("create") ? t("trip_tracking.abhi_koi_route_nahi_new_route") : t("trip_tracking.abhi_koi_route_nahi")}</div>
+        <div style={{ textAlign: "center", padding: "34px 20px", color: T.t4, fontSize: 13 }}>{canRoute("create") ? t("trip_tracking.abhi_koi_route_nahi_new_route") : t("trip_tracking.abhi_koi_route_nahi")}</div>
       )}
       {!loading && list.length > 0 && (
         <>
@@ -683,7 +688,7 @@ function RoutesTab({ projectId }) {
               <span style={{ fontSize: 12, color: T.t2, fontVariantNumeric: "tabular-nums" }}>{r.lead_km != null ? r.lead_km : "—"}</span>
               <span style={{ fontSize: 11.5, color: T.t2 }}>{r.expected_travel_min != null ? t("trip_tracking.n_min", { n: r.expected_travel_min }) : "—"}</span>
               <span>{r.is_active ? <Pill label={t("common.active")} c={T.grn} bg={T.grnL} /> : <Pill label={t("subcon.inactive")} c={T.t3} bg={T.sltL} />}</span>
-              {canEq("edit") ? <button onClick={() => setForm(r)} type="button" style={{ justifySelf: "end", fontSize: 11.5, color: T.blu, background: "none", border: "none", cursor: "pointer", fontWeight: 600, fontFamily: "inherit" }}>{t("common.edit_2")}</button> : <span />}
+              {canRoute("edit") ? <button onClick={() => setForm(r)} type="button" style={{ justifySelf: "end", fontSize: 11.5, color: T.blu, background: "none", border: "none", cursor: "pointer", fontWeight: 600, fontFamily: "inherit" }}>{t("common.edit_2")}</button> : <span />}
             </div>
           ))}
         </>

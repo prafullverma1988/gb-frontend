@@ -750,6 +750,9 @@ function ProjectDetailPage({project=PROJ, onBack, onSwitchProject}) {
     // Naam ka milaan case-insensitive (server jaisa) — permRow.
     const row = permRow(currentUser, mod);
     if(row == null) return true;
+    // Trip route banane ka kaam office (Finance Create — accountant) ka bhi hai:
+    // Equipment dekhna band ho tab bhi unhe ye tab chahiye (server: routeCreateGate).
+    if(id === "equipment" && !row.view){ const fin = permRow(currentUser, "Finance"); if(fin && fin.create === true) return true; }
     return !!row.view;
   };
   // "Request Payment" = Finance → ENTRY (5 Oct 2026; transition: Entry YA Create) —
