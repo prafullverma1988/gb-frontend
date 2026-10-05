@@ -9,6 +9,12 @@ import { t } from "../../i18n";
 import { companyName } from "../../utils/companyName";
 import { txnIsCleared, partyRowSign, isWalletCashPurchase, isWalletMaterialBuy, balanceLabel, isVendorType, round2 } from "../../utils/moneyRules";
 import { loadPartyCategories, partyCategoryKeys, catLabel } from "../../utils/partyCategories";
+import { can, canAny } from "../../utils/perms";
+
+// Roles & Access (5 Oct 2026) — server (/finance/parties) party banana
+// "Party" YA Finance YA Library row ke CREATE se maanta hai; ledger PDF = Party
+// YA Finance ka EXPORT; Receipt / Payment / Bill paise ka kaam = Finance CREATE.
+const PARTY_ROWS = ["Party", "Finance", "Library"];
 
 // Neeche ledger ke loop me `t` transaction ka naam hai, jo i18n ke t() ko
 // chhupa deta hai — isliye ye label bahar se.
@@ -508,7 +514,7 @@ function TabParty({ projectId, projectName }) {
       )}
       <div style={{width:290, flexShrink:0}}>
         <Panel style={{overflow:"hidden"}}>
-          <PHead title={`Parties (${partyRows.length})`} action={<AddBtn label={t("master_library.add_party")} onClick={()=>setShowAddParty(true)}/>}/>
+          <PHead title={`Parties (${partyRows.length})`} action={canAny(PARTY_ROWS,"create")?<AddBtn label={t("master_library.add_party")} onClick={()=>setShowAddParty(true)}/>:null}/>
           {!loading && partyRows.length > 0 && (
             <div style={{display:"flex", gap:6, alignItems:"center", padding:"8px 12px", borderBottom:`1px solid ${T.b1}`, background:T.surfaceB}}>
               <input value={pSearch} onChange={e=>setPSearch(e.target.value)} placeholder={t("party.search_party")}
@@ -560,7 +566,7 @@ function TabParty({ projectId, projectName }) {
         <Panel style={{height:"100%", overflow:"hidden", display:"flex", flexDirection:"column"}}>
           {selP?(
             <>
-              <PHead title={`${selP.name}  ·  ${projectName||t("common.project")}`} action={<SecBtn label={t("mom.export_pdf")} onClick={()=>exportPartyLedgerPDF(selP, projectName)}/>}/>
+              <PHead title={`${selP.name}  ·  ${projectName||t("common.project")}`} action={canAny(["Party","Finance"],"export")?<SecBtn label={t("mom.export_pdf")} onClick={()=>exportPartyLedgerPDF(selP, projectName)}/>:null}/>
               <div style={{padding:"8px 15px", borderBottom:`1px solid ${T.b1}`, background:T.surfaceB, display:"flex", gap:20}}>
                 {[[t("common.type"),selP.catText || selP.type],[t("common.balance"),`₹${fmtN(selP.balance)}`],[t("common.status"),balLabelText(selP.balLabel)]].map(([l,v])=>(
                   <div key={l} style={{display:"flex", gap:6, alignItems:"center"}}>
@@ -646,14 +652,14 @@ function TabParty({ projectId, projectName }) {
                   );
                 })()}
               </div>
-              <div style={{padding:"9px 15px", borderTop:`1px solid ${T.b1}`, display:"flex", gap:8}}>
+              {can("Finance","create")&&<div style={{padding:"9px 15px", borderTop:`1px solid ${T.b1}`, display:"flex", gap:8}}>
                 <button onClick={()=>setTxnModal({type:txnTypeFor("receipt", selP), partyName:selP.name})}
                   style={{flex:1, padding:"7px", border:`1px solid ${T.grnM}`, borderRadius:6, background:T.grnL, color:T.grn, fontSize:12, fontWeight:600, cursor:"pointer"}}>{t("party.receipt")}</button>
                 <button onClick={()=>setTxnModal({type:txnTypeFor("payment", selP), partyName:selP.name})}
                   style={{flex:1, padding:"7px", border:`1px solid ${T.redM}`, borderRadius:6, background:T.redL, color:T.red, fontSize:12, fontWeight:600, cursor:"pointer"}}>{t("party.payment")}</button>
                 <button onClick={()=>setTxnModal({type:txnTypeFor("bill", selP), partyName:selP.name})}
                   style={{flex:1, padding:"7px", border:`1px solid ${T.b2}`, borderRadius:6, background:T.surface, color:T.t2, fontSize:12, fontWeight:600, cursor:"pointer"}}>{t("party.bill")}</button>
-              </div>
+              </div>}
             </>
           ):(
             <div style={{display:"flex", alignItems:"center", justifyContent:"center", flex:1, color:T.t4, fontSize:13}}>

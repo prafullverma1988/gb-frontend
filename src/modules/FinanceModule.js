@@ -8,13 +8,19 @@ import useDebounce from "../utils/useDebounce";
 import { t, Rich } from "../i18n";
 import { companyName, companyNameHtml } from "../utils/companyName";
 import { downloadLedgerExcel, downloadLedgerPdf, fromScreenRow } from "../utils/partyLedgerDownload";
-import { canSeeFinancials } from "../utils/perms";
+import { canSeeFinancials, can, canAny, canEntry } from "../utils/perms";
 import { canApproveAction } from "../utils/approvalAuthority";
 import TabAccounts from "./tabs/TabAccounts";
 import { isoDate, todayISO, daysAgoISO } from "../utils/today";
 import { cashMoveOf, isTransferIn, round2, partyTypeBucket, PARTY_TYPE_BUCKETS } from "../utils/moneyRules";
 import { BackClose } from "../utils/backNav";
 import { loadPartyCategories, defaultCategories, partyCategoryKeys, catLabel, selectionToPayload } from "../utils/partyCategories";
+
+// Roles & Access (5 Oct 2026) — har button usi tick se chhupta hai jo server
+// maangta hai (routes/finance.js): party = Party YA Finance YA Library row;
+// ledger PDF/Excel = Party YA Finance ka EXPORT.
+const PARTY_ROWS = ["Party", "Finance", "Library"];
+const PARTY_EXPORT_ROWS = ["Party", "Finance"];
 
 // A party holds multiple roles: `roles` is the canonical comma list and
 // `type` is only the primary one. Matching on `type` alone dropped equipment
@@ -1116,6 +1122,8 @@ const ledgerCRDR=(rows)=>({
 // theek pehle ek chhota square "+" — text link neeche latakne se form ki
 // line toot jati thi.
 function AddPartyBtn({onClick}){
+  // Server (/finance/parties) jise mana karega use "+" dikhana hi kyun.
+  if(!canAny(PARTY_ROWS,"create")) return null;
   return (
     <button type="button" onClick={onClick} title={t("finance.nayi_party_library_me_add")}
       style={{width:32,height:32,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",
@@ -3420,10 +3428,11 @@ function ProjectPnlView(){
         <Tile label={t("finance.total_revenue")} val={`₹${fmtN(totals.revenue)}`} sub={t("finance.invoiced_earned_billing")} col={T.grn}/>
         <Tile label={t("finance.total_cost")} val={`₹${fmtN(totals.cost)}`} sub={t("finance.material_subcon_site_equip_transfers")} col={T.amb}/>
         <Tile label={t("finance.net_p_l")} val={fmtS(totals.pnl)} sub={Number(totals.pnl)>=0?t("finance.profit_labh"):t("finance.loss_haani")} col={pnlCol(totals.pnl)}/>
-        <div style={{display:"flex",alignItems:"flex-end",gap:7}}>
+        {/* P&L ka Excel / PDF = Financial Reports EXPORT (5 Oct 2026) */}
+        {can("Financial Reports","export")&&<div style={{display:"flex",alignItems:"flex-end",gap:7}}>
           <button onClick={dlExcel} style={{padding:"7px 12px",borderRadius:7,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:11.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}><IcDown size={13} color={T.grn}/> {t("common.excel")}</button>
           <button onClick={dlPdf}   style={{padding:"7px 12px",borderRadius:7,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:11.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}><IcDown size={13} color={T.red}/> PDF</button>
-        </div>
+        </div>}
       </div>
 
       {/* basis banner */}
@@ -3680,10 +3689,11 @@ function CashDayBook({ accounts=[], view="cashbook", mapRow, reloadKey=0 }){ // 
           <input type="date" value={fFrom} onChange={e=>setFFrom(e.target.value)} style={{...selStyle,width:130}}/>
           <span style={{fontSize:11,color:T.t4}}>to</span>
           <input type="date" value={fTo} onChange={e=>setFTo(e.target.value)} style={{...selStyle,width:130}}/>
-          <div style={{display:"flex",gap:6}}>
+          {/* Cash / Day Book ka Excel / print = Finance EXPORT (5 Oct 2026) */}
+          {can("Finance","export")&&<div style={{display:"flex",gap:6}}>
             <button onClick={dlExcel} style={{display:"flex",alignItems:"center",gap:4,padding:"5px 11px",borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>{t("common.excel")}</button>
             <button onClick={printOut} style={{display:"flex",alignItems:"center",gap:4,padding:"5px 11px",borderRadius:6,background:T.bluL,border:`1px solid ${T.bluM}`,color:T.blu,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>{t("finance.pdf_print")}</button>
-          </div>
+          </div>}
         </div>
       </div>
 
@@ -3790,6 +3800,15 @@ function CashDayBook({ accounts=[], view="cashbook", mapRow, reloadKey=0 }){ // 
 
 function FinanceModule(){
   const [tab,setTab]=useState("party");
+  // Roles & Access (5 Oct 2026): Create = transaction (role ke naam ki shart
+  // nahi), Entry = payment request, Edit = Extend/Close, Approve = PR manzoori,
+  // Export = har Excel / PDF / CSV.
+  const cFinCreate=can("Finance","create");
+  const cFinEdit=can("Finance","edit");
+  const cFinExport=can("Finance","export");
+  const cPrNew=canEntry("Finance");
+  const cPartyCreate=canAny(PARTY_ROWS,"create");
+  const cLedgerExport=canAny(PARTY_EXPORT_ROWS,"export");
   // Animated sliding indicator for the group-toggle (Level-1 nav)
   const groupBarRef=useRef(null);
   const [grpInd,setGrpInd]=useState({left:0,width:0});
@@ -5071,8 +5090,8 @@ Status: ${ledgerRow.status||"unpaid"}`;
               </>)}
             </div>
             {sendStaff&&<SendToStaffModal staff={sendStaff} accounts={apiAccounts} onClose={()=>setSendStaff(null)} onDone={()=>{setSendStaff(null);loadWallets();refreshAccounts();refreshTxns();}}/>}
-            {/* Create Transaction dropdown */}
-            <div style={{position:"relative"}}>
+            {/* Create Transaction dropdown — Finance CREATE */}
+            {cFinCreate&&<div style={{position:"relative"}}>
               <button onClick={()=>setShowCreateTxn(!showCreateTxn)} style={{display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:6,background:T.blu,color:"white",fontSize:11.5,fontWeight:700,border:"none",cursor:"pointer"}}>
                 <IcAdd size={13} color="white"/> {t("finance.create_transaction")} <IcDown size={10} color="white"/>
               </button>
@@ -5118,7 +5137,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
                   ))}
                 </div>
               </>)}
-            </div>
+            </div>}
           </div>
         </div>
         {/* Level 2: sub-tabs of the active group — segmented switch (matches the group toggle) */}
@@ -5221,9 +5240,9 @@ Status: ${ledgerRow.status||"unpaid"}`;
               <div style={{padding:"10px 12px",borderBottom:`1px solid ${T.b1}`,background:T.surfaceB,flexShrink:0}}>
                 <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
                   <span style={{fontSize:13,fontWeight:700,color:T.t1,flex:1}}>{t("finance.parties")} <span style={{fontSize:11,color:T.t4,fontWeight:500}}>· {filteredParties.length}</span></span>
-                  <button onClick={()=>setShowAddParty(true)} style={{height:28,padding:"0 10px",borderRadius:6,background:T.blu,color:"white",border:"none",cursor:"pointer",fontSize:11,fontWeight:700,display:"flex",alignItems:"center",gap:3,flexShrink:0}}>
+                  {cPartyCreate&&<button onClick={()=>setShowAddParty(true)} style={{height:28,padding:"0 10px",borderRadius:6,background:T.blu,color:"white",border:"none",cursor:"pointer",fontSize:11,fontWeight:700,display:"flex",alignItems:"center",gap:3,flexShrink:0}}>
                     <IcAdd size={12} color="white"/> {t("common.party")}
-                  </button>
+                  </button>}
                 </div>
                 <div style={{display:"flex",gap:6,alignItems:"center"}}>
                   <div style={{position:"relative",flex:1}}>
@@ -5329,8 +5348,8 @@ Status: ${ledgerRow.status||"unpaid"}`;
                     <span style={{fontSize:11,color:T.grn,fontWeight:600,whiteSpace:"nowrap"}}>{t("finance.cr_fmtn", { fmtN: fmtN(totalCR) })}</span>
                     <span style={{fontSize:11,color:T.red,fontWeight:600,whiteSpace:"nowrap"}}>{t("finance.dr_fmtn", { fmtN: fmtN(totalDR) })}</span>
                     <span style={{background:chipC.bg,color:chipC.fg,fontSize:11,fontWeight:700,padding:"4px 10px",borderRadius:8,border:`1px solid ${chipC.br}`}}>₹{fmtN(computedBal)} · {balTypeText(computedBalType)}</span>
-                    <button onClick={()=>downloadLedger(selParty,"excel")} disabled={!!ledgerDl} title={t("finance.ledger_dl_hint")} style={{height:28,padding:"0 10px",borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:11,fontWeight:600,cursor:ledgerDl?"wait":"pointer"}}>{ledgerDl==="excel"?t("finance.ledger_dl_working"):t("finance.ledger_dl_excel")}</button>
-                    <button onClick={()=>downloadLedger(selParty,"pdf")} disabled={!!ledgerDl} title={t("finance.ledger_dl_hint")} style={{height:28,padding:"0 10px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:11,fontWeight:600,cursor:ledgerDl?"wait":"pointer"}}>{ledgerDl==="pdf"?t("finance.ledger_dl_working"):t("finance.ledger_dl_pdf")}</button>
+                    {cLedgerExport&&<button onClick={()=>downloadLedger(selParty,"excel")} disabled={!!ledgerDl} title={t("finance.ledger_dl_hint")} style={{height:28,padding:"0 10px",borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:11,fontWeight:600,cursor:ledgerDl?"wait":"pointer"}}>{ledgerDl==="excel"?t("finance.ledger_dl_working"):t("finance.ledger_dl_excel")}</button>}
+                    {cLedgerExport&&<button onClick={()=>downloadLedger(selParty,"pdf")} disabled={!!ledgerDl} title={t("finance.ledger_dl_hint")} style={{height:28,padding:"0 10px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:11,fontWeight:600,cursor:ledgerDl?"wait":"pointer"}}>{ledgerDl==="pdf"?t("finance.ledger_dl_working"):t("finance.ledger_dl_pdf")}</button>}
                     <button onClick={()=>setSelParty(null)} style={{background:"none",border:"none",cursor:"pointer",color:T.t4,display:"flex",padding:3}}><IcX size={16}/></button>
                   </div>
                   {/* Per-party CR/DR/Balance now live as compact chips in the header
@@ -5494,7 +5513,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
                                   }} style={{padding:"4px 10px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:10.5,fontWeight:600,cursor:"pointer"}}>
                                    {t("finance.print_bill")}
                                   </button>
-                                  {txn.status!=="paid"&&<button onClick={()=>openTxn("Payment Made",selParty.name)} style={{padding:"4px 10px",borderRadius:6,background:T.blu,color:"white",border:"none",cursor:"pointer",fontSize:10.5,fontWeight:700}}>{t("finance.pay_now")}</button>}
+                                  {cFinCreate&&txn.status!=="paid"&&<button onClick={()=>openTxn("Payment Made",selParty.name)} style={{padding:"4px 10px",borderRadius:6,background:T.blu,color:"white",border:"none",cursor:"pointer",fontSize:10.5,fontWeight:700}}>{t("finance.pay_now")}</button>}
                                 </div>
                               </div>
                               {/* Line items table */}
@@ -5565,8 +5584,8 @@ Status: ${ledgerRow.status||"unpaid"}`;
                       </>
                     );
                   })()}
-                  {/* ── Integrated action buttons ── */}
-                  <div style={{padding:"9px 14px",borderTop:`1px solid ${T.b1}`,display:"flex",gap:7,flexShrink:0,background:T.surfaceB}}>
+                  {/* ── Integrated action buttons — paise ka kaam = Finance CREATE ── */}
+                  {cFinCreate&&<div style={{padding:"9px 14px",borderTop:`1px solid ${T.b1}`,display:"flex",gap:7,flexShrink:0,background:T.surfaceB}}>
                     <button onClick={()=>openTxn("Payment Received",selParty.name)}
                       style={{flex:1,padding:"7px",borderRadius:6,background:T.grnL,color:T.grn,border:`1px solid ${T.grnM}`,fontSize:11.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:4}}>
                       <IcRecv size={13} color={T.grn}/> {t("finance.payment_received")}
@@ -5588,7 +5607,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
                       style={{flex:1,padding:"7px",borderRadius:6,background:T.bluL,color:T.blu,border:`1px solid ${T.bluM}`,fontSize:11.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:4}}>
                       <IcBillDue size={13} color={T.blu}/> {t("finance.new_bill")}
                     </button>
-                  </div>
+                  </div>}
                 </div>
               );
             })()}
@@ -5635,8 +5654,8 @@ Status: ${ledgerRow.status||"unpaid"}`;
                   <IcUB size={13} color={T.pur}/> {t("common.unbilled")}
                   <span style={{background:T.pur,color:"white",fontSize:9,fontWeight:800,padding:"1px 5px",borderRadius:10}}>{UNBILLED_PARTIES.length}</span>
                 </button>
-                <button onClick={dlTxnCSV} style={{height:31,padding:"0 10px",borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>{t("common.excel")}</button>
-                <button onClick={dlTxnPDF} style={{height:31,padding:"0 10px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>PDF</button>
+                {cFinExport&&<button onClick={dlTxnCSV} style={{height:31,padding:"0 10px",borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>{t("common.excel")}</button>}
+                {cFinExport&&<button onClick={dlTxnPDF} style={{height:31,padding:"0 10px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>PDF</button>}
               </div>
             </div>
 
@@ -5791,11 +5810,12 @@ Status: ${ledgerRow.status||"unpaid"}`;
                 {searchPR&&<button onClick={()=>setSearchPR("")} style={{position:"absolute",right:6,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:T.t4,padding:2,display:"flex",alignItems:"center"}} title={t("common.clear")}><IcX size={12}/></button>}
               </div>
               <div style={{display:"flex",gap:7}}>
-                <button onClick={dlPRcsv} style={{padding:"5px 10px",borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:11,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}><IcDown size={12} color={T.grn}/> {t("common.excel")}</button>
-                <button onClick={dlPRpdf} style={{padding:"5px 10px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:11,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}><IcDown size={12} color={T.red}/> PDF</button>
-                <button onClick={()=>setShowNewPR(true)} style={{padding:"5px 13px",borderRadius:6,background:T.blu,color:"white",border:"none",cursor:"pointer",fontSize:12,fontWeight:700,display:"flex",alignItems:"center",gap:5,boxShadow:`0 2px 6px ${T.blu}44`}}>
+                {cFinExport&&<button onClick={dlPRcsv} style={{padding:"5px 10px",borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:11,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}><IcDown size={12} color={T.grn}/> {t("common.excel")}</button>}
+                {cFinExport&&<button onClick={dlPRpdf} style={{padding:"5px 10px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:11,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}><IcDown size={12} color={T.red}/> PDF</button>}
+                {/* Payment maangna = Finance ENTRY (transition: Entry YA Create) */}
+                {cPrNew&&<button onClick={()=>setShowNewPR(true)} style={{padding:"5px 13px",borderRadius:6,background:T.blu,color:"white",border:"none",cursor:"pointer",fontSize:12,fontWeight:700,display:"flex",alignItems:"center",gap:5,boxShadow:`0 2px 6px ${T.blu}44`}}>
                   <IcAdd size={13} color="white"/> {t("common.new_request")}
-                </button>
+                </button>}
               </div>
             </div>
 
@@ -5891,10 +5911,11 @@ Status: ${ledgerRow.status||"unpaid"}`;
                       {/* Action */}
                       <div style={{display:"flex",gap:4,alignItems:"center",flexWrap:"wrap"}}>
                         {req.status==="pending"&&(<>
-                          <button onClick={()=>{if(isEditing){setEditReqId(null);}else{setEditReqId(req.id);setEditAmt(String(req.amount));setEditReason("");setEditNote("");}}}
+                          {/* "Edit" = rakam badal kar approve karna — wahi Approve tick */}
+                          {canApproveAction({perm:["Finance","approve"]})&&<button onClick={()=>{if(isEditing){setEditReqId(null);}else{setEditReqId(req.id);setEditAmt(String(req.amount));setEditReason("");setEditNote("");}}}
                             style={{padding:"4px 7px",borderRadius:5,background:isEditing?T.bluL:T.sltL,color:isEditing?T.blu:T.t3,border:`1px solid ${isEditing?T.blu:T.b1}`,fontSize:10,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:3}}>
                             <IcEdit size={10} color="currentColor"/> {t("common.edit_2")}
-                          </button>
+                          </button>}
                           {/* ✓/✗ sirf usko jiske paas Finance ka approve hai —
                               server bhi isi ko maanta hai (requirePerm). */}
                           {canApproveAction({perm:["Finance","approve"]})&&<>
@@ -5977,8 +5998,8 @@ Status: ${ledgerRow.status||"unpaid"}`;
                 {searchPend&&<button onClick={()=>setSearchPend("")} style={{position:"absolute",right:6,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:T.t4,padding:2,display:"flex",alignItems:"center"}} title={t("common.clear")}><IcX size={12}/></button>}
               </div>
               <div style={{display:"flex",gap:7,alignItems:"center"}}>
-                <button onClick={dlPendCSV} style={{padding:"5px 10px",borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:11,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}><IcDown size={12} color={T.grn}/> {t("common.excel")}</button>
-                <button onClick={dlPendPDF} style={{padding:"5px 10px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:11,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}><IcDown size={12} color={T.red}/> PDF</button>
+                {cFinExport&&<button onClick={dlPendCSV} style={{padding:"5px 10px",borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:11,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}><IcDown size={12} color={T.grn}/> {t("common.excel")}</button>}
+                {cFinExport&&<button onClick={dlPendPDF} style={{padding:"5px 10px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:11,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}><IcDown size={12} color={T.red}/> PDF</button>}
               </div>
             </div>
 
@@ -6092,6 +6113,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
                         if(pmt.type==="settlement"){
                           // Phase 1: settlement is visible + payable-pending. The actual
                           // Pay routing (vendor cash + against-party contra) is Phase 2.
+                          if(!cFinCreate) return null;
                           return (
                             <button onClick={()=>{ setSettleAcct(""); setSettleDate(todayISO()); setSettleMop("Cash"); setSettleNote(""); setSettlePay(pmt); }}
                               title={t("finance.record_payment")}
@@ -6116,28 +6138,31 @@ Status: ${ledgerRow.status||"unpaid"}`;
                           } catch(e) { window.alert(e?.message||"Network error"); }
                         };
                         const onClose = async ()=>{
-                          if (!await window.confirmAsync(`Close ${pmt.no} without paying?\n\nThis removes it from Pending Payments. The original ${sourceKind==="pr"?"request":"bill"} record stays in history.`)) return;
+                          // Bina payment band = cancel — wajah zaroori (server 3 akshar se kam par 400).
+                          const reason = await window.promptAsync({ message: t("finance.close_reason_prompt", { no: pmt.no }), multiline: true, cancelLabel: t("common.cancel") });
+                          if (reason == null) return;
+                          if (String(reason).trim().length < 3) { window.alert(t("transaction_detail.delete_reason_short")); return; }
                           try {
-                            const r = await api.post(`/finance/pending-payments/${sourceKind}/${sourceId}/close`, {});
+                            const r = await api.post(`/finance/pending-payments/${sourceKind}/${sourceId}/close`, { reason: String(reason).trim() });
                             if (r?.success===false) { window.alert(r.message||"Close failed"); return; }
                             refresh();
                           } catch(e) { window.alert(e?.message||"Network error"); }
                         };
                         return (
                           <div style={{display:"flex",gap:4,alignItems:"center"}}>
-                            <button onClick={()=>openTxn("Payment Made",pmt.party,null,{kind:sourceKind,id:sourceId,amount:pmt.amount,label:pmt.no})}
+                            {cFinCreate&&<button onClick={()=>openTxn("Payment Made",pmt.party,null,{kind:sourceKind,id:sourceId,amount:pmt.amount,label:pmt.no})}
                               title={t("finance.record_payment")}
                               style={{padding:"5px 9px",borderRadius:5,background:T.blu,color:"white",border:"none",cursor:"pointer",fontSize:10.5,fontWeight:700,display:"flex",alignItems:"center",gap:3}}>
                               <IcSend size={9} color="white"/> {t("finance.pay")}
-                            </button>
-                            <button onClick={onExtend} title={t("finance.extend_due_date")}
+                            </button>}
+                            {cFinEdit&&<button onClick={onExtend} title={t("finance.extend_due_date")}
                               style={{padding:"5px 7px",borderRadius:5,background:T.ambL,color:T.amb,border:`1px solid ${T.ambM}`,cursor:"pointer",fontSize:10.5,fontWeight:700,display:"flex",alignItems:"center"}}>
                               <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round"><path d="M19 4H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V6a2 2 0 00-2-2zM16 2v4M8 2v4M3 10h18M12 14v4M10 16h4"/></svg>
-                            </button>
-                            <button onClick={onClose} title={t("finance.close_without_paying")}
+                            </button>}
+                            {cFinEdit&&<button onClick={onClose} title={t("finance.close_without_paying")}
                               style={{padding:"5px 7px",borderRadius:5,background:T.surfaceB,color:T.t3,border:`1px solid ${T.b1}`,cursor:"pointer",fontSize:10.5,fontWeight:700,display:"flex",alignItems:"center"}}>
                               <IcX size={11} color={T.t3}/>
-                            </button>
+                            </button>}
                           </div>
                         );
                       })()}
@@ -6361,13 +6386,18 @@ Status: ${ledgerRow.status||"unpaid"}`;
                   {/* Actions */}
                   {!isEditingRoute && (
                     <div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:12,flexWrap:"wrap"}}>
-                      {/* Rate ka faisla server par admin / super_admin / PM
-                          tak seemit hai (requireRole) — baaki ke liye button
-                          hi nahi (dabane par 403 milta tha), sirf batate hain
-                          ki kiska intezaar hai. */}
-                      {isRateBlocking && !canApproveAction({roles:["admin","super_admin","project_manager"]}) ? (
+                      {/* Roles & Access (5 Oct 2026, faisla 3): rate ka faisla
+                          Equipment row se hat kar Finance → CREATE (strict) par —
+                          baaki ke liye button hi nahi, sirf batate hain ki kiska
+                          intezaar hai. Confirm / route badlo = Equipment APPROVE
+                          (strict) ya purane role (admin / PM / accountant). */}
+                      {isRateBlocking && !canAny("Finance","create",{strict:true}) ? (
                         <span style={{fontSize:11.5,color:T.t4}}>
-                          ⏳ {t("projects.waiting_on")} {t("projects.admin_or_pm")}
+                          ⏳ {t("finance.rate_waiting_finance_create")}
+                        </span>
+                      ) : (!isRateBlocking && !(canAny("Equipment","approve",{strict:true}) || canApproveAction({roles:["admin","super_admin","project_manager","accountant"]}))) ? (
+                        <span style={{fontSize:11.5,color:T.t4}}>
+                          ⏳ {t("finance.confirm_waiting_equipment_approve")}
                         </span>
                       ) : isRateBlocking ? (
                         <>
@@ -6686,11 +6716,11 @@ Status: ${ledgerRow.status||"unpaid"}`;
                             <span style={{fontSize:11.5,color:T.t3}}>
                               {selectedInGrp>0?`${selectedInGrp} item${selectedInGrp===1?"":"s"} ticked — bill banayenge`:t("finance.select_items_above_to_bill_them")}
                             </span>
-                            <button disabled={selectedInGrp===0}
+                            {cFinCreate&&<button disabled={selectedInGrp===0}
                               onClick={()=>handleCreateBill(grp.vendor)}
                               style={{padding:"7px 16px",borderRadius:7,background:selectedInGrp>0?T.blu:T.t4,color:"white",border:"none",cursor:selectedInGrp>0?"pointer":"not-allowed",fontSize:12,fontWeight:700,opacity:selectedInGrp>0?1:0.55,display:"flex",alignItems:"center",gap:5,whiteSpace:"nowrap"}}>
                              {t("finance.create_bill")}
-                            </button>
+                            </button>}
                           </div>
                         </div>
                       )}
@@ -6825,7 +6855,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
                     ))}
                     <div style={{display:"flex",justifyContent:"space-between",marginTop:8,alignItems:"center"}}>
                       <span style={{fontSize:11.5,fontWeight:700,color:T.t1}}>{t("finance.total_fmtn", { fmtN: fmtN(p.billItems.reduce((s,i)=>s+i.amt,0)) })}</span>
-                      <button onClick={()=>openTxn("Material Purchase Bill",p.name)} style={{padding:"5px 12px",borderRadius:6,background:T.blu,color:"white",border:"none",cursor:"pointer",fontSize:11,fontWeight:700}}>{t("finance.create_bill_2")}</button>
+                      {cFinCreate&&<button onClick={()=>openTxn("Material Purchase Bill",p.name)} style={{padding:"5px 12px",borderRadius:6,background:T.blu,color:"white",border:"none",cursor:"pointer",fontSize:11,fontWeight:700}}>{t("finance.create_bill_2")}</button>}
                     </div>
                   </div>
                 )}

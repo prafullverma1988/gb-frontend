@@ -6,6 +6,7 @@ import { T, fmtN } from "../shared/tokens";
 import { Pill, Panel, AddBtn } from "../shared/ui";
 import { t } from "../../i18n";
 import { txnIsCleared, isTransferIn, round2 } from "../../utils/moneyRules";
+import { can, canAny } from "../../utils/perms";
 
 const D = { invoices:[] };
 // Shared grid template so the header and every row column stay aligned.
@@ -97,6 +98,12 @@ function TabTransaction({projectId, projectName}) {
   // (Finance VIEW nahi / error) — tab tile "—" dikhata hai, galat rakam nahi.
   const [billDue, setBillDue] = useState(null);
 
+  // Roles & Access (5 Oct 2026) — "Fin Activity" row sirf dekhne ki; kaam Finance
+  // row se. "Add Transaction" = Finance CREATE (server bhi wahi maangta hai);
+  // Unpaid Bills (pending-payments) = Fin Activity YA Finance VIEW.
+  const canAddTxn = can("Finance","create");
+  const canPending = canAny(["Transaction","Finance"],"view");
+
   const reload = useCallback(()=>{
     if(!projectId) return;
     Promise.all([
@@ -104,7 +111,7 @@ function TabTransaction({projectId, projectName}) {
       api.get("/finance/accounts"),
       api.get("/projects"),
       api.get("/finance/transactions?project_id=" + projectId + "&limit=2000"),
-      api.get("/finance/pending-payments"),
+      canPending ? api.get("/finance/pending-payments") : Promise.resolve(null),
     ]).then(([pRes,aRes,prRes,tRes,pdRes])=>{
       const pend = (pdRes?.success&&Array.isArray(pdRes.data)) ? pdRes.data : null;
       setBillDue(pend ? Object.fromEntries(pend.filter(p=>p.type==="bill").map(p=>[String(p.id), Number(p.amount)||0])) : null);
@@ -125,7 +132,7 @@ function TabTransaction({projectId, projectName}) {
       if(aRes?.success&&Array.isArray(aRes.data))   setTxnAccounts(aRes.data);
       if(prRes?.success&&Array.isArray(prRes.data)) setTxnProjects(prRes.data.map(p=>p.name));
     }).catch(()=>{});
-  },[projectId]);
+  },[projectId, canPending]);
 
   useEffect(()=>{ reload(); },[reload]);
 
@@ -225,7 +232,7 @@ function TabTransaction({projectId, projectName}) {
             {t("common.more")}{activeFilters>0&&<span style={{background:T.blu,color:"white",fontSize:9,fontWeight:800,padding:"0 5px",borderRadius:10}}>{activeFilters}</span>}
           </button>
           {/* Add Transaction dropdown */}
-          <div style={{position:"relative"}}>
+          {canAddTxn&&<div style={{position:"relative"}}>
             <AddBtn label={t("transaction.add_transaction")} onClick={()=>setShowCreateTxn(v=>!v)}/>
             {showCreateTxn&&(<>
               <div onClick={()=>setShowCreateTxn(false)} style={{position:"fixed",inset:0,zIndex:140}}/>
@@ -270,7 +277,7 @@ function TabTransaction({projectId, projectName}) {
                 ))}
               </div>
             </>)}
-          </div>
+          </div>}
           {activeFilters>0&&<button onClick={clearAll} style={{fontSize:11,color:T.red,background:T.redL,border:`1px solid ${T.redM}`,borderRadius:5,padding:"3px 9px",cursor:"pointer"}}>{t("finance.clear")}</button>}
         </div>
 

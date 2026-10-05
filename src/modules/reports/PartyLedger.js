@@ -4,6 +4,7 @@ import { T } from "../shared/tokens";
 import { t } from "../../i18n";
 import { companyName } from "../../utils/companyName";
 import { downloadLedgerExcel, downloadLedgerPdf, fromApiRow, statusText } from "../../utils/partyLedgerDownload";
+import { can, canAny } from "../../utils/perms";
 
 // ── Reports → Party Ledger ──────────────────────────────────────
 // Kisi bhi party ka statement file me — party dhoondho, tareekh do, Excel ya
@@ -106,6 +107,9 @@ export default function PartyLedger() {
               <label style={{ fontSize: 11.5, color: T.t3 }}>{t("reports.pl_to")}</label>
               <input type="date" value={to} onChange={(e) => setTo(e.target.value)} style={inp} />
             </div>
+            {/* Statement = EXPORT (5 Oct 2026): Reports EXPORT + server ka Party YA
+                Finance EXPORT (GET /finance/parties/:id/ledger.pdf). Na ho to batao kyon. */}
+            {can("Reports", "export") && canAny(["Party", "Finance"], "export") ? (
             <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
               <button onClick={() => run("excel")} disabled={!!busy} style={btn(T.grn, T.grnL, T.grnM)}>
                 {busy === "excel" ? t("finance.ledger_dl_working") : t("finance.ledger_dl_excel")}
@@ -114,6 +118,9 @@ export default function PartyLedger() {
                 {busy === "pdf" ? t("finance.ledger_dl_working") : t("finance.ledger_dl_pdf")}
               </button>
             </div>
+            ) : (
+              <div style={{ fontSize: 12, color: T.t3, marginTop: 14 }}>{t("reports.pl_no_export")}</div>
+            )}
             <div style={{ fontSize: 11.5, color: T.t4, marginTop: 12, lineHeight: 1.5 }}>{t("reports.pl_hint")}</div>
           </>
         )}

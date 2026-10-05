@@ -5,9 +5,20 @@ import SearchSelect from "../../components/SearchSelect";
 import { T, localYMD } from "../shared/tokens";
 import { canApproveAction, approverRolesFor } from "../../utils/approvalAuthority";
 import { t, Rich } from "../../i18n";
-import { can, currentUser } from "../../utils/perms";
+import { can, canAny, currentUser } from "../../utils/perms";
 
 function TabSubcon({ projectId, project }) {
+  // Roles & Access (5 Oct 2026) — buttons usi Subcon tick se jo server
+  // (routes/subcon.js) maangta hai:
+  //   Create = WO / RA bill / schedule / auto-bill sweep;  Edit = WO edit,
+  //   bill submit/edit, ledger me bhejna, billing method, task link;
+  //   Delete = RA bill (wajah ke saath) / schedule / task unlink;
+  //   Approve = RA bill + WO amendment ka Approve / Reject (+ chain ki baari);
+  //   Export = WO / RA bill ka print-PDF.
+  const sCreate = can("Subcon", "create");
+  const sEdit = can("Subcon", "edit");
+  const sDelete = can("Subcon", "delete");
+  const sExport = can("Subcon", "export");
   const [wos, setWos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selWo, setSelWo] = useState(null);
@@ -374,7 +385,7 @@ function TabSubcon({ projectId, project }) {
       <div style={{width:220,borderRight:"1px solid "+T.b1,background:T.surfaceB,flexShrink:0}}>
         <div style={{padding:"10px 12px",borderBottom:"1px solid "+T.b1,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
           <span style={{fontSize:11,fontWeight:700,color:T.t1}}>{t("subcon.work_orders_wos", { wos: wos.length })}</span>
-          <button onClick={()=>setShowNewWO(true)} style={{background:T.blu,color:"white",border:"none",borderRadius:5,padding:"4px 8px",fontSize:10,fontWeight:700,cursor:"pointer"}}>{t("subcon.new")}</button>
+          {sCreate&&<button onClick={()=>setShowNewWO(true)} style={{background:T.blu,color:"white",border:"none",borderRadius:5,padding:"4px 8px",fontSize:10,fontWeight:700,cursor:"pointer"}}>{t("subcon.new")}</button>}
         </div>
         {loading&&<div style={{textAlign:"center",padding:"60px 0",color:T.t4}}><div style={{width:28,height:28,border:"3px solid #E2E8F0",borderTopColor:"#3B82F6",borderRadius:"50%",animation:"spin 0.8s linear infinite",margin:"0 auto 12px"}}></div>{t("common.loading")}</div>}
         {!loading&&wos.length===0&&<div style={{padding:"24px 12px",textAlign:"center",color:T.t4,fontSize:12}}>{t("subcon.no_work_orders_yet")}</div>}
@@ -445,10 +456,11 @@ function TabSubcon({ projectId, project }) {
                     <div style={{fontSize:13,fontWeight:800,color:s.c}}>{s.v}</div>
                   </div>
                 ))}
-                <button onClick={()=>setShowEditWO(true)}
+                {/* WO "Edit" asal me amendment banata hai (POST …/amendment = Subcon CREATE) */}
+                {sCreate&&<button onClick={()=>setShowEditWO(true)}
                   style={{background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.2)",color:"white",borderRadius:6,padding:"5px 12px",fontSize:11,fontWeight:600,cursor:"pointer",flexShrink:0}}>
                  {t("common.edit")}
-                </button>
+                </button>}
               </div>
             </div>
           </div>
@@ -473,7 +485,7 @@ function TabSubcon({ projectId, project }) {
               {selWo?.billing_method === "milestone_rate" && (
                 <button onClick={async()=>{
                     await loadLinkedTasksSub(selWo.id);
-                    if (selWo.auto_bill_on_complete) {
+                    if (selWo.auto_bill_on_complete && sCreate) {
                       const sw = await api.post("/subcon/wo/"+selWo.id+"/auto-bill-sweep").catch(()=>({success:false}));
                       if (sw?.success && sw.data?.created?.length > 0) {
                         alert(sw.data.created.length + " draft RA bill(s) created for eligible milestones. Review in RA Bills tab.");
@@ -486,7 +498,7 @@ function TabSubcon({ projectId, project }) {
                   {linkedTasksLoading ? t("estimate.refreshing") : t("estimate.refresh_progress")}
                 </button>
               )}
-              <button onClick={async()=>{
+              {sEdit&&<button onClick={async()=>{
                   const next = !selWo.auto_bill_on_complete;
                   if (next && !await window.confirmAsync(
                     t("subcon.turn_on_auto_billing_when_a")
@@ -494,7 +506,7 @@ function TabSubcon({ projectId, project }) {
                   const r = await api.patch("/subcon/wo/"+selWo.id+"/auto-bill", { enabled: next }).catch(()=>({success:false}));
                   if (!r?.success) { alert(r?.message || "Failed"); return; }
                   setSelWo(p => p ? { ...p, auto_bill_on_complete: next ? 1 : 0 } : p);
-                  if (next) {
+                  if (next && sCreate) {
                     const sw = await api.post("/subcon/wo/"+selWo.id+"/auto-bill-sweep").catch(()=>({success:false}));
                     if (sw?.success && sw.data?.created?.length > 0) {
                       alert("Auto-billing ON.\n\n" + sw.data.created.length + " draft RA bill(s) created for already-eligible milestones.");
@@ -507,8 +519,8 @@ function TabSubcon({ projectId, project }) {
                   color:      selWo?.auto_bill_on_complete ? "#15803D" : T.t3,
                   border:"1px solid " + (selWo?.auto_bill_on_complete ? "#86EFAC" : T.b1),
                   borderRadius:14,padding:"4px 10px",fontSize:10.5,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:5,marginRight:4,
-                }}>{t("subcon.auto_bill_selwo", { selWo: selWo?.auto_bill_on_complete ? "ON" : "OFF" })}</button>
-              <div style={{position:"relative",marginRight:8}}>
+                }}>{t("subcon.auto_bill_selwo", { selWo: selWo?.auto_bill_on_complete ? "ON" : "OFF" })}</button>}
+              {(sCreate||sEdit)&&<div style={{position:"relative",marginRight:8}}>
                 <button onClick={()=>setMsChooserOpen(o=>!o)}
                   style={{background:T.bluL,color:T.blu,border:"1px solid "+T.bluM,borderRadius:5,padding:"5px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>
                  {t("estimate.set_schedule")}
@@ -519,19 +531,19 @@ function TabSubcon({ projectId, project }) {
                     <div style={{padding:"8px 12px",fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",borderBottom:"1px solid "+T.b1,background:T.surfaceB}}>
                      {t("estimate.choose_billing_mode")}
                     </div>
-                    <div onClick={()=>{ setMsForm(p=>({...p,kind:"rate",wo_item_id:null})); setShowSetMs(true); setMsChooserOpen(false); }}
+                    {sCreate&&(sEdit||selWo.billing_method==="milestone_rate")&&<div onClick={()=>{ setMsForm(p=>({...p,kind:"rate",wo_item_id:null})); setShowSetMs(true); setMsChooserOpen(false); }}
                       style={{padding:"10px 12px",cursor:"pointer",borderBottom:"1px solid "+T.b1}}
                       onMouseEnter={e=>e.currentTarget.style.background="#EFF6FF"} onMouseLeave={e=>e.currentTarget.style.background="white"}>
                       <div style={{fontSize:12,fontWeight:700,color:T.t1}}>{t("estimate.item_wise")}</div>
                       <div style={{fontSize:10.5,color:T.t3,marginTop:2}}>{t("subcon.define_billing_stages_per_wo_item")}</div>
-                    </div>
-                    <div onClick={()=>{ setMsForm(p=>({...p,kind:"percent"})); setShowSetMs(true); setMsChooserOpen(false); }}
+                    </div>}
+                    {sCreate&&(sEdit||selWo.billing_method==="milestone_percent")&&<div onClick={()=>{ setMsForm(p=>({...p,kind:"percent"})); setShowSetMs(true); setMsChooserOpen(false); }}
                       style={{padding:"10px 12px",cursor:"pointer",borderBottom:"1px solid "+T.b1}}
                       onMouseEnter={e=>e.currentTarget.style.background="#EFF6FF"} onMouseLeave={e=>e.currentTarget.style.background="white"}>
                       <div style={{fontSize:12,fontWeight:700,color:T.t1}}>{t("subcon.of_wo_value")}</div>
                       <div style={{fontSize:10.5,color:T.t3,marginTop:2}}>{t("subcon.define_milestones_as_of_total_wo")}</div>
-                    </div>
-                    <div onClick={async()=>{
+                    </div>}
+                    {sEdit&&<div onClick={async()=>{
                         setMsChooserOpen(false);
                         // Already manual: earlier this click silently did nothing.
                         // Manual has no stages to set — say how to bill and go there.
@@ -548,10 +560,10 @@ function TabSubcon({ projectId, project }) {
                       onMouseEnter={e=>e.currentTarget.style.background="#FAF5FF"} onMouseLeave={e=>e.currentTarget.style.background="white"}>
                       <div style={{fontSize:12,fontWeight:700,color:T.t1}}>{t("subcon.manual_cumulative")}</div>
                       <div style={{fontSize:10.5,color:T.t3,marginTop:2}}>{t("subcon.no_preset_stages_bill_cumulative_qty")}</div>
-                    </div>
+                    </div>}
                   </div>
                 </>)}
-              </div>
+              </div>}
             </>)}
           </div>
 
@@ -628,10 +640,10 @@ function TabSubcon({ projectId, project }) {
                             {boqQty > 0 && <span style={{fontSize:10.5,color:T.t4,marginLeft:8}}>{t("subcon.boqqty_leditem_fmtc_unit_fmtc2", { boqQty, ledItem: ledItem?.unit||"", fmtC: fmtC(boqRate), fmtC2: fmtC(boqValue) })}</span>}
                           </div>
                           <div style={{display:"flex",gap:5}}>
-                            <button onClick={()=>{ setMsForm(p=>({...p,kind:"rate",wo_item_id:item_id})); setShowSetMs(true); }} title={t("estimate.edit_schedule")}
-                              style={{background:"white",border:"1px solid "+T.b1,color:T.t2,borderRadius:5,width:24,height:24,fontSize:11,cursor:"pointer",lineHeight:1}}>✎</button>
-                            <button onClick={()=>deleteRateScheduleSub(item_id, itemDesc)} title={t("common.delete")}
-                              style={{background:T.redL,border:"1px solid "+T.redM,color:T.red,borderRadius:5,width:24,height:24,fontSize:11,cursor:"pointer",lineHeight:1}}>🗑</button>
+                            {sCreate&&<button onClick={()=>{ setMsForm(p=>({...p,kind:"rate",wo_item_id:item_id})); setShowSetMs(true); }} title={t("estimate.edit_schedule")}
+                              style={{background:"white",border:"1px solid "+T.b1,color:T.t2,borderRadius:5,width:24,height:24,fontSize:11,cursor:"pointer",lineHeight:1}}>✎</button>}
+                            {sDelete&&<button onClick={()=>deleteRateScheduleSub(item_id, itemDesc)} title={t("common.delete")}
+                              style={{background:T.redL,border:"1px solid "+T.redM,color:T.red,borderRadius:5,width:24,height:24,fontSize:11,cursor:"pointer",lineHeight:1}}>🗑</button>}
                           </div>
                         </div>
                         {/* Billed / Remaining progress */}
@@ -707,9 +719,9 @@ function TabSubcon({ projectId, project }) {
                                       <span style={{color:linked.eligible?"#15803D":T.t3,fontWeight:500}}>{t("subcon.progress_trigger_trigger_pct", { progress: linked.progress, trigger_pct: linked.trigger_pct })}</span>
                                       {linked.eligible&&<span style={{fontSize:10}}>{t("estimate.ready_to_bill")}</span>}
                                     </span>
-                                    <button onClick={()=>openTaskPickerSub(m.id)} style={{background:"none",border:"none",color:T.t3,fontSize:11,cursor:"pointer",padding:"0 4px"}}>✎</button>
-                                    <button onClick={()=>unlinkTaskSub(m.id)} style={{background:"none",border:"none",color:T.red,fontSize:12,cursor:"pointer",padding:"0 4px"}}>×</button>
-                                  </>) : (
+                                    {sEdit&&<button onClick={()=>openTaskPickerSub(m.id)} style={{background:"none",border:"none",color:T.t3,fontSize:11,cursor:"pointer",padding:"0 4px"}}>✎</button>}
+                                    {sDelete&&<button onClick={()=>unlinkTaskSub(m.id)} style={{background:"none",border:"none",color:T.red,fontSize:12,cursor:"pointer",padding:"0 4px"}}>×</button>}
+                                  </>) : sEdit&&(
                                     <button onClick={()=>openTaskPickerSub(m.id)}
                                       style={{background:"transparent",border:"1px dashed "+T.b1,color:T.t3,borderRadius:14,padding:"3px 10px",fontSize:10.5,fontWeight:600,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:4}}>
                                      {t("estimate.link_to_task")}
@@ -800,10 +812,10 @@ function TabSubcon({ projectId, project }) {
                       <div style={{fontSize:12.5,fontWeight:700,color:T.t1}}>{t("subcon.payment_milestones_of_wo_value")}</div>
                       {woMilestones.percent.length > 0 && (
                         <div style={{display:"flex",gap:5}}>
-                          <button onClick={()=>{ setMsForm(p=>({...p,kind:"percent"})); setShowSetMs(true); }} title={t("common.edit_2")}
-                            style={{background:"white",border:"1px solid "+T.b1,color:T.t2,borderRadius:5,width:26,height:26,fontSize:12,cursor:"pointer",lineHeight:1}}>✎</button>
-                          <button onClick={deletePercentScheduleSub} title={t("common.delete")}
-                            style={{background:T.redL,border:"1px solid "+T.redM,color:T.red,borderRadius:5,width:26,height:26,fontSize:12,cursor:"pointer",lineHeight:1}}>🗑</button>
+                          {sCreate&&<button onClick={()=>{ setMsForm(p=>({...p,kind:"percent"})); setShowSetMs(true); }} title={t("common.edit_2")}
+                            style={{background:"white",border:"1px solid "+T.b1,color:T.t2,borderRadius:5,width:26,height:26,fontSize:12,cursor:"pointer",lineHeight:1}}>✎</button>}
+                          {sDelete&&<button onClick={deletePercentScheduleSub} title={t("common.delete")}
+                            style={{background:T.redL,border:"1px solid "+T.redM,color:T.red,borderRadius:5,width:26,height:26,fontSize:12,cursor:"pointer",lineHeight:1}}>🗑</button>}
                         </div>
                       )}
                     </div>
@@ -849,7 +861,7 @@ function TabSubcon({ projectId, project }) {
             {/* RA BILLS TAB */}
             {subTab==="bills"&&(
               <div>
-                <div style={{display:"flex",justifyContent:"flex-end",gap:8,marginBottom:12}}>
+                {sCreate&&<div style={{display:"flex",justifyContent:"flex-end",gap:8,marginBottom:12}}>
                   <button onClick={()=>{setManualBillForm({bill_date:localYMD(),remark:"",items:[{description:"",qty:"",rate:""}]});setShowManualRaBill(true);}}
                     style={{background:"white",color:"#7C3AED",border:"2px dashed #7C3AED",borderRadius:6,padding:"7px 14px",fontSize:12,fontWeight:700,cursor:"pointer"}}>
                    {t("subcon.manual_bill")}
@@ -858,7 +870,7 @@ function TabSubcon({ projectId, project }) {
                     style={{background:T.blu,color:"white",border:"none",borderRadius:6,padding:"7px 14px",fontSize:12,fontWeight:700,cursor:"pointer"}}>
                    {t("subcon.new_ra_bill")}
                   </button>
-                </div>
+                </div>}
                 {bills.length===0&&<div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>{t("subcon.no_bills_raised_yet")}</div>}
                 {bills.map(b=>{
                   const stC=b.status==="Paid"?T.grn:b.status==="Approved"?T.blu:b.status==="Submitted"?T.amb:b.status==="Draft"?"#7C3AED":T.t4;
@@ -905,17 +917,18 @@ function TabSubcon({ projectId, project }) {
                       {b.ledger_missing && (
                         <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:8,padding:"7px 10px",borderRadius:6,background:"#FEF2F2",border:"1px solid #FCA5A5",fontSize:11,color:"#991B1B",lineHeight:1.45}}>
                           <span style={{flex:1,minWidth:200}}>{t("subcon.ledger_missing")}</span>
-                          {canApproveAction({perm:["Subcon","edit"]}) && (
+                          {sEdit && (
                             <button onClick={()=>sendBillToLedger(b)} style={{padding:"5px 10px",borderRadius:5,background:"#DC2626",color:"white",border:"none",fontSize:11,fontWeight:700,cursor:"pointer"}}>{t("subcon.send_to_ledger")}</button>
                           )}
                         </div>
                       )}
                       <div style={{display:"flex",gap:8,marginBottom:8,flexWrap:"wrap"}}>
-                        {b.status==="Draft"&&<button onClick={()=>billAction(()=>api.patch("/subcon/ra-bills/"+b.id+"/status",{status:"Submitted"}))} style={{flex:1,minWidth:100,padding:"6px",borderRadius:5,background:T.blu,color:"white",border:"none",fontSize:11,fontWeight:700,cursor:"pointer"}}>{t("estimate.confirm_submit")}</button>}
-                        {b.status==="Rejected"&&<button onClick={()=>billAction(()=>api.patch("/subcon/ra-bills/"+b.id+"/status",{status:"Submitted"}))} style={{flex:1,minWidth:100,padding:"6px",borderRadius:5,background:T.blu,color:"white",border:"none",fontSize:11,fontWeight:700,cursor:"pointer"}}>{t("subcon.resubmit_bill")}</button>}
-                        {/* RA bill approve — server par requirePerm("Subcon","edit"). On
-                            approval the net payable goes to the subcon's party ledger. */}
-                        {b.status==="Submitted"&&canApproveAction({perm:["Subcon","edit"]})&&<button onClick={async()=>{
+                        {sEdit&&b.status==="Draft"&&<button onClick={()=>billAction(()=>api.patch("/subcon/ra-bills/"+b.id+"/status",{status:"Submitted"}))} style={{flex:1,minWidth:100,padding:"6px",borderRadius:5,background:T.blu,color:"white",border:"none",fontSize:11,fontWeight:700,cursor:"pointer"}}>{t("estimate.confirm_submit")}</button>}
+                        {sEdit&&b.status==="Rejected"&&<button onClick={()=>billAction(()=>api.patch("/subcon/ra-bills/"+b.id+"/status",{status:"Submitted"}))} style={{flex:1,minWidth:100,padding:"6px",borderRadius:5,background:T.blu,color:"white",border:"none",fontSize:11,fontWeight:700,cursor:"pointer"}}>{t("subcon.resubmit_bill")}</button>}
+                        {/* RA bill approve — server par Subcon APPROVE (5 Oct 2026; pehle
+                            EDIT) + chain ki baari. On approval the net payable goes to
+                            the subcon's party ledger. */}
+                        {b.status==="Submitted"&&canApproveAction({perm:["Subcon","approve"],workflow:"RA Bill"})&&<button onClick={async()=>{
                             const r = await billAction(()=>api.patch("/subcon/ra-bills/"+b.id+"/status",{status:"Approved"}));
                             // Multi-level: after level 1 the bill is still "Submitted" —
                             // the engine's message says whose turn is next.
@@ -923,7 +936,7 @@ function TabSubcon({ projectId, project }) {
                             apiCache.refreshApprovals();
                           }} style={{flex:1,minWidth:100,padding:"6px",borderRadius:5,background:T.blu,color:"white",border:"none",fontSize:11,fontWeight:700,cursor:"pointer"}}>{t("common.approve")}</button>}
                         {/* Edit + Delete — not once a payment is settled against it */}
-                        {b.status!=="Paid"&&!(Number(b.paid_amount)>0.005)&&(
+                        {sEdit&&b.status!=="Paid"&&!(Number(b.paid_amount)>0.005)&&(
                           <button onClick={async()=>{
                               // Load bill items for editing
                               const r = await api.get("/subcon/ra-bills/"+b.id);
@@ -936,10 +949,13 @@ function TabSubcon({ projectId, project }) {
                            {t("subcon.edit")}
                           </button>
                         )}
-                        {b.status!=="Paid"&&!(Number(b.paid_amount)>0.005)&&(
+                        {sDelete&&b.status!=="Paid"&&!(Number(b.paid_amount)>0.005)&&(
                           <button onClick={async()=>{
-                              if(!await window.confirmAsync(t("subcon.delete_bill_no_this_will_permanently", { bill_no: b.bill_no }))) return;
-                              const res = await api.del("/subcon/ra-bills/"+b.id);
+                              // Bill paise ka record — wajah zaroori, bill + lines audit me (5 Oct 2026)
+                              const reason = await window.promptAsync({ message: t("subcon.ra_delete_reason_prompt", { bill_no: b.bill_no }), multiline: true, cancelLabel: t("common.cancel") });
+                              if (reason == null) return;
+                              if (String(reason).trim().length < 3) { alert(t("estimate.reason_min_3")); return; }
+                              const res = await api.del("/subcon/ra-bills/"+b.id+"?reason="+encodeURIComponent(String(reason).trim()));
                               if(res.success){
                                 reloadWo(); // reload bills
                               } else {
@@ -3230,11 +3246,12 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
                     </option>
                   ))}
                 </datalist>
-                <button type="button" onClick={()=>setShowAddSc(true)}
+                {/* Naya subcontractor = POST /library/subcontractors (Library YA Subcon CREATE) */}
+                {canAny(["Library","Subcon"],"create")&&<button type="button" onClick={()=>setShowAddSc(true)}
                   title={t("subcon.add_new_subcontractor_to_master_library")}
                   style={{padding:"0 10px",borderRadius:6,border:`1.5px solid ${T.blu}`,background:T.bluL,color:T.blu,fontSize:11,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}>
                  {t("subcon.new")}
-                </button>
+                </button>}
               </div>
               {/* Labour strength chip — appears when typed name matches a library entry */}
               {matchedSubcon && (
@@ -3358,7 +3375,8 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
         {/* Footer */}
         <div style={{padding:"12px 20px",borderTop:"1px solid #E5E7EB",display:"flex",gap:8,flexShrink:0,alignItems:"center",background:"white"}}>
           {/* PDF download — only in package builder mode */}
-          {pkgBuilderMode && (
+          {/* Print / PDF = Subcon EXPORT (5 Oct 2026) */}
+          {pkgBuilderMode && can("Subcon","export") && (
             <button onClick={()=>window.print()} title={t("subcon.download_pdf_of_current_view")}
               style={{padding:"8px 14px",borderRadius:7,border:"1.5px solid #94A3B8",background:"white",fontSize:12,fontWeight:600,color:"#334155",cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
              {t("subcon.pdf")}
@@ -3939,14 +3957,14 @@ function AmendmentsTab({ amendments, fmtC, onRefresh }) {
                     })}
                   </div>
                 )}
-                {/* Approve/Reject — sirf jiska faisla hai. Server:
-                    requirePerm("Subcon","edit") + checkWorkflowRole("Subcon WO Amendment") */}
-                {a.status==="Pending"&&!canApproveAction({perm:["Subcon","edit"],workflow:"Subcon WO Amendment"})&&(
+                {/* Approve/Reject — sirf jiska faisla hai. Server (5 Oct 2026):
+                    requirePerm("Subcon","approve") + chain ("Subcon WO Amendment") */}
+                {a.status==="Pending"&&!canApproveAction({perm:["Subcon","approve"],workflow:"Subcon WO Amendment"})&&(
                   <div style={{fontSize:11,color:T.t4}}>
                     ⏳ {t("projects.waiting_on")} {approverRolesFor("Subcon WO Amendment")||t("common.approver")}
                   </div>
                 )}
-                {a.status==="Pending"&&canApproveAction({perm:["Subcon","edit"],workflow:"Subcon WO Amendment"})&&(
+                {a.status==="Pending"&&canApproveAction({perm:["Subcon","approve"],workflow:"Subcon WO Amendment"})&&(
                   <div style={{display:"flex",gap:8}}>
                     <button onClick={()=>action(a.id,"Rejected")} disabled={!!actioning}
                       style={{flex:1,padding:"7px",borderRadius:6,border:"1px solid "+T.red,background:"white",color:T.red,fontSize:12,fontWeight:700,cursor:"pointer"}}>
@@ -4678,11 +4696,12 @@ function PaymentsTab({ woId, fmtC, summary, inpStyle, lblStyle, onChanged }) {
               <div style={{fontSize:10,color:T.t4,fontWeight:700,textTransform:"uppercase"}}>{x.l}</div>
               <div style={{fontSize:13,fontWeight:800,color:"#B45309"}}>{t("subcon.held_amount",{amount:fmtC(x.held)})}</div>
             </div>
-            <button disabled={x.held<=0} onClick={()=>openRelease(x.type)}
+            {/* SD / TDS release = Subcon APPROVE (transition: APPROVE YA CREATE) — server bhi yahi */}
+            {(can("Subcon","approve")||can("Subcon","create"))&&<button disabled={x.held<=0} onClick={()=>openRelease(x.type)}
               style={{padding:"6px 10px",borderRadius:6,border:"none",fontSize:11,fontWeight:700,
                 cursor:x.held>0?"pointer":"not-allowed",background:x.held>0?T.blu:T.b1,color:x.held>0?"white":T.t4}}>
               {x.btn}
-            </button>
+            </button>}
           </div>
         ))}
       </div>

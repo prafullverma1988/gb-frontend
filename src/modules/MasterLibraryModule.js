@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useEffect, useCallback, createContext, useContext } from "react";
 import api from "../config/api";
 import SearchSelect from "../components/SearchSelect";
 import CityPicker from "../components/CityPicker";
@@ -8,6 +8,37 @@ import { t, Rich } from "../i18n";
 import { BackClose } from "../utils/backNav";
 import { loadPartyCategories, dropPartyCategoryCache, defaultCategories, partyCategoryKeys, catLabel,
   selectionToPayload, toRoleKey, PCAT_MAX } from "../utils/partyCategories";
+import { canAny } from "../utils/perms";
+
+// ─── ROLES & ACCESS (5 Oct 2026) ─────────────────────────────────────
+// Pehle is poore module me ek bhi tick check nahi tha — Library ka sirf View
+// wala aadmi bhi Add / Edit / Delete / Import dekhta, dabane par server 403
+// deta. Ab har section ka button usi row ke tick se jo uska server route
+// maangta hai:
+//   • zyadatar masters (routes/library.js)      → "Library"
+//   • Client BOQ / BOQ Item Library             → "Estimate" YA "Library"
+//   • Party Master (POST/PUT/DELETE /finance/parties) → "Party" YA Finance YA Library
+//   • Subcontractor banana                      → "Library" YA "Subcon" (edit/delete sirf Library)
+//   • Design Library (routes/design.js)         → "Design"
+// Export (master ka CSV) = usi row ka EXPORT; Import = CREATE.
+// Section ka spec Provider se aata hai (MasterLibraryModule neeche), aur
+// Toolbar / ToolbarWithIO / DataTable khud usi se button dikhate / chhupate hain.
+const LIB_ROWS = "Library";
+const ESTIMATE_ROWS = ["Estimate", "Library"];
+const PARTY_ROWS = ["Party", "Finance", "Library"];
+const LibPermCtx = createContext({ base: LIB_ROWS });
+// spec = { base, create?, edit?, delete?, export?, import? } — action ki apni list na ho
+// to base. "import" = CREATE ka tick, par apni list se (jaise subcontractor ka bulk
+// import sirf Library par hai, jabki ek subcontractor banana Library YA Subcon se).
+function libCan(spec, action) {
+  const sp = spec || {};
+  if (action === "import") return canAny(sp.import || sp.create || sp.base || LIB_ROWS, "create");
+  return canAny(sp[action] || sp.base || LIB_ROWS, action);
+}
+function useLibCan() {
+  const spec = useContext(LibPermCtx);
+  return (action) => libCan(spec, action);
+}
 
 // ─── ICON COMPONENT ──────────────────────────────────────────────────
 const Icon = ({ d, size = 20, color = "currentColor", fill = "none", strokeWidth = 1.8 }) => (
@@ -131,6 +162,10 @@ function Modal({ open, onClose, title, desc, width = 600, children }) {
 
 // Toolbar with search, count, filters, and actions
 function Toolbar({ search, setSearch, count, label, onAdd, addLabel, filterEl, onExport, onImport }) {
+  const lc = useLibCan();
+  if (!lc("create")) onAdd = null;
+  if (!lc("import")) onImport = null;
+  if (!lc("export")) onExport = null;
   return (
     <div style={{ background: T.card, borderRadius: T.radius, padding: "14px 18px", marginBottom: 16, boxShadow: T.shadow, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", border: `1px solid ${T.border}` }}>
       <div style={{ position: "relative", flex: 1, minWidth: 200 }}>
@@ -153,9 +188,9 @@ function Toolbar({ search, setSearch, count, label, onAdd, addLabel, filterEl, o
           <IcDownload size={14} color={T.textMid} /> {t("common.export")}
         </button>
       )}
-      <button onClick={onAdd} style={{ padding: "8px 16px", borderRadius: 8, background: `linear-gradient(135deg, ${T.blue}, ${T.blueMid})`, color: "white", fontSize: 13, fontWeight: 600, border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 6, boxShadow: `0 3px 10px ${T.blue}33`, whiteSpace: "nowrap" }}>
+      {onAdd && <button onClick={onAdd} style={{ padding: "8px 16px", borderRadius: 8, background: `linear-gradient(135deg, ${T.blue}, ${T.blueMid})`, color: "white", fontSize: 13, fontWeight: 600, border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 6, boxShadow: `0 3px 10px ${T.blue}33`, whiteSpace: "nowrap" }}>
         <IcPlus size={15} color="white" /> {addLabel}
-      </button>
+      </button>}
     </div>
   );
 }
@@ -175,9 +210,14 @@ function Toolbar({ search, setSearch, count, label, onAdd, addLabel, filterEl, o
 //   per-section wiring.
 function DataTable({ columns, data, onEdit, onDelete, onRowClick, hideActions, noDetail, emptyMsg = "No items found" }) {
   const [detailRow, setDetailRow] = useState(null);
-  const detailMode = !noDetail && !onRowClick && !hideActions && !!onEdit && !!onDelete;
+  // Tick nahi to button hi nahi (Roles & Access, 5 Oct 2026).
+  const lc = useLibCan();
+  if (!lc("edit")) onEdit = null;
+  if (!lc("delete")) onDelete = null;
+  const hasAct = !!onEdit || !!onDelete;
+  const detailMode = !noDetail && !onRowClick && !hideActions && hasAct;
   const rowClick = onRowClick || (detailMode ? setDetailRow : null);
-  const showActions = !hideActions && !detailMode;
+  const showActions = !hideActions && !detailMode && hasAct;
 
   if (data.length === 0) {
     return (
@@ -221,12 +261,12 @@ function DataTable({ columns, data, onEdit, onDelete, onRowClick, hideActions, n
                 {showActions && (
                   <td style={{ padding: "10px 14px" }} onClick={e => e.stopPropagation()}>
                     <div style={{ display: "flex", gap: 4 }}>
-                      <button onClick={() => onEdit(row)} style={{ background: T.blueSoft, border: "none", cursor: "pointer", padding: 6, borderRadius: 6, display: "flex" }}>
+                      {onEdit && <button onClick={() => onEdit(row)} style={{ background: T.blueSoft, border: "none", cursor: "pointer", padding: 6, borderRadius: 6, display: "flex" }}>
                         <IcEdit size={14} color={T.blue} />
-                      </button>
-                      <button onClick={() => onDelete(row.id)} style={{ background: T.redSoft, border: "none", cursor: "pointer", padding: 6, borderRadius: 6, display: "flex" }}>
+                      </button>}
+                      {onDelete && <button onClick={() => onDelete(row.id)} style={{ background: T.redSoft, border: "none", cursor: "pointer", padding: 6, borderRadius: 6, display: "flex" }}>
                         <IcTrash size={14} color={T.red} />
-                      </button>
+                      </button>}
                     </div>
                   </td>
                 )}
@@ -257,14 +297,14 @@ function DataTable({ columns, data, onEdit, onDelete, onRowClick, hideActions, n
               ))}
             </div>
             <div style={{ padding: "12px 20px", borderTop: `1px solid ${T.border}`, display: "flex", gap: 10 }}>
-              <button onClick={() => { const tgt = detailRow; setDetailRow(null); onEdit(tgt); }}
+              {onEdit && <button onClick={() => { const tgt = detailRow; setDetailRow(null); onEdit(tgt); }}
                 style={{ flex: 1, padding: "9px", borderRadius: 8, background: T.blue, color: "white", border: "none", fontSize: 13, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
                 <IcEdit size={15} color="white" /> {t("common.edit_2")}
-              </button>
-              <button onClick={async () => { if (await window.confirmAsync(`Delete "${drawerTitle(detailRow)}"?`)) { await onDelete(detailRow.id); setDetailRow(null); } }}
+              </button>}
+              {onDelete && <button onClick={async () => { if (await window.confirmAsync(`Delete "${drawerTitle(detailRow)}"?`)) { await onDelete(detailRow.id); setDetailRow(null); } }}
                 style={{ padding: "9px 16px", borderRadius: 8, background: T.redSoft, color: T.red, border: `1px solid ${T.red}44`, fontSize: 13, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
                 <IcTrash size={15} color={T.red} /> {t("common.delete")}
-              </button>
+              </button>}
             </div>
           </div>
         </>
@@ -636,6 +676,8 @@ function ImportExportModal({ open, onClose, mode, sectionName, templateConfig, c
 // ─── ENHANCED TOOLBAR with import/export modals ──────────────────────
 function ToolbarWithIO({ search, setSearch, count, label, onAdd, addLabel, filterEl, templateConfig, currentData }) {
   const [ioMode, setIoMode] = useState(null); // "import" | "export" | null
+  const lc = useLibCan();
+  const canCreate = lc("create"), canExport = lc("export"), canImport = lc("import");
   return (
     <>
       <div style={{ background: T.card, borderRadius: T.radius, padding: "14px 18px", marginBottom: 16, boxShadow: T.shadow, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", border: `1px solid ${T.border}` }}>
@@ -649,17 +691,17 @@ function ToolbarWithIO({ search, setSearch, count, label, onAdd, addLabel, filte
         </div>
         <Badge text={`${count} items`} color={T.textMid} bg={T.borderLight} />
         {filterEl}
-        {templateConfig && templateConfig.importUrl && (
+        {canImport && templateConfig && templateConfig.importUrl && (
           <button onClick={() => setIoMode("import")} style={{ padding: "8px 12px", borderRadius: 8, border: `1.5px solid ${T.green}`, background: T.greenSoft, fontSize: 12, fontWeight: 600, color: T.green, cursor: "pointer", display: "flex", alignItems: "center", gap: 5 }}>
             <IcUpload size={14} color={T.green} /> {t("master_library.import_csv")}
           </button>
         )}
-        <button onClick={() => setIoMode("export")} style={{ padding: "8px 12px", borderRadius: 8, border: `1.5px solid ${T.border}`, background: "white", fontSize: 12, fontWeight: 600, color: T.textMid, cursor: "pointer", display: "flex", alignItems: "center", gap: 5 }}>
+        {canExport && <button onClick={() => setIoMode("export")} style={{ padding: "8px 12px", borderRadius: 8, border: `1.5px solid ${T.border}`, background: "white", fontSize: 12, fontWeight: 600, color: T.textMid, cursor: "pointer", display: "flex", alignItems: "center", gap: 5 }}>
           <IcDownload size={14} color={T.textMid} /> {t("common.export")}
-        </button>
-        <button onClick={onAdd} style={{ padding: "8px 16px", borderRadius: 8, background: `linear-gradient(135deg, ${T.blue}, ${T.blueMid})`, color: "white", fontSize: 13, fontWeight: 600, border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 6, boxShadow: `0 3px 10px ${T.blue}33`, whiteSpace: "nowrap" }}>
+        </button>}
+        {canCreate && onAdd && <button onClick={onAdd} style={{ padding: "8px 16px", borderRadius: 8, background: `linear-gradient(135deg, ${T.blue}, ${T.blueMid})`, color: "white", fontSize: 13, fontWeight: 600, border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 6, boxShadow: `0 3px 10px ${T.blue}33`, whiteSpace: "nowrap" }}>
           <IcPlus size={15} color="white" /> {addLabel}
-        </button>
+        </button>}
       </div>
       <ImportExportModal open={!!ioMode} onClose={() => setIoMode(null)} mode={ioMode || "export"}
         sectionName={label} templateConfig={templateConfig} currentData={currentData} />
@@ -1141,13 +1183,19 @@ function PartyMasterSection() {
     setSaving(false);
   };
 
-  const del = async (id) => {
-    const res = await api.del("/finance/parties/" + id);
+  // Party delete par wajah zaroori (5 Oct 2026) — server 3 akshar se kam par 400
+  // deta hai; party ki poori row audit me rehti hai. History wali party archive hi hoti hai.
+  const del = async (id, name) => {
+    const reason = await window.promptAsync({ message: t("master_library.party_delete_reason_prompt", { name: name || "" }), multiline: true, cancelLabel: t("common.cancel") });
+    if (reason == null) return false;
+    if (String(reason).trim().length < 3) { window.alert(t("master_library.reason_min_3")); return false; }
+    const res = await api.del("/finance/parties/" + id + "?reason=" + encodeURIComponent(String(reason).trim()));
     if (res && res.success === false) {
       window.alert(res.message || "Delete nahi hua");
-      return;
+      return false;
     }
     setParties(prev => prev.filter(p => p.id !== id));
+    return true;
   };
 
   // Import ke Type me company ki chalu category (Staff ke bina) — server bhi
@@ -1315,14 +1363,14 @@ function PartyMasterSection() {
               </div>
               {/* Footer — Edit + Delete */}
               <div style={{ padding:"12px 20px", borderTop:`1px solid ${T.border}`, display:"flex", gap:10 }}>
-                <button onClick={() => { const tgt = p; setDetailParty(null); openEdit(tgt); }}
+                {canAny(PARTY_ROWS, "edit") && <button onClick={() => { const tgt = p; setDetailParty(null); openEdit(tgt); }}
                   style={{ flex:1, padding:"9px", borderRadius:8, background:T.blue, color:"white", border:"none", fontSize:13, fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}>
                   <IcEdit size={15} color="white" /> {t("common.edit_2")}
-                </button>
-                <button onClick={async () => { if (await window.confirmAsync(t("master_library.delete_name", { name: p.name }))) { await del(p.id); setDetailParty(null); } }}
+                </button>}
+                {canAny(PARTY_ROWS, "delete") && <button onClick={async () => { if (await del(p.id, p.name)) setDetailParty(null); }}
                   style={{ padding:"9px 16px", borderRadius:8, background:T.redSoft, color:T.red, border:`1px solid ${T.red}44`, fontSize:13, fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", gap:6 }}>
                   <IcTrash size={15} color={T.red} /> {t("common.delete")}
-                </button>
+                </button>}
               </div>
             </div>
           </>
@@ -1422,8 +1470,9 @@ function PartyMasterSection() {
                     <div style={{ flex: 1 }}>
                       <SearchSelect value={form.designation || ""} options={desigNames} onChange={v => upd("designation", v)} placeholder={t("master_library.select_designation")} />
                     </div>
-                    <button type="button" onClick={() => { setNewDesig(""); setAddingDesig(true); }}
-                      style={{ padding: "0 12px", borderRadius: T.radiusSm, border: `1.5px dashed ${T.border}`, background: T.card, color: T.textMid, fontSize: 12.5, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>+ {t("common.new")}</button>
+                    {/* Nayi designation = /library/designations (Library CREATE) */}
+                    {canAny(LIB_ROWS, "create") && <button type="button" onClick={() => { setNewDesig(""); setAddingDesig(true); }}
+                      style={{ padding: "0 12px", borderRadius: T.radiusSm, border: `1.5px dashed ${T.border}`, background: T.card, color: T.textMid, fontSize: 12.5, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>+ {t("common.new")}</button>}
                   </div>
                 )}
               </div>
@@ -1598,11 +1647,11 @@ function PartyCategorySection() {
             {deletedDefaults.map(c => (
               <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px 6px 12px", borderRadius: 8, border: `1px solid ${T.border}`, background: T.bg }}>
                 <span style={{ fontSize: 12.5, color: T.textMid }}>{c.label}</span>
-                <button type="button" onClick={() => restore(c)} disabled={atCap}
+                {canAny(LIB_ROWS, "edit") && <button type="button" onClick={() => restore(c)} disabled={atCap}
                   title={atCap ? t("master_library.pcat_cap_reached", { max }) : undefined}
                   style={{ padding: "4px 10px", borderRadius: 6, border: `1.5px solid ${T.blue}`, background: "white", color: T.blue, fontSize: 12, fontWeight: 600, cursor: atCap ? "not-allowed" : "pointer", opacity: atCap ? 0.5 : 1, fontFamily: T.font }}>
                   {t("master_library.pcat_restore")}
-                </button>
+                </button>}
               </div>
             ))}
           </div>
@@ -1933,6 +1982,8 @@ function SubcontractorSection() {
 // Work Items:    Construction Type → City → flat items with unit rates
 // ═══════════════════════════════════════════════════════════════════════
 function SubconRateCardSection() {
+  // Subcon rate card = sirf "Library" (server: subcon package par Estimate nahi chalta).
+  const lc = useLibCan();
 
   // ── Mode ──────────────────────────────────────────────────────────────
   const [mode, setMode] = useState("package"); // "package" | "item_wise"
@@ -2469,7 +2520,8 @@ function SubconRateCardSection() {
     }}>{label}</button>
   );
 
-  const addChipBtn = (label, onClick) => (
+  // Chip se naya type / category / city = Library CREATE
+  const addChipBtn = (label, onClick) => lc("create") && (
     <button onClick={onClick} style={{
       padding:"7px 16px", borderRadius:20, border:`1.5px dashed ${T.border}`,
       background:"transparent", color:T.textMid,
@@ -2571,16 +2623,16 @@ function SubconRateCardSection() {
                   <div style={{fontSize:13,fontWeight:700,color:selPkg?.id===p.id?T.blue:T.text,paddingRight:20}}>{p.name}</div>
                   {p.sqft_rate>0 && <div style={{fontSize:11,color:T.textLight,marginTop:3}}>₹{Number(p.sqft_rate).toLocaleString()}/sqft</div>}
                   {p.description && <div style={{fontSize:10.5,color:T.textLight,marginTop:2}}>{p.description}</div>}
-                  <button onClick={e=>{e.stopPropagation();setEditingPkg(p);setPkgForm({name:p.name,sqft_rate:String(p.sqft_rate||""),description:p.description||""});setAddPkgModal(true);}}
+                  {lc("edit") && <button onClick={e=>{e.stopPropagation();setEditingPkg(p);setPkgForm({name:p.name,sqft_rate:String(p.sqft_rate||""),description:p.description||""});setAddPkgModal(true);}}
                     style={{position:"absolute",top:7,right:7,background:"none",border:"none",cursor:"pointer",padding:3,borderRadius:5,opacity:0.5,display:"flex"}}>
                     <IcEdit size={12} color={T.textMid}/>
-                  </button>
+                  </button>}
                 </div>
               ))}
-              <div onClick={()=>{setEditingPkg(null);setPkgForm({name:"",sqft_rate:"",description:""});setAddPkgModal(true);}}
+              {lc("create") && <div onClick={()=>{setEditingPkg(null);setPkgForm({name:"",sqft_rate:"",description:""});setAddPkgModal(true);}}
                 style={{padding:"12px 16px",borderRadius:10,border:`2px dashed ${T.border}`,background:T.bg,cursor:"pointer",minWidth:130,display:"flex",alignItems:"center",justifyContent:"center",gap:6,color:T.textLight,fontSize:13,fontWeight:600}}>
                 <IcPlus size={14} color={T.textLight}/> {t("master_library.new_rate_card")}
-              </div>
+              </div>}
             </div>
           </div>
         )}
@@ -2603,14 +2655,14 @@ function SubconRateCardSection() {
                  {t("master_library.discard")}
                 </button>
               )}
-              <button onClick={saveRates} disabled={!hasPendingEdits||saving}
+              {(lc("create")||lc("edit")) && <button onClick={saveRates} disabled={!hasPendingEdits||saving}
                 style={{padding:"8px 18px",borderRadius:8,background:hasPendingEdits&&!saving?T.blue:T.borderLight,color:hasPendingEdits&&!saving?"white":T.textLight,border:"none",fontSize:13,fontWeight:700,cursor:hasPendingEdits&&!saving?"pointer":"not-allowed"}}>
                 {saving?t("common.saving_2"):t("master_library.save_rates")}
-              </button>
-              <button onClick={()=>{setAddSecForm({name:"",default_qty:0,unit:"sqft",per_item_qty:false});setAddSecModal(true);}}
+              </button>}
+              {lc("create") && <button onClick={()=>{setAddSecForm({name:"",default_qty:0,unit:"sqft",per_item_qty:false});setAddSecModal(true);}}
                 style={{padding:"8px 16px",borderRadius:8,background:"white",border:`1.5px solid ${T.blue}`,color:T.blue,fontSize:13,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
                 <IcPlus size={14} color={T.blue}/> {t("common.add_section_2")}
-              </button>
+              </button>}
             </div>
           </div>
 
@@ -2703,10 +2755,10 @@ function SubconRateCardSection() {
                     <span style={{fontSize:10.5,color:"rgba(255,255,255,0.45)"}}>₹{Math.round(sCalc.perSqft).toLocaleString()}/sqft</span>
                   )}
 
-                  <button onClick={e=>{e.stopPropagation();setEditingSections(p=>({...p,[sec.id]:!editable}));}}
+                  {(lc("edit")||lc("create")) && <button onClick={e=>{e.stopPropagation();setEditingSections(p=>({...p,[sec.id]:!editable}));}}
                     style={{padding:"4px 12px",borderRadius:6,background:editable?"#1E40AF":"rgba(255,255,255,0.12)",border:"none",color:"white",fontSize:11,fontWeight:700,cursor:"pointer",flexShrink:0}}>
                     {editable?t("master_library.done"):t("common.edit")}
-                  </button>
+                  </button>}
                 </div>
 
                 {/* Section body */}
@@ -2928,10 +2980,10 @@ function SubconRateCardSection() {
               </button>
             ))}
             {addChipBtn(t("master_library.new_category_2"), ()=>openChipAdd("workcat"))}
-            <button onClick={openAddItem}
+            {lc("create") && <button onClick={openAddItem}
               style={{marginLeft:"auto",padding:"8px 18px",borderRadius:8,background:`linear-gradient(135deg,${T.blue},${T.blueMid})`,color:"white",border:"none",fontSize:13,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:6,boxShadow:`0 3px 10px ${T.blue}33`}}>
               <IcPlus size={14} color="white"/> {t("finance.add_work_item")}
-            </button>
+            </button>}
           </div>
 
           {itemsLoading && <div style={{textAlign:"center",padding:"40px",color:T.textLight}}>{t("common.loading_2")}</div>}
@@ -3216,6 +3268,10 @@ function SubconRateCardSection() {
 // Flow: Construction Type → City → Package → Category → Items
 // ═══════════════════════════════════════════════════════════════════════
 function ClientBOQSection() {
+  // Client BOQ = "Estimate" YA "Library" (section spec); construction type aur
+  // city khud Library ke master hain (routes/library.js) — wahan sirf "Library".
+  const lc = useLibCan();
+  const libC = (a) => canAny(LIB_ROWS, a);
   // ═══════════════════════════════════════════════════════════════════
   // MASTER DATA
   // ═══════════════════════════════════════════════════════════════════
@@ -4346,7 +4402,7 @@ function ClientBOQSection() {
                   fontWeight: 600, fontSize: 13, cursor: "pointer", transition: "all .15s"
                 }}>
                 {ct.name}
-                {active && (
+                {active && (libC("edit") || libC("delete")) && (
                   <button onClick={(e) => { e.stopPropagation(); openTypeEdit(ct); }}
                     title={t("master_library.edit_construction_type")}
                     style={{ position: "absolute", right: 6, top: 6,
@@ -4362,10 +4418,10 @@ function ClientBOQSection() {
               </div>
             );
           })}
-          <button onClick={() => openAdd("type")}
+          {libC("create") && <button onClick={() => openAdd("type")}
             style={{ padding: "9px 14px", borderRadius: 8, border: "2px dashed #D1D5DB", background: "transparent", color: "#6B7280", fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
            {t("master_library.new_type")}
-          </button>
+          </button>}
         </div>
       </div>
 
@@ -4387,7 +4443,7 @@ function ClientBOQSection() {
                     fontWeight: 600, fontSize: 13, cursor: "pointer", transition: "all .15s"
                   }}>
                   {city.name}
-                  {active && (
+                  {active && (libC("edit") || libC("delete")) && (
                     <button onClick={(e) => { e.stopPropagation(); openCityEdit(city); }}
                       title={t("master_library.edit_city")}
                       style={{ position: "absolute", right: 6, top: 6,
@@ -4403,10 +4459,10 @@ function ClientBOQSection() {
                 </div>
               );
             })}
-            <button onClick={() => openAdd("city")}
+            {libC("create") && <button onClick={() => openAdd("city")}
               style={{ padding: "9px 14px", borderRadius: 8, border: "2px dashed #D1D5DB", background: "transparent", color: "#6B7280", fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
              {t("master_library.new_city")}
-            </button>
+            </button>}
           </div>
         </div>
       )}
@@ -4428,7 +4484,7 @@ function ClientBOQSection() {
                   <div>{pkg.name}</div>
                   {pkg.sqft_rate > 0 && <div style={{ fontSize: 11, fontWeight: 500, opacity: 0.85 }}>{t("master_library.rs_inr_sqft", { inr: inr(pkg.sqft_rate) })}</div>}
                   {/* Pencil — only on the active tile. Opens Package Edit drawer. */}
-                  {active && (
+                  {active && (lc("edit") || lc("delete")) && (
                     <button onClick={(e) => { e.stopPropagation(); openEditPkg(pkg); }}
                       title={t("master_library.edit_package")}
                       style={{ position: "absolute", right: 6, top: 6,
@@ -4444,10 +4500,10 @@ function ClientBOQSection() {
                 </div>
               );
             })}
-            <button onClick={() => openAdd("pkg")}
+            {lc("create") && <button onClick={() => openAdd("pkg")}
               style={{ padding: "9px 14px", borderRadius: 8, border: "2px dashed #D1D5DB", background: "transparent", color: "#6B7280", fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
              {t("master_library.new_package")}
-            </button>
+            </button>}
           </div>
         </div>
       )}
@@ -4466,20 +4522,20 @@ function ClientBOQSection() {
               {hasChanged && <span style={{ marginLeft: 10, color: "#D97706", fontWeight: 600 }}>{t("master_library.unsaved_changes")}</span>}
             </span>
             <div style={{ display: "flex", gap: 8 }}>
-              <button onClick={openAddSection}
+              {lc("create") && <button onClick={openAddSection}
                 style={{ padding: "8px 14px", background: "white", color: COL_DARK,
                          border: "1.5px solid " + COL_DARK, borderRadius: 7,
                          fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>
                {t("common.add_section")}
-              </button>
-              <button onClick={saveRates} disabled={saving || !hasChanged}
+              </button>}
+              {(lc("create") || lc("edit")) && <button onClick={saveRates} disabled={saving || !hasChanged}
                 style={{ padding: "8px 20px",
                          background: (saving || !hasChanged) ? "#9CA3AF" : COL_BLUE,
                          color: "white", border: "none", borderRadius: 7,
                          fontSize: 13, fontWeight: 700,
                          cursor: (saving || !hasChanged) ? "default" : "pointer" }}>
                 {saving ? t("common.saving") : t("master_library.save_rates_2")}
-              </button>
+              </button>}
             </div>
           </div>
 
@@ -4596,7 +4652,7 @@ function ClientBOQSection() {
 
                     {/* Edit / Done toggle — switches the entire section between
                         locked (read-only displays) and editable. Default = locked. */}
-                    <button onClick={() => setEditingSections(p => ({ ...p, [sec.id]: !p[sec.id] }))}
+                    {(lc("edit") || lc("create") || lc("delete")) && <button onClick={() => setEditingSections(p => ({ ...p, [sec.id]: !p[sec.id] }))}
                       title={editable ? t("master_library.lock_section") : t("master_library.unlock_to_edit")}
                       style={{ background: editable ? "#10B981" : "rgba(255,255,255,0.14)",
                                border: "none", color: "white",
@@ -4618,10 +4674,10 @@ function ClientBOQSection() {
                          {t("common.edit_2")}
                         </>
                       )}
-                    </button>
+                    </button>}
 
                     {/* × delete — only visible when section is unlocked */}
-                    {editable && (
+                    {editable && lc("delete") && (
                       <button onClick={() => deleteSection(sec)}
                         title={t("estimate_builder.delete_section")}
                         style={{ background: "rgba(239,68,68,0.18)", border: "none", color: "#FCA5A5",
@@ -4718,7 +4774,7 @@ function ClientBOQSection() {
                                 </>
                               )}
                               <span style={{ color: "#64748B" }}>{t("common.total")} <strong style={{ color: COL_GREEN }}>{t("master_library.rs_inr", { inr: inr(cCalc.total) })}</strong></span>
-                              {editable && (
+                              {editable && lc("delete") && (
                                 <button onClick={() => deleteCategory(cat)}
                                   title={t("estimate_builder.delete_category")}
                                   style={{ background: "transparent", border: "none", color: COL_RED, cursor: "pointer", fontSize: 14, padding: 2, lineHeight: 1 }}>
@@ -4840,7 +4896,7 @@ function ClientBOQSection() {
                                         </td>
                                         <td style={{ padding: "8px 12px", textAlign: "right", fontSize: 13, fontWeight: 700, color: COL_GREEN }}>{t("master_library.rs_inr", { inr: inr(calc.total) })}</td>
                                         <td style={{ padding: "8px 6px", textAlign: "center" }}>
-                                          {editable && (
+                                          {editable && (lc("edit") || lc("delete")) && (
                                             <button onClick={() => removeItemRow(sec.id, r.item_id)}
                                               title={t("master_library.remove_from_this_section")}
                                               style={{ background: "transparent", border: "none", color: COL_RED, cursor: "pointer", fontSize: 14, padding: 2, lineHeight: 1 }}>
@@ -4854,7 +4910,7 @@ function ClientBOQSection() {
                                 </tbody>
                               </table>
                               {/* Category footer — only visible when section is unlocked */}
-                              {editable && (
+                              {editable && lc("create") && (
                                 <div style={{ padding: "8px 12px", borderTop: "1px solid #F3F4F6", background: "#FAFAFA" }}>
                                   <button onClick={() => openAddItemDrawer(sec, cat)}
                                     style={{ background: "transparent", border: "1px dashed #BFDBFE",
@@ -4869,7 +4925,7 @@ function ClientBOQSection() {
                     })}
 
                     {/* Section footer — only visible when section is unlocked */}
-                    {editable && (
+                    {editable && lc("create") && (
                       <div style={{ padding: "6px 0 2px", textAlign: "right" }}>
                         <button onClick={() => openAddCatDrawer(sec)}
                           style={{ background: "white", border: "1px dashed #94A3B8",
@@ -5070,7 +5126,8 @@ function ClientBOQSection() {
 
                 {/* + Create new */}
                 <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px dashed #E5E7EB" }}>
-                  {addCatNewForm === null ? (
+                  {/* Nayi work category = /library/work-categories (sirf Library CREATE) */}
+                  {!libC("create") ? null : addCatNewForm === null ? (
                     <button onClick={() => setAddCatNewForm({ name: "", code: "", desc: "" })}
                       style={{ width: "100%", padding: "8px 12px", background: "#F0FDF4",
                                border: "1px dashed " + COL_GREEN, color: COL_GREEN,
@@ -5535,7 +5592,7 @@ function ClientBOQSection() {
                                                        color: ed.base_rate !== undefined ? "#92400E" : "#0F172A" }}/>
                                           </td>
                                           <td style={{ padding: "5px 6px", textAlign: "center" }}>
-                                            <button onClick={() => pkgToggleDelete(r.item_id)}
+                                            {lc("delete") && <button onClick={() => pkgToggleDelete(r.item_id)}
                                               title={deleted ? t("master_library.undo_delete") : t("master_library.delete_from_master_library")}
                                               style={{ background: deleted ? COL_RED : "transparent",
                                                        color: deleted ? "white" : COL_RED,
@@ -5544,7 +5601,7 @@ function ClientBOQSection() {
                                                        fontSize: 11, fontWeight: 700, padding: "3px 7px",
                                                        cursor: "pointer", lineHeight: 1 }}>
                                               {deleted ? "↺" : "×"}
-                                            </button>
+                                            </button>}
                                           </td>
                                         </tr>
                                       );
@@ -5579,7 +5636,7 @@ function ClientBOQSection() {
                      {t("master_library.delete_this_package_and_all_its")}
                     </div>
                   </div>
-                  {!pkgDangerOpen && (
+                  {!pkgDangerOpen && lc("delete") && (
                     <button onClick={() => { setPkgDangerOpen(true); setPkgDeleteText(""); }}
                       disabled={pkgSaving || pkgDeleting}
                       style={{ padding: "7px 14px", borderRadius: 6, background: "white", border: "1.5px solid #DC2626",
@@ -5633,14 +5690,14 @@ function ClientBOQSection() {
                          cursor: pkgSaving ? "not-allowed" : "pointer" }}>
                {t("common.cancel")}
               </button>
-              <button onClick={savePackageEdit}
+              {lc("edit") && <button onClick={savePackageEdit}
                 disabled={pkgSaving || !pkgHasChanged || !pkgDraft.name?.trim()}
                 style={{ flex: 2, padding: "9px", borderRadius: 6,
                          background: (pkgSaving || !pkgHasChanged || !pkgDraft.name?.trim()) ? "#9CA3AF" : COL_BLUE,
                          color: "white", border: "none", fontSize: 13, fontWeight: 700,
                          cursor: (pkgSaving || !pkgHasChanged || !pkgDraft.name?.trim()) ? "not-allowed" : "pointer" }}>
                 {pkgSaving ? t("master_library.saving_all") : t("master_library.save_all")}
-              </button>
+              </button>}
             </div>
           </div>
         </>
@@ -5755,7 +5812,7 @@ function ClientBOQSection() {
                      {t("master_library.delete_this_construction_type_packages_tied")}
                     </div>
                   </div>
-                  {!typeDangerOpen && (
+                  {!typeDangerOpen && libC("delete") && (
                     <button onClick={() => { setTypeDangerOpen(true); setTypeDeleteText(""); }}
                       disabled={typeSaving}
                       style={{ padding: "6px 12px", borderRadius: 5, background: "white", border: "1.5px solid #DC2626", color: "#DC2626", fontSize: 11.5, fontWeight: 700, cursor: typeSaving ? "not-allowed" : "pointer" }}>
@@ -5796,13 +5853,13 @@ function ClientBOQSection() {
                 style={{ flex: 1, padding: "9px", borderRadius: 7, border: "1px solid #D1D5DB", background: "white", fontSize: 13, color: "#374151", cursor: typeSaving ? "not-allowed" : "pointer" }}>
                {t("common.cancel")}
               </button>
-              <button onClick={saveTypeEdit} disabled={typeSaving || !typeForm.name?.trim()}
+              {libC("edit") && <button onClick={saveTypeEdit} disabled={typeSaving || !typeForm.name?.trim()}
                 style={{ flex: 2, padding: "9px", borderRadius: 7,
                          background: (typeSaving || !typeForm.name?.trim()) ? "#9CA3AF" : COL_BLUE,
                          color: "white", border: "none", fontSize: 13, fontWeight: 700,
                          cursor: (typeSaving || !typeForm.name?.trim()) ? "not-allowed" : "pointer" }}>
                 {typeSaving ? t("common.saving_2") : t("common.save")}
-              </button>
+              </button>}
             </div>
           </div>
         </>
@@ -5852,7 +5909,7 @@ function ClientBOQSection() {
                      {t("master_library.delete_this_city_leads_rates_tied")}
                     </div>
                   </div>
-                  {!cityDangerOpen && (
+                  {!cityDangerOpen && libC("delete") && (
                     <button onClick={() => { setCityDangerOpen(true); setCityDeleteText(""); }}
                       disabled={citySaving}
                       style={{ padding: "6px 12px", borderRadius: 5, background: "white", border: "1.5px solid #DC2626", color: "#DC2626", fontSize: 11.5, fontWeight: 700, cursor: citySaving ? "not-allowed" : "pointer" }}>
@@ -5893,13 +5950,13 @@ function ClientBOQSection() {
                 style={{ flex: 1, padding: "9px", borderRadius: 7, border: "1px solid #D1D5DB", background: "white", fontSize: 13, color: "#374151", cursor: citySaving ? "not-allowed" : "pointer" }}>
                {t("common.cancel")}
               </button>
-              <button onClick={saveCityEdit} disabled={citySaving || !cityForm.name?.trim()}
+              {libC("edit") && <button onClick={saveCityEdit} disabled={citySaving || !cityForm.name?.trim()}
                 style={{ flex: 2, padding: "9px", borderRadius: 7,
                          background: (citySaving || !cityForm.name?.trim()) ? "#9CA3AF" : COL_BLUE,
                          color: "white", border: "none", fontSize: 13, fontWeight: 700,
                          cursor: (citySaving || !cityForm.name?.trim()) ? "not-allowed" : "pointer" }}>
                 {citySaving ? t("common.saving_2") : t("common.save")}
-              </button>
+              </button>}
             </div>
           </div>
         </>
@@ -5915,6 +5972,7 @@ function ClientBOQSection() {
 // so users can manage the master list without going through a package.
 // ═══════════════════════════════════════════════════════════════════════
 function BoqItemLibrarySection() {
+  const lc = useLibCan();   // BOQ Item Library = "Estimate" YA "Library"
   const { items: rows, loading, save: apiSave, del: apiDel, reload } = useSection("boq-items");
   const { items: workCats }    = useSection("work-categories");
   const { items: uomList }     = useSection("uom");
@@ -5997,10 +6055,10 @@ function BoqItemLibrarySection() {
           </select>
           <span style={{ fontSize: 12, color: "#6B7280" }}>{filtered.length} / {rows.length} items</span>
         </div>
-        <button onClick={openCreate}
+        {lc("create") && <button onClick={openCreate}
           style={{ background: "#10B981", color: "white", border: "none", borderRadius: 7, padding: "8px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
          {t("common.add_item")}
-        </button>
+        </button>}
       </div>
 
       {/* Category pills */}
@@ -6052,14 +6110,14 @@ function BoqItemLibrarySection() {
                   <td style={{ padding: "9px 14px", textAlign: "right", fontSize: 13, fontWeight: 600, color: "#374151" }}>{t("master_library.rs_number", { Number: Number(r.base_rate || 0).toLocaleString() })}</td>
                   <td style={{ padding: "9px 14px", fontSize: 12, color: "#6B7280" }}>{r.description || "—"}</td>
                   <td style={{ padding: "9px 6px", textAlign: "center", whiteSpace: "nowrap" }}>
-                    <button onClick={() => openEdit(r)} title={t("common.edit_2")}
+                    {lc("edit") && <button onClick={() => openEdit(r)} title={t("common.edit_2")}
                       style={{ background: "none", border: "none", color: "#6B7280", cursor: "pointer", padding: 4, marginRight: 2 }}>
                       <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                    </button>
-                    <button onClick={() => del(r)} title={t("common.delete")}
+                    </button>}
+                    {lc("delete") && <button onClick={() => del(r)} title={t("common.delete")}
                       style={{ background: "none", border: "none", color: "#EF4444", cursor: "pointer", padding: 4 }}>
                       <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-                    </button>
+                    </button>}
                   </td>
                 </tr>
               ))}
@@ -6361,6 +6419,7 @@ function ExpenseHeadSection() {
 // Sub-tabs: Categories | Drawing Types | Drawing Titles
 // ═══════════════════════════════════════════════════════════════════════
 function DesignLibrarySection() {
+  const lc = useLibCan();   // Design Library = routes/design.js → "Design" row
   const [subTab, setSubTab] = useState("categories"); // "categories" | "types" | "titles"
 
   // ── Shared data ──────────────────────────────────────────────────────
@@ -6494,7 +6553,7 @@ function DesignLibrarySection() {
             </div>
           )}
         </div>
-        <button
+        {lc("create") && <button
           onClick={() => {
             if (subTab === "categories") openCreate({ name: "", description: "" });
             else if (subTab === "types")  openCreate({ name: "", description: "" });
@@ -6502,7 +6561,7 @@ function DesignLibrarySection() {
           }}
           style={{ padding: "9px 20px", background: "#2563EB", color: "white", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>
           + {subTab === "categories" ? t("common.add_category_2") : subTab === "types" ? t("master_library.add_type") : t("master_library.add_title")}
-        </button>
+        </button>}
       </div>
 
       {/* Content */}
@@ -6519,10 +6578,10 @@ function DesignLibrarySection() {
                   {cat.description && <div style={{ fontSize: 12, color: "#6B7280", marginTop: 3 }}>{cat.description}</div>}
                 </div>
                 <div style={{ display: "flex", gap: 4 }}>
-                  <button onClick={() => { setEditing(cat); setForm({ name: cat.name, description: cat.description||"" }); setErrMsg(""); setShowModal(true); }}
-                    style={{ background: "none", border: "none", cursor: "pointer", color: "#6B7280" }}><IcEdit size={14} /></button>
-                  <button onClick={() => deleteItem("category", cat.id)}
-                    style={{ background: "none", border: "none", cursor: "pointer", color: "#EF4444" }}><IcTrash size={14} /></button>
+                  {lc("edit") && <button onClick={() => { setEditing(cat); setForm({ name: cat.name, description: cat.description||"" }); setErrMsg(""); setShowModal(true); }}
+                    style={{ background: "none", border: "none", cursor: "pointer", color: "#6B7280" }}><IcEdit size={14} /></button>}
+                  {lc("delete") && <button onClick={() => deleteItem("category", cat.id)}
+                    style={{ background: "none", border: "none", cursor: "pointer", color: "#EF4444" }}><IcTrash size={14} /></button>}
                 </div>
               </div>
               <div style={{ marginTop: 8, fontSize: 11, color: "#9CA3AF" }}>
@@ -6543,10 +6602,10 @@ function DesignLibrarySection() {
                   {dt.description && <div style={{ fontSize: 12, color: "#6B7280", marginTop: 3 }}>{dt.description}</div>}
                 </div>
                 <div style={{ display: "flex", gap: 4 }}>
-                  <button onClick={() => { setEditing(dt); setForm({ name: dt.name, description: dt.description||"" }); setErrMsg(""); setShowModal(true); }}
-                    style={{ background: "none", border: "none", cursor: "pointer", color: "#6B7280" }}><IcEdit size={14} /></button>
-                  <button onClick={() => deleteItem("type", dt.id)}
-                    style={{ background: "none", border: "none", cursor: "pointer", color: "#EF4444" }}><IcTrash size={14} /></button>
+                  {lc("edit") && <button onClick={() => { setEditing(dt); setForm({ name: dt.name, description: dt.description||"" }); setErrMsg(""); setShowModal(true); }}
+                    style={{ background: "none", border: "none", cursor: "pointer", color: "#6B7280" }}><IcEdit size={14} /></button>}
+                  {lc("delete") && <button onClick={() => deleteItem("type", dt.id)}
+                    style={{ background: "none", border: "none", cursor: "pointer", color: "#EF4444" }}><IcTrash size={14} /></button>}
                 </div>
               </div>
             </div>
@@ -7029,7 +7088,8 @@ function CitySection() {
 
       {/* Bina city ke project — ye kisi city ki ginti me nahi aate. Ek saath
           chun kar city lagao, har project ko alag se kholna na pade. */}
-      {loose.length > 0 && (
+      {/* Project ki city badalna = server par Projects EDIT (POST /library/cities/:id/assign-projects) */}
+      {loose.length > 0 && canAny("Projects", "edit") && (
         <div style={{ background: T.amberSoft, border: `1px solid ${T.amber}33`, borderRadius: T.radius, padding: "12px 14px", marginBottom: 16 }}>
           <div style={{ fontSize: 13.5, fontWeight: 700, color: T.text }}>{t("master_library.unassigned_projects_title", { n: loose.length })}</div>
           <div style={{ fontSize: 12, color: T.textMid, marginTop: 2, marginBottom: 10 }}>{t("master_library.unassigned_projects_note")}</div>
@@ -7087,21 +7147,21 @@ const masterSections = [
   { id: "work_cat",      get label() { return t("master_library.work_category"); },       Icon: IcTool,      Comp: WorkCategorySection,      section: null, countKey: "work_categories", color: T.purple },
   { id: "material_cat",  get label() { return t("master_library.material_category"); },   Icon: IcFolder,    Comp: MaterialCategorySection,  section: null, countKey: "material_categories", color: T.blue },
   { id: "materials",     get label() { return t("master_library.material_master"); },     Icon: IcBox,       Comp: MaterialMasterSection,    section: null, countKey: "materials", color: T.teal },
-  { id: "boq_items",     get label() { return t("master_library.boq_item_library"); },    Icon: IcBox,       Comp: BoqItemLibrarySection,    section: null, countKey: null, color: T.purple },
+  { id: "boq_items",     get label() { return t("master_library.boq_item_library"); },    Icon: IcBox,       Comp: BoqItemLibrarySection,    section: null, countKey: null, color: T.purple, perm: { base: ESTIMATE_ROWS } },
   // ── PEOPLE ────────────────────────────────────────────────────────
-  { id: "party",         get label() { return t("master_library.party_supplier"); },    Icon: IcUsers,     Comp: PartyMasterSection,       section: "PEOPLE", countKey: "parties", color: T.green },
+  { id: "party",         get label() { return t("master_library.party_supplier"); },    Icon: IcUsers,     Comp: PartyMasterSection,       section: "PEOPLE", countKey: "parties", color: T.green, perm: { base: PARTY_ROWS, export: ["Party", "Library"] } },
   { id: "party_category", get label() { return t("master_library.pcat_title"); },       Icon: IcLayers,    Comp: PartyCategorySection,     section: null, countKey: "party_categories", color: T.green },
-  { id: "subcon",        get label() { return t("master_library.subcontractors"); },      Icon: IcHardHat,   Comp: SubcontractorSection,     section: null, countKey: "subcontractors", color: T.amber },
+  { id: "subcon",        get label() { return t("master_library.subcontractors"); },      Icon: IcHardHat,   Comp: SubcontractorSection,     section: null, countKey: "subcontractors", color: T.amber, perm: { base: LIB_ROWS, create: ["Library", "Subcon"], import: LIB_ROWS } },
   { id: "workers",       get label() { return t("master_library.workers"); },             Icon: IcHardHat,   Comp: WorkersSection,           section: null, countKey: "workers", color: T.blue },
   { id: "designation",   get label() { return t("master_library.staff_designation"); },   Icon: IcUsers,     Comp: DesignationSection,       section: null, countKey: null, color: T.indigo },
   // ── RATES & BOQ ───────────────────────────────────────────────────
   { id: "subcon_rate",   get label() { return t("master_library.subcon_rate_card"); },    Icon: IcDollar,    Comp: SubconRateCardSection,    section: "RATES & BOQ", countKey: null, color: T.teal },
   { id: "labour",        get label() { return t("master_library.labour_rate_card"); },    Icon: IcUsers,     Comp: LabourRateSection,        section: null, countKey: "labour_rates", color: T.orange },
-  { id: "client_boq",    get label() { return t("master_library.client_boq_rate"); },     Icon: IcClipboard, Comp: ClientBOQSection,         section: null, countKey: null, color: T.indigo },
+  { id: "client_boq",    get label() { return t("master_library.client_boq_rate"); },     Icon: IcClipboard, Comp: ClientBOQSection,         section: null, countKey: null, color: T.indigo, perm: { base: ESTIMATE_ROWS } },
   // Equipment / Machinery ab apne Machinery module me hai. Yahan se hataya
   // gaya taaki ek machine do jagah edit na ho — register wahi ek rahe.
   // ── OTHER ─────────────────────────────────────────────────────────
-  { id: "design_library", get label() { return t("master_library.design_library"); },     Icon: IcLayers,    Comp: DesignLibrarySection,     section: "OTHER", countKey: null, color: T.purple },
+  { id: "design_library", get label() { return t("master_library.design_library"); },     Icon: IcLayers,    Comp: DesignLibrarySection,     section: "OTHER", countKey: null, color: T.purple, perm: { base: "Design" } },
   { id: "city",          get label() { return t("master_library.city_library"); },        Icon: IcMap,       Comp: CitySection,              section: null, countKey: null, color: T.rose },
   { id: "uom",           get label() { return t("master_library.units_uom"); },         Icon: IcRuler,     Comp: UOMMasterSection,         section: null, countKey: "uom", color: T.teal },
   // Count hardcoded "14" tha jabki /library/summary asli `expense_heads`
@@ -7191,7 +7251,10 @@ export default function MasterLibraryModule() {
           </div>
         </div>
         <div style={{ flex: 1, overflowY: "auto", padding: "24px 28px" }}>
-          <ActiveComp dbProjects={dbProjects} />
+          {/* Section ka tick-spec — Toolbar / DataTable isi se button dikhate hain */}
+          <LibPermCtx.Provider value={active?.perm || { base: LIB_ROWS }}>
+            <ActiveComp dbProjects={dbProjects} />
+          </LibPermCtx.Provider>
         </div>
       </div>
     </div>

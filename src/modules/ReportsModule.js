@@ -2,10 +2,19 @@ import { useState, useMemo, useRef, useEffect } from "react";
 import api from "../config/api";
 import { t } from "../i18n";
 import { companyName, companyNameHtml } from "../utils/companyName";
-import { can, canSeeFinancials, currentUser } from "../utils/perms";
+import { can, canAny, canSeeFinancials, currentUser } from "../utils/perms";
 import CompanyDay from "./reports/CompanyDay";
 import PartyLedger from "./reports/PartyLedger";
 import { daysAgoISO } from "../utils/today";
+
+
+// Roles & Access (5 Oct 2026): Reports VIEW sirf module kholta hai; har report
+// apne SOURCE module ki VIEW se dikhti hai (server bhi wahi maangta hai), aur
+// har Excel / PDF / print = Reports EXPORT (+ jahan data paise ka hai wahan
+// us row ka EXPORT bhi).
+const CASH_ROWS = ["Finance", "Transaction"];                         // GET /finance/cashbook
+const MATERIAL_ROWS = ["Procurement", "Material", "Warehouse", "Finance"]; // GET /procurement/grns
+const canReportExport = () => can("Reports", "export");
 
 
 // ── ICONS ─────────────────────────────────────────────────────
@@ -440,7 +449,7 @@ function CashBookModule(){
           {/* Reports = VIEW-ONLY. Excel + PDF only. Add/Edit/Delete
               moved out — those live in Finance → Cash Book where the
               backend ledger is the source of truth. */}
-          <div style={{marginLeft:"auto",display:"flex",gap:6}}>
+          {canReportExport()&&<div style={{marginLeft:"auto",display:"flex",gap:6}}>
             <button onClick={view==="cashbook"?dlExcelCash:dlExcelDay}
               style={{display:"flex",alignItems:"center",gap:4,padding:"5px 11px",borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>
               <IcXLS size={13} color={T.grn}/> {t("common.excel")}
@@ -449,7 +458,7 @@ function CashBookModule(){
               style={{display:"flex",alignItems:"center",gap:4,padding:"5px 11px",borderRadius:6,background:T.bluL,border:`1px solid ${T.bluM}`,color:T.blu,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>
               <IcPrint size={13} color={T.blu}/> {t("finance.pdf_print")}
             </button>
-          </div>
+          </div>}
         </div>
       </div>
 
@@ -917,7 +926,7 @@ function ChallanModule(){
           </div>
           {/* Reports = view-only. Add Entry removed; new GRNs come
               from Warehouse / Procurement workflows. */}
-          <div style={{display:"flex",gap:6,marginLeft:"auto"}}>
+          {canReportExport()&&<div style={{display:"flex",gap:6,marginLeft:"auto"}}>
             <button onClick={dlExcel}
               style={{display:"flex",alignItems:"center",gap:4,padding:"5px 11px",borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>
               <IcXLS size={13} color={T.grn}/> {t("common.excel")}
@@ -926,7 +935,7 @@ function ChallanModule(){
               style={{display:"flex",alignItems:"center",gap:4,padding:"5px 11px",borderRadius:6,background:T.bluL,border:`1px solid ${T.bluM}`,color:T.blu,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>
               <IcPrint size={13} color={T.blu}/> {t("finance.pdf_print")}
             </button>
-          </div>
+          </div>}
         </div>
         {/* Row 2: filters */}
         <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
@@ -1238,11 +1247,11 @@ function ProgressReportModule(){
         </div>
       )}
 
-      {/* Actions */}
-      <div style={{display:"flex",gap:7,marginBottom:12}}>
+      {/* Actions — portfolio = paise ka data: Reports EXPORT + Financial Reports EXPORT */}
+      {canReportExport()&&can("Financial Reports","export")&&<div style={{display:"flex",gap:7,marginBottom:12}}>
         <button onClick={dlExcelPortfolio} style={{display:"flex",alignItems:"center",gap:5,padding:"7px 14px",borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:12,fontWeight:600,cursor:"pointer"}}><IcXLS size={14} color={T.grn}/> {t("reports.portfolio_excel")}</button>
         <button onClick={printPortfolio} style={{display:"flex",alignItems:"center",gap:5,padding:"7px 14px",borderRadius:6,background:T.bluL,border:`1px solid ${T.bluM}`,color:T.blu,fontSize:12,fontWeight:600,cursor:"pointer"}}><IcPrint size={14} color={T.blu}/> {t("reports.portfolio_pdf")}</button>
-      </div>
+      </div>}
 
       {/* Project cards */}
       <div style={{display:"flex",flexDirection:"column",gap:10}}>
@@ -1278,10 +1287,10 @@ function ProgressReportModule(){
                     </div>
                     <span style={{fontSize:11.5,color:T.t4}}>{p.site} · {p.start} → {p.target}</span>
                   </div>
-                  <div style={{display:"flex",gap:7}} onClick={e=>e.stopPropagation()}>
+                  {canReportExport()&&can("Financial Reports","export")&&<div style={{display:"flex",gap:7}} onClick={e=>e.stopPropagation()}>
                     <button onClick={()=>dlExcelProject(p)} style={{display:"flex",alignItems:"center",gap:3,padding:"5px 9px",borderRadius:5,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:11,fontWeight:600,cursor:"pointer"}}><IcXLS size={11} color={T.grn}/> {t("common.excel")}</button>
                     <button onClick={()=>printProject(p)} style={{display:"flex",alignItems:"center",gap:3,padding:"5px 9px",borderRadius:5,background:T.bluL,border:`1px solid ${T.bluM}`,color:T.blu,fontSize:11,fontWeight:600,cursor:"pointer"}}><IcPrint size={11} color={T.blu}/> PDF</button>
-                  </div>
+                  </div>}
                 </div>
 
                 {/* Overall progress bar */}
@@ -1345,11 +1354,11 @@ function ProgressReportModule(){
 // MAIN APP
 // ══════════════════════════════════════════════════════════════
 export default function ReportsModule(){
-  const [tab,setTab]=useState("cash");
-
+  // Har report apne source module ki VIEW se (Roles & Access, 5 Oct 2026) —
+  // server bhi wahi list maangta hai, warna tab khulta aur data 403 deta.
   const TABS=[
-    {id:"cash",    l:t("reports.cash_book_day_book"),  desc:t("reports.date_wise_receipts_payments"),icon:IcCalc},
-    {id:"challan", l:t("reports.material_register"),      desc:t("reports.grn_level_material_movement_vendor_project"), icon:IcSheet},
+    ...(canAny(CASH_ROWS,"view") ? [{id:"cash",    l:t("reports.cash_book_day_book"),  desc:t("reports.date_wise_receipts_payments"),icon:IcCalc}] : []),
+    ...(canAny(MATERIAL_ROWS,"view") ? [{id:"challan", l:t("reports.material_register"),      desc:t("reports.grn_level_material_movement_vendor_project"), icon:IcSheet}] : []),
     // Progress & Financial me paisa hota hai — "Financial Reports" ke peeche.
     ...(canSeeFinancials() ? [{id:"progress",l:t("reports.progress_financial"),  desc:t("reports.site_progress_finance_report"),icon:IcBar}] : []),
     // Company ka din sirf admin/super_admin ko — isme wo paisa bhi hai jo kisi
@@ -1359,6 +1368,8 @@ export default function ReportsModule(){
     // Party ka statement (Excel / PDF) — wahi rok jo Finance ke party ledger par hai.
     ...(can("Finance","view") ? [{id:"pledger",l:t("reports.party_ledger"),desc:t("reports.party_ledger_desc"),icon:IcXLS}] : []),
   ];
+  const [tabPick,setTab]=useState(null);
+  const tab = TABS.some(x=>x.id===tabPick) ? tabPick : (TABS[0]?.id || null);
 
   return(
     <div style={{minHeight:"100vh",background:T.bg,fontFamily:"'Segoe UI',system-ui,sans-serif",display:"flex",flexDirection:"column"}}>
@@ -1392,6 +1403,7 @@ export default function ReportsModule(){
         {tab==="progress" && <ProgressReportModule/>}
         {tab==="coday"    && <CompanyDay/>}
         {tab==="pledger"  && <PartyLedger/>}
+        {!tab && <div style={{padding:"60px 20px",textAlign:"center",color:T.t4,fontSize:13}}>{t("reports.no_report_access")}</div>}
       </div>
 
       <style>{`

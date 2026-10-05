@@ -8,8 +8,22 @@ import { PTAddTask } from "./TabTasks";
 import { canApproveAction, approverRolesFor } from "../../utils/approvalAuthority";
 import { t, Rich } from "../../i18n";
 import { companyName } from "../../utils/companyName";
+import { can } from "../../utils/perms";
 
 function TabEstimate({ project }) {
+  // Roles & Access (5 Oct 2026) — har button usi Estimate tick se jo server
+  // (routes/customer-estimates.js) maangta hai. Pehle is tab me ek bhi check
+  // nahi tha: tab kholne wale har aadmi ko har button dikhta, dabane par 403.
+  //   Create = naya estimate / invoice / payment / milestone / auto-bill sweep
+  //   Edit   = BOQ badlav (amendment), invoice edit/confirm, billing method, task link
+  //   Delete = estimate / invoice (wajah ke saath) / schedule / task unlink
+  //   Approve= amendment Approve / Reject (+ Multi-Level Approval ki baari)
+  //   Export = BOQ ka Excel / PDF
+  const eCreate = can("Estimate", "create");
+  const eEdit = can("Estimate", "edit");
+  const eDelete = can("Estimate", "delete");
+  const eApprove = can("Estimate", "approve");
+  const eExport = can("Estimate", "export");
   const projectId = project?.id;
   const [estimates, setEstimates] = useState([]);
   const [selEst, setSelEst] = useState(null);
@@ -1137,8 +1151,10 @@ function TabEstimate({ project }) {
   const rejectAutoInvoice = async () => {
     if (!previewInv?.invoice?.id) return;
     if (!await window.confirmAsync(t("estimate.reject_and_delete_this_auto_generated"))) return;
+    const reason = await askInvoiceReason(previewInv.invoice.invoice_no);
+    if (reason == null) return;
     setPreviewConfirming(true);
-    const r = await api.del("/customer-estimates/invoices/"+previewInv.invoice.id)
+    const r = await api.del("/customer-estimates/invoices/"+previewInv.invoice.id+"?reason="+encodeURIComponent(reason))
       .catch(e => ({ success:false, message:e.message }));
     setPreviewConfirming(false);
     if (!r?.success) { alert(r?.message || "Reject failed"); return; }
@@ -1269,9 +1285,18 @@ function TabEstimate({ project }) {
     } else alert(r.message || "Failed");
   };
 
+  // Invoice paise ka record — wajah zaroori (server 3 akshar se kam par 400),
+  // invoice + lines audit me rehti hain (5 Oct 2026).
+  const askInvoiceReason = async (no) => {
+    const reason = await window.promptAsync({ message: t("estimate.invoice_delete_reason_prompt", { no: no || "" }), multiline: true, cancelLabel: t("common.cancel") });
+    if (reason == null) return null;
+    if (String(reason).trim().length < 3) { alert(t("estimate.reason_min_3")); return null; }
+    return String(reason).trim();
+  };
   const deleteInvoice = async (invId, no) => {
-    if (!await window.confirmAsync("Delete invoice " + no + "? This cannot be undone.")) return;
-    const r = await api.del("/customer-estimates/invoices/" + invId);
+    const reason = await askInvoiceReason(no);
+    if (reason == null) return;
+    const r = await api.del("/customer-estimates/invoices/" + invId + "?reason=" + encodeURIComponent(reason));
     if (r.success) { showLockedInvoices(r.data?.locked); await reloadSel(); }
     else alert(r.message || "Delete failed");
   };
@@ -1304,10 +1329,10 @@ function TabEstimate({ project }) {
       <div style={{width:230,borderRight:"1px solid "+T.b1,background:T.surfaceB,flexShrink:0,overflowY:"auto"}}>
         <div style={{padding:"10px 12px",borderBottom:"1px solid "+T.b1,display:"flex",justifyContent:"space-between",alignItems:"center",position:"relative"}}>
           <span style={{fontSize:11,fontWeight:700,color:T.t1}}>{t("estimate.estimates_estimates", { estimates: estimates.length })}</span>
-          <button onClick={()=>setEstChooserOpen(o=>!o)}
+          {eCreate && <button onClick={()=>setEstChooserOpen(o=>!o)}
             style={{background:T.blu,color:"white",border:"none",borderRadius:5,padding:"4px 8px",fontSize:10,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>
            {t("estimate.new")}
-          </button>
+          </button>}
           {/* Chooser dropdown — 4 paths */}
           {estChooserOpen && (() => {
             const hasCity  = !!project?.city_id;
@@ -1440,14 +1465,14 @@ function TabEstimate({ project }) {
                 </div>
                 {e.invoice_count > 0 && <div style={{fontSize:9.5,color:T.t4,marginTop:3}}>{e.invoice_count} invoice{e.invoice_count>1?"s":""}</div>}
                 {/* Trash icon (top-right) — opens danger panel below */}
-                <button onClick={(ev)=>{ ev.stopPropagation(); isDelOpen ? closeDelEst() : openDelEst(e); }}
+                {eDelete && <button onClick={(ev)=>{ ev.stopPropagation(); isDelOpen ? closeDelEst() : openDelEst(e); }}
                   title={t("estimate.delete_this_estimate")}
                   style={{position:"absolute",top:8,right:8,background: isDelOpen ? "#FEE2E2" : "transparent",
                           border:"1px solid " + (isDelOpen ? "#FCA5A5" : "transparent"),
                           color: isDelOpen ? "#DC2626" : "#94A3B8",
                           borderRadius:4,padding:"1px 5px",fontSize:11,cursor:"pointer",lineHeight:1}}>
                   🗑
-                </button>
+                </button>}
               </div>
               {/* Inline danger panel — type estimate_no to confirm */}
               {isDelOpen && (
@@ -1475,13 +1500,13 @@ function TabEstimate({ project }) {
         })}
 
         {/* "+ Manual Invoice" — available even without an estimate */}
-        <div style={{padding:"10px 12px",borderTop:"1px solid "+T.b1,marginTop:8}}>
+        {eCreate && <div style={{padding:"10px 12px",borderTop:"1px solid "+T.b1,marginTop:8}}>
           <button onClick={()=>{ setInvForm(p=>({...p,source:"manual"})); setShowNewInv(true); }}
             style={{width:"100%",background:T.purL,color:T.pur,border:"1.5px dashed "+T.pur,borderRadius:6,padding:"7px",fontSize:11,fontWeight:700,cursor:"pointer"}}>
            {t("estimate.manual_invoice")}
           </button>
           <div style={{fontSize:9.5,color:T.t4,marginTop:4,textAlign:"center"}}>{t("estimate.ad_hoc_not_tied_to_an")}</div>
-        </div>
+        </div>}
       </div>
 
       {/* RIGHT — Detail */}
@@ -1547,12 +1572,13 @@ function TabEstimate({ project }) {
                     style={{background:T.surface,border:"1px solid "+T.b1,color:T.t2,borderRadius:5,padding:"5px 9px",fontSize:11,fontWeight:600,cursor:"pointer"}}>{t("estimate.expand_all")}</button>
                   <button onClick={collapseAllBoq} title={t("estimate.collapse_all_sections")}
                     style={{background:T.surface,border:"1px solid "+T.b1,color:T.t2,borderRadius:5,padding:"5px 9px",fontSize:11,fontWeight:600,cursor:"pointer"}}>{t("estimate.collapse_all")}</button>
-                  {/* Exports */}
-                  <button onClick={exportBoqExcel} title={t("estimate.download_boq_as_excel_csv")}
-                    style={{background:T.grnL,border:"1px solid "+T.grnM,color:T.grn,borderRadius:5,padding:"5px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>{t("estimate.excel")}</button>
-                  <button onClick={exportBoqPdf} title={t("estimate.download_print_boq_as_pdf")}
-                    style={{background:T.redL,border:"1px solid "+T.redM,color:T.red,borderRadius:5,padding:"5px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>{t("estimate.pdf")}</button>
-                  <button onClick={openEditBoq}
+                  {/* Exports — Estimate EXPORT (rate bahar jaate hain) */}
+                  {eExport && <button onClick={exportBoqExcel} title={t("estimate.download_boq_as_excel_csv")}
+                    style={{background:T.grnL,border:"1px solid "+T.grnM,color:T.grn,borderRadius:5,padding:"5px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>{t("estimate.excel")}</button>}
+                  {eExport && <button onClick={exportBoqPdf} title={t("estimate.download_print_boq_as_pdf")}
+                    style={{background:T.redL,border:"1px solid "+T.redM,color:T.red,borderRadius:5,padding:"5px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>{t("estimate.pdf")}</button>}
+                  {/* BOQ badlav = amendment = Estimate EDIT */}
+                  {eEdit && <button onClick={openEditBoq}
                     title={pendingAmendCount > 0 ? "A pending amendment already exists — review it in the Amendments tab first" : t("estimate.propose_changes_to_this_estimate_s")}
                     disabled={pendingAmendCount > 0}
                     style={{background: pendingAmendCount > 0 ? "#E5E7EB" : "#FEF3C7",
@@ -1561,7 +1587,7 @@ function TabEstimate({ project }) {
                             borderRadius:5,padding:"5px 10px",fontSize:11,fontWeight:700,
                             cursor: pendingAmendCount > 0 ? "not-allowed" : "pointer"}}>
                    {t("estimate.edit_boq")}
-                  </button>
+                  </button>}
                 </>
               )}
               {subTab==="milestone" && (
@@ -1576,7 +1602,8 @@ function TabEstimate({ project }) {
                         // milestones that need auto-bill drafts. Two-in-one
                         // affordance — fast feedback loop for the PM.
                         await loadLinkedTasks(selEst.id);
-                        if (selEst.auto_bill_on_complete) {
+                        // Sweep draft invoice banata hai = Estimate CREATE
+                        if (selEst.auto_bill_on_complete && eCreate) {
                           const sw = await api.post("/customer-estimates/"+selEst.id+"/auto-bill-sweep")
                             .catch(e => ({ success:false, message:e.message }));
                           if (sw?.success && sw.data?.created?.length > 0) {
@@ -1604,8 +1631,9 @@ function TabEstimate({ project }) {
                       (Module B). When ON + a linked task hits "Complete",
                       the future hook will auto-create a DRAFT invoice. Off
                       by default; safe opt-in. Toggle never affects existing
-                      drafts — they wait for admin review regardless. */}
-                  <button onClick={async()=>{
+                      drafts — they wait for admin review regardless.
+                      Switch = Estimate EDIT; sweep (draft banana) = CREATE. */}
+                  {eEdit && <button onClick={async()=>{
                       const next = !selEst.auto_bill_on_complete;
                       if (next && !await window.confirmAsync(
                         "Turn ON auto-billing?\n\n" +
@@ -1622,7 +1650,7 @@ function TabEstimate({ project }) {
                       // When turning ON: sweep for already-eligible milestones.
                       // Tasks that were already past trigger before the toggle
                       // was enabled won't fire via PUT hook, so sweep catches them.
-                      if (next) {
+                      if (next && eCreate) {
                         const sw = await api.post("/customer-estimates/"+selEst.id+"/auto-bill-sweep")
                           .catch(e => ({ success:false, message:e.message }));
                         if (sw?.success && sw.data?.created?.length > 0) {
@@ -1642,8 +1670,9 @@ function TabEstimate({ project }) {
                       border:"1px solid " + (selEst.auto_bill_on_complete ? "#86EFAC" : T.b1),
                       borderRadius:14,padding:"4px 10px",fontSize:10.5,fontWeight:700,cursor:"pointer",
                       display:"flex",alignItems:"center",gap:5,
-                    }}>{t("estimate.auto_bill_selest", { selEst: selEst.auto_bill_on_complete ? "ON" : "OFF" })}</button>
-                <div style={{position:"relative"}}>
+                    }}>{t("estimate.auto_bill_selest", { selEst: selEst.auto_bill_on_complete ? "ON" : "OFF" })}</button>}
+                {/* Schedule banana = CREATE; billing method badalna = EDIT */}
+                {(eCreate || eEdit) && <div style={{position:"relative"}}>
                   <button onClick={()=>setMsChooserOpen(o=>!o)}
                     style={{background:T.bluL,color:T.blu,border:"1px solid "+T.bluM,borderRadius:5,padding:"5px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>
                    {t("estimate.set_schedule")}
@@ -1657,7 +1686,7 @@ function TabEstimate({ project }) {
                        {t("estimate.choose_billing_mode")}
                       </div>
                       {/* Item-wise — opens existing modal with kind=rate */}
-                      <div onClick={()=>{
+                      {eCreate && (eEdit || selEst.billing_method === "milestone_rate") && <div onClick={()=>{
                           setMsForm(p=>({...p,kind:"rate",estimate_item_id:null}));
                           setShowSetMs(true); setMsChooserOpen(false);
                         }}
@@ -1668,9 +1697,9 @@ function TabEstimate({ project }) {
                         <div style={{fontSize:10.5,color:T.t3,marginTop:2,lineHeight:1.4}}>
                          {t("estimate.pick_boq_items_define_billing_stages")}
                         </div>
-                      </div>
+                      </div>}
                       {/* % of Order Value */}
-                      <div onClick={()=>{
+                      {eCreate && (eEdit || selEst.billing_method === "milestone_percent") && <div onClick={()=>{
                           setMsForm(p=>({...p,kind:"percent"}));
                           setShowSetMs(true); setMsChooserOpen(false);
                         }}
@@ -1681,9 +1710,9 @@ function TabEstimate({ project }) {
                         <div style={{fontSize:10.5,color:T.t3,marginTop:2,lineHeight:1.4}}>
                          {t("estimate.define_milestones_as_of_total_estimate")}
                         </div>
-                      </div>
+                      </div>}
                       {/* Manual — directly switches billing_method, no modal */}
-                      <div onClick={async()=>{
+                      {eEdit && <div onClick={async()=>{
                           setMsChooserOpen(false);
                           if (selEst.billing_method === "manual") return;
                           if (!await window.confirmAsync(t("estimate.switch_to_manual_mode_you_ll"))) return;
@@ -1698,13 +1727,13 @@ function TabEstimate({ project }) {
                         <div style={{fontSize:10.5,color:T.t3,marginTop:2,lineHeight:1.4}}>
                          {t("estimate.no_preset_stages_bill_cumulative_qty")}
                         </div>
-                      </div>
+                      </div>}
                     </div>
                   </>)}
-                </div>
+                </div>}
                 </>
               )}
-              {subTab==="invoice" && (<>
+              {subTab==="invoice" && eCreate && (<>
                 <button onClick={openNewInvoice}
                   style={{background:T.blu,color:"white",border:"none",borderRadius:5,padding:"5px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>
                  {t("estimate.invoice")}
@@ -1922,10 +1951,10 @@ function TabEstimate({ project }) {
                                       </div>
                                       {hasSchedule && (
                                         <div style={{display:"flex",gap:5}}>
-                                          <button onClick={()=>editRateSchedule(it.id)} title={t("estimate.edit_schedule")}
-                                            style={{background:"white",border:"1px solid "+T.b1,color:T.t2,borderRadius:5,width:24,height:24,fontSize:11,cursor:"pointer",lineHeight:1}}>✎</button>
-                                          <button onClick={()=>deleteRateSchedule(it.id, it._cleanDesc)} title={t("estimate.delete_schedule")}
-                                            style={{background:T.redL,border:"1px solid "+T.redM,color:T.red,borderRadius:5,width:24,height:24,fontSize:11,cursor:"pointer",lineHeight:1}}>🗑</button>
+                                          {eCreate && <button onClick={()=>editRateSchedule(it.id)} title={t("estimate.edit_schedule")}
+                                            style={{background:"white",border:"1px solid "+T.b1,color:T.t2,borderRadius:5,width:24,height:24,fontSize:11,cursor:"pointer",lineHeight:1}}>✎</button>}
+                                          {eDelete && <button onClick={()=>deleteRateSchedule(it.id, it._cleanDesc)} title={t("estimate.delete_schedule")}
+                                            style={{background:T.redL,border:"1px solid "+T.redM,color:T.red,borderRadius:5,width:24,height:24,fontSize:11,cursor:"pointer",lineHeight:1}}>🗑</button>}
                                         </div>
                                       )}
                                     </div>
@@ -2015,12 +2044,12 @@ function TabEstimate({ project }) {
                                                       <span style={{color: linked.eligible ? "#15803D" : T.t3,fontWeight:500}}>{t("estimate.progress_trigger_trigger_pct", { progress: linked.progress, trigger_pct: linked.trigger_pct })}</span>
                                                       {linked.eligible && <span style={{fontSize:10}}>{t("estimate.ready_to_bill")}</span>}
                                                     </span>
-                                                    <button onClick={()=>openTaskPicker(m.id)} title={t("estimate.change_link_or_trigger")}
-                                                      style={{background:"none",border:"none",color:T.t3,fontSize:11,cursor:"pointer",padding:"0 4px"}}>✎</button>
-                                                    <button onClick={()=>unlinkTask(m.id)} title={t("estimate.unlink_from_task")}
-                                                      style={{background:"none",border:"none",color:T.red,fontSize:12,cursor:"pointer",padding:"0 4px"}}>×</button>
+                                                    {eEdit && <button onClick={()=>openTaskPicker(m.id)} title={t("estimate.change_link_or_trigger")}
+                                                      style={{background:"none",border:"none",color:T.t3,fontSize:11,cursor:"pointer",padding:"0 4px"}}>✎</button>}
+                                                    {eDelete && <button onClick={()=>unlinkTask(m.id)} title={t("estimate.unlink_from_task")}
+                                                      style={{background:"none",border:"none",color:T.red,fontSize:12,cursor:"pointer",padding:"0 4px"}}>×</button>}
                                                   </>
-                                                ) : (
+                                                ) : eEdit && (
                                                   <button onClick={()=>openTaskPicker(m.id)}
                                                     style={{background:"transparent",border:"1px dashed "+T.b1,color:T.t3,borderRadius:14,padding:"3px 10px",fontSize:10.5,fontWeight:600,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:4}}>
                                                    {t("estimate.link_to_task")}
@@ -2048,16 +2077,16 @@ function TabEstimate({ project }) {
                       <div style={{fontSize:12.5,fontWeight:700,color:T.t1}}>{t("estimate.payment_milestones_of_order_value")}</div>
                       {milestones.percent.length > 0 && (
                         <div style={{display:"flex",gap:5}}>
-                          <button onClick={editPercentSchedule}
+                          {eCreate && <button onClick={editPercentSchedule}
                             title={t("estimate.edit_schedule")}
                             style={{background:"white",border:"1px solid "+T.b1,color:T.t2,borderRadius:5,width:26,height:26,fontSize:12,cursor:"pointer",lineHeight:1}}>
                             ✎
-                          </button>
-                          <button onClick={deletePercentSchedule}
+                          </button>}
+                          {eDelete && <button onClick={deletePercentSchedule}
                             title={t("estimate.delete_schedule")}
                             style={{background:T.redL,border:"1px solid "+T.redM,color:T.red,borderRadius:5,width:26,height:26,fontSize:12,cursor:"pointer",lineHeight:1}}>
                             🗑
-                          </button>
+                          </button>}
                         </div>
                       )}
                     </div>
@@ -2340,7 +2369,7 @@ function TabEstimate({ project }) {
                               ⏳ {t("projects.waiting_on")} {approverRolesFor("Customer Estimate Amendment")||t("common.approver")}
                             </div>
                           )}
-                          {a.status === "Pending" && canApproveAction({perm:["Estimate","edit"],workflow:"Customer Estimate Amendment"}) && (
+                          {a.status === "Pending" && canApproveAction({perm:["Estimate","approve"],workflow:"Customer Estimate Amendment"}) && (
                             <div style={{display:"flex",gap:10,justifyContent:"flex-end",marginTop:8}}>
                               <button onClick={()=>decideAmendment(a.id,"Rejected")}
                                 style={{background:"white",color:"#DC2626",border:"1.5px solid #FCA5A5",borderRadius:6,padding:"7px 16px",fontSize:12,fontWeight:700,cursor:"pointer"}}>
@@ -3258,7 +3287,7 @@ function TabEstimate({ project }) {
                               {it.library_item_id && libStageCount > 0 && (
                                 <div style={{marginBottom:10,padding:"7px 10px",background:T.grnL,border:"1px solid "+T.grnM,borderRadius:5,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                                   <span style={{fontSize:11,color:T.grn}}><Rich k="estimate.name_has_libstagecount_library_stagelibstagecount2" params={{ name: libItem.name, libStageCount, libStageCount2: libStageCount>1?"s":"" }} /></span>
-                                  <button onClick={async()=>{
+                                  {eCreate && <button onClick={async()=>{
                                       setSaving(true);
                                       const r = await api.post("/customer-estimates/"+selEst.id+"/items/"+it.id+"/apply-library-stages", {}).catch(()=>({success:false}));
                                       setSaving(false);
@@ -3271,7 +3300,7 @@ function TabEstimate({ project }) {
                                     disabled={saving}
                                     style={{padding:"4px 10px",background:T.grn,color:"white",border:"none",borderRadius:4,fontSize:10.5,fontWeight:700,cursor:saving?"default":"pointer"}}>
                                     {saving?t("estimate.applying"):t("estimate.apply_library_stages")}
-                                  </button>
+                                  </button>}
                                 </div>
                               )}
                               <div style={{display:"grid",gridTemplateColumns:"26px 1fr 80px 70px 95px 26px",gap:6,marginBottom:4}}>
@@ -3540,19 +3569,19 @@ function TabEstimate({ project }) {
             </div>
             {/* Footer actions */}
             <div style={{padding:"12px 18px",borderTop:"1px solid "+T.b1,display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0,background:T.surfaceB,gap:8}}>
-              <button onClick={rejectAutoInvoice} disabled={previewConfirming}
+              {eDelete ? <button onClick={rejectAutoInvoice} disabled={previewConfirming}
                 style={{background:"white",border:"1.5px solid "+T.redM,color:T.red,borderRadius:6,padding:"7px 14px",fontSize:12,fontWeight:700,cursor: previewConfirming?"default":"pointer"}}>
                {t("estimate.reject_draft")}
-              </button>
+              </button> : <span/>}
               <div style={{display:"flex",gap:8}}>
                 <button onClick={()=>setPreviewInv(null)} disabled={previewConfirming}
                   style={{background:"white",border:"1px solid "+T.b1,color:T.t2,borderRadius:6,padding:"7px 14px",fontSize:12,fontWeight:600,cursor: previewConfirming?"default":"pointer"}}>
                  {t("common.close")}
                 </button>
-                <button onClick={confirmAutoInvoice} disabled={previewConfirming}
+                {eEdit && <button onClick={confirmAutoInvoice} disabled={previewConfirming}
                   style={{background: previewConfirming ? T.t4 : T.grn,color:"white",border:"none",borderRadius:6,padding:"7px 20px",fontSize:12,fontWeight:700,cursor: previewConfirming?"default":"pointer"}}>
                   {previewConfirming ? t("common.submitting") : t("estimate.confirm_submit")}
-                </button>
+                </button>}
               </div>
             </div>
           </div>
@@ -3762,7 +3791,7 @@ function TabEstimate({ project }) {
             {/* Footer actions */}
             {!invDetailLoading && invDetail && (
               <div style={{padding:"12px 18px",borderTop:"1px solid "+T.b1,background:T.surfaceB,display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0,gap:8}}>
-                {inv.status !== "Paid" ? (
+                {inv.status !== "Paid" && eDelete ? (
                   <button onClick={()=>{ closeInvoiceDetail(); deleteInvoice(inv.id, inv.invoice_no); }}
                     style={{background:"white",border:"1.5px solid "+T.redM,color:T.red,borderRadius:6,padding:"7px 14px",fontSize:12,fontWeight:700,cursor:"pointer"}}>
                    {t("estimate.delete_invoice")}
@@ -3776,7 +3805,7 @@ function TabEstimate({ project }) {
                   </button>
                   {/* Edit — all non-Paid invoices. Manual → full item editor;
                       milestone/auto → compact header editor (date/remark/%). */}
-                  {inv.status !== "Paid" && (
+                  {inv.status !== "Paid" && eEdit && (
                     <button onClick={()=>editInvoice(inv)}
                       style={{background:"white",border:"1px solid "+T.bluM,color:T.blu,borderRadius:6,padding:"7px 12px",fontSize:12,fontWeight:600,cursor:"pointer"}}>
                      {t("estimate.edit")}
@@ -3789,7 +3818,7 @@ function TabEstimate({ project }) {
                   {/* Record Payment removed — customer receipts are recorded
                       in the Party Ledger (Party tab → Receipt), keeping all
                       money-in for this client in one place. */}
-                  {inv.status === "Draft" && (
+                  {inv.status === "Draft" && eEdit && (
                     <button onClick={()=>{ closeInvoiceDetail(); openInvoicePreview(inv.id); }}
                       style={{background:"#7C3AED",color:"white",border:"none",borderRadius:6,padding:"7px 16px",fontSize:12,fontWeight:700,cursor:"pointer"}}>
                      {t("estimate.confirm_submit_2")}

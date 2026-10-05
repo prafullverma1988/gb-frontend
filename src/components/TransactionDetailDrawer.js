@@ -22,6 +22,7 @@ import ActivityLog from "./ActivityLog";
 import { t } from "../i18n";
 import { BackClose } from "../utils/backNav";
 import { cld } from "../utils/cloudinary";
+import { can, canAny } from "../utils/perms";
 
 const T = {
   surface: "#FFFFFF", surfaceB: "#F8F9FB",
@@ -180,6 +181,10 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
   const [deleting, setDeleting] = useState(false);
   const [err, setErr] = useState("");
   const [editItems, setEditItems] = useState([]);
+  // Roles & Access (5 Oct 2026) — wahi tick jo server maangta hai:
+  // badalna = Finance EDIT, hatana = Finance DELETE (strict — row na ho to band).
+  const canEditTxn = can("Finance", "edit");
+  const canDeleteTxn = canAny("Finance", "delete", { strict: true });
 
   // Company kharcha kis city ka — wahin dikhe, aur galat ho to wahin badle.
   // Finance ki list ke rows chune hue field ke saath map hote hain (city_id
@@ -418,10 +423,18 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
 
   const handleDelete = async () => {
     if (deleting) return;
-    if (!await window.confirmAsync(`Delete this ${meta.label} of ₹${fmtN(txn.amount)}? Yeh undo nahi hoga.`)) return;
+    // Wajah zaroori (server 3 akshar se kam par 400) — poori entry audit me rehti hai.
+    const reason = window.promptAsync
+      ? await window.promptAsync({
+          message: t("transaction_detail.delete_reason_prompt", { label: meta.label, amount: fmtN(txn.amount) }),
+          multiline: true, okLabel: t("transaction_detail.delete"), cancelLabel: t("common.cancel"),
+        })
+      : null;
+    if (reason == null) return;
+    if (String(reason).trim().length < 3) { setErr(t("transaction_detail.delete_reason_short")); return; }
     setDeleting(true); setErr("");
     try {
-      const res = await api.del("/finance/transactions/" + txn.id);
+      const res = await api.del("/finance/transactions/" + txn.id + "?reason=" + encodeURIComponent(String(reason).trim()));
       if (res?.success === false) {
         // "Transaction not found" → it's a ghost row (never persisted, or
         // already deleted elsewhere). Treat as success: refresh the list
@@ -532,7 +545,7 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
               {cityInfo?.applicable && cityInfo.cities?.length > 0 && (
                 <div style={{ gridColumn: "1 / -1" }}>
                   <div style={{ fontSize: 10.5, fontWeight: 700, color: T.t3, textTransform: "uppercase", letterSpacing: ".4px", marginBottom: 4 }}>{t("finance.city_label")}</div>
-                  <select value={cityInfo.city_id ? String(cityInfo.city_id) : "central"} disabled={citySaving}
+                  <select value={cityInfo.city_id ? String(cityInfo.city_id) : "central"} disabled={citySaving || !canEditTxn}
                     onChange={e => saveCity(e.target.value)}
                     style={{ width: "100%", height: 34, padding: "0 10px", borderRadius: 7, border: `1.5px solid ${T.b1}`, fontSize: 13, background: "#fff", color: "#111827", outline: "none", cursor: citySaving ? "wait" : "pointer", fontFamily: "inherit" }}>
                     {cityInfo.cities.map(c => <option key={c.id} value={String(c.id)}>{c.name}</option>)}
@@ -834,15 +847,19 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
             </>
           ) : (
             <>
+              {canDeleteTxn && (
               <button onClick={handleDelete} disabled={deleting}
                 style={{ padding: "9px 14px", borderRadius: 7, background: T.redL, border: `1px solid ${T.redM}`, color: T.red, fontSize: 12, fontWeight: 700, cursor: deleting ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: 5 }}>
                 {deleting ? t("common.deleting") : t("transaction_detail.delete")}
               </button>
+              )}
               <div style={{ flex: 1 }}/>
+              {canEditTxn && (
               <button onClick={() => setEditing(true)}
                 style={{ padding: "9px 18px", borderRadius: 7, background: T.blu, border: "none", color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 5 }}>
                {t("common.edit")}
               </button>
+              )}
             </>
           )}
         </div>

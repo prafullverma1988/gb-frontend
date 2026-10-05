@@ -27,6 +27,13 @@ import { useState, useEffect, useCallback } from "react";
 import api from "../config/api";
 import SearchSelect from "./SearchSelect";
 import { t } from "../i18n";
+import { canAny } from "../utils/perms";
+
+// "+ Add New" usi tick se dikhe jo server maangta hai (Roles & Access, 5 Oct
+// 2026): party (/finance/parties) = Party YA Finance YA Library ka CREATE;
+// material / worker (/library/...) = Library CREATE.
+const PARTY_ROWS = ["Party", "Finance", "Library"];
+const ADD_PERM = { material: "Library", worker: "Library" };
 
 // Module-level cache so multiple instances on the same page reuse the result
 const _cache = {
@@ -244,6 +251,7 @@ export default function LibrarySelect({
   hideAddNew = false,
 }) {
   const cfg = TYPE_CONFIG[type] || TYPE_CONFIG.supplier;
+  const canAddNew = canAny(ADD_PERM[type] || PARTY_ROWS, "create");
   const cacheEntry = _cache[type] || (_cache[type] = { items: null, loading: false, listeners: new Set() });
   const [items, setItems] = useState(cacheEntry.items || []);
   const [showAdd, setShowAdd] = useState(false);
@@ -336,7 +344,7 @@ export default function LibrarySelect({
         inputRef={inputRef}
         disabled={disabled}
       />
-      {hideAddNew ? null : !showAdd ? (
+      {(hideAddNew || !canAddNew) ? null : !showAdd ? (
         <button
           type="button"
           onClick={() => { setShowAdd(true); setForm({}); }}

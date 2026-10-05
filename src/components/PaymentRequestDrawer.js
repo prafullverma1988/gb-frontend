@@ -20,6 +20,16 @@ import LibrarySelect from "./LibrarySelect";
 import { Credit, fmtTimeAgo } from "./Credit";
 import { t } from "../i18n";
 import { todayISO } from "../utils/today";
+import { can, canAny, canEntry } from "../utils/perms";
+
+// India ka din (server utils/ownEntry jaisa) — "apni request, usi din" ke liye.
+const IST_MS = 5.5 * 3600 * 1000;
+const istDay = (v) => {
+  if (!v) return null;
+  const str = String(v);
+  const ms = new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(str) ? str : str.replace(" ", "T") + "Z").getTime();
+  return Number.isFinite(ms) ? new Date(ms + IST_MS).toISOString().slice(0, 10) : null;
+};
 
 const T = {
   bg: "#F4F6F9",
@@ -274,7 +284,8 @@ export default function PaymentRequestDrawer({
             </div>
           </div>
           <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
-            {mode === "list" && (
+            {/* Payment maangna = Finance ENTRY (transition: Entry YA Create) — server bhi yahi maangta hai */}
+            {mode === "list" && canEntry("Finance") && (
               <button onClick={() => { setMode("form"); setErr(""); }} title={t("payment_request.new_request")}
                 style={{ padding: "6px 12px", borderRadius: 6, background: T.blu, border: "none", color: "white", fontSize: 11.5, fontWeight: 600, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 5, fontFamily: "inherit", transition: "background .12s" }}
                 onMouseEnter={el => el.currentTarget.style.background = "#1D4ED8"}
@@ -344,16 +355,26 @@ export default function PaymentRequestDrawer({
                   );
                 }
                 const me = getUser();
+                // Server (DELETE /finance/payment-requests/:id) ka hi niyam:
+                // Finance DELETE = kisi ki bhi; sirf Entry/Create = apni, aaj ki, pending.
                 const canDelete = (r) => {
                   if (!me) return false;
-                  const role = (me.role || "").toLowerCase();
-                  if (role === "admin" || role === "super_admin") return true;
-                  return String(r.requested_by) === String(me.id);
+                  const own = String(r.requested_by) === String(me.id);
+                  // Delete tick (row ho) = kisi ki bhi; row hi na ho to sirf apni (purana niyam)
+                  if (canAny("Finance", "delete", { strict: true }) || (own && can("Finance", "delete"))) return true;
+                  const pending = !r.status || String(r.status).toLowerCase() === "pending";
+                  return canEntry("Finance") && pending && own
+                    && istDay(r.created_at) === istDay(new Date().toISOString());
                 };
                 const onDelete = async (r) => {
-                  if (!await window.confirmAsync(`Delete payment request PR-${r.id}?\n\nAmount: ${fmtAmount(r.amount)}\nThis cannot be undone.`)) return;
+                  const reason = await window.promptAsync({
+                    message: t("payment_request.delete_reason_prompt", { id: r.id, amount: fmtAmount(r.amount) }),
+                    multiline: true, cancelLabel: t("common.cancel"),
+                  });
+                  if (reason == null) return;
+                  if (String(reason).trim().length < 3) { window.alert(t("transaction_detail.delete_reason_short")); return; }
                   try {
-                    const res = await api.del("/finance/payment-requests/" + r.id);
+                    const res = await api.del("/finance/payment-requests/" + r.id + "?reason=" + encodeURIComponent(String(reason).trim()));
                     if (res?.success === false) {
                       window.alert(res.message || "Delete failed");
                       return;

@@ -22,6 +22,7 @@ import { T, fmtN } from "../shared/tokens";
 import { Panel, PHead, Pill } from "../shared/ui";
 import StatementImportWizard from "./StatementImportWizard";
 import { t } from "../../i18n";
+import { can } from "../../utils/perms";
 
 const PAGE = 150;
 
@@ -774,10 +775,11 @@ export default function TabAccounts() {
             <span style={{ fontSize: 11.5, color: T.t3 }}>
               {meta ? t("acctledger.entries_n", { n: meta.filtered.count }) : ""}
             </span>
-            <button onClick={exportCsv} disabled={!rows.length}
+            {/* Khaate ka ledger = Financial Reports data — CSV = uska EXPORT (5 Oct 2026) */}
+            {can("Financial Reports", "export") && <button onClick={exportCsv} disabled={!rows.length}
               style={{ border: `1px solid ${T.b2}`, background: T.surface, color: rows.length ? T.t2 : T.t4, fontSize: 11.5, fontWeight: 600, padding: "4px 10px", borderRadius: 6, cursor: rows.length ? "pointer" : "default" }}>
               {t("acctledger.export_csv")}
-            </button>
+            </button>}
             <button onClick={load} style={{ border: "none", background: "none", color: T.blu, fontSize: 11.5, fontWeight: 600, cursor: "pointer" }}>
               {t("common.refresh")}
             </button>
