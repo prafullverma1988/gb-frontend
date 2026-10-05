@@ -8324,6 +8324,7 @@ const dict = {
   "settings.mlay_i_rmc":                                        "कंक्रीट (RMC)",
   "settings.mlay_i_rmc_plant":                                  "RMC प्लांट",
   "settings.mlay_i_road_levels":                                "L-सेक्शन",
+  "settings.mlay_i_payreq":                                     "पेमेंट रिक्वेस्ट",
   "settings.mlay_i_settings":                                   "साइट सेटिंग्स",
   "settings.mlay_i_attendance":                                 "मेरी हाज़िरी और छुट्टी",
   "settings.mlay_i_timesheet":                                  "टाइमशीट",

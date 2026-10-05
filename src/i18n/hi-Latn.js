@@ -8327,6 +8327,7 @@ const dict = {
   "settings.mlay_i_rmc":                                        "Concrete (RMC)",
   "settings.mlay_i_rmc_plant":                                  "RMC Plant",
   "settings.mlay_i_road_levels":                                "L-section",
+  "settings.mlay_i_payreq":                                     "Payment Request",
   "settings.mlay_i_settings":                                   "Site Settings",
   "settings.mlay_i_attendance":                                 "Meri Hazri & Chhutti",
   "settings.mlay_i_timesheet":                                  "Timesheet",
