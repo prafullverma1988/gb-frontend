@@ -1136,23 +1136,12 @@ function TopBar({title,sub,collapsed,setCollapsed,alertCount,user,onLogout,onNav
 // ── MOBILE BOTTOM NAV ────────────────────────────────────────────────
 function MobileBottomNav({active,setActive,enabledModules,user}){
   const [showMore,setShowMore]=useState(false);
-  const MODULE_MAP_MOBILE={
-    dashboard:"Dashboard",projects:"Projects",design:"Design",
-    finance:"Finance",procurement:"Procurement",warehouse:"Warehouse",
-    reports:"Reports",library:"Library",settings:"Settings",
-    crm:"CRM",mom:"MOM",payroll:"Payroll",
-    fuel:"Fuel",machinery:"Machinery",assets:"Assets",mapping:"Mapping",rmc:"RMC"
-  };
-  const isVisible=(id)=>{
-    if(id==="saas"||id==="saas-leads") return user?.role==="super_admin";
-    // Entitlement before role — same rule as the desktop sidebar above.
-    if(enabledModules && enabledModules[id]===false) return false;
-    if(["admin","super_admin"].includes(user?.role)) return true;
-    const perms = user?.module_permissions;
-    const modName = MODULE_MAP_MOBILE[id];
-    if(perms && modName) return !!(perms[modName]?.view);
-    return ALWAYS_ON.includes(id);
-  };
+  // (5 Oct 2026) Desktop sidebar wala hi niyam (navAllowed): matrix me row hi
+  // nahi = DIKHE (unconfigured = blocked nahi; Viewer ko bhi dekhna milta hai).
+  // Pehle yahan "row nahi = chhupa" tha, aur "payroll" ko "Payroll" naam ki row
+  // se dhoondha jaata tha (asli row "Team & HR") — mobile browser par wo module
+  // har non-admin se chhupa rehta tha.
+  const isVisible=(id)=>navAllowed(id,user,enabledModules);
   const moreItems=NAV_GROUPS.flatMap(g=>g.items).filter(item=>!BOTTOM_TABS.find(t=>t.id===item.id)&&isVisible(item.id));
   const isMoreActive=!BOTTOM_TABS.find(t=>t.id===active);
   const handleNav=(id)=>{setActive(id);setShowMore(false);};

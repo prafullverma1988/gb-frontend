@@ -113,201 +113,263 @@ function ToggleRow({ icon, label, desc, value, onChange }) {
 //
 // PERM_LIVE batati hai ki kaunsi rok kahan tak SACH ME lagti hai:
 //   "server" — API bhi rokti hai (asli rok)
-//   "app"    — sirf screen par button chhupta hai, API khuli hai
+//   "app"    — sirf screen (web/mobile) ka button chhupta hai, API khuli hai
 //   (nadaarad) — abhi kuch nahi rokta, sirf record hai
-// Jaise-jaise module enforce hote jayenge, yahan naam jodte jao —
-// tooltip apne aap sach bolne lagega.
-// Kaunsi rok kahan tak SACH ME lagti hai. Ye list asli code se banayi
-// gayi hai (scripts/gen-perm-reference.js wahi routes padhta hai).
-//   "server" — API bhi rokti hai   "app" — sirf screen (web/mobile) ka button chhupta hai
-//
-// Mapping: create/edit/delete routes/map-library.js me requirePerm se rukte
-// hain. Approve ka bit bhi server padhta hai (poori company ki library kise
-// dikhe). Export ka koi server route nahi — file browser/phone me banti hai,
-// isliye wahan sirf button chhupta hai ("app").
-// View: har module me screen/tab chhupta hai ("app"); jin me server data bhi
-// rokta hai wo "server" — wahan VIEW hataane par API se bhi kuch nahi milta
-// (14 Sep 2026). Party/godown/machine jaise dropdown khule rehte hain.
-// Entry (3 Oct 2026): rozana ka kaam darj karna — abhi sirf Equipment row par
-// (Trip Tracking ki loading/unloading, routes/trips.js). Equipment ka Approve
-// bhi ab server padhta hai — trip review / manual close / doosre ki trip cancel.
+// Ye list asli code se banayi gayi hai (scripts/gen-perm-reference.js wahi
+// routes padhta hai). Roles & Access v2 (5 Oct 2026) ke baad:
+//   • Entry 15 row par server padhta hai — transition me "Entry YA Create"
+//     (middleware/auth.js entryOrCreate), isliye Create wale ka kaam nahi rukta.
+//   • Overview / Reports ka View ab sirf tab/screen kholta hai — data apne
+//     source module ki View se (finance ki lists se "Overview"/"Reports" hate).
+//   • Fin Activity (Transaction) ka View server par finance list kholta hai;
+//     baaki box bujhe — kaam Finance row se.
+//   • Export: jahan file server banata hai (DPR PDF, ledger, Fuel/Machinery
+//     report, sheet, KML, opening XLSX, salary sheet) wahan "server"; jahan
+//     browser/phone banata hai (CSV, print) wahan "app".
+//   • Approve: Approvals drawer bhi ab matrix ka Approve tick maangta hai
+//     (routes/approvals.js), isliye Design ka Approve bhi "server".
 const PERM_LIVE = {
-  view:    { "*": "app", "CRM": "server", "Township CRM": "server", "Tenders": "server", "Team & HR": "server", "Machinery": "server", "Equipment": "server", "Subcon": "server", "Estimate": "server", "Finance": "server", "Fuel": "server", "Procurement": "server", "Warehouse": "server", "Material": "server", "Assets": "server", "Financial Reports": "server", "Users & Roles": "server", "Attendance": "server", "Overview": "server", "Transaction": "server", "Mapping": "server", "Pulse": "server", "Reports": "server" },
-  create:  { "Attendance": "server", "CRM": "server", "Design": "server", "Equipment": "server", "Estimate": "server", "Finance": "server", "Fuel": "server", "Library": "server", "MOM": "server", "Machinery": "server", "Procurement": "server", "Projects": "server", "Subcon": "server", "Team & HR": "server", "Tenders": "server", "Township CRM": "server", "Users & Roles": "server", "Warehouse": "server", "Material": "server", "Mapping": "server", "Assets": "server", "Tasks": "server", "To Do": "server", "Files": "server", "Budget": "server", "Site / DPR": "server" },
-  edit:    { "Attendance": "server", "CRM": "server", "Design": "server", "Equipment": "server", "Estimate": "server", "Finance": "server", "Fuel": "server", "Library": "server", "MOM": "server", "Machinery": "server", "Procurement": "server", "Projects": "server", "Subcon": "server", "Team & HR": "server", "Tenders": "server", "Township CRM": "server", "Users & Roles": "server", "Warehouse": "server", "Mapping": "server", "Assets": "server", "Tasks": "server", "To Do": "server", "Budget": "server" },
-  delete:  { "Attendance": "server", "CRM": "server", "Design": "server", "Equipment": "server", "Estimate": "server", "Finance": "server", "Fuel": "server", "Library": "server", "MOM": "server", "Machinery": "server", "Projects": "server", "Subcon": "server", "Team & HR": "server", "Tenders": "server", "Township CRM": "server", "Users & Roles": "server", "Warehouse": "server", "Mapping": "server", "Tasks": "server", "To Do": "server" },
-  entry:   { "Equipment": "server" },
-  approve: { "Attendance": "server", "Finance": "server", "Procurement": "server", "Team & HR": "server", "Warehouse": "server", "Mapping": "server", "Assets": "server", "Projects": "server", "Site / DPR": "server", "Equipment": "server" },
-  export:  { "Mapping": "app" },
+  view:    { "*": "app", "CRM": "server", "Township CRM": "server", "Tenders": "server", "Team & HR": "server", "Machinery": "server", "Equipment": "server", "Subcon": "server", "Estimate": "server", "Finance": "server", "Fuel": "server", "Procurement": "server", "Warehouse": "server", "Material": "server", "Assets": "server", "Financial Reports": "server", "Users & Roles": "server", "Attendance": "server", "Transaction": "server", "Mapping": "server", "Pulse": "server", "RMC": "server", "Road Levels": "server", "Budget": "server" },
+  create:  { "Attendance": "server", "CRM": "server", "Design": "server", "Equipment": "server", "Estimate": "server", "Finance": "server", "Fuel": "server", "Library": "server", "MOM": "server", "Machinery": "server", "Procurement": "server", "Projects": "server", "Subcon": "server", "Team & HR": "server", "Tenders": "server", "Township CRM": "server", "Users & Roles": "server", "Warehouse": "server", "Material": "server", "Mapping": "server", "Assets": "server", "Tasks": "server", "To Do": "server", "Budget": "server", "Site / DPR": "server", "RMC": "server", "Road Levels": "server", "Party": "server" },
+  entry:   { "Site / DPR": "server", "Tasks": "server", "Material": "server", "Attendance": "server", "Equipment": "server", "Files": "server", "Procurement": "server", "Warehouse": "server", "Fuel": "server", "Machinery": "server", "Assets": "server", "RMC": "server", "Tenders": "server", "Mapping": "server", "Finance": "server" },
+  edit:    { "Attendance": "server", "CRM": "server", "Design": "server", "Equipment": "server", "Estimate": "server", "Finance": "server", "Fuel": "server", "Library": "server", "MOM": "server", "Machinery": "server", "Procurement": "server", "Projects": "server", "Subcon": "server", "Team & HR": "server", "Tenders": "server", "Township CRM": "server", "Users & Roles": "server", "Warehouse": "server", "Mapping": "server", "Assets": "server", "Tasks": "server", "To Do": "server", "Budget": "server", "RMC": "server", "Road Levels": "server", "Party": "server", "Material": "server", "Site / DPR": "server" },
+  delete:  { "Attendance": "server", "CRM": "server", "Design": "server", "Equipment": "server", "Estimate": "server", "Finance": "server", "Fuel": "server", "Library": "server", "MOM": "server", "Machinery": "server", "Projects": "server", "Subcon": "server", "Team & HR": "server", "Tenders": "server", "Township CRM": "server", "Users & Roles": "server", "Warehouse": "server", "Mapping": "server", "Tasks": "server", "To Do": "server", "RMC": "server", "Road Levels": "server", "Party": "server", "Budget": "server", "Files": "server", "Material": "server", "Procurement": "server", "Assets": "server", "Site / DPR": "server" },
+  approve: { "Attendance": "server", "Finance": "server", "Procurement": "server", "Team & HR": "server", "Warehouse": "server", "Mapping": "server", "Assets": "server", "Site / DPR": "server", "Equipment": "server", "RMC": "server", "Fuel": "server", "Subcon": "server", "Estimate": "server", "CRM": "server", "Budget": "server", "Design": "server" },
+  export:  { "Site / DPR": "server", "Finance": "server", "Financial Reports": "server", "Party": "server", "Fuel": "server", "Machinery": "server", "Road Levels": "server", "Tenders": "server", "Assets": "server", "Team & HR": "server",
+             "Mapping": "app", "Projects": "app", "Estimate": "app", "Tasks": "app", "Subcon": "app", "Reports": "app", "Library": "app", "CRM": "app", "MOM": "app", "Procurement": "app", "Warehouse": "app" },
 };
 // Module ka apna naam pehle, "*" sirf tab jab uske liye kuch likha na ho.
 const permLive = (mod, act) => (PERM_LIVE[act] || {})[mod] || (PERM_LIVE[act] || {})["*"] || null;
 
+// Jahan server "row hi nahi" ko BAND maanta hai (strict) — matrix ka "Row save
+// nahi — default" isi se banta hai, aur hover par chetavni bhi.
+const PERM_STRICT = {
+  "Users & Roles": ["view", "create", "edit", "delete"],
+  "Road Levels": ["create", "edit", "delete"],
+  "Site / DPR": ["approve"],
+  "Budget": ["approve"],
+  "Attendance": ["approve"],
+  "Team & HR": ["approve"],
+  "Fuel": ["approve"],
+  "Equipment": ["approve"],
+};
+
+// Har row/box ka matlab — teeno bhasha me (t()). Box ke teen roop:
+//   () => t(key)  — box chalta hai, ye uska matlab
+//   NA            — is row par lagoo nahi ("–" bujha box)
+//   naTip(key)    — bujha box, par hover par wajah (Settings: sirf Admin;
+//                   Fin Activity: kaam Finance row se)
+// Entry sirf 15 row par khulta hai (Site / DPR, Tasks, Material, Attendance,
+// Equipment, Files, Procurement, Warehouse, Fuel, Machinery, Assets, RMC,
+// Tenders, Mapping, Finance) — baaki sab par NA.
+const NA = "—";
+const naTip = (key) => ({ na: true, tip: () => t(key) });
 const PERM_HELP = {
   "Projects": {
-    view: "Sidebar se Projects gayab. Koi bhi project khul hi nahi payega — uske andar ke saare tabs bhi band.",
-    create: "Naya project banana", edit: "Project ki detail badalna (naam, city, date, budget)",
-    delete: "Project archive ya delete karna", approve: "Project par aayi approval par faisla dena",
-    export: "Project list CSV/PDF me nikalna",
+    view: () => t("settings.perm_projects_view"), create: () => t("settings.perm_projects_create"), entry: NA, edit: () => t("settings.perm_projects_edit"),
+    delete: () => t("settings.perm_projects_delete"), approve: NA, export: () => t("settings.perm_projects_export"),
   },
   "Design": {
-    view: "Sidebar se Design gayab — drawing (naksha) upload, revision aur sharing sab band.",
-    create: "Nayi drawing upload karna", edit: "Drawing ki detail ya nayi revision chadhana",
-    delete: "Drawing hatana", approve: "Drawing approve karna", export: "Drawing list nikalna",
+    view: () => t("settings.perm_design_view"), create: () => t("settings.perm_design_create"), entry: NA, edit: () => t("settings.perm_design_edit"),
+    delete: () => t("settings.perm_design_delete"), approve: () => t("settings.perm_design_approve"), export: () => t("settings.perm_design_export"),
   },
   "Finance": {
-    view: "Sidebar se Finance gayab — Party Ledger, Fin Activity, Cash Book, Day Book, Payment Requests, Pending Payments, Unbilled GRN, Billed Material sab band.",
-    create: "Nayi transaction (bill, payment, receipt), nayi party, nayi payment request banana",
-    edit: "Transaction ya party ki detail badalna, pending payment close/extend karna",
-    delete: "Party ya payment request delete karna",
-    approve: "Payment request aur staff wallet ka kharcha approve / reject karna",
-    export: "Ledger aur transaction CSV/PDF me nikalna",
+    view: () => t("settings.perm_finance_view"), create: () => t("settings.perm_finance_create"), entry: () => t("settings.perm_finance_entry"), edit: () => t("settings.perm_finance_edit"),
+    delete: () => t("settings.perm_finance_delete"), approve: () => t("settings.perm_finance_approve"), export: () => t("settings.perm_finance_export"),
   },
   "Financial Reports": {
-    view: "Paisa ka vishleshan band — Finance ka \"P&L (Project-wise)\" tab, upar wali KPI patti (kitna aaya/gaya/lena/dena), project Overview ka paisa hissa, aur Reports ka \"Progress & Financial\". Rozana ka Finance kaam isse alag hai.",
-    create: "—", edit: "—", delete: "—", approve: "—",
-    export: "P&L ko CSV/PDF me nikalna",
+    view: () => t("settings.perm_finrep_view"), create: NA, entry: NA, edit: NA,
+    delete: NA, approve: NA, export: () => t("settings.perm_finrep_export"),
   },
   "Pulse": {
-    view: "Site Pulse band — \"kis site par kya hua\" wali khabrein (app ka Pulse tab aur web ka Site Pulse drawer). Pulse apna koi data nahi rakhta, isliye ISKE ANDAR har khabar apne module ke adhikar se hi khulti hai: payment Finance se, maal aana Warehouse se, MR Procurement se, progress/photo/document Projects se, aur manzoori ki khabar sirf unhe jo khud kuchh approve karte hain. Yani ye row poori screen ka switch hai, khabron ka nahi.",
-    create: "—", edit: "—", delete: "—", approve: "—", export: "—",
-  },
-  "Assets": {
-    view: "Sidebar se Assets gayab — plate, prop, shuttering jaisa saamaan jo site par jaata hai aur wapas aata hai (meter wali machine Machinery me hai).",
-    create: "Naya asset jodna, site ko issue karna", edit: "Asset ki detail ya jagah badalna",
-    delete: "Asset hatana", approve: "Asset ka issue/wapsi approve karna", export: "Asset register nikalna",
+    view: () => t("settings.perm_pulse_view"), create: NA, entry: NA, edit: NA,
+    delete: NA, approve: NA, export: NA,
   },
   "Mapping": {
-    view: "Site mapping aur uski library khulti hai — mobile app ka \"Site mapping\" aur web ka \"Site Mapping\" (sidebar). Sirf View par aadmi ko APNI banayi marking dikhti hai (aur wo folder jo use diya gaya ho). Box hatao to dono jagah screen band.",
-    create: "Nayi marking aur naya folder banana.",
-    edit: "Marking ka naam badalna aur use doosre folder me khiskana (apne folder ka naam badalna bhi).",
-    delete: "Marking ya folder hatana. ⚠️ Ye box tick na ho to hatana BAND hai — naye ya custom role ko ye apne aap nahi milta, admin ko khud tick karna padta hai. Hatayi marking \"Hatayi hui\" me jaati hai, aur jiske paas Delete hai wo use wahan se wapas la sakta hai. Folder me doosre ki banayi marking ho to folder nahi hatega.",
-    approve: "⚠️ Yahan iska matlab MANZOORI nahi, DEKH-REKH hai — is box se aadmi ko POORI COMPANY ki library dikhne lagti hai, doosron ki banayi marking bhi. Admin/super admin ko wo bina box ke bhi dikhti hai. Default me Project Manager ke paas ye laga hua hai.",
-    export: "KML / GeoJSON / CSV ke button — folder ya file ki marking nikalna (web aur mobile dono). Box na ho to button nahi dikhte.",
+    view: () => t("settings.perm_mapping_view"), create: () => t("settings.perm_mapping_create"), entry: () => t("settings.perm_mapping_entry"), edit: () => t("settings.perm_mapping_edit"),
+    delete: () => t("settings.perm_mapping_delete"), approve: () => t("settings.perm_mapping_approve"), export: () => t("settings.perm_mapping_export"),
   },
   "Procurement": {
-    view: "Sidebar se Procurement gayab — Material Request (MR), RFQ, quotation compare aur Purchase Order sab band.",
-    create: "Nayi MR banana, RFQ nikalna, PO banana", edit: "MR/PO ki detail badalna",
-    delete: "MR ya PO delete karna", approve: "MR aur PO approve karna", export: "MR/PO list nikalna",
+    view: () => t("settings.perm_procurement_view"), create: () => t("settings.perm_procurement_create"), entry: () => t("settings.perm_procurement_entry"), edit: () => t("settings.perm_procurement_edit"),
+    delete: () => t("settings.perm_procurement_delete"), approve: () => t("settings.perm_procurement_approve"), export: () => t("settings.perm_procurement_export"),
   },
   "Warehouse": {
-    view: "Sidebar se Warehouse gayab — central godown ka Material In (GRN), Material Out (issue) aur stock sab band.",
-    create: "Maal andar lena (GRN) ya site ko dena (issue)", edit: "GRN/issue ki entry badalna",
-    delete: "Entry delete karna", approve: "Stock transfer approve karna", export: "Stock register nikalna",
+    view: () => t("settings.perm_warehouse_view"), create: () => t("settings.perm_warehouse_create"), entry: () => t("settings.perm_warehouse_entry"), edit: () => t("settings.perm_warehouse_edit"),
+    delete: () => t("settings.perm_warehouse_delete"), approve: () => t("settings.perm_warehouse_approve"), export: () => t("settings.perm_warehouse_export"),
   },
   "Fuel": {
-    view: "Sidebar se Fuel gayab — pump se diesel aana, barrel ka stock, kis machine ne kitna piya, pump ka baaki paisa.",
-    create: "Diesel entry karna (pump se aaya / machine me dala)", edit: "Diesel entry badalna",
-    delete: "Diesel entry delete karna", approve: "Fuel entry approve karna", export: "Fuel register nikalna",
+    view: () => t("settings.perm_fuel_view"), create: () => t("settings.perm_fuel_create"), entry: () => t("settings.perm_fuel_entry"), edit: () => t("settings.perm_fuel_edit"),
+    delete: () => t("settings.perm_fuel_delete"), approve: () => t("settings.perm_fuel_approve"), export: () => t("settings.perm_fuel_export"),
   },
   "Machinery": {
-    view: "Sidebar se Machinery gayab — machine ka meter, diesel, usage aur kaagaz (insurance/fitness) ki tareekhein.",
-    create: "Nayi machine jodna, usage/meter entry karna", edit: "Machine ki detail ya kaagaz badalna",
-    delete: "Machine hatana", approve: "Machinery entry approve karna", export: "Machine register nikalna",
+    view: () => t("settings.perm_machinery_view"), create: () => t("settings.perm_machinery_create"), entry: () => t("settings.perm_machinery_entry"), edit: () => t("settings.perm_machinery_edit"),
+    delete: () => t("settings.perm_machinery_delete"), approve: NA, export: () => t("settings.perm_machinery_export"),
+  },
+  "Assets": {
+    view: () => t("settings.perm_assets_view"), create: () => t("settings.perm_assets_create"), entry: () => t("settings.perm_assets_entry"), edit: () => t("settings.perm_assets_edit"),
+    delete: () => t("settings.perm_assets_delete"), approve: () => t("settings.perm_assets_approve"), export: () => t("settings.perm_assets_export"),
+  },
+  "RMC": {
+    view: () => t("settings.perm_rmc_view"), create: () => t("settings.perm_rmc_create"), entry: () => t("settings.perm_rmc_entry"), edit: () => t("settings.perm_rmc_edit"),
+    delete: () => t("settings.perm_rmc_delete"), approve: () => t("settings.perm_rmc_approve"), export: NA,
+  },
+  "Road Levels": {
+    view: () => t("settings.perm_road_view"), create: () => t("settings.perm_road_create"), entry: NA, edit: () => t("settings.perm_road_edit"),
+    delete: () => t("settings.perm_road_delete"), approve: NA, export: () => t("settings.perm_road_export"),
   },
   "Team & HR": {
-    view: "Sidebar se Team & HR gayab — staff, worker, salary aur payroll sab band.",
-    create: "Naya staff/worker jodna, payroll run banana", edit: "Salary, detail ya attendance badalna",
-    delete: "Staff/worker hatana", approve: "Payroll aur salary approve karna", export: "Payroll/salary sheet nikalna",
+    view: () => t("settings.perm_teamhr_view"), create: () => t("settings.perm_teamhr_create"), entry: NA, edit: () => t("settings.perm_teamhr_edit"),
+    delete: () => t("settings.perm_teamhr_delete"), approve: () => t("settings.perm_teamhr_approve"), export: () => t("settings.perm_teamhr_export"),
   },
   "CRM": {
-    view: "Sidebar se CRM gayab — lead ka record aur uska follow-up band.",
-    create: "Naya lead banana, follow-up jodna", edit: "Lead ki detail ya stage badalna",
-    delete: "Lead delete karna", approve: "Quotation approve karna", export: "Lead list nikalna",
+    view: () => t("settings.perm_crm_view"), create: () => t("settings.perm_crm_create"), entry: NA, edit: () => t("settings.perm_crm_edit"),
+    delete: () => t("settings.perm_crm_delete"), approve: () => t("settings.perm_crm_approve"), export: () => t("settings.perm_crm_export"),
   },
   "MOM": {
-    view: "Sidebar se MOM gayab — meeting ke minutes aur unse nikle kaam band.",
-    create: "Nayi meeting/MOM banana", edit: "MOM ya usme diye gaye kaam badalna",
-    delete: "MOM delete karna", approve: "MOM approve karna", export: "MOM PDF nikalna",
+    view: () => t("settings.perm_mom_view"), create: () => t("settings.perm_mom_create"), entry: NA, edit: () => t("settings.perm_mom_edit"),
+    delete: () => t("settings.perm_mom_delete"), approve: NA, export: () => t("settings.perm_mom_export"),
   },
   "Township CRM": {
-    view: "Sidebar se Township CRM gayab — plot/flat (unit) ki booking, customer aur uski kist sab band.",
-    create: "Nayi booking ya customer banana", edit: "Booking, kist ya customer detail badalna",
-    delete: "Booking delete karna", approve: "Booking/discount approve karna", export: "Booking list nikalna",
+    view: () => t("settings.perm_township_view"), create: () => t("settings.perm_township_create"), entry: NA, edit: () => t("settings.perm_township_edit"),
+    delete: () => t("settings.perm_township_delete"), approve: NA, export: NA,
   },
   "Tenders": {
-    view: "Sidebar se Tenders gayab — NIT se lekar work order tak ka poora tender record band.",
-    create: "Naya tender jodna, BOQ chadhana", edit: "Tender ki detail, BOQ ya date badalna",
-    delete: "Tender delete karna", approve: "Tender par faisla dena", export: "Tender/BOQ nikalna",
+    view: () => t("settings.perm_tenders_view"), create: () => t("settings.perm_tenders_create"), entry: () => t("settings.perm_tenders_entry"), edit: () => t("settings.perm_tenders_edit"),
+    delete: () => t("settings.perm_tenders_delete"), approve: NA, export: () => t("settings.perm_tenders_export"),
   },
   "Reports": {
-    view: "Sidebar se Reports gayab — cash, party, material aur labour ki saari report band.",
-    create: "—", edit: "—", delete: "—", approve: "—",
-    export: "Report CSV/PDF me nikalna",
+    view: () => t("settings.perm_reports_view"), create: NA, entry: NA, edit: NA,
+    delete: NA, approve: NA, export: () => t("settings.perm_reports_export"),
   },
   "Library": {
-    view: "Sidebar se Library gayab — material, worker, party, subcontractor, rate card aur BOQ item ka master data band.",
-    create: "Naya master item jodna (material, party, worker, rate)", edit: "Master item badalna",
-    delete: "Master item hatana", approve: "—", export: "Master list CSV me nikalna",
+    view: () => t("settings.perm_library_view"), create: () => t("settings.perm_library_create"), entry: NA, edit: () => t("settings.perm_library_edit"),
+    delete: () => t("settings.perm_library_delete"), approve: NA, export: () => t("settings.perm_library_export"),
   },
   "Settings": {
-    view: "Sidebar se Settings gayab — company profile, roles & access, approval chain, photo settings sab band.",
-    create: "Naya role ya user banana", edit: "Company/role/user setting badalna",
-    delete: "Role ya user hatana", approve: "—", export: "—",
+    view: () => t("settings.perm_settings_view"), create: naTip("settings.perm_settings_admin_only"), entry: NA, edit: naTip("settings.perm_settings_admin_only"),
+    delete: naTip("settings.perm_settings_admin_only"), approve: NA, export: NA,
   },
   "Users & Roles": {
-    view: "Settings → Roles & Access me user aur role ki list dikhna. Iske bina Users aur Project Access tab khali dikhte hain. (Settings row alag hai — My Profile aur password uske andar aate hain.)",
-    create: "Naya user ya naya custom role banana",
-    edit: "User ki detail/role badalna, password reset karna, role ki permissions save karna",
-    delete: "User ya role hatana",
-    approve: "—", export: "—",
+    view: () => t("settings.perm_users_view"), create: () => t("settings.perm_users_create"), entry: NA, edit: () => t("settings.perm_users_edit"),
+    delete: () => t("settings.perm_users_delete"), approve: NA, export: NA,
   },
   "Overview": {
-    view: "Project ke andar Overview tab nahi dikhega — progress, paisa ka summary aur kaam ki halat.",
-    create: "—", edit: "Overview ke number/target badalna", delete: "—", approve: "—", export: "Overview nikalna",
+    view: () => t("settings.perm_overview_view"), create: NA, entry: NA, edit: NA,
+    delete: NA, approve: NA, export: NA,
   },
   "Estimate": {
-    view: "Project ke andar Estimate tab nahi dikhega — client ka BOQ aur quotation.",
-    create: "Naya estimate/quotation banana", edit: "Estimate ki line ya rate badalna",
-    delete: "Estimate delete karna", approve: "Estimate approve karna", export: "Estimate PDF nikalna",
+    view: () => t("settings.perm_estimate_view"), create: () => t("settings.perm_estimate_create"), entry: NA, edit: () => t("settings.perm_estimate_edit"),
+    delete: () => t("settings.perm_estimate_delete"), approve: () => t("settings.perm_estimate_approve"), export: () => t("settings.perm_estimate_export"),
+  },
+  "Budget": {
+    view: () => t("settings.perm_budget_view"), create: () => t("settings.perm_budget_create"), entry: NA, edit: () => t("settings.perm_budget_edit"),
+    delete: () => t("settings.perm_budget_delete"), approve: () => t("settings.perm_budget_approve"), export: () => t("settings.perm_budget_export"),
+  },
+  "Party": {
+    view: () => t("settings.perm_party_view"), create: () => t("settings.perm_party_create"), entry: NA, edit: () => t("settings.perm_party_edit"),
+    delete: () => t("settings.perm_party_delete"), approve: NA, export: () => t("settings.perm_party_export"),
   },
   "Transaction": {
-    view: "Project ke andar Transaction tab nahi dikhega — us project ki saari len-den.",
-    create: "Us project me nayi transaction banana", edit: "Transaction badalna",
-    delete: "Transaction delete karna", approve: "Transaction approve karna", export: "Transaction list nikalna",
+    view: () => t("settings.perm_txn_view"), create: naTip("settings.perm_txn_via_finance"), entry: naTip("settings.perm_txn_via_finance"), edit: naTip("settings.perm_txn_via_finance"),
+    delete: naTip("settings.perm_txn_via_finance"), approve: naTip("settings.perm_txn_via_finance"), export: naTip("settings.perm_txn_via_finance"),
+  },
+  "To Do": {
+    view: () => t("settings.perm_todo_view"), create: () => t("settings.perm_todo_create"), entry: NA, edit: () => t("settings.perm_todo_edit"),
+    delete: () => t("settings.perm_todo_delete"), approve: NA, export: NA,
+  },
+  "Tasks": {
+    view: () => t("settings.perm_tasks_view"), create: () => t("settings.perm_tasks_create"), entry: () => t("settings.perm_tasks_entry"), edit: () => t("settings.perm_tasks_edit"),
+    delete: () => t("settings.perm_tasks_delete"), approve: NA, export: () => t("settings.perm_tasks_export"),
   },
   "Material": {
-    view: "Project ke andar Material tab nahi dikhega — site par maal aana (GRN), issue aur stock.",
-    create: "Site par maal ka kaam — nayi MR banana (maal maangna), aur maal receive karna teenon tarah se: order kiye MR ka maal aana, bina MR ka seedha GRN, aur godown se bheja hua maal utarna. Har ek par is tick ki jagah us raaste ka apna module (Procurement / Warehouse) bhi chalta hai — do me se koi ek kaafi hai. MR bante hi Pending hoti hai; approve karna alag tick hai.",
-    edit: "GRN/issue ki entry badalna", delete: "Entry delete karna",
-    approve: "Material entry approve karna", export: "Site stock register nikalna",
+    view: () => t("settings.perm_material_view"), create: () => t("settings.perm_material_create"), entry: () => t("settings.perm_material_entry"), edit: () => t("settings.perm_material_edit"),
+    delete: () => t("settings.perm_material_delete"), approve: NA, export: NA,
   },
   "Subcon": {
-    view: "Project ke andar Subcon tab nahi dikhega — thekedar ke work order, RA bill aur unka hisaab.",
-    create: "Naya work order banana, RA bill banana", edit: "WO ya RA bill badalna",
-    delete: "WO/RA bill delete karna", approve: "RA bill approve karna", export: "WO/RA bill nikalna",
+    view: () => t("settings.perm_subcon_view"), create: () => t("settings.perm_subcon_create"), entry: NA, edit: () => t("settings.perm_subcon_edit"),
+    delete: () => t("settings.perm_subcon_delete"), approve: () => t("settings.perm_subcon_approve"), export: () => t("settings.perm_subcon_export"),
   },
   "Attendance": {
-    view: "Project ke andar Attendance tab nahi dikhega — mazdoor aur staff ki hazri.",
-    create: "Hazri lagana", edit: "Lagi hui hazri badalna", delete: "Hazri hatana",
-    approve: "Attendance review approve karna", export: "Attendance sheet nikalna",
+    view: () => t("settings.perm_attendance_view"), create: () => t("settings.perm_attendance_create"), entry: () => t("settings.perm_attendance_entry"), edit: () => t("settings.perm_attendance_edit"),
+    delete: () => t("settings.perm_attendance_delete"), approve: () => t("settings.perm_attendance_approve"), export: NA,
   },
-  // Trip Tracking 3 Oct 2026 se isi row se chalta hai (pehle Machinery se), aur
-  // Create / Entry ka matlab alag ho gaya — isliye ye text t() se aata hai
-  // (function = padhte waqt jo bhasha chal rahi ho). Sirf jis row me `entry`
-  // likha hai wahan Entry ka box khulta hai — baaki sab par "–" (permNA).
   "Equipment": {
-    view: "Project ke andar Equipment tab nahi dikhega — project par lagi machine aur uska hisaab.",
-    create: () => t("settings.perm_eq_create"),
-    entry: () => t("settings.perm_eq_entry"),
-    edit: () => t("settings.perm_eq_edit"),
-    delete: () => t("settings.perm_eq_delete"),
-    approve: () => t("settings.perm_eq_approve"),
-    export: "Equipment register nikalna",
+    view: () => t("settings.perm_eq_view"), create: () => t("settings.perm_eq_create"), entry: () => t("settings.perm_eq_entry"), edit: () => t("settings.perm_eq_edit"),
+    delete: () => t("settings.perm_eq_delete"), approve: () => t("settings.perm_eq_approve"), export: NA,
   },
+  "Files": {
+    view: () => t("settings.perm_files_view"), create: NA, entry: () => t("settings.perm_files_entry"), edit: NA,
+    delete: () => t("settings.perm_files_delete"), approve: NA, export: NA,
+  },
+  "Site / DPR": {
+    view: () => t("settings.perm_dpr_view"), create: () => t("settings.perm_dpr_create"), entry: () => t("settings.perm_dpr_entry"), edit: () => t("settings.perm_dpr_edit"),
+    delete: () => t("settings.perm_dpr_delete"), approve: () => t("settings.perm_dpr_approve"), export: () => t("settings.perm_dpr_export"),
+  },
+};
+// Matrix me row ka naam — DB ki key (jaise "Transaction") wahi rehti hai, sirf
+// dikhne wala naam badalta hai: Transaction → "Fin Activity" (5 Oct 2026).
+const PERM_ROW_LABEL = {
+  "Projects": () => t("settings.perm_row_projects"),
+  "Design": () => t("settings.perm_row_design"),
+  "Finance": () => t("settings.perm_row_finance"),
+  "Financial Reports": () => t("settings.perm_row_finrep"),
+  "Pulse": () => t("settings.perm_row_pulse"),
+  "Mapping": () => t("settings.perm_row_mapping"),
+  "Procurement": () => t("settings.perm_row_procurement"),
+  "Warehouse": () => t("settings.perm_row_warehouse"),
+  "Fuel": () => t("settings.perm_row_fuel"),
+  "Machinery": () => t("settings.perm_row_machinery"),
+  "Assets": () => t("settings.perm_row_assets"),
+  "RMC": () => t("settings.perm_row_rmc"),
+  "Road Levels": () => t("settings.perm_row_road"),
+  "Team & HR": () => t("settings.perm_row_teamhr"),
+  "CRM": () => t("settings.perm_row_crm"),
+  "MOM": () => t("settings.perm_row_mom"),
+  "Township CRM": () => t("settings.perm_row_township"),
+  "Tenders": () => t("settings.perm_row_tenders"),
+  "Reports": () => t("settings.perm_row_reports"),
+  "Library": () => t("settings.perm_row_library"),
+  "Settings": () => t("settings.perm_row_settings"),
+  "Users & Roles": () => t("settings.perm_row_users"),
+  "Overview": () => t("settings.perm_row_overview"),
+  "Estimate": () => t("settings.perm_row_estimate"),
+  "Budget": () => t("settings.perm_row_budget"),
+  "Party": () => t("settings.perm_row_party"),
+  "Transaction": () => t("settings.perm_row_txn"),
+  "To Do": () => t("settings.perm_row_todo"),
+  "Tasks": () => t("settings.perm_row_tasks"),
+  "Material": () => t("settings.perm_row_material"),
+  "Subcon": () => t("settings.perm_row_subcon"),
+  "Attendance": () => t("settings.perm_row_attendance"),
+  "Equipment": () => t("settings.perm_row_eq"),
+  "Files": () => t("settings.perm_row_files"),
+  "Site / DPR": () => t("settings.perm_row_dpr"),
+};
+// "New role" ke shuruaati ticks (5 Oct 2026). DB me koi seed nahi — role banne
+// ke turant baad yahi ticks PUT /settings/roles/:id/permissions se save hote
+// hain (wahi raasta jo matrix ka "Update Permissions" leta hai).
+const ROLE_PRESETS = {
+  store_keeper: { Warehouse: ["view", "entry"], Material: ["view", "entry"], Assets: ["view", "entry"], Procurement: ["view"] },
+};
+const permRowLabel = (name) => (PERM_ROW_LABEL[name] ? PERM_ROW_LABEL[name]() : name);
+const permText = (name, action) => {
+  const v = (PERM_HELP[name] || {})[action];
+  return typeof v === "function" ? v() : null;
 };
 
 // Ek box ka poora hover text — matlab + wo saaf chetavni ki rok abhi sach me
 // lagti hai ya nahi.
 function permTip(moduleName, action) {
-  const h = PERM_HELP[moduleName] || {};
-  const base = typeof h[action] === "function" ? h[action]() : h[action];
-  if (base === "—") return `${action.toUpperCase()} — is row par lagoo nahi hota.`;
-  const head = base || `${moduleName} me ${action}`;
+  const v = (PERM_HELP[moduleName] || {})[action];
+  const ACT = action.toUpperCase();
+  if (v === NA || (v === undefined && action === "entry")) return `${ACT} — ${t("settings.perm_tip_na")}`;
+  if (v && v.na) return `${ACT} — ${v.tip()}`;
+  const head = permText(moduleName, action) || `${permRowLabel(moduleName)} — ${action}`;
   const live = permLive(moduleName, action);
-  if (live === "server") return `${action.toUpperCase()}: ${head}`;
-  if (live === "app")    return `${action.toUpperCase()}: ${head}\n\nAbhi sirf screen ka button chhupta hai (web aur mobile) — server par rok nahi lagti.`;
-  return `${action.toUpperCase()}: ${head}\n\nAbhi sirf record hota hai — ye tick hataane se kaam nahi rukta. (Module-by-module lagaya ja raha hai.)`;
+  const strict = (PERM_STRICT[moduleName] || []).includes(action) ? `\n\n${t("settings.perm_tip_strict")}` : "";
+  if (live === "server") return `${ACT}: ${head}${strict}`;
+  if (live === "app")    return `${ACT}: ${head}\n\n${t("settings.perm_tip_app")}${strict}`;
+  return `${ACT}: ${head}\n\n${t("settings.perm_tip_record")}`;
 }
 
 function SectionCard({ title, desc, children, action }) {
@@ -1147,7 +1209,7 @@ function RolesAccess() {
   const [roleForm, setRoleForm] = useState({ name: "", desc: "", color: T.teal });
   const roleColors = [T.red, T.blue, T.green, T.amber, T.purple, T.teal, "#E11D48", "#DB2777", "#0891B2", "#CA8A04"];
 
-  const openCreateRole = () => { setEditingRole(null); setRoleForm({ name: "", desc: "", color: T.teal }); setShowRoleModal(true); };
+  const openCreateRole = () => { setEditingRole(null); setRoleForm({ name: "", desc: "", color: T.teal, preset: "" }); setShowRoleModal(true); };
   const openEditRole = (r) => { setEditingRole(r); setRoleForm({ name: r.name, desc: r.desc, color: r.color }); setShowRoleModal(true); };
   // Custom roles persist via /settings/roles — system roles keep only
   // local desc/color edits (their names are wired into permission mapping).
@@ -1174,7 +1236,18 @@ function RolesAccess() {
         if (!res?.success) { alert(res?.message || "Role create failed"); setRoleSaving(false); return; }
         const slug = res.data?.slug || roleForm.name.toLowerCase().replace(/\s+/g, "_");
         setRoles(prev => [...prev, { id: slug, dbId: res.data?.id, name: roleForm.name, desc: roleForm.desc, color: roleForm.color, colorBg: roleForm.color + "15", isSystem: false }]);
-        setPermMatrix(prev => ({ ...prev, [slug]: prev[slug] || {} }));
+        // Preset chuna ho to uske ticks turant save (role 0-rows se shuru hota hai).
+        const preset = ROLE_PRESETS[roleForm.preset];
+        if (preset && res.data?.id) {
+          const bit = (list, b) => (list.includes(b) ? 1 : 0);
+          const permissions = Object.entries(preset).map(([module, list]) => ({
+            module, can_view: bit(list, "view"), can_create: bit(list, "create"), can_entry: bit(list, "entry"),
+            can_edit: bit(list, "edit"), can_delete: bit(list, "delete"), can_approve: bit(list, "approve"), can_export: bit(list, "export"),
+          }));
+          const pr = await api.put(`/settings/roles/${res.data.id}/permissions`, { permissions }).catch(() => null);
+          if (!pr?.success) alert(t("settings.role_preset_fail"));
+        }
+        setPermMatrix(prev => ({ ...prev, [slug]: preset ? { ...preset } : (prev[slug] || {}) }));
         setSelectedRole(slug);
         reloadDbRoles();
       }
@@ -1407,16 +1480,16 @@ function RolesAccess() {
   const allPerms = ["view", "create", "entry", "edit", "delete", "approve", "export"];
   // In rows par sirf dekhna aur nikalna hota hai — create/edit/delete/approve
   // ka koi matlab nahi.
-  // Kaunsa box is row par lagoo hi nahi hota — yahi PERM_HELP me "—" se
-  // likha hai, to wahi ek jagah se dono cheezein chalti hain: bujha box
-  // aur uska hover text.
-  // Entry ulta chalta hai: jis row ke PERM_HELP me `entry` likha hi nahi
-  // (aaj Equipment ke siwa sab), wahan wo lagoo nahi — naye module apne aap
-  // bujhe rehte hain jab tak koi jaan-boojh kar unka Entry na jode.
+  // Kaunsa box is row par lagoo hi nahi hota — yahi PERM_HELP me NA (ya
+  // naTip) se likha hai, to wahi ek jagah se dono cheezein chalti hain: bujha
+  // box aur uska hover text.
+  // Entry ulta chalta hai: jis row ke PERM_HELP me `entry` likha hi nahi,
+  // wahan wo lagoo nahi — naye module apne aap bujhe rehte hain jab tak koi
+  // jaan-boojh kar unka Entry na jode.
   const permNA = (name, p) => {
-    const h = PERM_HELP[name] || {};
-    if (p === "entry") return !h.entry || h.entry === "—";
-    return h[p] === "—";
+    const v = (PERM_HELP[name] || {})[p];
+    if (v === undefined) return p === "entry";
+    return v === NA || !!(v && v.na);
   };
   const permColors = {
     view: { bg: T.blueSoft, text: T.blue }, create: { bg: T.greenSoft, text: T.green },
@@ -1425,23 +1498,45 @@ function RolesAccess() {
     approve: { bg: T.purpleSoft, text: T.purple }, export: { bg: "#F0FDF4", text: "#166534" },
   };
 
+  // Shuruaati (DB load hone se pehle) ticks — gb-backend utils/permDefaults.js
+  // ke DEFAULT_PERMS ki copy (5 Oct 2026 — Role Presets). Wahan badlo to yahan bhi.
   const [permMatrix, setPermMatrix] = useState({
     admin: Object.fromEntries(modules.map(m => [m.name, allPerms])),
     project_manager: {
-      Projects:["view","create","edit"], Design:["view","create","edit"], Finance:["view","create"], Procurement:["view","create","edit"], Warehouse:["view","create","edit"], "Team & HR":["view"], CRM:["view","create","edit"], MOM:["view","create","edit"], "Township CRM":["view","create","edit"], Tenders:["view","create","edit"], Reports:["view"], Library:["view"], Settings:[],
-      Overview:["view"], Estimate:["view","create","edit"], Budget:["view"], Party:["view","create","edit"], Transaction:["view","create"], "To Do":["view","create","edit"], Tasks:["view","create","edit"], Material:["view","create","edit"], Subcon:["view","create","edit"], Attendance:["view","create","edit"], Equipment:["view","create","entry","edit"], Files:["view","create","edit"], "Site / DPR":["view","create","edit"],
+      Fuel:["view","create","entry","edit","export"], Machinery:["view","create","entry","edit","export"],
+      Assets:["view","create","entry","edit","approve","export"], RMC:["view","create","entry","edit","approve"],
+      Projects:["view","create","edit","export"], Design:["view","create","edit","approve"], Finance:["view","create","entry","approve"], Pulse:["view"],
+      Mapping:["view","create","entry","edit","delete","approve","export"],
+      Procurement:["view","create","entry","edit","approve","export"], Warehouse:["view","create","entry","edit","export"], "Team & HR":["view"],
+      CRM:["view","create","edit","approve","export"], MOM:["view","create","edit","export"], "Township CRM":["view","create","edit"],
+      Tenders:["view","create","entry","edit","export"], Reports:["view","export"], Library:["view","export"], Settings:[],
+      Overview:["view"], Estimate:["view","create","edit","approve","export"], Transaction:["view"], Material:["view","create","entry","edit"],
+      Subcon:["view","create","edit","approve","export"], Attendance:["view","create","entry","edit","approve"], Equipment:["view","create","entry","edit"],
+      Budget:["view","create","edit","approve"], Party:["view","create","edit","export"], "To Do":["view","create","edit"], Tasks:["view","create","entry","edit","export"],
+      Files:["view","entry","delete"], "Site / DPR":["view","create","entry","edit","approve","export"],
     },
     supervisor: {
-      Projects:["view"], Design:["view"], Finance:["view"], Procurement:["view","create"], Warehouse:["view","create","edit"], "Team & HR":["view"], CRM:[], MOM:["view"], "Township CRM":["view"], Tenders:["view"], Reports:["view"], Library:["view"], Settings:[],
-      Overview:["view"], Estimate:[], Budget:[], Party:["view"], Transaction:[], "To Do":["view","create","edit"], Tasks:["view","create","edit"], Material:["view","create"], Subcon:["view"], Attendance:["view","create","edit"], Equipment:["view","entry"], Files:["view","create"], "Site / DPR":["view","create","edit"],
+      Fuel:["view","entry"], Machinery:["view","entry"], Assets:["view","create","entry"], RMC:["view","create","entry"],
+      Projects:["view"], Design:["view"], Finance:["view","entry"], Pulse:["view"], Mapping:["view","create","entry","edit","export"],
+      Procurement:["view","create","entry"], Warehouse:["view","create","entry","edit"],
+      "Team & HR":["view"], CRM:[], MOM:["view"], "Township CRM":["view"], Tenders:["view"], Reports:["view"], Library:["view"], Settings:[],
+      Overview:["view"], Estimate:[], Transaction:[], Material:["view","create","entry"], Subcon:["view"], Attendance:["view","entry"], Equipment:["view","entry"],
+      Budget:[], Party:["view"], "To Do":["view","create","edit"], Tasks:["view","entry"], Files:["view","entry"], "Site / DPR":["view","entry","export"],
     },
     accountant: {
-      Projects:["view"], Design:[], Finance:["view","create","edit","approve"], Procurement:["view"], Warehouse:["view"], "Team & HR":["view","create","edit"], CRM:["view"], MOM:["view"], "Township CRM":["view"], Tenders:["view","create","edit"], Reports:["view"], Library:["view"], Settings:[],
-      Overview:["view"], Estimate:["view"], Budget:["view"], Party:["view","create","edit"], Transaction:["view","create","edit"], "To Do":["view"], Tasks:["view"], Material:["view"], Subcon:[], Attendance:["view"], Equipment:[], Files:["view"], "Site / DPR":["view"],
+      Fuel:["view"], Machinery:["view"], Assets:["view"], RMC:["view"], "Road Levels":["view"],
+      Projects:["view"], Design:[], Finance:["view","create","entry","edit","approve","export"], Pulse:["view"], Mapping:["view"],
+      Procurement:["view","approve"], Warehouse:["view"],
+      "Team & HR":["view","create","edit","export"], CRM:["view"], MOM:["view"], "Township CRM":["view"], Tenders:["view","create","edit"], Reports:["view","export"], Library:["view"], Settings:[],
+      Overview:["view"], Estimate:["view","approve"], Transaction:["view"], Material:["view"], Subcon:[], Attendance:["view"], Equipment:[],
+      Budget:["view"], Party:["view","create","edit","export"], "To Do":["view"], Tasks:["view"], Files:["view"], "Site / DPR":["view"],
     },
     viewer: {
-      Projects:["view"], Design:["view"], Finance:["view"], Procurement:["view"], Warehouse:["view"], "Team & HR":[], CRM:["view"], MOM:["view"], "Township CRM":["view"], Tenders:["view"], Reports:["view"], Library:["view"], Settings:[],
-      Overview:["view"], Estimate:["view"], Budget:["view"], Party:["view"], Transaction:["view"], "To Do":["view"], Tasks:["view"], Material:["view"], Subcon:["view"], Attendance:["view"], Equipment:["view"], Files:["view"], "Site / DPR":["view"],
+      Fuel:["view"], Machinery:["view"], Assets:["view"], RMC:["view"],
+      Projects:["view"], Design:["view"], Finance:["view"], Pulse:["view"], Mapping:["view"], Procurement:["view"], Warehouse:["view"], "Team & HR":[],
+      CRM:["view"], MOM:["view"], "Township CRM":["view"], Tenders:["view"], Reports:["view"], Library:["view"], Settings:[],
+      Overview:["view"], Estimate:["view"], Transaction:["view"], Material:["view"], Subcon:["view"], Attendance:["view"], Equipment:["view"],
+      Budget:["view"], Party:["view"], "To Do":["view"], Tasks:["view"], Files:["view"], "Site / DPR":["view"],
     },
   });
 
@@ -1495,7 +1590,11 @@ function RolesAccess() {
             if (p.can_delete)  perms.push("delete");
             if (p.can_approve) perms.push("approve");
             if (p.can_export)  perms.push("export");
-            modMap[p.module] = perms;
+            // Naam ka milaan case-insensitive (server bhi aise padhta hai) —
+            // purani lowercase row ("equipment") warna matrix me khaali dikhti.
+            // Dohri row ho to pehli jeetti hai, middleware jaisa.
+            const canon = (modules.find(m => m.name.toLowerCase() === String(p.module).toLowerCase()) || {}).name || p.module;
+            if (!(canon in modMap)) modMap[canon] = perms;
           }
           if (Object.keys(modMap).length) next[key] = modMap;
         }
@@ -1520,11 +1619,41 @@ function RolesAccess() {
     if (!r) return false;
     return !(r.permissions || []).some(p => String(p.module).toLowerCase() === mod.toLowerCase());
   };
+  // Server ka "row nahi" niyam: khula — par strict box (PERM_STRICT: Users &
+  // Roles, Road Levels ka likhna, DPR / Budget / Attendance / Team & HR ka
+  // Approve) band, aur Viewer ko sirf dekhna.
   const rowDefault = (roleKey, mod) => {
-    if (mod === "Users & Roles") return [];
-    if (roleKey === "viewer") return ["view"];
-    return allPerms.filter(p => !permNA(mod, p));
+    const strict = PERM_STRICT[mod] || [];
+    if (roleKey === "viewer") return strict.includes("view") ? [] : ["view"];
+    return allPerms.filter(p => !permNA(mod, p) && !strict.includes(p));
   };
+  // "Row save nahi — default: …" ka label: kuch nahi = band; sirf dekhna /
+  // nikalna = sirf dekhna; koi likhne wala box = khula.
+  const rowDefaultLabel = (perms) => perms.length === 0 ? "settings.perm_row_default_closed"
+    : perms.every(p => p === "view" || p === "export") ? "settings.perm_row_default_view" : "settings.perm_row_default_open";
+  // ── Permission ka Itihaas (5 Oct 2026) — kisne, kab, kya se kya ──────
+  // Server har save ki ek audit row likhta hai (sirf badli rows). Panel band
+  // rehta hai; kholne par us role ka naya 50 aata hai.
+  const [histOpen, setHistOpen] = useState(false);
+  const [hist, setHist] = useState({ roleId: null, rows: [], loading: false, error: false });
+  const loadHistory = (dbId) => {
+    if (!dbId) return;
+    setHist({ roleId: dbId, rows: [], loading: true, error: false });
+    api.get(`/settings/roles/${dbId}/permission-history`)
+      .then(r => setHist({ roleId: dbId, rows: (r && r.success && r.data) || [], loading: false, error: !(r && r.success) }))
+      .catch(() => setHist({ roleId: dbId, rows: [], loading: false, error: true }));
+  };
+  const PERM_BIT_NAME = { view: "View", create: "Create", entry: "Entry", edit: "Edit", delete: "Delete", approve: "Approve", export: "Export" };
+  const histChangeText = (c) => {
+    const bits = Object.keys(PERM_BIT_NAME);
+    if (!c.from) {
+      const on = bits.filter(b => c.to && c.to[b]).map(b => `${PERM_BIT_NAME[b]} ✓`);
+      return `${t("settings.perm_hist_new_row")} ${on.join(", ") || "—"}`;
+    }
+    return bits.filter(b => !!c.from[b] !== !!(c.to && c.to[b]))
+      .map(b => `${PERM_BIT_NAME[b]} ${c.from[b] ? "✓" : "✗"}→${c.to && c.to[b] ? "✓" : "✗"}`).join(", ");
+  };
+
   const savePermissions = async () => {
     if (selectedRole === "admin") return;
     // Find DB role by name-slug match
@@ -1546,7 +1675,11 @@ function RolesAccess() {
     setPermSaving(true);
     const res = await api.put(`/settings/roles/${dbRole.id}/permissions`, { permissions });
     setPermSaving(false);
-    if (res.success) { const k = selectedRole; reloadDbRoles().then(() => setTouchedPerm(p => ({ ...p, [k]: {} }))); alert("Permissions saved!"); }
+    if (res.success) {
+      const k = selectedRole; reloadDbRoles().then(() => setTouchedPerm(p => ({ ...p, [k]: {} })));
+      if (histOpen) loadHistory(dbRole.id);
+      alert("Permissions saved!");
+    }
     else alert(res.message || "Failed to save permissions");
   };
 
@@ -1575,6 +1708,11 @@ function RolesAccess() {
 
   const isAllUsers = selectedRole === "all";
   const activeRole = roles.find(r => r.id === selectedRole);
+  // Itihaas ka role — activeRole ke baad (dbRoleOf usse padhta hai).
+  const histDbId = (dbRoleOf(selectedRole) || {}).id;
+  useEffect(() => { if (histOpen && histDbId && hist.roleId !== histDbId) loadHistory(histDbId); },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [histOpen, histDbId]);
   // A super_admin user is grouped under the "Admin" role card — there
   // is no separate Super Admin card, so without this they show nowhere.
   const userInRole = (u, roleId) => u.role === roleId || (roleId === "admin" && u.role === "super_admin");
@@ -1736,9 +1874,9 @@ function RolesAccess() {
                     return (
                       <tr key={name} style={{ borderBottom: `1px solid ${T.borderLight}` }}>
                         <td style={{ padding: "12px", fontWeight: 600, color: T.text }}
-                            title={(PERM_HELP[name] || {}).view || name}>{name}
+                            title={permText(name, "view") || name}>{permRowLabel(name)}
                           {dflt && <div style={{ fontSize: 10.5, fontWeight: 500, color: T.amber, marginTop: 2 }}
-                            title={t("settings.perm_row_default_tip")}>{t(perms.length === 0 ? "settings.perm_row_default_closed" : perms.length === 1 ? "settings.perm_row_default_view" : "settings.perm_row_default_open")}</div>}</td>
+                            title={t("settings.perm_row_default_tip")}>{t(rowDefaultLabel(perms))}</div>}</td>
                         {allPerms.map(p => {
                           const has = perms.includes(p);
                           // Report "banayi" ya "delete" nahi jaati — us row par
@@ -1748,7 +1886,7 @@ function RolesAccess() {
                           return (
                             <td key={p} style={{ textAlign: "center", padding: "8px 6px" }}>
                               <button onClick={() => { if (!na) togglePerm(name, p); }}
-                                title={na ? "Is row par lagoo nahi hota" : permTip(name, p)}
+                                title={permTip(name, p)}
                                 style={{ width: 28, height: 28, borderRadius: 6, background: na ? "transparent" : (has ? (dflt ? "transparent" : permColors[p].bg) : T.borderLight), border: `1.5px ${dflt && has ? "dashed" : "solid"} ${na ? T.borderLight : (has ? permColors[p].text + (dflt ? "99" : "44") : "transparent")}`, cursor: (na || selectedRole === "admin") ? "not-allowed" : "pointer", opacity: na ? 0.4 : 1, display: "inline-flex", alignItems: "center", justifyContent: "center", transition: "all 0.15s" }}>
                                 {na ? <span style={{ fontSize: 12, color: T.textLight }}>–</span> : (has && <IcCheck size={14} color={permColors[p].text} strokeWidth={2.5} />)}
                               </button>
@@ -1763,6 +1901,35 @@ function RolesAccess() {
               </tbody>
             </table>
           </div>
+          {/* ── Itihaas — kab · kisne · module: View ✓→✗ ── */}
+          {histDbId && (
+            <div style={{ marginTop: 14, borderTop: `1px solid ${T.borderLight}`, paddingTop: 10 }}>
+              <button onClick={() => setHistOpen(o => !o)}
+                style={{ background: "none", border: "none", padding: "4px 0", cursor: "pointer", fontSize: 12.5, fontWeight: 700, color: T.textMid, fontFamily: "inherit", display: "flex", alignItems: "center", gap: 6 }}>
+                <span style={{ display: "inline-block", width: 12, transform: histOpen ? "none" : "rotate(-90deg)", transition: "transform .15s" }}>▼</span>
+                {t("settings.perm_hist_title")}
+              </button>
+              {histOpen && (
+                <div style={{ marginTop: 6, maxHeight: 320, overflowY: "auto" }}>
+                  {hist.loading && <div style={{ fontSize: 12, color: T.textLight, padding: "6px 0" }}>{t("settings.perm_hist_loading")}</div>}
+                  {!hist.loading && hist.error && <div style={{ fontSize: 12, color: T.red, padding: "6px 0" }}>{t("settings.perm_hist_load_fail")}</div>}
+                  {!hist.loading && !hist.error && hist.rows.length === 0 && (
+                    <div style={{ fontSize: 12, color: T.textLight, padding: "6px 0" }}>{t("settings.perm_hist_empty")}</div>
+                  )}
+                  {!hist.loading && hist.rows.map(h => (
+                    <div key={h.id} style={{ padding: "7px 0", borderBottom: `1px solid ${T.borderLight}`, fontSize: 12, lineHeight: 1.55 }}>
+                      {(h.changes || []).map((c, i) => (
+                        <div key={i} style={{ color: T.text }}>
+                          <span style={{ color: T.textLight }}>{auditTime(h.at)} · {h.by || t("settings.perm_hist_someone")} · </span>
+                          <b>{permRowLabel(c.module)}</b>: {histChangeText(c)}
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </SectionCard>
       )}
 
@@ -2120,6 +2287,17 @@ function RolesAccess() {
         <div style={{ height: 14 }} />
         <FormField label="Description" value={roleForm.desc} onChange={v => setRoleForm(p => ({ ...p, desc: v }))} placeholder="What can this role do?" />
         <div style={{ height: 16 }} />
+        {!editingRole && (
+          <div style={{ marginBottom: 16 }}>
+            <label style={{ fontSize: 12, fontWeight: 600, color: T.textMid, display: "block", marginBottom: 6 }}>{t("settings.role_preset_label")}</label>
+            <select value={roleForm.preset || ""} onChange={e => setRoleForm(p => ({ ...p, preset: e.target.value }))}
+              style={{ width: "100%", padding: "9px 12px", borderRadius: T.radiusSm, border: `1.5px solid ${T.border}`, fontSize: 13, color: T.text, background: "white", fontFamily: "inherit" }}>
+              <option value="">{t("settings.role_preset_none")}</option>
+              <option value="store_keeper">{t("settings.role_preset_store_keeper")}</option>
+            </select>
+            {roleForm.preset && <div style={{ fontSize: 11, color: T.textLight, marginTop: 4 }}>{t("settings.role_preset_hint")}</div>}
+          </div>
+        )}
         <div>
           <label style={{ fontSize: 12, fontWeight: 600, color: T.textMid, display: "block", marginBottom: 8 }}>Role Color</label>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -2371,13 +2549,15 @@ function ApprovalSettings() {
   const [editLevels, setEditLevels] = useState([]);
   // Company switch: auto-approve the requester's own approval level
   const [autoApproveSelf, setAutoApproveSelf] = useState(false);
+  // Company switch (5 Oct 2026): "Apna banaya khud approve kar sake" — default band
+  const [allowSelf, setAllowSelf] = useState(false);
 
   // Load from API on mount
   useEffect(() => {
     (async () => {
       try {
         api.get("/approvals/settings").then(r => {
-          if (r.success && r.data) setAutoApproveSelf(!!r.data.auto_approve_self);
+          if (r.success && r.data) { setAutoApproveSelf(!!r.data.auto_approve_self); setAllowSelf(!!r.data.allow_self_approval); }
         }).catch(() => {});
         // Custom roles (RATNA: Head Engineer, Site Engineer, Store Keeper …) —
         // slug wahi jo server users.role me rakhta hai (routes/settings.js roleSlug).
@@ -2521,6 +2701,12 @@ function ApprovalSettings() {
     try { await api.put("/approvals/settings", { auto_approve_self: v }); }
     catch (e) { setAutoApproveSelf(!v); }
   };
+  // Server sirf bheja hua switch badalta hai — ek toggle doosre ko nahi chhoota.
+  const toggleAllowSelf = async (v) => {
+    setAllowSelf(v);
+    try { const r = await api.put("/approvals/settings", { allow_self_approval: v }); if (!r?.success) setAllowSelf(!v); }
+    catch (e) { setAllowSelf(!v); }
+  };
 
   if (loading) return <div style={{textAlign:"center",padding:"60px 0",color:T.textLight,fontSize:13}}>Loading approval workflows...</div>;
 
@@ -2542,6 +2728,13 @@ function ApprovalSettings() {
           desc="Jab approval chain us role tak pahunche jo request banane wale ka hai, wo level apne aap approve ho jata hai (eg: Admin ne banaya, PM check kare, fir Admin ka level auto-approve). OFF = har level pe alag click (double-check)."
           value={autoApproveSelf}
           onChange={toggleAutoApproveSelf}
+        />
+        <ToggleRow
+          icon={<IcShield size={18} color={T.blue} />}
+          label={t("settings.appr_self_label")}
+          desc={t("settings.appr_self_desc")}
+          value={allowSelf}
+          onChange={toggleAllowSelf}
         />
       </div>
 
