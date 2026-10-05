@@ -2318,6 +2318,12 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
           if(rejectNote!==null) window.alert(t("projects.rejection_reason_required"));
           return;
         }
+      } else if(src==="auto_invoice"&&isRej){
+        // Draft invoice hatana = delete — server wajah maangta hai (5 Oct 2026,
+        // utils/deleteSnapshot needReason; kam se kam 3 akshar). Wahi prompt jo TabEstimate me hai.
+        rejectNote=await window.promptAsync({ message: t("estimate.invoice_delete_reason_prompt", { no: item.ref_no || item.title || "" }), multiline: true, cancelLabel: t("common.cancel") });
+        if(rejectNote==null) return;
+        if(String(rejectNote).trim().length<3){ window.alert(t("estimate.reason_min_3")); return; }
       }
       setSaveErr("");setActing(p=>({...p,[key]:isRej?"rejecting":isRevise?"revising":"approving"}));
       try{
@@ -2351,7 +2357,7 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
           // Reject → soft-delete (DELETE /invoices/:id). Both feed back into
           // the central drawer's "remove from list" finishing step.
           if (isRej) {
-            res = await api.del("/customer-estimates/invoices/"+item._source_id);
+            res = await api.del("/customer-estimates/invoices/"+item._source_id+"?reason="+encodeURIComponent(String(rejectNote||"").trim()));
           } else {
             res = await api.patch("/customer-estimates/invoices/"+item._source_id+"/confirm");
           }

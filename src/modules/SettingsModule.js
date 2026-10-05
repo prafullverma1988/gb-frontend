@@ -135,7 +135,7 @@ const PERM_LIVE = {
   edit:    { "Attendance": "server", "CRM": "server", "Design": "server", "Equipment": "server", "Estimate": "server", "Finance": "server", "Fuel": "server", "Library": "server", "MOM": "server", "Machinery": "server", "Procurement": "server", "Projects": "server", "Subcon": "server", "Team & HR": "server", "Tenders": "server", "Township CRM": "server", "Users & Roles": "server", "Warehouse": "server", "Mapping": "server", "Assets": "server", "Tasks": "server", "To Do": "server", "Budget": "server", "RMC": "server", "Road Levels": "server", "Party": "server", "Material": "server", "Site / DPR": "server" },
   delete:  { "Attendance": "server", "CRM": "server", "Design": "server", "Equipment": "server", "Estimate": "server", "Finance": "server", "Fuel": "server", "Library": "server", "MOM": "server", "Machinery": "server", "Projects": "server", "Subcon": "server", "Team & HR": "server", "Tenders": "server", "Township CRM": "server", "Users & Roles": "server", "Warehouse": "server", "Mapping": "server", "Tasks": "server", "To Do": "server", "RMC": "server", "Road Levels": "server", "Party": "server", "Budget": "server", "Files": "server", "Material": "server", "Procurement": "server", "Assets": "server", "Site / DPR": "server" },
   approve: { "Attendance": "server", "Finance": "server", "Procurement": "server", "Team & HR": "server", "Warehouse": "server", "Mapping": "server", "Assets": "server", "Site / DPR": "server", "Equipment": "server", "RMC": "server", "Fuel": "server", "Subcon": "server", "Estimate": "server", "CRM": "server", "Budget": "server", "Design": "server" },
-  export:  { "Site / DPR": "server", "Finance": "server", "Financial Reports": "server", "Party": "server", "Fuel": "server", "Machinery": "server", "Road Levels": "server", "Tenders": "server", "Assets": "server", "Team & HR": "server",
+  export:  { "Site / DPR": "server", "Finance": "server", "Financial Reports": "app", "Party": "server", "Fuel": "server", "Machinery": "server", "Road Levels": "server", "Tenders": "server", "Assets": "server", "Team & HR": "server",
              "Mapping": "app", "Projects": "app", "Estimate": "app", "Tasks": "app", "Subcon": "app", "Reports": "app", "Library": "app", "CRM": "app", "MOM": "app", "Procurement": "app", "Warehouse": "app" },
 };
 // Module ka apna naam pehle, "*" sirf tab jab uske liye kuch likha na ho.
@@ -172,7 +172,7 @@ const PERM_HELP = {
   },
   "Design": {
     view: () => t("settings.perm_design_view"), create: () => t("settings.perm_design_create"), entry: NA, edit: () => t("settings.perm_design_edit"),
-    delete: () => t("settings.perm_design_delete"), approve: () => t("settings.perm_design_approve"), export: () => t("settings.perm_design_export"),
+    delete: () => t("settings.perm_design_delete"), approve: () => t("settings.perm_design_approve"), export: NA,   // koi design export button/route tick nahi padhta
   },
   "Finance": {
     view: () => t("settings.perm_finance_view"), create: () => t("settings.perm_finance_create"), entry: () => t("settings.perm_finance_entry"), edit: () => t("settings.perm_finance_edit"),
@@ -264,7 +264,7 @@ const PERM_HELP = {
   },
   "Budget": {
     view: () => t("settings.perm_budget_view"), create: () => t("settings.perm_budget_create"), entry: NA, edit: () => t("settings.perm_budget_edit"),
-    delete: () => t("settings.perm_budget_delete"), approve: () => t("settings.perm_budget_approve"), export: () => t("settings.perm_budget_export"),
+    delete: () => t("settings.perm_budget_delete"), approve: () => t("settings.perm_budget_approve"), export: NA,   // budget ka koi download abhi nahi
   },
   "Party": {
     view: () => t("settings.perm_party_view"), create: () => t("settings.perm_party_create"), entry: NA, edit: () => t("settings.perm_party_edit"),

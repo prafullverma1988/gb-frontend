@@ -19,7 +19,7 @@
 import { useState, useEffect } from "react";
 import api, { API_BASE, getToken } from "../../config/api";
 import apiCache from "../../utils/apiCache";
-import { can } from "../../utils/perms";
+import { can, canAny } from "../../utils/perms";
 import { T } from "../shared/tokens";
 import { t } from "../../i18n";
 
@@ -264,7 +264,11 @@ export function useRoadAccess() {
   return { ready: modOn !== null, show: modOn === true && can(ROAD_PERM, "view") };
 }
 
-export const canRoad = (action) => can(ROAD_PERM, action);
+// Likhne wale route server par STRICT hain (row hi nahi = band) — screen bhi wahi
+// maane, warna bina row wala role edit dekh kar 403 khaata. View/Export non-strict.
+export const canRoad = (action) => (["create", "edit", "delete"].includes(action)
+  ? canAny(ROAD_PERM, action, { strict: true })
+  : can(ROAD_PERM, action));
 
 // ── STYLE ─────────────────────────────────────────────────────────
 // Baaki module ki tarah inline styles. Indigo (#4B45C4 = T.ind) hi is
