@@ -23,6 +23,7 @@ import ImportFixPanel, { useImportFix } from "../components/ImportFix";
 import { BackClose } from "../utils/backNav";
 import CityPicker from "../components/CityPicker";
 import { can, canAny, canEntry } from "../utils/perms";
+import { canApproveAction } from "../utils/approvalAuthority";
 
 // Gadi number ka milan: space/dash/dot ka farak nahi ginna — backend bhi
 // theek yahi karta hai (utils/machineIdentity.js). Dono taraf ek jaisa na ho
@@ -5092,7 +5093,10 @@ function MachineRequestsTab({ fleet, projects, cities, onChanged }) {
   const [fTo, setFTo] = useState("");
   const [data, setData] = useState({ loading: true, failed: false, rows: [] });
   const [act, setAct] = useState(null);   // { id, kind: "fulfill" | "reject", eq, note, busy, err }
-  const canDecide = canApproveAction({ roles: ["admin", "super_admin", "project_manager"] });
+  // Server (routes/equipment.js requestApprover): Admin / PM, ya Equipment ka
+  // APPROVE tick (strict — row na ho to nahi). Wahi yahan.
+  const canDecide = canApproveAction({ roles: ["admin", "super_admin", "project_manager"] })
+    || canAny("Equipment", "approve", { strict: true });
 
   const load = useCallback(async () => {
     setData((d) => ({ ...d, loading: true }));
