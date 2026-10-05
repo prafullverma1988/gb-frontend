@@ -152,6 +152,7 @@ const PERM_STRICT = {
   "Team & HR": ["approve"],
   "Fuel": ["approve"],
   "Equipment": ["approve"],
+  "Finance": ["delete"],
 };
 
 // Har row/box ka matlab — teeno bhasha me (t()). Box ke teen roop:
