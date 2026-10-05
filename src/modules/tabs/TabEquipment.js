@@ -5,6 +5,8 @@ import { Pill, Stat, Panel, THead, AddBtn, FilterTabs } from "../shared/ui";
 import TabTripTracking from "./TabTripTracking";
 import { t } from "../../i18n";
 import { can } from "../../utils/perms";
+import uploadManager from "../../utils/uploadManager";
+import { fileInputProps } from "../../utils/photoPolicy";
 
 // Route keys as the backend stores them (routes/equipment.js PAYMENT_ROUTES).
 // "site_exp" used to fall through unlabelled and render as raw text.
@@ -50,6 +52,19 @@ function TabEquipment({ projectId }) {
   // collapse state for each new section
   const [openUsage, setOpenUsage] = useState(true);
   const [openLegacy, setOpenLegacy] = useState(false);
+  // Receive — machine site par pahunchi (mobile jaisa, 6 Oct 2026): allot hui
+  // (raaste me) ya city ki koi bhi; machine par dekha number + kam se kam 1
+  // photo. Receive par machine is project par On Site, kahin aur thi to wahan
+  // apne aap Returned (server). Release = site se gayi.
+  const [eqSum, setEqSum] = useState(null);
+  const [rcvOpen, setRcvOpen] = useState(false);
+  const [rcvOpt, setRcvOpt] = useState({ loading: false, failed: false, city: "", transit: [], machines: [] });
+  const [rcvSel, setRcvSel] = useState(null);     // { machine, request_id }
+  const [rcvReg, setRcvReg] = useState("");
+  const [rcvNote, setRcvNote] = useState("");
+  const [rcvPhotos, setRcvPhotos] = useState([]); // uploaded urls
+  const [rcvUp, setRcvUp] = useState(0);          // abhi upload ho rahi
+  const [rcvBusy, setRcvBusy] = useState(false);
   const [openReqs, setOpenReqs] = useState(false);
   const [openReserved, setOpenReserved] = useState(false);
 
@@ -168,6 +183,9 @@ function TabEquipment({ projectId }) {
       .then(r => setRows(r && r.success && Array.isArray(r.data) ? r.data : []))
       .catch(() => setRows([]))
       .finally(() => setLoading(false));
+    api.get("/equipment/project-summary?project_id=" + projectId)
+      .then(r => setEqSum(r && r.success ? r.data : null))
+      .catch(() => setEqSum(null));
   };
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [projectId]);
 
@@ -372,6 +390,56 @@ function TabEquipment({ projectId }) {
     load();
   };
   const resetForm = () => { setName(""); setVendor("Self"); setFromD(""); setToD(""); setStat("On Site"); setRate(""); };
+
+  // ── Receive / Release ──
+  const locText = (l) => !l ? "" : l.state === "site" ? t("equipment.rcv_loc_at", { name: l.project_name || "—" })
+    : l.state === "transit" ? t("equipment.rcv_loc_transit", { name: l.project_name || "—" }) : t("equipment.rcv_loc_free");
+  const resetRcv = () => { setRcvSel(null); setRcvReg(""); setRcvNote(""); setRcvPhotos([]); };
+  const openReceive = () => {
+    setOpenLegacy(true); setRcvOpen(true); resetRcv();
+    setRcvOpt((o) => ({ ...o, loading: true, failed: false }));
+    api.get("/equipment/receive/options?project_id=" + projectId)
+      .then((r) => {
+        if (r && r.success && r.data) setRcvOpt({ loading: false, failed: false, city: r.data.city_name || "", transit: r.data.transit || [], machines: r.data.machines || [] });
+        else setRcvOpt({ loading: false, failed: true, city: "", transit: [], machines: [] });
+      })
+      .catch(() => setRcvOpt({ loading: false, failed: true, city: "", transit: [], machines: [] }));
+  };
+  const addRcvPhotos = (files) => {
+    files.forEach((file) => {
+      setRcvUp((n) => n + 1);
+      uploadManager.add({
+        file, folder: "gb_buildcon/equipment_receive",
+        label: t("equipment.rcv_photo_upload_label", { name: file.name }),
+        onDone: (url) => { setRcvPhotos((p) => [...p, url]); setRcvUp((n) => Math.max(0, n - 1)); },
+        onError: () => setRcvUp((n) => Math.max(0, n - 1)),
+      });
+    });
+  };
+  const submitReceive = async () => {
+    if (!rcvSel) return;
+    if (!rcvPhotos.length) { window.alert(t("equipment.rcv_photo_zaroori")); return; }
+    setRcvBusy(true);
+    const r = await api.post("/equipment/receive", {
+      project_id: projectId, equipment_id: rcvSel.machine.id, request_id: rcvSel.request_id || null,
+      reg_no_seen: rcvReg.trim() || null, note: rcvNote.trim() || null, photo_urls: rcvPhotos,
+    });
+    setRcvBusy(false);
+    if (!r || r.success === false) { window.alert((r && r.message) || t("equipment.save_failed")); return; }
+    window.alert(t("equipment.rcv_ok"));
+    resetRcv(); setRcvOpen(false); load();
+  };
+  const releaseEq = async (eq) => {
+    const msg = t("equipment.rel_q");
+    const note = window.promptAsync ? await window.promptAsync({ message: msg, defaultValue: "" }) : window.prompt(msg, "");
+    if (note === null || note === undefined) return;
+    const r = await api.post("/equipment/release/" + eq.id, { note: String(note).trim() || null });
+    if (!r || r.success === false) { window.alert((r && r.message) || t("equipment.update_failed")); }
+    load();
+  };
+  const rcvLibReg = rcvSel ? rcvSel.machine.registration_no : "";
+  const rcvRegState = !rcvSel || !rcvReg.trim() ? null : !rcvLibReg ? "nolib" : regKey(rcvReg) === regKey(rcvLibReg) ? "ok" : "diff";
+  const transitN = eqSum && eqSum.transit_n ? eqSum.transit_n : 0;
   const saveNew = async () => {
     if (!name.trim()) { window.alert(t("equipment.equipment_name_required")); return; }
     setSaving(true);
@@ -650,11 +718,118 @@ function TabEquipment({ projectId }) {
 
       {/* ── LEGACY: Period & Status (project_equipment) ───────────── */}
       <Panel style={{ marginBottom: 12 }}>
-        <SectionHeader title={t("equipment.period_status_legacy")} open={openLegacy} onToggle={() => setOpenLegacy(v => !v)}
+        <SectionHeader title={t("equipment.site_machines")} open={openLegacy} onToggle={() => setOpenLegacy(v => !v)}
           count={rows.length}
-          action={<AddBtn label={t("equipment.add_equipment")} onClick={() => setShowAdd(true)} />} />
+          action={
+            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              {canEqCreate && (
+                <button type="button" onClick={openReceive}
+                  style={{ padding: "5px 12px", borderRadius: 7, cursor: "pointer", fontFamily: "inherit", fontSize: 12, fontWeight: 700,
+                    border: `1.5px solid ${transitN ? T.grn : T.blu}`, background: transitN ? T.grnL : T.surface, color: transitN ? T.grn : T.blu,
+                    display: "inline-flex", alignItems: "center", gap: 6 }}>
+                  {t("equipment.rcv_btn")}
+                  {transitN > 0 && <span style={{ minWidth: 18, height: 18, padding: "0 5px", borderRadius: 9, background: T.grn, color: "#fff", fontSize: 10.5, lineHeight: "18px", boxSizing: "border-box" }}>{transitN}</span>}
+                </button>
+              )}
+              <AddBtn label={t("equipment.add_equipment")} onClick={() => setShowAdd(true)} />
+            </div>} />
         {openLegacy && (
           <div style={{ padding: "10px 15px" }}>
+      {/* ── Machine Receive ── */}
+      {rcvOpen && (
+        <Panel style={{ marginBottom: 14, padding: "14px 16px", border: `1.5px solid ${T.grn}55` }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: T.t1 }}>{t("equipment.rcv_title")}</div>
+            <button type="button" onClick={() => { resetRcv(); setRcvOpen(false); }}
+              style={{ padding: "5px 12px", borderRadius: 7, border: `1px solid ${T.b1}`, background: T.surface, fontSize: 12, fontWeight: 600, color: T.t3, cursor: "pointer", fontFamily: "inherit" }}>{t("common.cancel")}</button>
+          </div>
+          {rcvOpt.loading && <div style={{ fontSize: 12, color: T.t4, padding: "8px 0" }}>{t("common.loading")}</div>}
+          {!rcvOpt.loading && rcvOpt.failed && <div style={{ fontSize: 12, color: T.t4, padding: "8px 0" }}>{t("equipment.rcv_load_fail")}</div>}
+          {!rcvOpt.loading && !rcvOpt.failed && !rcvSel && (
+            <>
+              <div style={{ fontSize: 10, color: T.t4, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".4px", marginBottom: 6 }}>{t("equipment.rcv_allot_hui")}</div>
+              {rcvOpt.transit.length === 0 && <div style={{ fontSize: 12, color: T.t4, marginBottom: 10 }}>{t("equipment.rcv_koi_allot_nahi")}</div>}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 8, marginBottom: 12 }}>
+                {rcvOpt.transit.map((m) => (
+                  <div key={m.request_id} role="button" onClick={() => setRcvSel({ machine: m, request_id: m.request_id })}
+                    style={{ padding: "10px 12px", borderRadius: 8, border: `1.5px solid ${T.b1}`, background: T.surface, cursor: "pointer" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                      <span style={{ fontSize: 12.5, fontWeight: 700, color: T.t1 }}>{m.name}</span>
+                      {m.registration_no && <span style={regBadge}>{m.registration_no}</span>}
+                    </div>
+                    <div style={{ fontSize: 11, color: T.t3, marginTop: 3 }}>
+                      {t("equipment.rcv_allot_by", { date: fmtD(m.decided_at), name: m.decided_by_name || "—" })}{m.equipment_type ? " · " + m.equipment_type : ""}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div style={{ fontSize: 10, color: T.t4, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".4px", marginBottom: 6 }}>{t("equipment.rcv_doosri")}</div>
+              <select value="" onChange={(e) => { const m = rcvOpt.machines.find((x) => String(x.id) === e.target.value); if (m) setRcvSel({ machine: m, request_id: null }); }} style={{ ...inp, maxWidth: 520 }}>
+                <option value="">{t("equipment.rcv_doosri_ph", { city: rcvOpt.city || "—", n: rcvOpt.machines.length })}</option>
+                {rcvOpt.machines.map((m) => (
+                  <option key={m.id} value={String(m.id)}>{m.name}{m.registration_no ? " · " + m.registration_no : ""}{m.location ? " — " + locText(m.location) : ""}</option>
+                ))}
+              </select>
+            </>
+          )}
+          {rcvSel && (
+            <>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 8, border: `1.5px solid ${T.blu}`, background: T.bluL + "66", marginBottom: 12 }}>
+                <div style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: T.t1 }}>{rcvSel.machine.name}</span>
+                  {rcvSel.machine.registration_no && <span style={regBadge}>{rcvSel.machine.registration_no}</span>}
+                  <span style={{ fontSize: 11, color: T.t3 }}>{rcvSel.request_id ? t("equipment.rcv_allot_wali") : t("equipment.rcv_bina_request")}</span>
+                </div>
+                <button type="button" onClick={resetRcv} disabled={rcvBusy}
+                  style={{ padding: "5px 12px", borderRadius: 7, border: `1px solid ${T.b1}`, background: T.surface, fontSize: 11.5, fontWeight: 600, color: T.t3, cursor: "pointer", fontFamily: "inherit" }}>{t("equipment.rcv_badlo")}</button>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                <div>
+                  <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>{t("equipment.rcv_number_label")}</div>
+                  <input value={rcvReg} onChange={(e) => setRcvReg(e.target.value.toUpperCase())} placeholder={rcvLibReg || t("equipment.rcv_number_ph")} style={inp} />
+                  <div style={{ fontSize: 11, marginTop: 4, fontWeight: rcvRegState ? 700 : 400,
+                    color: rcvRegState === "ok" ? T.grn : rcvRegState === "diff" ? T.amb : T.t4 }}>
+                    {rcvRegState === "ok" ? t("equipment.rcv_number_mila")
+                      : rcvRegState === "diff" ? t("equipment.rcv_number_alag", { n: rcvLibReg })
+                      : rcvLibReg ? t("equipment.rcv_lib_number", { n: rcvLibReg }) : t("equipment.rcv_lib_no_number")}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>{t("equipment.rcv_note_label")}</div>
+                  <input value={rcvNote} onChange={(e) => setRcvNote(e.target.value)} placeholder={t("equipment.rcv_note_ph")} style={inp} />
+                </div>
+              </div>
+              <div style={{ marginTop: 12 }}>
+                <div style={{ fontSize: 10, color: T.t4, marginBottom: 6, fontWeight: 600 }}>{t("equipment.rcv_photos_label")}</div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                  {rcvPhotos.map((u, i) => (
+                    <div key={u + i} style={{ position: "relative" }}>
+                      <img src={u} alt="" style={{ width: 64, height: 64, objectFit: "cover", borderRadius: 7, border: `1px solid ${T.b1}`, display: "block" }} />
+                      <button type="button" onClick={() => setRcvPhotos((p) => p.filter((_, j) => j !== i))}
+                        style={{ position: "absolute", top: 3, right: 3, width: 18, height: 18, borderRadius: "50%", background: "rgba(0,0,0,0.65)", color: "white", border: "none", fontSize: 10, cursor: "pointer", lineHeight: 1, padding: 0 }}>×</button>
+                    </div>
+                  ))}
+                  <label style={{ width: 64, height: 64, borderRadius: 7, border: "1.5px dashed " + T.blu, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexDirection: "column", gap: 2, color: T.blu, fontSize: 11, fontWeight: 700 }}>
+                    + {t("equipment.rcv_photo_add")}
+                    <input {...fileInputProps({ source: "both" }, { multiple: true })} style={{ display: "none" }}
+                      onChange={(e) => { addRcvPhotos(Array.from(e.target.files || [])); e.target.value = ""; }} />
+                  </label>
+                  {rcvUp > 0 && <span style={{ fontSize: 11, color: T.t3 }}>{t("equipment.rcv_uploading", { n: rcvUp })}</span>}
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 12 }}>
+                <button onClick={submitReceive} disabled={rcvBusy || rcvUp > 0 || !rcvPhotos.length} type="button"
+                  style={{ padding: "8px 18px", borderRadius: 7, border: "none",
+                    background: (rcvBusy || rcvUp > 0 || !rcvPhotos.length) ? T.b1 : T.grn, color: (rcvBusy || rcvUp > 0 || !rcvPhotos.length) ? T.t4 : "white",
+                    fontSize: 12.5, fontWeight: 700, cursor: (rcvBusy || rcvUp > 0 || !rcvPhotos.length) ? "not-allowed" : "pointer", fontFamily: "inherit" }}>
+                  {rcvBusy ? t("common.saving") : t("equipment.rcv_do")}
+                </button>
+              </div>
+              {!rcvPhotos.length && <div style={{ fontSize: 11, color: T.t4, textAlign: "right", marginTop: 4 }}>{t("equipment.rcv_photo_zaroori")}</div>}
+            </>
+          )}
+        </Panel>
+      )}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
         <div style={{ display: "flex", gap: 18 }}>
           <div><div style={{ fontSize: 10, color: T.t4, textTransform: "uppercase", fontWeight: 600 }}>{t("common.total")}</div><div style={{ fontSize: 19, fontWeight: 700, color: T.t1 }}>{rows.length}</div></div>
@@ -737,9 +912,31 @@ function TabEquipment({ projectId }) {
               <div key={eq.id}
                 style={{ display: "grid", gridTemplateColumns: "2fr 1.4fr 1.6fr 110px 110px 60px",
                   padding: "10px 15px", borderBottom: `1px solid ${T.b1}`, alignItems: "center" }}>
-                <div>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: T.t1 }}>{eq.name}</div>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: T.t1 }}>{eq.name}</span>
+                    {eq.equipment_reg_no && <span style={regBadge}>{eq.equipment_reg_no}</span>}
+                  </div>
                   {eq.equipment_code && <div style={{ fontSize: 10, color: T.t4, marginTop: 1 }}>{eq.equipment_code}</div>}
+                  {/* Receive ka saboot: kisne / kab mili, photo (tap = poori) */}
+                  {eq.received_at && (
+                    <div style={{ fontSize: 10.5, color: T.t3, marginTop: 2 }}>
+                      {t("equipment.rcv_mili", { date: fmtD(eq.received_at), name: eq.received_by_name || "—" })}
+                      {eq.reg_no_seen && eq.equipment_reg_no && regKey(eq.reg_no_seen) !== regKey(eq.equipment_reg_no)
+                        ? <span style={{ color: T.amb, fontWeight: 700 }}>{" · " + t("equipment.rcv_seen_diff", { n: eq.reg_no_seen })}</span> : null}
+                    </div>
+                  )}
+                  {(() => { let ph = []; try { ph = Array.isArray(eq.photo_urls) ? eq.photo_urls : JSON.parse(eq.photo_urls || "[]"); } catch (_) { ph = []; }
+                    return ph.length ? (
+                      <div style={{ display: "flex", gap: 4, marginTop: 4, flexWrap: "wrap" }}>
+                        {ph.slice(0, 6).map((u, i) => (
+                          <a key={i} href={u} target="_blank" rel="noopener noreferrer">
+                            <img src={u} alt="" style={{ width: 34, height: 34, objectFit: "cover", borderRadius: 5, border: `1px solid ${T.b1}`, display: "block" }} />
+                          </a>
+                        ))}
+                      </div>
+                    ) : null; })()}
+                  {eq.status === "Returned" && eq.release_note && <div style={{ fontSize: 10.5, color: T.t4, marginTop: 2 }}>{eq.release_note}</div>}
                 </div>
                 <span style={{ fontSize: 12, color: T.t2 }}>{eq.vendor || t("payroll.self")}</span>
                 <span style={{ fontSize: 11.5, color: T.t2 }}>
@@ -749,12 +946,27 @@ function TabEquipment({ projectId }) {
                 <span style={{ fontSize: 12.5, color: T.t1, fontVariantNumeric: "tabular-nums" }}>
                   {eq.rate_per_day ? "₹" + fmtN(eq.rate_per_day) : "—"}
                 </span>
+                {eq.equipment_master_id ? (
+                  // Library ki machine: status Receive / Release se badalta hai (kahan hai sahi rahe)
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 5 }}>
+                    <span style={{ fontSize: 10.5, fontWeight: 700, padding: "4px 10px", borderRadius: 8, background: sm.bg, color: sm.c }}>
+                      {STATUS_LABEL[eq.status] || eq.status}
+                    </span>
+                    {eq.status === "On Site" && canEqCreate && (
+                      <button type="button" onClick={() => releaseEq(eq)}
+                        style={{ fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 7, border: `1px solid ${T.b1}`, background: T.surface, color: T.t2, cursor: "pointer", fontFamily: "inherit" }}>
+                        {t("equipment.rel_btn")}
+                      </button>
+                    )}
+                  </div>
+                ) : (
                 <button onClick={() => toggleStatus(eq)} type="button"
                   style={{ fontSize: 10.5, fontWeight: 700, padding: "4px 10px", borderRadius: 8,
                     background: sm.bg, color: sm.c, border: "none", cursor: "pointer",
                     fontFamily: "inherit", justifySelf: "start" }}>
                   {STATUS_LABEL[eq.status] || eq.status}
                 </button>
+                )}
                 <button onClick={() => removeEq(eq)} type="button"
                   title={t("common.remove")}
                   style={{ background: "none", border: "none", cursor: "pointer", padding: 4, color: T.t4, fontSize: 16, fontFamily: "inherit", justifySelf: "end" }}>
