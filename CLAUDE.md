@@ -13,3 +13,7 @@ permission gate in this repo MUST be reflected in the matching KB file in
 `C:\Users\prafu\gb-backend\kb\` as part of the same piece of work.**
 See `gb-backend/kb/README.md` for the file→module map and writing rules
 (Roman Hinglish, verbatim labels, document only what exists in code).
+
+## Review / code audit — kam token ka niyam
+
+Poora niyam `gb-backend/CLAUDE.md` me hai: ek reviewer, sirf diff, fix ke baad dobara review nahi, mechanical kaam Sonnet ya khud, research sirf maangne par — par tests, i18n gate, eslint, build kabhi nahi chhodne.
