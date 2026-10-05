@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
 import api from "../../config/api";
 import { T, fmtN, localYMD } from "../shared/tokens";
 import { Pill, Stat, Panel, THead, AddBtn, FilterTabs } from "../shared/ui";
-import { currentUser } from "../../utils/perms";
+import { currentUser, canAny, canEntry } from "../../utils/perms";
 import { t, Rich } from "../../i18n";
 import { cld } from "../../utils/cloudinary";
 
@@ -10,11 +10,14 @@ import { cld } from "../../utils/cloudinary";
 // 3 Oct 2026 se Trip Tracking Roles & Access ki "Equipment" row se chalta hai
 // (pehle Machinery). Niyam wahi jo server routes/trips.js lagata hai — button
 // sirf use dikhe jo dabaa sake, warna 403:
-//   Create  = naya route / naya truck      Edit = route badalna
+//   Create  = naya route                   Edit = route badalna
 //   Entry   = loading / unloading (mobile) + apni trip 10 min me cancel
+//             + naya truck jodna (5 Oct 2026 se; transition me Create bhi)
 //   Approve = review, manual close, doosre ki trip cancel — Admin / PM role se
 //             hamesha, baaki ko Equipment ka Approve tick chahiye
 //   Bill    = Finance ka Create (Finance ki row hi nahi = band)
+//   Rate    = route ka rate, rate card, "Rate badlo" — 5 Oct 2026 se sirf
+//             Finance ka Create (strict); Equipment Edit / approver ab nahi
 // Asli rok server par hai; yahan sirf chhupana hai.
 const TRIP_MOD = "Equipment";
 const roleOf = (u) => String(u?.role || "").toLowerCase().replace(/[\s-]+/g, "_");
@@ -41,9 +44,7 @@ function canApproveTrip(u = currentUser()) {
   return !!row && row.approve === true;
 }
 function canBillTrips(u = currentUser()) {
-  if (isAdminU(u)) return true;
-  const fin = (u?.module_permissions || {}).Finance;
-  return !!fin && fin.create === true;
+  return canAny("Finance", "create", { strict: true }, u);
 }
 // Cancel: approver kisi ki bhi (remark ke saath); Entry wala sirf APNI raste
 // wali trip, load ke 10 min ke andar. Ghadi ka thoda farak ho to server bata dega.
@@ -58,12 +59,9 @@ function canCancelTrip(trip, u = currentUser()) {
 }
 
 // "Rate badlo" (ek trip ka rate, 4 Oct 2026) — server ka overrideGate:
-// approver (upar) YA rate ka haq (Equipment Edit / Finance Create).
+// 5 Oct 2026 se sirf Finance ka Create (strict). Approver / Equipment Edit nahi.
 function canOverrideRate(u = currentUser()) {
-  if (canApproveTrip(u)) return true;
-  if (canEq("edit", u)) return true;
-  const fin = (u?.module_permissions || {}).Finance;
-  return !!fin && fin.create === true;
+  return canAny("Finance", "create", { strict: true }, u);
 }
 // Trip par "Rate badlo" kab: poori hui, bill me nahi, reject nahi, bill
 // banne wali (fleet 'own' / mahina nahi) — server ka overrideBlock wahi.
@@ -938,7 +936,8 @@ function TrucksTab({ cards, onChange }) {
     <Panel>
       <div style={{ padding: "10px 15px", borderBottom: `1px solid ${T.b1}`, background: T.surfaceB, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <span style={{ fontSize: 12.5, fontWeight: 700, color: T.t1 }}>{t("trip_tracking.trucks_list", { list: list.length ? `(${list.length})` : "" })}</span>
-        {canEq("create") && <AddBtn label={t("trip_tracking.add_truck")} onClick={() => setForm(f => (f && !f.id ? null : {}))} />}
+        {/* Naya truck = Equipment ki Entry (ya Create) — server ka POST /trips/trucks (5 Oct 2026) */}
+        {canEntry("Equipment") && <AddBtn label={t("trip_tracking.add_truck")} onClick={() => setForm(f => (f && !f.id ? null : {}))} />}
       </div>
       {cards && cards.pending.length > 0 && (
         <div style={{ padding: "10px 15px 0" }}>

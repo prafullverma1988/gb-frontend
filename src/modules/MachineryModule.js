@@ -22,18 +22,25 @@ import { t, Rich } from "../i18n";
 import ImportFixPanel, { useImportFix } from "../components/ImportFix";
 import { BackClose } from "../utils/backNav";
 import CityPicker from "../components/CityPicker";
-import { canApproveAction } from "../utils/approvalAuthority";
-import { can, canAny, currentUser } from "../utils/perms";
+import { can, canAny, canEntry } from "../utils/perms";
 
 // Gadi number ka milan: space/dash/dot ka farak nahi ginna — backend bhi
 // theek yahi karta hai (utils/machineIdentity.js). Dono taraf ek jaisa na ho
 // to screen par "mil gaya" dikhta hai aur save par "pehle se hai" aata hai.
 const normReg = (s) => String(s == null ? "" : s).replace(/[\s.-]/g, "").toUpperCase();
-// City badalna (shifting) sirf admin/super-admin ka kaam — server par bhi wahi rok.
-const canShiftCity = () => canApproveAction({ roles: ["admin", "super_admin"] });
-// Gaadi hatana bhi wahi admin ka kaam (Prafull, 3 Oct 2026: alag approval
-// nahi, admin seedha wajah likh kar hatata hai). Server live role dekhta hai.
-const canRemoveMachine = () => canApproveAction({ roles: ["admin", "super_admin"] });
+// ── Kaun kya kare — Roles & Access ki Machinery row (5 Oct 2026) ──
+// Server (routes/machinery.js, telematics.js) wahi tick maangta hai jo yahan:
+//   Entry  = meter, "Kharab hai" / service darj karna, bill padhna, reminder
+//            snooze (transition me Create bhi)
+//   Create = nayi machine, Excel import, kaagaz, service templates, telematics
+//   Edit   = machine badalna, city badalna (pehle sirf admin), service band karna
+//   Delete = "Gaadi hatao" (pehle admin + Edit)
+//   Export = report ka Excel / PDF / WhatsApp
+// Admin / PM role ki koi alag shart ab nahi. Button wahi dikhe jo server maane.
+const canMach = (action) => can("Machinery", action);
+const canMachEntry = () => canEntry("Machinery");
+const canShiftCity = () => canMach("edit");
+const canRemoveMachine = () => canMach("delete");
 // Ctrl+K (App.js) → Machinery: kaunsi gaadi kholni hai. Wahi do naam App.js me.
 const MACH_OPEN_KEY = "sanchalan_machinery_open";
 const MACH_OPEN_EVENT = "sanchalan:machinery-open";
@@ -1724,10 +1731,10 @@ function MachineDetail({ id, onBack, onChanged, onEdit, onRemoved, canRemove, pa
               <div style={{ fontSize: 10, color: T.t4 }}>{expiryTone(worst.days).label} · {fmtD(worst.valid_till)}</div>
             </div>
           )}
-          <Btn ghost icon={IcGauge} onClick={() => setMeterOpen(true)}>{t("machinery.meter")}</Btn>
+          {canMachEntry() && <Btn ghost icon={IcGauge} onClick={() => setMeterOpen(true)}>{t("machinery.meter")}</Btn>}
           {canShiftCity() && <Btn ghost onClick={() => setCityOpen(true)}>{t("machinery.city_badlo")}</Btn>}
           {canRemove && canRemoveMachine() && <Btn ghost onClick={() => setRemoveOpen(true)} style={{ color: T.red }}>{t("machinery.gaadi_hatao")}</Btn>}
-          {onEdit && <Btn ghost onClick={() => onEdit(m)}>{t("common.edit_2")}</Btn>}
+          {onEdit && canMach("edit") && <Btn ghost onClick={() => onEdit(m)}>{t("common.edit_2")}</Btn>}
         </div>
       </div>
 
@@ -1812,7 +1819,7 @@ function MachineDetail({ id, onBack, onChanged, onEdit, onRemoved, canRemove, pa
               })}
             </Panel>
           )}
-          {svcDue && svcDue.no_templates && (
+          {svcDue && svcDue.no_templates && canMach("create") && (
             <Notice>{t("machinery.is_machine_ke_liye_koi_service", { v: " " })}<button type="button" onClick={async () => {
                 const r = await api.post("/machinery/templates/seed", {}).catch(() => null);
                 if (r && r.success) load(true);
@@ -1824,7 +1831,7 @@ function MachineDetail({ id, onBack, onChanged, onEdit, onRemoved, canRemove, pa
           )}
 
           <Panel title={t("machinery.service_log")}
-            action={<Btn size="sm" icon={IcWrench} onClick={() => { setSvcEdit(null); setSvcOpen(true); }}>{t("machinery.service")}</Btn>}>
+            action={canMachEntry() ? <Btn size="sm" icon={IcWrench} onClick={() => { setSvcEdit(null); setSvcOpen(true); }}>{t("machinery.service")}</Btn> : null}>
             {services.length === 0 && (
               <Empty>
                {t("machinery.koi_service_darj_nahi")}<br />
@@ -1838,7 +1845,7 @@ function MachineDetail({ id, onBack, onChanged, onEdit, onRemoved, canRemove, pa
                 </Row>
                 {services.map((s) => (
                   <Row key={s.id} cols="92px 1.2fr 1.2fr 90px 100px 110px"
-                    onClick={s.status === "open" ? () => { setSvcEdit(s); setSvcOpen(true); } : undefined}>
+                    onClick={s.status === "open" && canMach("edit") ? () => { setSvcEdit(s); setSvcOpen(true); } : undefined}>
                     <span style={{ fontSize: 11.5, color: T.t3 }}>{fmtD(s.service_date)}</span>
                     <span style={{ fontSize: 12, color: T.t1 }}>
                       {s.status === "open"
@@ -1902,7 +1909,7 @@ function MachineDetail({ id, onBack, onChanged, onEdit, onRemoved, canRemove, pa
       )}
 
       {activeTab === "docs" && (
-        <Panel title={t("machinery.documents_permits")} action={<Btn size="sm" icon={IcAdd} onClick={() => setDocOpen(true)}>{t("machinery.document")}</Btn>}>
+        <Panel title={t("machinery.documents_permits")} action={canMach("create") ? <Btn size="sm" icon={IcAdd} onClick={() => setDocOpen(true)}>{t("machinery.document")}</Btn> : null}>
           {docs.length === 0 && (
             <Empty>
              {t("machinery.koi_kaagaz_darj_nahi")}<br />
@@ -2295,19 +2302,13 @@ const matchTv = (v, vendorName, q) => {
 // billing card ke tareeke ka — "Rate baaki" (phone se judi, rate office tay
 // karega) gaadi bhi, aur uski RATE PENDING trips usi card se bharti hain. Har
 // trip apne waqt ke card ki copy rakhti hai. Badalne ka haq server ke
-// rateGate jaisa — Equipment Edit ya Finance Create.
+// rateGate jaisa — 5 Oct 2026 se sirf Finance Create (strict); Equipment Edit nahi.
 // ══════════════════════════════════════════════════════════════════
-const canEditRates = () => can("Equipment", "edit") || canAny("Finance", "create", { strict: true });
-// "Rate badlo" (ek trip ka rate, 4 Oct 2026) — server ka overrideGate: approver
-// (Admin / PM role, ya Equipment ka Approve tick — review approve jaisa) YA
-// rateGate. Asli rok server par; yahan sirf button chhupana.
-const canOverrideRate = () => {
-  const u = currentUser();
-  const role = String(u?.role || "").toLowerCase().replace(/[\s-]+/g, "_");
-  if (["admin", "super_admin", "project_manager"].includes(role)) return true;
-  const row = (u?.module_permissions || {}).Equipment;
-  return (!!row && row.approve === true) || canEditRates();
-};
+const canEditRates = () => canAny("Finance", "create", { strict: true });
+// "Rate badlo" (ek trip ka rate, 4 Oct 2026) — server ka overrideGate: 5 Oct
+// 2026 se wahi Finance Create (strict). Approver / PM role / Equipment Edit nahi.
+// Asli rok server par; yahan sirf button chhupana.
+const canOverrideRate = () => canEditRates();
 // Trip par "Rate badlo" kab: poori hui, bill me nahi, reject nahi, aur bill
 // banne wali (fleet 'own' / mahina nahi) — server ka overrideBlock wahi.
 // Billing = load ka billing_snap; purani trip (billing_snap khaali) par
@@ -3346,10 +3347,10 @@ function TripVehiclesTab({ tv, from, to, onRange, onReload, parties, q, onQ, vie
   const [showRemoved, setShowRemoved] = useState(false);
   const [form, setForm] = useState(null);          // null | {} nayi | gaadi (edit)
   const [removing, setRemoving] = useState(null);
-  // Server ke gate jaise: nayi gaadi = Equipment Create, badlo = Equipment
-  // Edit (routes/trips.js), hatao = sirf admin, card = rateGate (Equipment
-  // Edit ya Finance Create).
-  const canAdd = can("Equipment", "create");
+  // Server ke gate jaise (5 Oct 2026): nayi gaadi = Equipment Entry (ya Create),
+  // badlo = Equipment Edit (routes/trips.js), hatao = Machinery Delete, card /
+  // rate = sirf Finance Create (rateGate).
+  const canAdd = canEntry("Equipment");
   const canEdit = can("Equipment", "edit");
   const canRemove = canRemoveMachine();
   const canRates = canEditRates();
@@ -3767,6 +3768,10 @@ function ExportBar({ rows, columns, pdfPath, params, baseName, caption, disabled
   const empty = disabled || !rows || rows.length === 0;
   const fname = [baseName, slug(params.from), params.to ? "to-" + slug(params.to) : "",
     slug(params.sector)].filter(Boolean).join("-");
+  // Excel / PDF / WhatsApp = Machinery ka EXPORT tick (5 Oct 2026) — server ki
+  // report PDF bhi wahi maangti hai. Bina tick ke report screen par dikhti hai,
+  // bahar nahi jaati.
+  const mayExport = canMach("export");
 
   const run = async (kind) => {
     setBusy(kind); setMsg(null);
@@ -3787,6 +3792,7 @@ function ExportBar({ rows, columns, pdfPath, params, baseName, caption, disabled
     setBusy("");
   };
 
+  if (!mayExport) return null;
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
       {empty && disabledWhy && <span style={{ fontSize: 10.5, color: T.t4 }}>{disabledWhy}</span>}
@@ -4567,7 +4573,7 @@ function TeleDash({ dash, onAction }) {
               <span style={{ fontSize: 12, fontWeight: 600 }}>{d.machine_name || d.unit_name}<span style={{ fontWeight: 400, color: T.t4, fontSize: 10.5 }}> {t("machinery.fuel_drop")}</span></span>
               <span style={{ fontFamily: "monospace", fontSize: 12, color: T.red, fontWeight: 700 }}>−{fmtN(d.litres)} L</span>
               <span style={{ fontSize: 11, color: T.t3 }}>{d.location_text || "—"}</span>
-              <span style={{ textAlign: "right" }}><Btn size="sm" ghost onClick={() => review(d.id)}>{t("fuel.theek_tha")}</Btn></span>
+              <span style={{ textAlign: "right" }}>{canMach("create") && <Btn size="sm" ghost onClick={() => review(d.id)}>{t("fuel.theek_tha")}</Btn>}</span>
             </Row>
           ))}
           {dash.flags.fills_no_entry.map((f) => (
@@ -4636,7 +4642,9 @@ function TelematicsTab({ data, onReload, onNewMachine }) {
           <Notice>
            {t("machinery.vendor_jaise_technoton_ka_api_yahan")}
           </Notice>
-          <TeleConfigForm existing={null} onSaved={() => onReload && onReload(true)} />
+          {canMach("create")
+            ? <TeleConfigForm existing={null} onSaved={() => onReload && onReload(true)} />
+            : <Empty>{t("machinery.tele_setup_create_chahiye")}</Empty>}
         </div>
       </Panel>
     );
@@ -4705,10 +4713,13 @@ function TelematicsTab({ data, onReload, onNewMachine }) {
               ? <span>{t("machinery.aakhri_sync_fmtd_har_raat_apne", { fmtD: fmtD(acc.last_sync_at) })}</span>
               : <span>{t("machinery.abhi_pehla_sync_hona_baaki_hai")}</span>}
         </div>
-        <div style={{ display: "flex", gap: 7 }}>
-          <Btn size="sm" ghost onClick={() => setConfigOpen(true)}>{t("common.settings")}</Btn>
-          <Btn size="sm" onClick={doSync} disabled={syncing}>{syncing ? t("machinery.sync_chal_raha_hai") : t("machinery.sync_now")}</Btn>
-        </div>
+        {/* Telematics ka setup / sync / jod = Machinery Create (server: routes/telematics.js) */}
+        {canMach("create") && (
+          <div style={{ display: "flex", gap: 7 }}>
+            <Btn size="sm" ghost onClick={() => setConfigOpen(true)}>{t("common.settings")}</Btn>
+            <Btn size="sm" onClick={doSync} disabled={syncing}>{syncing ? t("machinery.sync_chal_raha_hai") : t("machinery.sync_now")}</Btn>
+          </div>
+        )}
       </div>
       {syncing && (
         <Notice>{t("machinery.vendor_se_data_aa_raha_hai")}</Notice>
@@ -4768,7 +4779,7 @@ function TelematicsTab({ data, onReload, onNewMachine }) {
                 </div>
               )}
 
-              <div style={{ display: "flex", gap: 7, alignItems: "center", flexWrap: "wrap" }}>
+              {canMach("create") && <div style={{ display: "flex", gap: 7, alignItems: "center", flexWrap: "wrap" }}>
                 <select value={selId} onChange={(e) => setChoice((p) => ({ ...p, [u.id]: e.target.value }))}
                   style={{ ...inp, width: 320 }}>
                   <option value="">{t("machinery.machine_chuno")}</option>
@@ -4783,7 +4794,7 @@ function TelematicsTab({ data, onReload, onNewMachine }) {
                 </Btn>
                 <Btn size="sm" ghost onClick={() => onNewMachine && onNewMachine(u)}>{t("machinery.nayi_machine_banao")}</Btn>
                 <Btn size="sm" ghost onClick={() => act(u, "ignore")} disabled={busyId === u.id}>{t("machinery.hamari_nahi_hai")}</Btn>
-              </div>
+              </div>}
 
               {canFillReg && (
                 <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 11.5, color: T.t2, marginTop: 8, cursor: "pointer" }}>
@@ -4816,7 +4827,7 @@ function TelematicsTab({ data, onReload, onNewMachine }) {
                   {u.health === "red" && t("machinery.sensor_chup_hai")}
                 </span>
                 <span style={{ textAlign: "right" }}>
-                  <Btn size="sm" ghost onClick={() => unlink(u)} disabled={busyId === u.id}>{t("machinery.kholo")}</Btn>
+                  {canMach("create") && <Btn size="sm" ghost onClick={() => unlink(u)} disabled={busyId === u.id}>{t("machinery.kholo")}</Btn>}
                 </span>
               </Row>
             ))}
@@ -4852,7 +4863,7 @@ function TelematicsTab({ data, onReload, onNewMachine }) {
             <Row key={u.id} cols="1.6fr 130px">
               <span style={{ fontSize: 12, color: T.t3 }}>{u.unit_name}</span>
               <span style={{ textAlign: "right" }}>
-                <Btn size="sm" ghost onClick={() => act(u, "restore")}>{t("machinery.wapas_lao")}</Btn>
+                {canMach("create") && <Btn size="sm" ghost onClick={() => act(u, "restore")}>{t("machinery.wapas_lao")}</Btn>}
               </span>
             </Row>
           ))}
@@ -5086,11 +5097,11 @@ function MachineryModule() {
             )}
 
             {curTab === "fleet" && (
-              <Panel title={t("machinery.fleet")} action={
+              <Panel title={t("machinery.fleet")} action={canMach("create") ? (
                 <div style={{ display: "flex", gap: 7 }}>
                   <Btn size="sm" ghost onClick={() => setImportOpen(true)}>{t("machinery.excel_import")}</Btn>
                   <Btn size="sm" icon={IcAdd} onClick={() => { setEditMachine(null); setFormOpen(true); }}>{t("fuel.machine")}</Btn>
-                </div>}>
+                </div>) : null}>
                 {fleet.length === 0 && (
                   <Empty>
                    {t("machinery.koi_machine_register_nahi")}<br />
@@ -5196,7 +5207,7 @@ function MachineryModule() {
                             </span>
                             <span style={{ fontSize: 11.5, color: T.t3 }}>{fmtD(d.valid_till)}</span>
                             <span style={{ textAlign: "right" }}>
-                              <Btn size="sm" ghost onClick={() => snooze(d)}>{t("machinery.snooze_7d")}</Btn>
+                              {canMachEntry() && <Btn size="sm" ghost onClick={() => snooze(d)}>{t("machinery.snooze_7d")}</Btn>}
                             </span>
                           </Row>
                         );

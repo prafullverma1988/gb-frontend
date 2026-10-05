@@ -22,6 +22,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { getUser } from "../config/api";
 import { t } from "../i18n";
+import { can as canDo, canEntry } from "../utils/perms";
 import { T, SubTabs, rget, dataOf, IcChart, IcDoc, IcTruck, IcSet, IcList, IcRefresh, IcBox, IcRupee, IcChk } from "./rmc/rmcShared";
 import RmcDashboard from "./rmc/RmcDashboard";
 import RmcOrders from "./rmc/RmcOrders";
@@ -35,12 +36,16 @@ import RmcCubes from "./rmc/RmcCubes";
 
 function RMCModule() {
   const me = useMemo(() => getUser() || {}, []);
-  const isAdmin = ["admin", "super_admin"].includes(String(me.role || "").toLowerCase());
-  // Permission row na ho (Settings me abhi RMC ki row nahi bani) to khula —
-  // backend bhi yahi karta hai (requirePerm fail-open).
-  const permRow = (me.module_permissions || {}).RMC;
-  const can = (k) => isAdmin || permRow === undefined || !!(permRow && permRow[k]);
+  // Roles & Access (5 Oct 2026) — wahi niyam jo server (routes/rmc.js): row na
+  // ho to khula, par Viewer sirf dekhta hai; naam case-insensitive (utils/perms).
+  //   Entry  = concrete order, challan, TM accept, ginti, cube / Marshall,
+  //            batch import (transition me Create bhi)
+  //   Create = plant, arrangement, mix design, lead, bill, bikri
+  const can = (k) => canDo("RMC", k, me);
   const canCreate = can("create"), canEdit = can("edit"), canApprove = can("approve"), canDelete = can("delete");
+  // Roz ki entry wali screens ko "canCreate" naam se hi jaata hai — unke andar
+  // ka har "naya" button entry ka hai (order, challan, accept, ginti, cube, batch).
+  const canEnter = canEntry("RMC", me);
 
   const [tab, setTab] = useState("dashboard");
   const [setupSub, setSetupSub] = useState("plants");
@@ -136,19 +141,19 @@ function RMCModule() {
           <RmcDashboard dash={dash} onGo={setTab} onOpenChallan={openChallan} onOpenOrder={openOrder} />
         )}
         {tab === "orders" && (
-          <RmcOrders meta={m} canCreate={canCreate} canApprove={canApprove} refreshKey={refreshKey}
+          <RmcOrders meta={m} canCreate={canEnter} canApprove={canApprove} refreshKey={refreshKey}
             onRefresh={refresh} openId={openOrderId} onOpenDone={() => setOpenOrderId(null)} />
         )}
         {tab === "challans" && (
-          <RmcChallans meta={m} canCreate={canCreate} canDelete={canDelete} refreshKey={refreshKey}
+          <RmcChallans meta={m} canCreate={canEnter} canDelete={canDelete} refreshKey={refreshKey}
             onRefresh={refresh} openId={openChallanId} onOpenDone={() => setOpenChallanId(null)} onGoSetup={goSetup} />
         )}
         {tab === "counts" && (
-          <RmcCounts meta={m} canCreate={canCreate} canApprove={canApprove}
+          <RmcCounts meta={m} canCreate={canEnter} canApprove={canApprove}
             refreshKey={refreshKey} onRefresh={refresh} />
         )}
         {tab === "cube" && (
-          <RmcCubes meta={m} canCreate={canCreate} refreshKey={refreshKey} onRefresh={refresh} />
+          <RmcCubes meta={m} canCreate={canEnter} refreshKey={refreshKey} onRefresh={refresh} />
         )}
         {tab === "bills" && (<>
           <SubTabs tabs={BILL_SUBS} value={billSub} onChange={setBillSub} />
@@ -164,7 +169,7 @@ function RMCModule() {
           <RmcSetup meta={m} canCreate={canCreate} canEdit={canEdit} onChanged={refresh}
             sub={setupSub} onSub={setSetupSub} />
         )}
-        {tab === "reports" && <RmcReports meta={m} sub={reportSub} onSub={setReportSub} canCreate={canCreate} />}
+        {tab === "reports" && <RmcReports meta={m} sub={reportSub} onSub={setReportSub} canCreate={canEnter} />}
       </div>
     </div>
   );

@@ -4,7 +4,7 @@ import { T, fmtN, localYMD } from "../shared/tokens";
 import { Pill, Stat, Panel, THead, AddBtn, FilterTabs } from "../shared/ui";
 import TabTripTracking from "./TabTripTracking";
 import { t } from "../../i18n";
-import { can } from "../../utils/perms";
+import { can, canAny, canEntry } from "../../utils/perms";
 
 // Route keys as the backend stores them (routes/equipment.js PAYMENT_ROUTES).
 // "site_exp" used to fall through unlabelled and render as raw text.
@@ -19,11 +19,17 @@ const ROUTE_LABEL = {
 const STATUS_LABEL = { get "On Site"() { return t("equipment.on_site"); }, get "Returned"() { return t("equipment.returned"); } };
 
 function TabEquipment({ projectId }) {
-  // Usage log aur equipment request server par Equipment ka CREATE maangte
-  // hain (routes/equipment.js). Bina tick ke button dikhta tha aur dabane par
-  // 403 — ab wahi button chhupta hai. (Entry wala tick abhi sirf Trip Tracking
-  // ka hai; ye dono baad me Entry par jaayenge.)
-  const canEqCreate = can("Equipment", "create");
+  // Roles & Access (5 Oct 2026): usage log aur equipment request roz ka kaam
+  // hain — Equipment ka ENTRY (transition me Create bhi). Usage log Machinery
+  // ke Entry tick se bhi (machine ka log; strict — row na ho to nahi). Server
+  // (routes/equipment.js) yahi maanta hai; bina tick ke button hi nahi.
+  const canLogUsage = canEntry("Equipment") || canAny("Machinery", "entry", { strict: true });
+  const canRequest = canEntry("Equipment");
+  // Purana "Period & Status" hissa Library ke project-equipment par chalta hai
+  // (routes/library.js — Library create / edit / delete).
+  const canLegacyAdd = can("Library", "create");
+  const canLegacyEdit = can("Library", "edit");
+  const canLegacyDel = can("Library", "delete");
   // Top-level view toggle: existing Equipment sections vs Trip Tracking.
   const [view, setView] = useState("equipment");
   const [rows,    setRows]    = useState([]);
@@ -341,7 +347,7 @@ function TabEquipment({ projectId }) {
       <Panel style={{ marginBottom: 12 }}>
         <SectionHeader title={t("equipment.usage_log")} open={openUsage} onToggle={() => setOpenUsage(v => !v)}
           count={usageRows.length}
-          action={canEqCreate ? <AddBtn label={t("equipment.log_usage")} onClick={() => { setLogForm(emptyLog); setLogErr(""); setShowLogModal(true); }} /> : null} />
+          action={canLogUsage ? <AddBtn label={t("equipment.log_usage")} onClick={() => { setLogForm(emptyLog); setLogErr(""); setShowLogModal(true); }} /> : null} />
         {openUsage && (
           <div>
             {usageLoading && <div style={{ textAlign: "center", padding: "30px 0", color: T.t4, fontSize: 13 }}>{t("equipment.loading_usage")}</div>}
@@ -382,7 +388,7 @@ function TabEquipment({ projectId }) {
       <Panel style={{ marginBottom: 12 }}>
         <SectionHeader title={t("equipment.equipment_requests")} open={openReqs} onToggle={() => setOpenReqs(v => !v)}
           count={reqList.length}
-          action={canEqCreate ? <AddBtn label={t("equipment.request_equipment")} onClick={() => setShowReqForm(v => !v)} /> : null} />
+          action={canRequest ? <AddBtn label={t("equipment.request_equipment")} onClick={() => setShowReqForm(v => !v)} /> : null} />
         {openReqs && (
           <div>
             {showReqForm && (
@@ -475,7 +481,7 @@ function TabEquipment({ projectId }) {
       <Panel style={{ marginBottom: 12 }}>
         <SectionHeader title={t("equipment.period_status_legacy")} open={openLegacy} onToggle={() => setOpenLegacy(v => !v)}
           count={rows.length}
-          action={<AddBtn label={t("equipment.add_equipment")} onClick={() => setShowAdd(true)} />} />
+          action={canLegacyAdd ? <AddBtn label={t("equipment.add_equipment")} onClick={() => setShowAdd(true)} /> : null} />
         {openLegacy && (
           <div style={{ padding: "10px 15px" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
@@ -572,17 +578,19 @@ function TabEquipment({ projectId }) {
                 <span style={{ fontSize: 12.5, color: T.t1, fontVariantNumeric: "tabular-nums" }}>
                   {eq.rate_per_day ? "₹" + fmtN(eq.rate_per_day) : "—"}
                 </span>
-                <button onClick={() => toggleStatus(eq)} type="button"
+                <button onClick={canLegacyEdit ? () => toggleStatus(eq) : undefined} type="button" disabled={!canLegacyEdit}
                   style={{ fontSize: 10.5, fontWeight: 700, padding: "4px 10px", borderRadius: 8,
-                    background: sm.bg, color: sm.c, border: "none", cursor: "pointer",
+                    background: sm.bg, color: sm.c, border: "none", cursor: canLegacyEdit ? "pointer" : "default",
                     fontFamily: "inherit", justifySelf: "start" }}>
                   {STATUS_LABEL[eq.status] || eq.status}
                 </button>
-                <button onClick={() => removeEq(eq)} type="button"
-                  title={t("common.remove")}
-                  style={{ background: "none", border: "none", cursor: "pointer", padding: 4, color: T.t4, fontSize: 16, fontFamily: "inherit", justifySelf: "end" }}>
-                  ×
-                </button>
+                {canLegacyDel ? (
+                  <button onClick={() => removeEq(eq)} type="button"
+                    title={t("common.remove")}
+                    style={{ background: "none", border: "none", cursor: "pointer", padding: 4, color: T.t4, fontSize: 16, fontFamily: "inherit", justifySelf: "end" }}>
+                    ×
+                  </button>
+                ) : <span />}
               </div>
             );
           })}

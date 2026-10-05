@@ -305,7 +305,8 @@ function RmcSetup({ meta, canCreate, canEdit, onChanged, sub, onSub }) {
       <SubTabs tabs={tabs} value={sub} onChange={onSub} />
       {sub === "plants" && <PlantsTab meta={meta} canCreate={canCreate} canEdit={canEdit} onChanged={onChanged} />}
       {sub === "arrangements" && <RmcArrangements meta={meta} canCreate={canCreate} canEdit={canEdit} onChanged={onChanged} />}
-      {sub === "leads" && <LeadsTab meta={meta} canEdit={canEdit} onChanged={onChanged} />}
+      {/* Lead = setup → RMC Create (5 Oct 2026); transition me Edit bhi (server dono maanta hai). */}
+      {sub === "leads" && <LeadsTab meta={meta} canEdit={canCreate || canEdit} onChanged={onChanged} />}
       {sub === "designs" && <RmcMixDesigns meta={meta} canCreate={canCreate} canEdit={canEdit} onChanged={onChanged} />}
     </div>
   );

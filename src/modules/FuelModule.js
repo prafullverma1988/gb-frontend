@@ -17,7 +17,7 @@ import { useState, useEffect, useCallback, useMemo, createContext, useContext } 
 import api, { API_BASE, getToken } from "../config/api";
 import { t, Rich } from "../i18n";
 import { BackClose } from "../utils/backNav";
-import { can, currentUser } from "../utils/perms";
+import { can, canAny, canEntry } from "../utils/perms";
 import { cld } from "../utils/cloudinary";
 
 // ── ICONS ─────────────────────────────────────────────────────────
@@ -1045,7 +1045,7 @@ function OverviewTab({ stores, purchases, issues, byEquipment, normMissing, onRe
       )}
 
       <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr", gap: 12, alignItems: "start" }}>
-        <Panel title={t("fuel.haal_ki_entries")} action={<Btn size="sm" icon={IcAdd} onClick={onRefuel}>{t("fuel.refuelling_entry")}</Btn>}>
+        <Panel title={t("fuel.haal_ki_entries")} action={canFuelEntry() ? <Btn size="sm" icon={IcAdd} onClick={onRefuel}>{t("fuel.refuelling_entry")}</Btn> : null}>
           {recent.length === 0 && <Empty>{t("fuel.abhi_koi_diesel_entry_nahi_hui")}</Empty>}
           {recent.length > 0 && (
             <>
@@ -1119,7 +1119,7 @@ function RefuelingTab({ purchases, issues, onRefuel, onDeletePurchase, onDeleteI
               style={{ padding: "5px 11px", borderRadius: 5, border: "none", cursor: "pointer", fontFamily: "inherit", fontSize: 11.5, fontWeight: kind === o.k ? 700 : 500, background: kind === o.k ? T.surface : "transparent", color: kind === o.k ? T.ind : T.t3 }}>{o.l}</button>
           ))}
         </div>
-        <Btn size="sm" icon={IcAdd} onClick={onRefuel}>{t("fuel.refuelling_entry")}</Btn>
+        {canFuelEntry() && <Btn size="sm" icon={IcAdd} onClick={onRefuel}>{t("fuel.refuelling_entry")}</Btn>}
       </div>}>
       {rows.length === 0 && <Empty>{t("fuel.koi_entry_nahi_mili")}</Empty>}
       {rows.length > 0 && (
@@ -1159,11 +1159,13 @@ function RefuelingTab({ purchases, issues, onRefuel, onDeletePurchase, onDeleteI
                         ? <Pill label={t("fuel.payable_unbilled")} c={T.amb} bg={T.ambL} />
                         : <Pill label={r.payable_status === "partial" ? t("fuel.payable_partial") : t("fuel.payable_unpaid")} c={T.amb} bg={T.ambL} />}
               </span>
-              <button type="button" title={t("common.delete")}
-                onClick={(ev) => { ev.stopPropagation(); if (r._k === "purchase") onDeletePurchase(r); else onDeleteIssue(r); }}
-                style={{ background: "none", border: "none", cursor: "pointer", color: T.t4, padding: 3, display: "flex" }}>
-                <IcTrash size={13} color="currentColor" />
-              </button>
+              {can("Fuel", "delete") ? (
+                <button type="button" title={t("common.delete")}
+                  onClick={(ev) => { ev.stopPropagation(); if (r._k === "purchase") onDeletePurchase(r); else onDeleteIssue(r); }}
+                  style={{ background: "none", border: "none", cursor: "pointer", color: T.t4, padding: 3, display: "flex" }}>
+                  <IcTrash size={13} color="currentColor" />
+                </button>
+              ) : <span />}
             </Row>
           ))}
         </>
@@ -1185,8 +1187,16 @@ function RefuelingTab({ purchases, issues, onRefuel, onDeletePurchase, onDeleteI
 // wo button chhupate hain jo dabane par mana hi hota.
 // ══════════════════════════════════════════════════════════════════
 const signedL = (n) => `${Number(n) > 0 ? "+" : ""}${fmtN(n)} L`;
-const canRequestDip = () => can("Fuel", "create") || can("Fuel", "edit");
-const canDecideDip = () => ["admin", "super_admin"].includes(currentUser().role);
+// ── Kaun kya kare — Roles & Access ki Fuel row (5 Oct 2026) ──
+// Server (routes/fuel.js) wahi tick maangta hai jo yahan:
+//   Entry  = refuelling entry, subcon ko diesel, dipstick, dipstick ki request
+//            (transition me Create bhi)
+//   Create = naya barrel / drum          Delete = entry hatana (wajah ke saath)
+//   Approve = dipstick request ka faisla (strict — pehle sirf Admin role)
+//   Export = Excel / PDF / WhatsApp
+const canFuelEntry = () => canEntry("Fuel");
+const canRequestDip = () => canEntry("Fuel") || can("Fuel", "edit");
+const canDecideDip = () => canAny("Fuel", "approve", { strict: true });
 
 // Reading wali row ek shakl me — drum ka Ledger (storeLedger) aur Barrel
 // Register ka ledger (barrelLedger) farq shakl ki row dete hain.
@@ -1517,8 +1527,8 @@ function BarrelTab({ stores, projects, onReload, onOpenLedger, onRefuel, dipPend
       )}
       <Panel title={t("fuel.barrel_stock")} action={<div style={{ display: "flex", gap: 8 }}>
         <Btn size="sm" ghost onClick={() => setLogOpen(true)}>{t("fuel.dip_log")}</Btn>
-        <Btn size="sm" ghost icon={IcAdd} onClick={() => { setF({}); setError(""); setNewOpen(true); }}>{t("fuel.naya_barrel")}</Btn>
-        <Btn size="sm" icon={IcDrop} onClick={onRefuel}>{t("fuel.refuelling_entry")}</Btn>
+        {can("Fuel", "create") && <Btn size="sm" ghost icon={IcAdd} onClick={() => { setF({}); setError(""); setNewOpen(true); }}>{t("fuel.naya_barrel")}</Btn>}
+        {canFuelEntry() && <Btn size="sm" icon={IcDrop} onClick={onRefuel}>{t("fuel.refuelling_entry")}</Btn>}
       </div>}>
         {stores.length === 0 && <Empty>{t("fuel.abhi_koi_barrel_nahi_bana_naya")}</Empty>}
         {stores.length > 0 && (
@@ -1545,7 +1555,7 @@ function BarrelTab({ stores, projects, onReload, onOpenLedger, onRefuel, dipPend
                 <span style={{ fontSize: 12, color: T.t2 }}>₹{fmtN(s.avg_rate)}</span>
                 <span style={{ fontSize: 12, fontWeight: 600, color: T.t1 }}>{fmtC(s.value)}</span>
                 <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
-                  <Btn size="sm" ghost icon={IcRuler} onClick={() => { setF({ checked_at: nowLocal() }); setError(""); setDipFor(s); }}>{t("fuel.dipstick")}</Btn>
+                  {canFuelEntry() && <Btn size="sm" ghost icon={IcRuler} onClick={() => { setF({ checked_at: nowLocal() }); setError(""); setDipFor(s); }}>{t("fuel.dipstick")}</Btn>}
                   {places.can_shift && (
                     <Btn size="sm" ghost onClick={() => {
                       setF({ moved_at: nowLocal(), to_scope: s.project_id ? "warehouse" : "project", to_warehouse_id: s.project_id ? onlyWarehouse : "" });
@@ -1750,10 +1760,12 @@ function SubconTab({ subcons, stores, vendors, projects, from, to, onRange, onRe
     setBusy(false);
   };
 
+  // Hatana = Fuel Delete + wajah (server audit me poori entry rakhta hai).
   const remove = async (r) => {
-    if (!(await window.confirmAsync(t("fuel.subcon_entry_delete_karein", { name: r.subcon_name, amt: fmtC(r.amount) })))) return;
+    const why = await window.promptAsync(t("fuel.subcon_entry_hatane_ki_wajah", { name: r.subcon_name, amt: fmtC(r.amount) }), "");
+    if (why == null) return;
     try {
-      const res = await api.del(`/fuel/subcon-issues/${r.id}?source=${r.source}`);
+      const res = await api.del(`/fuel/subcon-issues/${r.id}?source=${r.source}&reason=${encodeURIComponent(String(why).trim())}`);
       if (res && res.success === false) { window.alert(res.message || "Delete failed"); return; }
       await load(); onReload();
     } catch (e) { window.alert(e?.message || "Network error"); }
@@ -1768,9 +1780,11 @@ function SubconTab({ subcons, stores, vendors, projects, from, to, onRange, onRe
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           <input type="date" value={from} onChange={(e) => onRange(e.target.value, to)} style={{ ...inp, width: 140 }} />
           <input type="date" value={to} onChange={(e) => onRange(from, e.target.value)} style={{ ...inp, width: 140 }} />
-          <Btn size="sm" icon={IcDrop} onClick={() => { setF({ source: "store", issued_at: nowLocal(), payment_mode: "credit" }); setError(""); setOpen(true); }}>
-            {t("fuel.diesel_dein")}
-          </Btn>
+          {canFuelEntry() && (
+            <Btn size="sm" icon={IcDrop} onClick={() => { setF({ source: "store", issued_at: nowLocal(), payment_mode: "credit" }); setError(""); setOpen(true); }}>
+              {t("fuel.diesel_dein")}
+            </Btn>
+          )}
         </div>}>
         <div style={{ padding: "10px 13px", background: T.indL, border: `1px solid ${T.indM}`, borderRadius: 7, fontSize: 11.5, color: T.ind, fontWeight: 600, marginBottom: 12 }}>
           {t("fuel.subcon_diesel_ledger_hint")}
@@ -1840,10 +1854,12 @@ function SubconTab({ subcons, stores, vendors, projects, from, to, onRange, onRe
                         <IcCamera size={15} />
                       </a>
                     )}
-                    <button type="button" onClick={(ev) => { ev.stopPropagation(); remove(r); }} title={t("common.delete")}
-                      style={{ border: "none", background: "none", cursor: "pointer", color: T.t4, padding: 0 }}>
-                      <IcTrash size={15} />
-                    </button>
+                    {can("Fuel", "delete") && (
+                      <button type="button" onClick={(ev) => { ev.stopPropagation(); remove(r); }} title={t("common.delete")}
+                        style={{ border: "none", background: "none", cursor: "pointer", color: T.t4, padding: 0 }}>
+                        <IcTrash size={15} />
+                      </button>
+                    )}
                   </div>
                 </Row>
               );
@@ -2148,7 +2164,8 @@ function UnbilledTab({ onReload }) {
                   </Row>
                 ))}
 
-                <div style={{ padding: "11px 15px", display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                {/* Bill / cash post = Finance ka Create (server: POST /fuel/bills, /post-cash) */}
+                {can("Finance", "create") && <div style={{ padding: "11px 15px", display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
                   {credit.length > 0 && (
                     <>
                       <Btn ghost size="sm" onClick={() => toggleAll(g, "credit")}>
@@ -2171,7 +2188,7 @@ function UnbilledTab({ onReload }) {
                       </Btn>
                     </>
                   )}
-                </div>
+                </div>}
               </>
             )}
           </Panel>
@@ -2325,6 +2342,9 @@ function ExportBar({ rows, columns, pdfPath, params, baseName, caption, note }) 
   const empty = !rows || rows.length === 0;
   const fname = [baseName, slug(params.from), params.to ? "to-" + slug(params.to) : "",
     slug(params.sector), slug(params.flow)].filter(Boolean).join("-");
+  // Excel / PDF / WhatsApp = Fuel ka EXPORT tick (5 Oct 2026) — server ki
+  // register / ledger PDF bhi wahi maangti hai.
+  const mayExport = can("Fuel", "export");
 
   const run = async (kind) => {
     setBusy(kind); setMsg(null);
@@ -2345,6 +2365,7 @@ function ExportBar({ rows, columns, pdfPath, params, baseName, caption, note }) 
     setBusy("");
   };
 
+  if (!mayExport) return note ? <span style={{ fontSize: 10.5, color: T.t4 }}>{note}</span> : null;
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
       {note && <span style={{ fontSize: 10.5, color: T.t4 }}>{note}</span>}
@@ -3333,7 +3354,7 @@ function CrossCheckTab({ stores, byEquipment, purchases, issues, sensor, onReloa
                   <span style={{ fontSize: 12, fontFamily: "monospace", color: T.red, fontWeight: 700 }}>−{fmtL(d.litres)}</span>
                   <span style={{ fontSize: 11, color: T.t3 }}>{d.location || "—"}</span>
                   <span style={{ textAlign: "right" }}>
-                    <Btn size="sm" ghost onClick={() => review(d.id)}>{t("fuel.theek_tha")}</Btn>
+                    {can("Machinery", "create") && <Btn size="sm" ghost onClick={() => review(d.id)}>{t("fuel.theek_tha")}</Btn>}
                   </span>
                 </Row>
               ))}
@@ -3577,10 +3598,13 @@ function FuelModule() {
 
   const reloadAll = useCallback(async () => { await loadCore(); await loadReports(); }, [loadCore, loadReports]);
 
+  // Entry hatana = Fuel Delete + wajah (kam se kam 3 akshar) — server poori
+  // entry audit me rakhta hai (5 Oct 2026).
   const del = async (url, label) => {
-    if (!(await window.confirmAsync(t("fuel.label_delete_karein", { label })))) return;
+    const why = await window.promptAsync(t("fuel.hatane_ki_wajah_likho", { label }), "");
+    if (why == null) return;
     try {
-      const r = await api.del(url);
+      const r = await api.del(url + (url.includes("?") ? "&" : "?") + "reason=" + encodeURIComponent(String(why).trim()));
       if (r && r.success === false) { window.alert(r.message || "Delete failed"); return; }
       reloadAll();
     } catch (e) { window.alert(e?.message || "Network error"); }
