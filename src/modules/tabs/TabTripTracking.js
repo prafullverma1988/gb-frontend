@@ -5,6 +5,7 @@ import { Pill, Stat, Panel, THead, AddBtn, FilterTabs } from "../shared/ui";
 import { currentUser, canAny, canEntry } from "../../utils/perms";
 import { t, Rich } from "../../i18n";
 import { cld } from "../../utils/cloudinary";
+import SearchSelect from "../../components/SearchSelect";
 
 // ── Kaun kya kar sakta hai (is tab ka apna — module independence) ──
 // 3 Oct 2026 se Trip Tracking Roles & Access ki "Equipment" row se chalta hai
@@ -82,6 +83,9 @@ const canOverrideTrip = (tr) => !!tr && tr.status === "completed" && tr.bill_id 
 const FLAG_META = {
   too_fast:         { get label() { return t("trip_tracking.too_fast"); },         tone: "red" },
   impossible_cycle: { get label() { return t("trip_tracking.impossible_cycle"); }, tone: "red" },
+  plate_mismatch: { get label() { return t("trip_tracking.plate_mismatch"); }, tone: "red" },
+  slip_vehicle_mismatch: { get label() { return t("trip_tracking.slip_vehicle_mismatch"); }, tone: "red" },
+  slip_qty_mismatch: { get label() { return t("trip_tracking.slip_qty_mismatch"); }, tone: "red" },
   too_slow:         { get label() { return t("trip_tracking.too_slow"); },         tone: "amber" },
   gps_weak:         { get label() { return t("trip_tracking.gps_weak"); },         tone: "amber" },
   load_outside:     { get label() { return t("trip_tracking.load_outside"); },     tone: "amber" },
@@ -699,8 +703,15 @@ function RouteForm({ projectId, tasks, route, onCancel, onSaved }) {
     unload_lat: route?.unload_lat ?? "", unload_lng: route?.unload_lng ?? "",
     load_radius: route?.load_radius || 100,
     default_task_id: route?.default_task_id || "",
+    material_id: route?.material_id || null,
+    material_name: route?.material_name || "",
   });
   const [saving, setSaving] = useState(false);
+  // Route ka material (5 Oct 2026) — Library se; app ke loading form me pehle se bhara.
+  const [mats, setMats] = useState([]);
+  useEffect(() => {
+    api.get("/library/materials").then(r => setMats(r && r.success && Array.isArray(r.data) ? r.data : [])).catch(() => setMats([]));
+  }, []);
   const upd = (k, v) => setF(p => ({ ...p, [k]: v }));
   const numf = (v) => (v !== "" && v != null && !isNaN(parseFloat(v)) ? parseFloat(v) : null);
 
@@ -764,6 +775,8 @@ function RouteForm({ projectId, tasks, route, onCancel, onSaved }) {
     const body = {
       project_id: projectId, name: f.name.trim(),
       default_task_id: f.default_task_id || null,
+      material_id: f.material_id || null,
+      material_name: f.material_name || null,
       load_lat: a ? a.lat : numf(f.load_lat), load_lng: a ? a.lng : numf(f.load_lng),
       unload_lat: b ? b.lat : numf(f.unload_lat), unload_lng: b ? b.lng : numf(f.unload_lng),
       load_radius: f.load_radius, unload_radius: f.load_radius,
@@ -852,6 +865,13 @@ function RouteForm({ projectId, tasks, route, onCancel, onSaved }) {
         <div><div style={lblS}>{t("trip_tracking.unload_lng")}</div><input value={f.unload_lng} onChange={e => upd("unload_lng", e.target.value)} placeholder={t("trip_tracking.81_6xxxx")} style={inp} /></div>
       </div>
       )}
+      <div style={{ marginTop: 10 }}>
+        <div style={lblS}>{t("trip_tracking.route_material")}</div>
+        <SearchSelect value={f.material_id || ""} options={mats.map(m => ({ id: m.id, name: m.name + (m.unit ? " (" + m.unit + ")" : "") }))}
+          onChange={(id) => { const m = mats.find(x => String(x.id) === String(id)); setF(p => ({ ...p, material_id: m ? m.id : null, material_name: m ? m.name : "" })); }}
+          placeholder={t("trip_tracking.route_material_ph")} />
+        <div style={{ fontSize: 10.5, color: T.t4, marginTop: 3 }}>{t("trip_tracking.route_material_hint")}</div>
+      </div>
       <div style={{ marginTop: 10 }}>
         <div style={lblS}>{t("trip_tracking.default_task_optional")}</div>
         <select value={f.default_task_id || ""} onChange={e => upd("default_task_id", e.target.value ? Number(e.target.value) : "")} style={inp}>
