@@ -11811,6 +11811,7 @@ const dict = {
   "trip_tracking.unload_lat":                                  "Unload Lat",
   "trip_tracking.unload_lng":                                  "Unload Lng",
   "trip_tracking.unload_outside":                              "UNLOAD OUTSIDE",
+  "trip_tracking.unload_nahi":                                 "No unloading punch — closed manually",
   "trip_tracking.unloaded_by_t_fmtclock":                      "Unloaded by: {t} · {fmtClock}",
   "trip_tracking.unloading":                                   "Unloading",
   "trip_tracking.update_route":                                "Update route",

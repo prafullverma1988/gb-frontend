@@ -11810,6 +11810,7 @@ const dict = {
   "trip_tracking.unload_lat":                                  "अनलोड लैट",
   "trip_tracking.unload_lng":                                  "अनलोड लंग",
   "trip_tracking.unload_outside":                              "अनलोड आउटसाइड",
+  "trip_tracking.unload_nahi":                                 "अनलोडिंग पंच नहीं — मैनुअल क्लोज़",
   "trip_tracking.unloaded_by_t_fmtclock":                      "अनलोडेड बाय: {t} · {fmtClock}",
   "trip_tracking.unloading":                                   "अनलोडिंग",
   "trip_tracking.update_route":                                "अपडेट रूट",

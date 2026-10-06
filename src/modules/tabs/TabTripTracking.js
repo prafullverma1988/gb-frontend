@@ -561,7 +561,11 @@ function MonitorTab({ projectId, onChange }) {
                           <TripLoadDetails trip={item4} />
                           <div><Rich k="trip_tracking.travel_t_t2" params={{ t: item4.travel_min != null ? t("trip_tracking.n_min", { n: item4.travel_min }) : "—", t2: item4.expected_travel_min != null ? t("trip_tracking.expected_pm", { exp: item4.expected_travel_min, tol: item4.tolerance_min || 0 }) : "" }} /></div>
                           <div>{t("trip_tracking.loaded_by_t_fmtclock", { t: item4.load_by_name || "—", fmtClock: fmtClock(item4.load_at) })}</div>
-                          <div>{t("trip_tracking.unloaded_by_t_fmtclock", { t: item4.unload_by_name || "—", fmtClock: fmtClock(item4.unload_at) })}</div>
+                          {/* Manual close hui trip me unload ka punch hota hi nahi — wahan
+                              "Unloaded by: — ·" likhne se behtar hai wajah likhna. */}
+                          {item4.unload_at
+                            ? <div>{t("trip_tracking.unloaded_by_t_fmtclock", { t: item4.unload_by_name || "—", fmtClock: fmtClock(item4.unload_at) })}</div>
+                            : item4.status === "completed" ? <div>{t("trip_tracking.unload_nahi")}</div> : null}
                           <div>{t("trip_tracking.vendor_t_rate_t2", { t: item4.vendor_name || "—", t2:
                             item4.billing_snap === "km" ? t("trip_tracking.rate_km_card")
                               : item4.billing_snap === "monthly" ? t("trip_tracking.rate_monthly")
