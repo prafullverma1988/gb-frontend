@@ -373,7 +373,11 @@ function TabTripTracking({ projectId }) {
 
 // ── MONITOR ──────────────────────────────────────────────────────
 function MonitorTab({ projectId, onChange }) {
-  const [filter, setFilter] = useState("flagged");
+  // Monitor "Sab" par khulta hai (6 Oct 2026). Pehle "Flagged" par khulta tha —
+  // review ke liye theek tha, par jab koi flagged trip na ho to poori screen
+  // khaali dikhti thi aur lagta tha ki trip hai hi nahi (asli me approve /
+  // reject hui trips list me baithi thi, bas doosre tab me).
+  const [filter, setFilter] = useState("all");
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [openId, setOpenId] = useState(null);
