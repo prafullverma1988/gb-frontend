@@ -383,6 +383,7 @@ function MonitorTab({ projectId, onChange }) {
   const [busyId, setBusyId] = useState(null);
   // "Rate badlo" (4 Oct 2026) — khuli trip aur save ke baad ki line.
   const [over, setOver] = useState(null);
+  const [del, setDel] = useState(null);   // kaunsi trip hatani hai
   const [flash, setFlash] = useState("");
   // Trip kholne par naksha: route ka raasta + geofence — route ek hi baar laao.
   const [routesById, setRoutesById] = useState({});
@@ -474,6 +475,10 @@ function MonitorTab({ projectId, onChange }) {
             if (saved) setRows((p) => p.map((x) => (x.id === saved.id ? saved : x))); else load();
             onChange && onChange();
           }} />
+      )}
+      {del && (
+        <DeleteTripModal trip={del} onClose={() => setDel(null)}
+          onDone={(msg) => { setDel(null); setFlash(msg); load(); onChange && onChange(); }} />
       )}
       <Panel>
         {loading && <div style={{ textAlign: "center", padding: "30px 0", color: T.t4, fontSize: 13 }}>{t("trip_tracking.loading_trips")}</div>}
@@ -578,12 +583,18 @@ function MonitorTab({ projectId, onChange }) {
                         const canClose = item4.status === "in_transit" && approver;
                         // "Rate badlo" — poori, bina-bill trip par, jiske paas haq ho (4 Oct 2026).
                         const canOver = canOverrideRate() && canOverrideTrip(item4);
+                        // Trip hatana (6 Oct 2026): Equipment ka Delete, aur bill me
+                        // ja chuki trip kabhi nahi — server bhi yahi rokta hai.
+                        const canDel = canEq("delete") && item4.bill_id == null;
                         if (!canReview && !canCancel && !canClose) {
                           return (
                             <div style={{ display: "flex", gap: 8, alignItems: "center", justifyContent: "space-between", flexWrap: "wrap" }}>
                               {item4.verify_status === "flagged" && item4.status !== "in_transit"
                                 ? <span style={{ fontSize: 11.5, color: T.t4 }}>{t("trip_tracking.review_approver_karega")}</span> : <span />}
-                              {canOver && <BtnOutline label={t("trip_tracking.ro_button")} color={T.ind} onClick={() => setOver(item4)} />}
+                              <div style={{ display: "flex", gap: 8 }}>
+                                {canOver && <BtnOutline label={t("trip_tracking.ro_button")} color={T.ind} onClick={() => setOver(item4)} />}
+                                {canDel && <BtnOutline label={t("trip_tracking.del_button")} color={T.red} onClick={() => setDel(item4)} />}
+                              </div>
                             </div>
                           );
                         }
@@ -620,6 +631,7 @@ function MonitorTab({ projectId, onChange }) {
                               )}
                               {canCancel && <BtnOutline label={t("trip_tracking.cancel_trip")} color={T.red} busy={busyId === item4.id} onClick={() => stuckAct(item4, "cancel")} />}
                               {canClose && <BtnOutline label={t("trip_tracking.manual_close_2")} color={T.amb} busy={busyId === item4.id} onClick={() => stuckAct(item4, "close")} />}
+                              {canDel && <BtnOutline label={t("trip_tracking.del_button")} color={T.red} onClick={() => setDel(item4)} />}
                             </div>
                           </div>
                         );
@@ -1767,6 +1779,48 @@ function RateOverrideModal({ trip, onClose, onSaved }) {
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 14 }}>
           <BtnOutline label={t("common.cancel")} color={T.t3} onClick={onClose} />
           <BtnSolid label={busy ? t("common.saving") : t("common.save")} color={T.ind} busy={busy} onClick={save} />
+        </div>
+      </div>
+    </div>
+  );
+}
+// ── Trip hatao ──────────────────────────────────────────────────
+// Trip hatane ka koi raasta tha hi nahi (sirf cancel / reject, jisme row
+// list me bani rehti thi). Gaadi "hatao" karne par bhi uski trips bani
+// rehti hain — isliye log samajhte the ki trip delete ho gayi aur phone par
+// wahi trip dikhti rehti thi. Server: DELETE /trips/:id (Equipment Delete +
+// wajah + poori row audit me; bill wali trip nahi hatti).
+function DeleteTripModal({ trip, onClose, onDone }) {
+  const [reason, setReason] = useState("");
+  const [tried, setTried] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const bad = reason.trim().length < 3;
+  const go = async () => {
+    setTried(true);
+    if (bad) return;
+    setBusy(true);
+    const r = await api.del("/trips/" + trip.id, { reason: reason.trim() });
+    setBusy(false);
+    if (!r || r.success === false) { window.alert((r && r.message) || t("trip_tracking.action_fail")); return; }
+    onDone(t("trip_tracking.del_done", { trip: tripLabel(trip) }));
+  };
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center" }} onClick={onClose}>
+      <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.4)" }} />
+      <div onClick={(e) => e.stopPropagation()}
+        style={{ position: "relative", width: 440, maxWidth: "94vw", background: T.surface, borderRadius: 12, boxShadow: "0 12px 40px rgba(0,0,0,0.18)", padding: "16px 20px" }}>
+        <div style={{ fontSize: 14, fontWeight: 700, color: T.t1 }}>{t("trip_tracking.del_title", { trip: tripLabel(trip) })}</div>
+        <div style={{ fontSize: 12, color: T.t2, background: T.surfaceB, border: `1px solid ${T.b1}`, borderRadius: 8, padding: "8px 11px", margin: "12px 0" }}>
+          {t("trip_tracking.del_hint")}
+        </div>
+        <div style={lblS}>{t("trip_tracking.del_reason")}</div>
+        <input value={reason} autoFocus onChange={(e) => setReason(e.target.value)}
+          placeholder={t("trip_tracking.del_reason_ph")}
+          style={{ ...inp, borderColor: tried && bad ? T.red : T.b1 }} />
+        {tried && bad && <div style={{ fontSize: 11.5, color: T.red, marginTop: 5 }}>{t("trip_tracking.del_reason_min")}</div>}
+        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 14 }}>
+          <BtnOutline label={t("common.cancel")} color={T.t3} onClick={onClose} />
+          <BtnSolid label={busy ? t("trip_tracking.del_busy") : t("trip_tracking.del_confirm")} color={T.red} busy={busy} onClick={go} />
         </div>
       </div>
     </div>

@@ -2118,8 +2118,21 @@ function RemoveMachineModal({ open, onClose, machine, onRemoved }) {
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  // Gaadi hatne par uski POORI HUI trips nahi hatti — wo hisaab ka record hai.
+  // Pehle ye kahin likha nahi tha, to "gaadi hata di, phir bhi trip dikh rahi
+  // hai" wali galatfehmi hoti thi (6 Oct 2026). Ab ginti yahin dikha dete hain.
+  const [trips, setTrips] = useState(null);
 
-  useEffect(() => { if (open) { setReason(""); setErr(""); setBusy(false); } }, [open]);
+  useEffect(() => {
+    if (!open) return;
+    setReason(""); setErr(""); setBusy(false); setTrips(null);
+    let dead = false;
+    api.get("/trips?vehicle_id=" + machine.id)
+      .then((r) => { if (!dead) setTrips(r && r.success && Array.isArray(r.data) ? r.data.length : 0); })
+      .catch(() => { if (!dead) setTrips(0); });
+    return () => { dead = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, machine && machine.id]);
 
   const save = async () => {
     const why = reason.trim();
@@ -2140,6 +2153,7 @@ function RemoveMachineModal({ open, onClose, machine, onRemoved }) {
       footer={<><Btn ghost onClick={onClose}>{t("common.cancel")}</Btn>
         <Btn c={T.red} onClick={save} disabled={busy}>{busy ? t("machinery.hata_rahe_hain") : t("machinery.haan_hatao")}</Btn></>}>
       <Notice>{t("machinery.hatao_note")}</Notice>
+      {trips > 0 && <Notice>{t("machinery.hatao_trips_note", { n: trips })}</Notice>}
       <Field label={t("machinery.hatao_wajah")} hint={t("machinery.hatao_wajah_hint")}>
         <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={3} maxLength={300}
           placeholder={t("machinery.hatao_wajah_ph")} style={{ ...inp, resize: "vertical" }} />
