@@ -1173,6 +1173,10 @@ function PartyMasterSection() {
           wallet_limit: form.wallet_limit === "" ? null : Number(form.wallet_limit),
           negative_limit: form.negative_limit === "" ? null : Number(form.negative_limit),
         };
+        // Linked staff: naam / phone / email Settings → Users ke hain — bheje hi
+        // nahi, warna server unhe "badalne ki koshish" maan kar poora save rok deta tha
+        // (limit badalna bhi).
+        if (editingLinkedStaff) { delete payload.name; delete payload.phone; delete payload.email; }
       } else {
         payload = { ...form };
         delete payload.staff_subtype; delete payload.designation;
