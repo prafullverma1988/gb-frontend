@@ -162,6 +162,17 @@ const Sel=({value,onChange,children})=>(
   <PickSelect value={value} onChange={onChange} style={{width:"100%",padding:"8px 11px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",cursor:"pointer"}}>{children}</PickSelect>
 );
 
+// Assets ki kharid wali MR par "Zaroorat" (7 Oct 2026) — Assets ki maang wale
+// hi shabd. Normal par kuch nahi; sirf jo alag hai (Ho jaye to theek / Jaldi /
+// Bahut jaldi) wahi dikhe, taaki jaldi wali MR list me alag chamke. Aam MR par
+// priority hoti hi nahi (NULL).
+const MR_PRIO={low:[T.slt,T.sltL],high:[T.amb,T.ambL],urgent:[T.red,T.redL]};
+const MrPrio=({p})=>{
+  const x=MR_PRIO[p];
+  if(!x) return null;
+  return <span style={{fontSize:9.5,fontWeight:700,color:x[0],background:x[1],padding:"1px 7px",borderRadius:9,whiteSpace:"nowrap"}}>{t("assets.prio_"+p)}</span>;
+};
+
 // Vertical date rail — "16 Apr" stacked, used in MR cards
 const DateRail=({date})=>{
   // date may be "16 Apr 2026" / "16/04/2026" / ISO; extract day + month
@@ -2555,6 +2566,7 @@ function ProcurementModule(){
                           <span style={{fontWeight:700,color:T.blu,fontFamily:"monospace"}}>{m.id}</span>
                           <span>· {m.project}</span>
                           {m.requestedBy&&<span>· {m.requestedBy}</span>}
+                          <MrPrio p={m.priority}/>
                         </div>
                       </div>
                       {/* Total */}
@@ -2627,6 +2639,7 @@ function ProcurementModule(){
                             <div style={{fontSize:10.5,color:T.t4,marginTop:2,display:"flex",gap:8,flexWrap:"wrap"}}>
                               <span style={{fontWeight:700,color:T.blu,fontFamily:"monospace"}}>{m.id}</span>
                               {m.requestedBy&&<span>· {m.requestedBy}</span>}
+                              <MrPrio p={m.priority}/>
                             </div>
                           </div>
                           <div style={{textAlign:"right"}}>
