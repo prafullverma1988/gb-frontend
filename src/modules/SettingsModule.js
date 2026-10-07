@@ -1698,16 +1698,12 @@ function RolesAccess() {
     setPermMatrix(prev => {
       const cur = fromDefault || prev[selectedRole]?.[mod] || [];
       const has = cur.includes(perm);
-      let next;
-      if (perm === "view") {
-        // No view = no access → turning view OFF clears every permission.
-        next = has ? [] : [...cur, "view"];
-      } else if (has) {
-        next = cur.filter(p => p !== perm);
-      } else {
-        // Any action (create/edit/…) needs view → auto-enable it.
-        next = cur.includes("view") ? [...cur, perm] : [...cur, "view", perm];
-      }
+      // Har tick alag (Prafull, 7 Oct 2026): View = module / screen dikhna.
+      // Entry / Create / … dene se View apne aap nahi lagta, aur View hatane se
+      // baaki tick nahi hatte — jaise supervisor ko sirf wallet ka kharcha
+      // (Finance ENTRY) dena ho par Finance module na dikhe. Server bhi har
+      // tick alag hi padhta hai (middleware/auth.js permDecision).
+      const next = has ? cur.filter(p => p !== perm) : [...cur, perm];
       return { ...prev, [selectedRole]: { ...prev[selectedRole], [mod]: next } };
     });
   };
