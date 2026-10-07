@@ -12755,6 +12755,23 @@ const dict = {
   "tripbill.vv_open_vehicle": "Open the vehicle page",
   "tripbill.vv_ready_lbl": "Ready to bill",
   "tripbill.vv_sub": "{n} vehicles · {trips} trips · {km} km",
+  // ── tripbill: Trip bill Edit / Hatao (7 Oct 2026) ──
+  "tripbill.ed_add_none": "No other trips are ready for billing for this vendor.",
+  "tripbill.ed_add_trips": "Add more trips ({n})",
+  "tripbill.ed_del_go": "Yes, delete bill",
+  "tripbill.ed_del_text": "Its {n} trips go back to 'Ready to bill' and {amt} is removed from the vendor ledger.",
+  "tripbill.ed_del_title": "Delete bill {no}?",
+  "tripbill.ed_delete": "Delete bill",
+  "tripbill.ed_deleted": "Bill {no} deleted — {n} trips are ready for billing again.",
+  "tripbill.ed_deleting": "Deleting…",
+  "tripbill.ed_new_total": "New total {amt} · {n} trips",
+  "tripbill.ed_old_msg": "This is an old bill (settlement-based) — it cannot be edited or deleted from here.",
+  "tripbill.ed_paid_msg": "This bill already has a payment — changing trips / deleting the bill is blocked. Remove the payment first.",
+  "tripbill.ed_reason": "Reason * (at least 3 characters)",
+  "tripbill.ed_reason_min": "Enter a reason of at least 3 characters",
+  "tripbill.ed_save": "Save",
+  "tripbill.ed_saved": "Bill {no} updated.",
+  "tripbill.ed_trips_in": "Trips in this bill",
 };
 
 export default dict;

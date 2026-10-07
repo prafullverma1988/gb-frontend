@@ -12757,6 +12757,23 @@ const dict = {
   "tripbill.vv_open_vehicle": "Gaadi ka poora page kholo",
   "tripbill.vv_ready_lbl": "Bill ke liye taiyaar",
   "tripbill.vv_sub": "{n} gaadi · {trips} trip · {km} km",
+  // ── tripbill: Trip bill Edit / Hatao (7 Oct 2026) ──
+  "tripbill.ed_add_none": "Is vendor ki koi aur trip bill ke liye taiyaar nahi.",
+  "tripbill.ed_add_trips": "Aur trip add karo ({n})",
+  "tripbill.ed_del_go": "Haan, bill hatao",
+  "tripbill.ed_del_text": "Iski {n} trip wapas 'Bill ke liye taiyaar' ho jaayengi aur vendor ledger se {amt} hat jaayega.",
+  "tripbill.ed_del_title": "Bill {no} hatana hai?",
+  "tripbill.ed_delete": "Bill hatao",
+  "tripbill.ed_deleted": "Bill {no} hat gaya — {n} trip wapas bill ke liye taiyaar.",
+  "tripbill.ed_deleting": "Hat raha hai…",
+  "tripbill.ed_new_total": "Naya total {amt} · {n} trip",
+  "tripbill.ed_old_msg": "Ye purana bill hai (settlement wala) — yahan se edit / hata nahi sakte.",
+  "tripbill.ed_paid_msg": "Is bill par payment ho chuki hai — trip badalna / bill hatana band. Pehle payment hatao.",
+  "tripbill.ed_reason": "Wajah * (kam se kam 3 akshar)",
+  "tripbill.ed_reason_min": "Wajah kam se kam 3 akshar ki likho",
+  "tripbill.ed_save": "Save karo",
+  "tripbill.ed_saved": "Bill {no} badal gaya.",
+  "tripbill.ed_trips_in": "Is bill ki trips",
 };
 
 export default dict;

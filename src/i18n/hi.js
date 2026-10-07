@@ -12754,6 +12754,23 @@ const dict = {
   "tripbill.vv_open_vehicle": "गाड़ी का पूरा पेज खोलो",
   "tripbill.vv_ready_lbl": "बिल के लिए तैयार",
   "tripbill.vv_sub": "{n} गाड़ी · {trips} ट्रिप · {km} किमी",
+  // ── tripbill: Trip bill Edit / Hatao (7 Oct 2026) ──
+  "tripbill.ed_add_none": "इस वेंडर की कोई और ट्रिप बिल के लिए तैयार नहीं।",
+  "tripbill.ed_add_trips": "और ट्रिप जोड़ो ({n})",
+  "tripbill.ed_del_go": "हाँ, बिल हटाओ",
+  "tripbill.ed_del_text": "इसकी {n} ट्रिप वापस 'बिल के लिए तैयार' हो जाएंगी और वेंडर लेजर से {amt} हट जाएगा।",
+  "tripbill.ed_del_title": "बिल {no} हटाना है?",
+  "tripbill.ed_delete": "बिल हटाओ",
+  "tripbill.ed_deleted": "बिल {no} हट गया — {n} ट्रिप वापस बिल के लिए तैयार।",
+  "tripbill.ed_deleting": "हट रहा है…",
+  "tripbill.ed_new_total": "नया टोटल {amt} · {n} ट्रिप",
+  "tripbill.ed_old_msg": "ये पुराना बिल है (सेटलमेंट वाला) — यहाँ से एडिट / हटा नहीं सकते।",
+  "tripbill.ed_paid_msg": "इस बिल पर पेमेंट हो चुकी है — ट्रिप बदलना / बिल हटाना बंद। पहले पेमेंट हटाओ।",
+  "tripbill.ed_reason": "वजह * (कम से कम 3 अक्षर)",
+  "tripbill.ed_reason_min": "वजह कम से कम 3 अक्षर की लिखो",
+  "tripbill.ed_save": "सेव करो",
+  "tripbill.ed_saved": "बिल {no} बदल गया।",
+  "tripbill.ed_trips_in": "इस बिल की ट्रिप",
 };
 
 export default dict;

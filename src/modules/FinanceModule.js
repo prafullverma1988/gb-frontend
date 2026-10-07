@@ -185,7 +185,7 @@ const printHTML=(title,bodyHTML)=>{
 // "bill_state" server nikalta hai (in_transit · cancelled · rejected ·
 // flagged · own · monthly · rate_pending · ready · billed) — screen sirf
 // dikhati hai, khud kuch tay nahi karti.
-// Finance me sirf bill ki detail (party ledger ki trip-bill row se). Ye hissa (Tb…) har module me apni alag copy hai — module independence:
+// Finance me sirf bill ka drawer (party ledger ki trip-bill row se). Ye hissa (Tb…) har module me apni alag copy hai — module independence:
 // koi shared component nahi. Paisa (amount) jise Finance VIEW nahi usko
 // server null bhejta hai — null "—" dikhta hai, ₹0 nahi.
 // ════════════════════════════════════════════════════════════════
@@ -232,26 +232,6 @@ function TbBillStatus({ status, due }) {
   );
 }
 
-function TbModal({ title, sub, width = 760, onClose, footer, children }) {
-  return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center" }} onClick={onClose}>
-      <BackClose onClose={onClose} />
-      <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.4)" }} />
-      <div onClick={(e) => e.stopPropagation()}
-        style={{ position: "relative", width, maxWidth: "96vw", maxHeight: "92vh", background: T.surface, borderRadius: 12, boxShadow: "0 12px 40px rgba(0,0,0,0.18)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
-        <div style={{ padding: "13px 18px", borderBottom: `1px solid ${T.b1}`, display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
-          <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 14.5, fontWeight: 700, color: T.t1 }}>{title}</div>
-            {sub && <div style={{ fontSize: 11.5, color: T.t3, marginTop: 2 }}>{sub}</div>}
-          </div>
-          <button onClick={onClose} type="button" aria-label={t("common.close")} style={{ background: T.surfaceB, border: "none", borderRadius: 6, padding: "4px 9px", cursor: "pointer", fontSize: 16, lineHeight: 1, color: T.t3 }}>×</button>
-        </div>
-        <div style={{ padding: "14px 18px", overflowY: "auto", flex: 1 }}>{children}</div>
-        {footer && <div style={{ padding: "11px 18px", borderTop: `1px solid ${T.b1}`, display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap" }}>{footer}</div>}
-      </div>
-    </div>
-  );
-}
 const tbBtn = (primary) => ({ padding: "7px 14px", borderRadius: 8, border: primary ? "none" : `1.5px solid ${T.b1}`, background: primary ? T.ind : T.surface,
   color: primary ? "#fff" : T.t2, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" });
 
@@ -291,22 +271,37 @@ function tbPrint(title, body) {
   setTimeout(() => w.print(), 400);
 }
 
-// ── Bill ki poori detail (GET /trips/bills/:id) ─────────────────────
-// Project-wise jod, bill ki trips photo ke saath, due aur paid. onTrip diya
-// ho to trip dabane par uski detail. footerExtra = module ka apna button.
-function TbBillDetail({ id, onClose, onTrip, footerExtra }) {
+// ── Trip bill ka drawer (Finance → party ledger → "Trip bill" row) ──────
+// Daayein se slide hone wala poora bill (GET /trips/bills/:id): bill no, vendor,
+// dates, status, Total / Paid / Baaki, project-wise total, bill ki trips (photo
+// thumb), note. Neeche "Edit karo" (Finance EDIT) · "Bill hatao" (Finance DELETE) ·
+// "Ledger entry". Server ke gate jaisa: payment ho chuki ho to trip badalna aur
+// bill hatana band (sirf date / due / note), purana (settlement wala) bill dono band.
+// PATCH / DELETE /trips/bills/:id — server ka 409 sandesh waisa hi dikhta hai.
+function TbBillDrawer({ id, onClose, onLedgerEntry, onChanged }) {
   const [st, setSt] = useState({ loading: true });
   const [zoom, setZoom] = useState(null);
-  useEffect(() => {
-    let alive = true;
-    setSt({ loading: true });
-    api.get(`/trips/bills/${id}`).then((r) => {
-      if (!alive) return;
-      const d = tbBody(r);
-      setSt(d && typeof d === "object" && d.id != null ? { d } : { err: (r && r.message) || t("tripbill.load_fail") });
-    }).catch(() => { if (alive) setSt({ err: t("tripbill.load_fail") }); });
-    return () => { alive = false; };
-  }, [id]);
+  const [mode, setMode] = useState("view");          // view | edit | delete
+  const [flash, setFlash] = useState("");
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [tried, setTried] = useState(false);
+  const [fDate, setFDate] = useState("");
+  const [fDue, setFDue] = useState("");
+  const [fNote, setFNote] = useState("");
+  const [keep, setKeep] = useState(() => new Set()); // bill ki trips jo rakhni hain (untick = hatao)
+  const [add, setAdd] = useState(() => new Set());   // taiyaar trips jo bill me judengi
+  const [ready, setReady] = useState(null);          // null | {loading} | {rows} | {err}
+  const [reason, setReason] = useState("");
+  const canEditBill = canAny("Finance", "edit", { strict: true });
+  const canDelBill = canAny("Finance", "delete", { strict: true });
+
+  const load = () => api.get(`/trips/bills/${id}`).then((r) => {
+    const d = tbBody(r);
+    setSt(d && typeof d === "object" && d.id != null ? { d } : { err: (r && r.message) || t("tripbill.load_fail") });
+  }).catch(() => setSt({ err: t("tripbill.load_fail") }));
+  useEffect(() => { setSt({ loading: true }); load(); }, [id]);
+
   const d = st.d;
   const trips = (d && Array.isArray(d.trips)) ? d.trips : [];
   const byProject = (() => {
@@ -323,9 +318,67 @@ function TbBillDetail({ id, onClose, onTrip, footerExtra }) {
   const total = d && d.total_amount != null ? Number(d.total_amount) : null;
   const paid = d && d.paid_amount != null ? Number(d.paid_amount) : null;
   const balance = total != null && paid != null ? Math.max(0, total - paid) : null;
+  const isOld = !!(d && d.is_old);
+  const canTrips = !!d && !isOld && (d.can_change_trips != null ? !!d.can_change_trips : !(paid > 0));
+  const lockMsg = isOld ? t("tripbill.ed_old_msg") : (d && !canTrips ? t("tripbill.ed_paid_msg") : "");
+  const bn = d ? (d.bill_no || "#" + d.id) : "";
+
+  const loadReady = () => {
+    if (!d) return;
+    setReady({ loading: true });
+    api.get("/trips/bills/ready?vendor_id=" + d.vendor_id).then((r) => {
+      const b = tbBody(r);
+      setReady(b && Array.isArray(b.ready) ? { rows: b.ready } : { err: (r && r.message) || t("tripbill.load_fail") });
+    }).catch(() => setReady({ err: t("tripbill.load_fail") }));
+  };
+  const startEdit = () => {
+    setFDate(tbYmd(d.bill_date)); setFDue(tbYmd(d.due_date)); setFNote(d.note || "");
+    setKeep(new Set(trips.map((x) => x.id))); setAdd(new Set()); setReady(null);
+    setErr(""); setTried(false); setFlash(""); setMode("edit");
+    if (canTrips) loadReady();
+  };
+  const startDelete = () => { setReason(""); setErr(""); setTried(false); setFlash(""); setMode("delete"); };
+  const toggle = (setter, tid) => setter((s) => { const n = new Set(s); if (n.has(tid)) n.delete(tid); else n.add(tid); return n; });
+
+  const readyRows = (ready && ready.rows) || [];
+  const keptTrips = trips.filter((x) => keep.has(x.id));
+  const addedTrips = readyRows.filter((x) => add.has(x.id));
+  const newCount = keptTrips.length + addedTrips.length;
+  const newTotal = [...keptTrips, ...addedTrips].reduce((a, x) => a + (Number(x.amount) || 0), 0);
+  const tripsChanged = canTrips && (keep.size !== trips.length || add.size > 0);
+
+  const save = async () => {
+    setTried(true); setErr("");
+    if (!fDate) { setErr(t("tripbill.bf_err_bill_date")); return; }
+    if (!fDue) { setErr(t("tripbill.bf_err_due")); return; }
+    if (fDue < fDate) { setErr(t("tripbill.bf_err_due_before")); return; }
+    if (canTrips && newCount === 0) { setErr(t("tripbill.bf_err_none")); return; }
+    const body = { bill_date: fDate, due_date: fDue, note: fNote.trim() };
+    if (tripsChanged) body.trip_ids = [...keptTrips, ...addedTrips].map((x) => x.id);
+    setBusy(true);
+    const r = await api.patch(`/trips/bills/${id}`, body);
+    setBusy(false);
+    if (!r || r.success === false) { setErr((r && r.message) || t("tripbill.load_fail")); if (tripsChanged) loadReady(); return; }
+    const nd = tbBody(r);
+    if (nd && nd.id != null && Array.isArray(nd.trips)) setSt({ d: nd }); else await load();
+    setMode("view");
+    setFlash(t("tripbill.ed_saved", { no: (nd && nd.bill_no) || d.bill_no || "#" + d.id }));
+    if (onChanged) onChanged();
+  };
+  const del = async () => {
+    setTried(true); setErr("");
+    if (reason.trim().length < 3) { setErr(t("tripbill.ed_reason_min")); return; }
+    setBusy(true);
+    const r = await api.del(`/trips/bills/${id}`, { reason: reason.trim() });
+    setBusy(false);
+    if (!r || r.success === false) { setErr((r && r.message) || t("tripbill.load_fail")); return; }
+    const b = tbBody(r) || {};
+    if (onChanged) onChanged(t("tripbill.ed_deleted", { no: b.bill_no || d.bill_no || "#" + d.id, n: b.trips_freed != null ? b.trips_freed : trips.length }));
+    onClose();
+  };
   const print = () => {
     if (!d) return;
-    const head = `<h2>${tbEsc(d.bill_no || "#" + d.id)} · ${tbEsc(d.vendor_name || "")}</h2>`
+    const head = `<h2>${tbEsc(bn)} · ${tbEsc(d.vendor_name || "")}</h2>`
       + `<p>${tbEsc(t("tripbill.bd_bill_date"))}: ${tbEsc(tbDate(d.bill_date))} · ${tbEsc(t("tripbill.bd_due_date"))}: ${tbEsc(tbDate(d.due_date))}</p>`
       + `<p>${tbEsc(t("tripbill.bd_total"))}: ${tbEsc(tbMoney(total))} · ${tbEsc(t("tripbill.bd_paid"))}: ${tbEsc(tbMoney(paid))} · ${tbEsc(t("tripbill.bd_balance"))}: ${tbEsc(tbMoney(balance))}</p>`
       + (d.note ? `<p>${tbEsc(d.note)}</p>` : "");
@@ -335,82 +388,177 @@ function TbBillDetail({ id, onClose, onTrip, footerExtra }) {
     const rows = `<h3>${tbEsc(t("tripbill.bd_trips"))}</h3><table><tr><th>${tbEsc(t("common.date"))}</th><th>${tbEsc(t("tripbill.col_vehicle"))}</th><th>${tbEsc(t("common.project"))}</th><th>${tbEsc(t("tripbill.col_route"))}</th><th class="r">${tbEsc(t("tripbill.col_km"))}</th><th class="r">${tbEsc(t("tripbill.col_amount"))}</th></tr>`
       + trips.map((tr) => `<tr><td>${tbEsc(tbDate(tr.trip_date))} #${tbEsc(tr.trip_no)}</td><td>${tbEsc(tr.registration_no || "")}</td><td>${tbEsc(tr.project_name || "")}</td><td>${tbEsc(tr.route_name || "")}</td><td class="r">${tbEsc(tr.km_billed != null ? tbNum(tr.km_billed) : "")}</td><td class="r">${tbEsc(tbMoney(tr.amount))}</td></tr>`).join("")
       + `</table>`;
-    tbPrint(t("tripbill.bd_title", { no: d.bill_no || "#" + d.id }), head + proj + rows);
+    tbPrint(t("tripbill.bd_title", { no: bn }), head + proj + rows);
   };
-  const tile = (label, value, tone) => (
-    <div style={{ border: `1px solid ${T.b1}`, borderRadius: 9, padding: "9px 12px", background: T.surface }}>
+
+  const tile = (label, value) => (
+    <div style={{ border: `1px solid ${T.b1}`, borderRadius: 9, padding: "8px 11px", background: T.surface }}>
       <div style={tbLbl}>{label}</div>
-      <div style={{ fontSize: 16, fontWeight: 800, color: tone || T.t1, fontVariantNumeric: "tabular-nums" }}>{value}</div>
+      <div style={{ fontSize: 15, fontWeight: 800, color: T.t1, fontVariantNumeric: "tabular-nums" }}>{value}</div>
     </div>
   );
-  const TCOLS = "92px minmax(90px,1fr) minmax(90px,1fr) minmax(90px,1.1fr) 62px 92px 40px";
+  const sec = (label) => <div style={{ fontSize: 11, fontWeight: 700, color: T.t3, textTransform: "uppercase", letterSpacing: ".4px", margin: "14px 0 6px" }}>{label}</div>;
+  const inpS = (bad) => ({ width: "100%", height: 32, padding: "0 9px", borderRadius: 7, border: `1.5px solid ${bad ? T.red : T.b1}`, fontSize: 12.5, color: T.t1, background: T.surface, outline: "none", boxSizing: "border-box", fontFamily: "inherit" });
+  const errBox = err ? <div style={{ border: `1px solid ${T.red}33`, background: T.redL, color: T.red, borderRadius: 8, padding: "9px 12px", fontSize: 12, fontWeight: 600, lineHeight: 1.5, marginTop: 12 }}>{err}</div> : null;
+  const lockBox = lockMsg ? <div style={{ border: `1px solid ${T.amb}44`, background: T.ambL, color: T.t1, borderRadius: 8, padding: "9px 12px", fontSize: 12, lineHeight: 1.5, marginTop: 12 }}>{lockMsg}</div> : null;
+  // Trip ki ek line (bill ki trips + taiyaar trips dono me) — optional checkbox.
+  const tripLine = (tr, check) => (
+    <label key={tr.id} style={{ display: "grid", gridTemplateColumns: (check ? "22px " : "") + "74px minmax(86px,1fr) minmax(86px,1fr) minmax(86px,1fr) 52px 84px", gap: 8, padding: "7px 12px", borderTop: `1px solid ${T.b1}`, alignItems: "center", fontSize: 12, color: T.t2, cursor: check ? "pointer" : "default" }}>
+      {check && <input type="checkbox" checked={check.on} onChange={check.onChange} style={{ accentColor: T.ind }} />}
+      <span style={{ whiteSpace: "nowrap" }}>{tbDate(tr.trip_date)}<span style={{ display: "block", fontSize: 10, color: T.t4 }}>#{tr.trip_no}</span></span>
+      <span style={{ fontWeight: 700, color: T.t1 }}>{tr.registration_no || tr.vehicle_name || "—"}</span>
+      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tr.project_name || "—"}</span>
+      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tr.route_name || "—"}</span>
+      <span style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{tr.km_billed != null ? tbNum(tr.km_billed) : "—"}</span>
+      <span style={{ textAlign: "right", fontWeight: 700, color: T.t1, fontVariantNumeric: "tabular-nums" }}>{tbMoney(tr.amount)}</span>
+    </label>
+  );
+  const btn = (primary, danger, disabled) => ({ ...tbBtn(primary), ...(danger ? { background: disabled ? T.b1 : T.red, color: "#fff", border: "none" } : null), ...(disabled ? { opacity: 0.45, cursor: "not-allowed" } : null) });
+
   return (
     <>
-      <TbModal width={880} onClose={onClose}
-        title={d ? t("tripbill.bd_title", { no: d.bill_no || "#" + d.id }) : t("tripbill.bd_title", { no: "…" })}
-        sub={d ? [d.vendor_name || t("tripbill.vendor_nahi"), t("tripbill.bd_n_trips", { n: Number(d.trip_count) || trips.length })].join(" · ") : ""}
-        footer={<>
-          {footerExtra}
-          {d && <button type="button" onClick={print} style={tbBtn(false)}>{t("tripbill.print")}</button>}
-          <button type="button" onClick={onClose} style={tbBtn(false)}>{t("common.close")}</button>
-        </>}>
-        {st.loading && <div style={{ textAlign: "center", padding: 30, color: T.t4, fontSize: 12.5 }}>{t("common.loading_2")}</div>}
-        {st.err && <div style={{ border: `1px solid ${T.red}33`, background: T.redL, color: T.red, borderRadius: 8, padding: "9px 12px", fontSize: 12, fontWeight: 600 }}>{st.err}</div>}
-        {d && (
-          <>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(130px,1fr))", gap: 8, marginBottom: 12 }}>
-              {tile(t("tripbill.bd_total"), tbMoney(total))}
-              {tile(t("tripbill.bd_paid"), tbMoney(paid))}
-              {tile(t("tripbill.bd_balance"), tbMoney(balance))}
-              <div style={{ border: `1px solid ${T.b1}`, borderRadius: 9, padding: "9px 12px", background: T.surface }}>
-                <div style={tbLbl}>{t("common.status")}</div>
-                <TbBillStatus status={d.status} due={d.due_date} />
+      <BackClose onClose={onClose} />
+      <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.5)", zIndex: 1500, backdropFilter: "blur(2px)" }} />
+      <style>{`@keyframes tbSlideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }`}</style>
+      <div style={{ position: "fixed", top: 0, right: 0, height: "100vh", width: "min(640px, 100vw)", background: T.surface, zIndex: 1501, display: "flex", flexDirection: "column",
+        boxShadow: "-12px 0 40px rgba(0,0,0,0.18)", animation: "tbSlideIn .25s ease", fontFamily: "'Segoe UI', system-ui, sans-serif" }}>
+        <div style={{ background: "#0D1B2A", padding: "15px 20px", color: "#fff", flexShrink: 0, display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 11, color: "rgba(255,255,255,0.55)", fontWeight: 600, letterSpacing: ".4px", textTransform: "uppercase", marginBottom: 3 }}>{t("tripbill.ledger_label")}</div>
+            <div style={{ fontSize: 21, fontWeight: 800, letterSpacing: "-.3px" }}>{d ? bn : "…"}</div>
+            <div style={{ fontSize: 12, color: "rgba(255,255,255,0.7)", marginTop: 3 }}>
+              {d ? [d.vendor_name || t("tripbill.vendor_nahi"), t("tripbill.bd_n_trips", { n: Number(d.trip_count) || trips.length })].join(" · ") : ""}
+            </div>
+          </div>
+          <button type="button" onClick={onClose} aria-label={t("common.close")} style={{ width: 30, height: 30, borderRadius: 8, border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.08)", color: "#fff", cursor: "pointer", fontSize: 18, lineHeight: 1, flexShrink: 0 }}>×</button>
+        </div>
+
+        <div style={{ flex: 1, overflowY: "auto", padding: "14px 20px 18px" }}>
+          {st.loading && <div style={{ textAlign: "center", padding: 30, color: T.t4, fontSize: 12.5 }}>{t("common.loading_2")}</div>}
+          {st.err && <div style={{ border: `1px solid ${T.red}33`, background: T.redL, color: T.red, borderRadius: 8, padding: "9px 12px", fontSize: 12, fontWeight: 600 }}>{st.err}</div>}
+          {flash && <div style={{ border: `1px solid ${T.grn}44`, background: T.grnL, borderRadius: 8, padding: "8px 12px", marginBottom: 12, fontSize: 12, color: T.grn, fontWeight: 600 }}>{flash}</div>}
+          {d && mode !== "edit" && (
+            <>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(120px,1fr))", gap: 8, marginBottom: 12 }}>
+                {tile(t("tripbill.bd_total"), tbMoney(total))}
+                {tile(t("tripbill.bd_paid"), tbMoney(paid))}
+                {tile(t("tripbill.bd_balance"), tbMoney(balance))}
               </div>
-            </div>
-            <div style={{ display: "flex", gap: 18, flexWrap: "wrap", fontSize: 12, color: T.t2, marginBottom: 12 }}>
-              <span>{t("tripbill.bd_bill_date")}: <b>{tbDate(d.bill_date)}</b></span>
-              <span>{t("tripbill.bd_due_date")}: <b style={{ color: d.status !== "paid" && tbYmd(d.due_date) && tbYmd(d.due_date) < tbToday() ? T.red : T.t1 }}>{tbDate(d.due_date)}</b></span>
-              {d.from_date && <span>{t("tripbill.bd_period")}: <b>{tbDate(d.from_date)} – {tbDate(d.to_date)}</b></span>}
-              {d.created_by_name && <span>{t("tripbill.bd_made_by")}: <b>{d.created_by_name}</b></span>}
-            </div>
-            {d.note && <div style={{ fontSize: 12, color: T.t2, background: T.surfaceB, border: `1px solid ${T.b1}`, borderRadius: 8, padding: "8px 11px", marginBottom: 12 }}>{d.note}</div>}
+              <div style={{ display: "flex", gap: 14, flexWrap: "wrap", alignItems: "center", fontSize: 12, color: T.t2, marginBottom: 4 }}>
+                <TbBillStatus status={d.status} due={d.due_date} />
+                <span>{t("tripbill.bd_bill_date")}: <b>{tbDate(d.bill_date)}</b></span>
+                <span>{t("tripbill.bd_due_date")}: <b style={{ color: d.status !== "paid" && tbYmd(d.due_date) && tbYmd(d.due_date) < tbToday() ? T.red : T.t1 }}>{tbDate(d.due_date)}</b></span>
+              </div>
+              {d.from_date && <div style={{ fontSize: 12, color: T.t3 }}>{t("tripbill.bd_period")}: <b style={{ color: T.t2 }}>{tbDate(d.from_date)} – {tbDate(d.to_date)}</b>{d.created_by_name ? " · " + t("tripbill.bd_made_by") + ": " + d.created_by_name : ""}</div>}
+              {d.note && <div style={{ fontSize: 12, color: T.t2, background: T.surfaceB, border: `1px solid ${T.b1}`, borderRadius: 8, padding: "8px 11px", marginTop: 10 }}>{d.note}</div>}
+              {mode === "view" && lockBox}
 
-            <div style={{ fontSize: 11, fontWeight: 700, color: T.t3, textTransform: "uppercase", letterSpacing: ".4px", marginBottom: 6 }}>{t("tripbill.bd_by_project")}</div>
-            <div style={{ border: `1px solid ${T.b1}`, borderRadius: 8, marginBottom: 14, overflow: "hidden" }}>
-              {byProject.map((p, i) => (
-                <div key={i} style={{ display: "flex", justifyContent: "space-between", gap: 10, padding: "8px 12px", borderTop: i ? `1px solid ${T.b1}` : "none", fontSize: 12.5 }}>
-                  <span style={{ color: T.t1, fontWeight: 600, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.project_name || "—"}</span>
-                  <span style={{ color: T.t3, whiteSpace: "nowrap" }}>{t("tripbill.n_trips", { n: Number(p.trips) || 0 })}</span>
-                  <span style={{ color: T.t1, fontWeight: 700, fontVariantNumeric: "tabular-nums", minWidth: 90, textAlign: "right" }}>{tbMoney(p.amount)}</span>
-                </div>
-              ))}
-            </div>
-
-            <div style={{ fontSize: 11, fontWeight: 700, color: T.t3, textTransform: "uppercase", letterSpacing: ".4px", marginBottom: 6 }}>{t("tripbill.bd_trips")}</div>
-            <div style={{ overflowX: "auto", border: `1px solid ${T.b1}`, borderRadius: 8 }}>
-              <div style={{ minWidth: 700 }}>
-                <div style={{ display: "grid", gridTemplateColumns: TCOLS, gap: 8, padding: "7px 12px", background: T.surfaceB, fontSize: 10, fontWeight: 700, color: T.t4, textTransform: "uppercase", letterSpacing: ".4px" }}>
-                  <span>{t("common.date")}</span><span>{t("tripbill.col_vehicle")}</span><span>{t("common.project")}</span><span>{t("tripbill.col_route")}</span>
-                  <span style={{ textAlign: "right" }}>{t("tripbill.col_km")}</span><span style={{ textAlign: "right" }}>{t("tripbill.col_amount")}</span><span />
-                </div>
-                {trips.map((tr) => (
-                  <div key={tr.id} onClick={onTrip ? () => onTrip(tr.id) : undefined}
-                    style={{ display: "grid", gridTemplateColumns: TCOLS, gap: 8, padding: "8px 12px", borderTop: `1px solid ${T.b1}`, alignItems: "center", fontSize: 12, color: T.t2, cursor: onTrip ? "pointer" : "default" }}>
-                    <span style={{ whiteSpace: "nowrap" }}>{tbDate(tr.trip_date)}<span style={{ display: "block", fontSize: 10, color: T.t4 }}>#{tr.trip_no}</span></span>
-                    <span style={{ fontWeight: 700, color: T.t1 }}>{tr.registration_no || "—"}</span>
-                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tr.project_name || "—"}</span>
-                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tr.route_name || "—"}</span>
-                    <span style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{tr.km_billed != null ? tbNum(tr.km_billed) : "—"}</span>
-                    <span style={{ textAlign: "right", fontWeight: 700, color: T.t1, fontVariantNumeric: "tabular-nums" }}>{tbMoney(tr.amount)}</span>
-                    <span><TbThumb url={tr.unload_photo_url || tr.load_photo_url} label={tr.registration_no} onZoom={setZoom} /></span>
+              {sec(t("tripbill.bd_by_project"))}
+              <div style={{ border: `1px solid ${T.b1}`, borderRadius: 8, overflow: "hidden" }}>
+                {byProject.map((p, i) => (
+                  <div key={i} style={{ display: "flex", justifyContent: "space-between", gap: 10, padding: "8px 12px", borderTop: i ? `1px solid ${T.b1}` : "none", fontSize: 12.5 }}>
+                    <span style={{ color: T.t1, fontWeight: 600, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.project_name || "—"}</span>
+                    <span style={{ color: T.t3, whiteSpace: "nowrap" }}>{t("tripbill.n_trips", { n: Number(p.trips) || 0 })}</span>
+                    <span style={{ color: T.t1, fontWeight: 700, fontVariantNumeric: "tabular-nums", minWidth: 90, textAlign: "right" }}>{tbMoney(p.amount)}</span>
                   </div>
                 ))}
-                {trips.length === 0 && <div style={{ padding: 16, textAlign: "center", fontSize: 12, color: T.t4 }}>{t("tripbill.bd_no_trips")}</div>}
               </div>
-            </div>
-          </>
-        )}
-      </TbModal>
+
+              {sec(t("tripbill.bd_trips"))}
+              <div style={{ overflowX: "auto", border: `1px solid ${T.b1}`, borderRadius: 8 }}>
+                <div style={{ minWidth: 560 }}>
+                  {trips.map((tr) => (
+                    <div key={tr.id} style={{ display: "grid", gridTemplateColumns: "74px minmax(86px,1fr) minmax(86px,1fr) minmax(86px,1fr) 52px 84px 38px", gap: 8, padding: "7px 12px", borderTop: `1px solid ${T.b1}`, alignItems: "center", fontSize: 12, color: T.t2 }}>
+                      <span style={{ whiteSpace: "nowrap" }}>{tbDate(tr.trip_date)}<span style={{ display: "block", fontSize: 10, color: T.t4 }}>#{tr.trip_no}</span></span>
+                      <span style={{ fontWeight: 700, color: T.t1 }}>{tr.registration_no || "—"}</span>
+                      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tr.project_name || "—"}</span>
+                      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tr.route_name || "—"}</span>
+                      <span style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{tr.km_billed != null ? tbNum(tr.km_billed) : "—"}</span>
+                      <span style={{ textAlign: "right", fontWeight: 700, color: T.t1, fontVariantNumeric: "tabular-nums" }}>{tbMoney(tr.amount)}</span>
+                      <span><TbThumb url={tr.unload_photo_url || tr.load_photo_url} label={tr.registration_no} onZoom={setZoom} /></span>
+                    </div>
+                  ))}
+                  {trips.length === 0 && <div style={{ padding: 16, textAlign: "center", fontSize: 12, color: T.t4 }}>{t("tripbill.bd_no_trips")}</div>}
+                </div>
+              </div>
+
+              {mode === "delete" && (
+                <div style={{ marginTop: 16, border: `1px solid ${T.red}44`, background: T.redL, borderRadius: 10, padding: "12px 14px" }}>
+                  <div style={{ fontSize: 13, fontWeight: 800, color: T.red }}>{t("tripbill.ed_del_title", { no: bn })}</div>
+                  <div style={{ fontSize: 12, color: T.t2, lineHeight: 1.55, margin: "5px 0 10px" }}>{t("tripbill.ed_del_text", { n: trips.length || Number(d.trip_count) || 0, amt: tbMoney(total) })}</div>
+                  <div style={tbLbl}>{t("tripbill.ed_reason")}</div>
+                  <input value={reason} autoFocus maxLength={300} onChange={(e) => setReason(e.target.value)} style={inpS(tried && reason.trim().length < 3)} />
+                  {errBox}
+                  <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 12, flexWrap: "wrap" }}>
+                    <button type="button" onClick={() => { setMode("view"); setErr(""); }} disabled={busy} style={btn(false)}>{t("common.cancel")}</button>
+                    <button type="button" onClick={del} disabled={busy} style={btn(true, true)}>{busy ? t("tripbill.ed_deleting") : t("tripbill.ed_del_go")}</button>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+
+          {d && mode === "edit" && (
+            <>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 10 }}>
+                <div><div style={tbLbl}>{t("tripbill.bf_bill_date")}</div>
+                  <input type="date" value={fDate} onChange={(e) => setFDate(e.target.value)} style={inpS(tried && !fDate)} /></div>
+                <div><div style={tbLbl}>{t("tripbill.bf_due_date")} *</div>
+                  <input type="date" value={fDue} min={fDate || undefined} onChange={(e) => setFDue(e.target.value)} style={inpS(tried && !fDue)} /></div>
+              </div>
+              <div style={{ marginTop: 10 }}><div style={tbLbl}>{t("common.note")}</div>
+                <input value={fNote} maxLength={300} onChange={(e) => setFNote(e.target.value)} placeholder={t("tripbill.bf_note_ph")} style={inpS(false)} /></div>
+              {lockBox}
+
+              {sec(t("tripbill.ed_trips_in"))}
+              <div style={{ overflowX: "auto", border: `1px solid ${T.b1}`, borderRadius: 8 }}>
+                <div style={{ minWidth: 540 }}>
+                  {trips.map((tr) => tripLine(tr, canTrips ? { on: keep.has(tr.id), onChange: () => toggle(setKeep, tr.id) } : null))}
+                </div>
+              </div>
+
+              {canTrips && (
+                <>
+                  {sec(t("tripbill.ed_add_trips", { n: readyRows.length }))}
+                  {ready && ready.loading && <div style={{ fontSize: 12, color: T.t4, padding: 6 }}>{t("common.loading_2")}</div>}
+                  {ready && ready.err && <div style={{ fontSize: 12, color: T.red, padding: 6 }}>{ready.err}</div>}
+                  {ready && ready.rows && readyRows.length === 0 && <div style={{ fontSize: 12, color: T.t4, padding: 6 }}>{t("tripbill.ed_add_none")}</div>}
+                  {readyRows.length > 0 && (
+                    <div style={{ overflow: "auto", maxHeight: 280, border: `1px solid ${T.b1}`, borderRadius: 8 }}>
+                      <div style={{ minWidth: 540 }}>
+                        {readyRows.map((tr) => tripLine(tr, { on: add.has(tr.id), onChange: () => toggle(setAdd, tr.id) }))}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 10, marginTop: 14, fontSize: 13.5, fontWeight: 800, color: T.t1 }}>
+                <span>{t("tripbill.ed_new_total", { amt: tbMoney(canTrips ? newTotal : total), n: canTrips ? newCount : trips.length })}</span>
+              </div>
+              {errBox}
+            </>
+          )}
+        </div>
+
+        <div style={{ borderTop: `1px solid ${T.b1}`, padding: "11px 20px", display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap", flexShrink: 0, background: T.surface }}>
+          {d && mode === "view" && (
+            <>
+              {onLedgerEntry && <button type="button" onClick={onLedgerEntry} style={btn(false)}>{t("tripbill.fn_ledger_entry")}</button>}
+              <button type="button" onClick={print} style={btn(false)}>{t("tripbill.print")}</button>
+              {canDelBill && <button type="button" onClick={startDelete} disabled={!!lockMsg} title={lockMsg} style={btn(false, true, !!lockMsg)}>{t("tripbill.ed_delete")}</button>}
+              {canEditBill && <button type="button" onClick={startEdit} disabled={isOld} title={isOld ? lockMsg : ""} style={btn(true, false, isOld)}>{t("common.edit_2")}</button>}
+            </>
+          )}
+          {d && mode === "edit" && (
+            <>
+              <button type="button" onClick={() => { setMode("view"); setErr(""); }} disabled={busy} style={btn(false)}>{t("common.cancel")}</button>
+              <button type="button" onClick={save} disabled={busy} style={btn(true)}>{busy ? t("common.saving") : t("tripbill.ed_save")}</button>
+            </>
+          )}
+          {(!d || mode === "delete") && <button type="button" onClick={onClose} style={btn(false)}>{t("common.close")}</button>}
+        </div>
+      </div>
       <TbZoom photo={zoom} onClose={() => setZoom(null)} />
     </>
   );
@@ -3921,7 +4069,7 @@ function FinanceModule(){
   const [ledgerTo,setLedgerTo]=useState("");
   const [ledgerDl,setLedgerDl]=useState("");   // "excel" | "pdf" jab file ban rahi ho
   // Reset ledger filters whenever a different party is opened
-  useEffect(()=>{setLedgerSearch("");setLedgerType("All");setLedgerProj("All");setLedgerFrom("");setLedgerTo("");},[selParty?.id]);
+  useEffect(()=>{setLedgerSearch("");setLedgerType("All");setLedgerProj("All");setLedgerFrom("");setLedgerTo("");setTripBillFlash("");},[selParty?.id]);
   const [apiLedger,setApiLedger]=useState({});
   // Transaction tab
   const [txnSearch,setTxnSearch]=useState("");const [fProject,setFProject]=useState("All");const [fType,setFType]=useState("All");const [fAcc,setFAcc]=useState("All");const [fStatus,setFStatus]=useState("All");
@@ -3961,6 +4109,7 @@ function FinanceModule(){
   const [selTxn,setSelTxn]=useState(null);
   // Party ledger ki "Trip bill" row → bill ki detail (GET /trips/bills/:id).
   const [tripBill,setTripBill]=useState(null);   // {id, txn}
+  const [tripBillFlash,setTripBillFlash]=useState("");   // bill hatne par hari line
   // Staff wallets — live data (Phase 2; replaces the old mock array)
   const [walletList,setWalletList]=useState([]);
   // Salary bucket: outstanding due per staff party (separate ledger — imprest
@@ -5456,6 +5605,12 @@ Status: ${ledgerRow.status||"unpaid"}`;
                   {/* Per-party CR/DR/Balance now live as compact chips in the header
                       + the Closing Balance row — the big summary cards were dropped
                       to give the transaction table more vertical room. */}
+                  {tripBillFlash&&(
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,padding:"8px 14px",background:T.grnL,borderBottom:`1px solid ${T.grnM}`,color:T.grn,fontSize:12,fontWeight:600,flexShrink:0}}>
+                      <span>{tripBillFlash}</span>
+                      <button onClick={()=>setTripBillFlash("")} aria-label={t("common.close")} style={{background:"none",border:"none",cursor:"pointer",color:T.grn,fontSize:16,lineHeight:1,padding:0}}>×</button>
+                    </div>
+                  )}
                   {/* ── Compact filter toolbar: search · date range · project · type ── */}
                   <div style={{display:"flex",alignItems:"center",gap:6,padding:"7px 14px",background:T.surface,borderBottom:`1px solid ${T.b1}`,flexShrink:0,flexWrap:"wrap"}}>
                     <div style={{position:"relative",flex:1,minWidth:150}}>
@@ -7095,8 +7250,14 @@ Status: ${ledgerRow.status||"unpaid"}`;
       />
 
       {tripBill&&(
-        <TbBillDetail id={tripBill.id} onClose={()=>setTripBill(null)}
-          footerExtra={<button type="button" onClick={()=>{ const x=tripBill.txn; setTripBill(null); setSelTxn(x); }} style={tbBtn(false)}>{t("tripbill.fn_ledger_entry")}</button>} />
+        <TbBillDrawer id={tripBill.id} onClose={()=>setTripBill(null)}
+          onLedgerEntry={()=>{ const x=tripBill.txn; setTripBill(null); setSelTxn(x); }}
+          onChanged={async(msg)=>{
+            // Bill badla / hata — ledger (aur party ka balance) dobara; hatne par hari line.
+            if(msg) setTripBillFlash(msg);
+            const pid=selParty?.id!=null?selParty.id:(tripBill.txn&&tripBill.txn.party_id);
+            await Promise.all([pid!=null?loadPartyLedger(pid):null,refreshParties(),refreshTxns()]);
+          }} />
       )}
 
       {/* ══ Bill Conflict Warning Modal ══ */}
