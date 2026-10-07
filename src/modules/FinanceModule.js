@@ -16,6 +16,7 @@ import TabAccounts from "./tabs/TabAccounts";
 import { isoDate, todayISO, daysAgoISO } from "../utils/today";
 import { cashMoveOf, isTransferIn, round2, partyTypeBucket, PARTY_TYPE_BUCKETS } from "../utils/moneyRules";
 import { BackClose } from "../utils/backNav";
+import { cld } from "../utils/cloudinary";
 import { loadPartyCategories, defaultCategories, partyCategoryKeys, catLabel, selectionToPayload } from "../utils/partyCategories";
 
 // Roles & Access (5 Oct 2026) — har button usi tick se chhupta hai jo server
@@ -176,6 +177,244 @@ const printHTML=(title,bodyHTML)=>{
   </style></head><body>${bodyHTML}</body></html>`);
   w.document.close();setTimeout(()=>w.print(),400);
 };
+
+// ════════════════════════════════════════════════════════════════
+// TRIP BILLING v2 — office screens (7 Oct 2026)
+//
+// Server: GET /trips/office/*, /trips/:id/detail, /trips/bills*. Trip ka
+// "bill_state" server nikalta hai (in_transit · cancelled · rejected ·
+// flagged · own · monthly · rate_pending · ready · billed) — screen sirf
+// dikhati hai, khud kuch tay nahi karti.
+// Finance me sirf bill ki detail (party ledger ki trip-bill row se). Ye hissa (Tb…) har module me apni alag copy hai — module independence:
+// koi shared component nahi. Paisa (amount) jise Finance VIEW nahi usko
+// server null bhejta hai — null "—" dikhta hai, ₹0 nahi.
+// ════════════════════════════════════════════════════════════════
+const TB_MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const tbParse = (raw) => {
+  if (!raw) return null;
+  const s = String(raw);
+  const d = new Date(/^\d{4}-\d{2}-\d{2}$/.test(s) ? s + "T00:00:00" : s.replace(" ", "T"));
+  return isNaN(d.getTime()) ? null : d;
+};
+const tbDate = (raw) => {
+  const d = tbParse(raw);
+  return d ? d.getDate() + " " + TB_MON[d.getMonth()] + " " + String(d.getFullYear()).slice(2) : (raw ? String(raw).slice(0, 10) : "—");
+};
+const tbDT = (raw) => {
+  const d = tbParse(raw);
+  if (!d) return "—";
+  let h = d.getHours(); const m = d.getMinutes(); const ap = h >= 12 ? "PM" : "AM"; h = h % 12 || 12;
+  return tbDate(raw) + ", " + h + ":" + String(m).padStart(2, "0") + " " + ap;
+};
+const tbYmd = (raw) => { const d = tbParse(raw); return d ? d.toLocaleDateString("en-CA") : ""; };
+const tbToday = () => new Date().toLocaleDateString("en-CA");
+const tbMoney = (v) => (v == null || v === "" ? "—" : "₹" + (Number(v) || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 }));
+const tbNum = (v) => (v == null || v === "" ? "—" : (Number(v) || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 }));
+// Naye endpoint ka jawab { success, data } ya seedha body — dono chalte hain.
+const tbBody = (r) => (r && r.success !== false ? (r.data !== undefined ? r.data : r) : null);
+const tbEsc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const tbLbl = { fontSize: 10, color: T.t4, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".4px", marginBottom: 2 };
+
+function TbPill({ label, c, bg }) {
+  return <span style={{ display: "inline-block", background: bg, color: c, fontSize: 10.5, fontWeight: 700, padding: "2px 8px", borderRadius: 20, border: `1px solid ${c}33`, whiteSpace: "nowrap" }}>{label}</span>;
+}
+// Bill ka haal: unpaid (normal) · partial · paid; due nikal gayi aur paid nahi = laal.
+function TbBillStatus({ status, due }) {
+  const over = !!due && status !== "paid" && tbYmd(due) !== "" && tbYmd(due) < tbToday();
+  const m = status === "paid" ? { l: t("tripbill.bs_paid"), c: T.grn, bg: T.grnL }
+    : status === "partial" ? { l: t("tripbill.bs_partial"), c: T.amb, bg: T.ambL }
+    : { l: t("tripbill.bs_unpaid"), c: T.slt, bg: T.sltL };
+  return (
+    <span style={{ display: "inline-flex", gap: 4, alignItems: "center", flexWrap: "wrap" }}>
+      <TbPill label={m.l} c={m.c} bg={m.bg} />
+      {over && <TbPill label={t("tripbill.bs_overdue")} c={T.red} bg={T.redL} />}
+    </span>
+  );
+}
+
+function TbModal({ title, sub, width = 760, onClose, footer, children }) {
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center" }} onClick={onClose}>
+      <BackClose onClose={onClose} />
+      <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.4)" }} />
+      <div onClick={(e) => e.stopPropagation()}
+        style={{ position: "relative", width, maxWidth: "96vw", maxHeight: "92vh", background: T.surface, borderRadius: 12, boxShadow: "0 12px 40px rgba(0,0,0,0.18)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+        <div style={{ padding: "13px 18px", borderBottom: `1px solid ${T.b1}`, display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 14.5, fontWeight: 700, color: T.t1 }}>{title}</div>
+            {sub && <div style={{ fontSize: 11.5, color: T.t3, marginTop: 2 }}>{sub}</div>}
+          </div>
+          <button onClick={onClose} type="button" aria-label={t("common.close")} style={{ background: T.surfaceB, border: "none", borderRadius: 6, padding: "4px 9px", cursor: "pointer", fontSize: 16, lineHeight: 1, color: T.t3 }}>×</button>
+        </div>
+        <div style={{ padding: "14px 18px", overflowY: "auto", flex: 1 }}>{children}</div>
+        {footer && <div style={{ padding: "11px 18px", borderTop: `1px solid ${T.b1}`, display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap" }}>{footer}</div>}
+      </div>
+    </div>
+  );
+}
+const tbBtn = (primary) => ({ padding: "7px 14px", borderRadius: 8, border: primary ? "none" : `1.5px solid ${T.b1}`, background: primary ? T.ind : T.surface,
+  color: primary ? "#fff" : T.t2, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" });
+
+// Photo bade size me — kahin bhi click par band.
+function TbZoom({ photo, onClose }) {
+  if (!photo || !photo.url) return null;
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 10050, background: "rgba(0,0,0,0.85)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 16, cursor: "zoom-out" }}>
+      <img src={cld(photo.url, "view")} alt={photo.label || ""} style={{ maxWidth: "96vw", maxHeight: "82vh", objectFit: "contain", borderRadius: 8 }} />
+      {photo.label && <div style={{ color: "#fff", fontSize: 12.5, marginTop: 10, fontWeight: 600 }}>{photo.label}</div>}
+      <a href={photo.url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} style={{ color: "#C7D2FE", fontSize: 11.5, marginTop: 6 }}>{t("tripbill.open_original")}</a>
+    </div>
+  );
+}
+function TbThumb({ url, label, size = 34, onZoom }) {
+  if (!url) return <span style={{ width: size, height: size, borderRadius: 6, border: `1px dashed ${T.b1}`, display: "inline-block" }} />;
+  return (
+    <img src={cld(url, "thumb")} alt={label || ""} title={label || ""}
+      onClick={onZoom ? (e) => { e.stopPropagation(); onZoom({ url, label }); } : undefined}
+      style={{ width: size, height: size, objectFit: "cover", borderRadius: 6, border: `1px solid ${T.b1}`, cursor: onZoom ? "zoom-in" : "inherit", display: "block" }} />
+  );
+}
+
+// Bill ka print — naya window, browser ka print.
+function tbPrint(title, body) {
+  const w = window.open("", "_blank");
+  if (!w) { window.alert(t("tripbill.print_blocked")); return; }
+  w.document.write(`<html><head><title>${tbEsc(title)}</title><style>
+    *{font-family:Arial,sans-serif;font-size:12px;margin:0;padding:0}
+    body{padding:22px;color:#111827}h2{font-size:17px;margin-bottom:4px}p{color:#4B5563;margin-bottom:4px}
+    table{width:100%;border-collapse:collapse;margin-top:12px}
+    th{background:#EEEDFB;color:#3B369E;padding:7px 9px;text-align:left;border:1px solid #D1D5DB;font-size:10.5px;text-transform:uppercase;letter-spacing:.4px}
+    td{padding:6px 9px;border:1px solid #E5E7EB;vertical-align:top}.r{text-align:right}h3{font-size:13px;margin-top:16px}
+    .tot td{font-weight:700;background:#F8F9FB}
+  </style></head><body>${body}</body></html>`);
+  w.document.close();
+  setTimeout(() => w.print(), 400);
+}
+
+// ── Bill ki poori detail (GET /trips/bills/:id) ─────────────────────
+// Project-wise jod, bill ki trips photo ke saath, due aur paid. onTrip diya
+// ho to trip dabane par uski detail. footerExtra = module ka apna button.
+function TbBillDetail({ id, onClose, onTrip, footerExtra }) {
+  const [st, setSt] = useState({ loading: true });
+  const [zoom, setZoom] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    setSt({ loading: true });
+    api.get(`/trips/bills/${id}`).then((r) => {
+      if (!alive) return;
+      const d = tbBody(r);
+      setSt(d && typeof d === "object" && d.id != null ? { d } : { err: (r && r.message) || t("tripbill.load_fail") });
+    }).catch(() => { if (alive) setSt({ err: t("tripbill.load_fail") }); });
+    return () => { alive = false; };
+  }, [id]);
+  const d = st.d;
+  const trips = (d && Array.isArray(d.trips)) ? d.trips : [];
+  const byProject = (() => {
+    if (!d) return [];
+    if (Array.isArray(d.by_project) && d.by_project.length) return d.by_project;
+    const m = new Map();
+    trips.forEach((tr) => {
+      const k = tr.project_id == null ? "0" : String(tr.project_id);
+      const o = m.get(k) || { project_id: tr.project_id, project_name: tr.project_name || "—", trips: 0, amount: 0 };
+      o.trips += 1; o.amount += Number(tr.amount) || 0; m.set(k, o);
+    });
+    return [...m.values()];
+  })();
+  const total = d && d.total_amount != null ? Number(d.total_amount) : null;
+  const paid = d && d.paid_amount != null ? Number(d.paid_amount) : null;
+  const balance = total != null && paid != null ? Math.max(0, total - paid) : null;
+  const print = () => {
+    if (!d) return;
+    const head = `<h2>${tbEsc(d.bill_no || "#" + d.id)} · ${tbEsc(d.vendor_name || "")}</h2>`
+      + `<p>${tbEsc(t("tripbill.bd_bill_date"))}: ${tbEsc(tbDate(d.bill_date))} · ${tbEsc(t("tripbill.bd_due_date"))}: ${tbEsc(tbDate(d.due_date))}</p>`
+      + `<p>${tbEsc(t("tripbill.bd_total"))}: ${tbEsc(tbMoney(total))} · ${tbEsc(t("tripbill.bd_paid"))}: ${tbEsc(tbMoney(paid))} · ${tbEsc(t("tripbill.bd_balance"))}: ${tbEsc(tbMoney(balance))}</p>`
+      + (d.note ? `<p>${tbEsc(d.note)}</p>` : "");
+    const proj = `<h3>${tbEsc(t("tripbill.bd_by_project"))}</h3><table><tr><th>${tbEsc(t("common.project"))}</th><th class="r">${tbEsc(t("tripbill.col_trips"))}</th><th class="r">${tbEsc(t("tripbill.col_amount"))}</th></tr>`
+      + byProject.map((p) => `<tr><td>${tbEsc(p.project_name || "—")}</td><td class="r">${tbEsc(p.trips)}</td><td class="r">${tbEsc(tbMoney(p.amount))}</td></tr>`).join("")
+      + `<tr class="tot"><td>${tbEsc(t("tripbill.bd_total"))}</td><td class="r">${tbEsc(trips.length || d.trip_count || "")}</td><td class="r">${tbEsc(tbMoney(total))}</td></tr></table>`;
+    const rows = `<h3>${tbEsc(t("tripbill.bd_trips"))}</h3><table><tr><th>${tbEsc(t("common.date"))}</th><th>${tbEsc(t("tripbill.col_vehicle"))}</th><th>${tbEsc(t("common.project"))}</th><th>${tbEsc(t("tripbill.col_route"))}</th><th class="r">${tbEsc(t("tripbill.col_km"))}</th><th class="r">${tbEsc(t("tripbill.col_amount"))}</th></tr>`
+      + trips.map((tr) => `<tr><td>${tbEsc(tbDate(tr.trip_date))} #${tbEsc(tr.trip_no)}</td><td>${tbEsc(tr.registration_no || "")}</td><td>${tbEsc(tr.project_name || "")}</td><td>${tbEsc(tr.route_name || "")}</td><td class="r">${tbEsc(tr.km_billed != null ? tbNum(tr.km_billed) : "")}</td><td class="r">${tbEsc(tbMoney(tr.amount))}</td></tr>`).join("")
+      + `</table>`;
+    tbPrint(t("tripbill.bd_title", { no: d.bill_no || "#" + d.id }), head + proj + rows);
+  };
+  const tile = (label, value, tone) => (
+    <div style={{ border: `1px solid ${T.b1}`, borderRadius: 9, padding: "9px 12px", background: T.surface }}>
+      <div style={tbLbl}>{label}</div>
+      <div style={{ fontSize: 16, fontWeight: 800, color: tone || T.t1, fontVariantNumeric: "tabular-nums" }}>{value}</div>
+    </div>
+  );
+  const TCOLS = "92px minmax(90px,1fr) minmax(90px,1fr) minmax(90px,1.1fr) 62px 92px 40px";
+  return (
+    <>
+      <TbModal width={880} onClose={onClose}
+        title={d ? t("tripbill.bd_title", { no: d.bill_no || "#" + d.id }) : t("tripbill.bd_title", { no: "…" })}
+        sub={d ? [d.vendor_name || t("tripbill.vendor_nahi"), t("tripbill.bd_n_trips", { n: Number(d.trip_count) || trips.length })].join(" · ") : ""}
+        footer={<>
+          {footerExtra}
+          {d && <button type="button" onClick={print} style={tbBtn(false)}>{t("tripbill.print")}</button>}
+          <button type="button" onClick={onClose} style={tbBtn(false)}>{t("common.close")}</button>
+        </>}>
+        {st.loading && <div style={{ textAlign: "center", padding: 30, color: T.t4, fontSize: 12.5 }}>{t("common.loading_2")}</div>}
+        {st.err && <div style={{ border: `1px solid ${T.red}33`, background: T.redL, color: T.red, borderRadius: 8, padding: "9px 12px", fontSize: 12, fontWeight: 600 }}>{st.err}</div>}
+        {d && (
+          <>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(130px,1fr))", gap: 8, marginBottom: 12 }}>
+              {tile(t("tripbill.bd_total"), tbMoney(total))}
+              {tile(t("tripbill.bd_paid"), tbMoney(paid))}
+              {tile(t("tripbill.bd_balance"), tbMoney(balance))}
+              <div style={{ border: `1px solid ${T.b1}`, borderRadius: 9, padding: "9px 12px", background: T.surface }}>
+                <div style={tbLbl}>{t("common.status")}</div>
+                <TbBillStatus status={d.status} due={d.due_date} />
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 18, flexWrap: "wrap", fontSize: 12, color: T.t2, marginBottom: 12 }}>
+              <span>{t("tripbill.bd_bill_date")}: <b>{tbDate(d.bill_date)}</b></span>
+              <span>{t("tripbill.bd_due_date")}: <b style={{ color: d.status !== "paid" && tbYmd(d.due_date) && tbYmd(d.due_date) < tbToday() ? T.red : T.t1 }}>{tbDate(d.due_date)}</b></span>
+              {d.from_date && <span>{t("tripbill.bd_period")}: <b>{tbDate(d.from_date)} – {tbDate(d.to_date)}</b></span>}
+              {d.created_by_name && <span>{t("tripbill.bd_made_by")}: <b>{d.created_by_name}</b></span>}
+            </div>
+            {d.note && <div style={{ fontSize: 12, color: T.t2, background: T.surfaceB, border: `1px solid ${T.b1}`, borderRadius: 8, padding: "8px 11px", marginBottom: 12 }}>{d.note}</div>}
+
+            <div style={{ fontSize: 11, fontWeight: 700, color: T.t3, textTransform: "uppercase", letterSpacing: ".4px", marginBottom: 6 }}>{t("tripbill.bd_by_project")}</div>
+            <div style={{ border: `1px solid ${T.b1}`, borderRadius: 8, marginBottom: 14, overflow: "hidden" }}>
+              {byProject.map((p, i) => (
+                <div key={i} style={{ display: "flex", justifyContent: "space-between", gap: 10, padding: "8px 12px", borderTop: i ? `1px solid ${T.b1}` : "none", fontSize: 12.5 }}>
+                  <span style={{ color: T.t1, fontWeight: 600, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.project_name || "—"}</span>
+                  <span style={{ color: T.t3, whiteSpace: "nowrap" }}>{t("tripbill.n_trips", { n: Number(p.trips) || 0 })}</span>
+                  <span style={{ color: T.t1, fontWeight: 700, fontVariantNumeric: "tabular-nums", minWidth: 90, textAlign: "right" }}>{tbMoney(p.amount)}</span>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ fontSize: 11, fontWeight: 700, color: T.t3, textTransform: "uppercase", letterSpacing: ".4px", marginBottom: 6 }}>{t("tripbill.bd_trips")}</div>
+            <div style={{ overflowX: "auto", border: `1px solid ${T.b1}`, borderRadius: 8 }}>
+              <div style={{ minWidth: 700 }}>
+                <div style={{ display: "grid", gridTemplateColumns: TCOLS, gap: 8, padding: "7px 12px", background: T.surfaceB, fontSize: 10, fontWeight: 700, color: T.t4, textTransform: "uppercase", letterSpacing: ".4px" }}>
+                  <span>{t("common.date")}</span><span>{t("tripbill.col_vehicle")}</span><span>{t("common.project")}</span><span>{t("tripbill.col_route")}</span>
+                  <span style={{ textAlign: "right" }}>{t("tripbill.col_km")}</span><span style={{ textAlign: "right" }}>{t("tripbill.col_amount")}</span><span />
+                </div>
+                {trips.map((tr) => (
+                  <div key={tr.id} onClick={onTrip ? () => onTrip(tr.id) : undefined}
+                    style={{ display: "grid", gridTemplateColumns: TCOLS, gap: 8, padding: "8px 12px", borderTop: `1px solid ${T.b1}`, alignItems: "center", fontSize: 12, color: T.t2, cursor: onTrip ? "pointer" : "default" }}>
+                    <span style={{ whiteSpace: "nowrap" }}>{tbDate(tr.trip_date)}<span style={{ display: "block", fontSize: 10, color: T.t4 }}>#{tr.trip_no}</span></span>
+                    <span style={{ fontWeight: 700, color: T.t1 }}>{tr.registration_no || "—"}</span>
+                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tr.project_name || "—"}</span>
+                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tr.route_name || "—"}</span>
+                    <span style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{tr.km_billed != null ? tbNum(tr.km_billed) : "—"}</span>
+                    <span style={{ textAlign: "right", fontWeight: 700, color: T.t1, fontVariantNumeric: "tabular-nums" }}>{tbMoney(tr.amount)}</span>
+                    <span><TbThumb url={tr.unload_photo_url || tr.load_photo_url} label={tr.registration_no} onZoom={setZoom} /></span>
+                  </div>
+                ))}
+                {trips.length === 0 && <div style={{ padding: 16, textAlign: "center", fontSize: 12, color: T.t4 }}>{t("tripbill.bd_no_trips")}</div>}
+              </div>
+            </div>
+          </>
+        )}
+      </TbModal>
+      <TbZoom photo={zoom} onClose={() => setZoom(null)} />
+    </>
+  );
+}
 
 // ── NAV GROUPS ───────────────────────────────────────────────────────
 const NAV_GROUPS=[
@@ -952,7 +1191,8 @@ const LEDGER_TYPE_LABELS={"material_purchase":"Material Purchase","payment":"Pay
 // Wallet ke mobile "Material" tab se kharida material — type site_expense, par
 // khaate me "Material Purchase" (server display_type="wallet_material").
 // Ledger ki row, Type filter aur Excel — teeno yahi label padhte hain.
-const ledgerLabelOf=(txn)=>txn.displayType==="fuel_given"?t("finance.fuel_given_label")
+const ledgerLabelOf=(txn)=>txn.tripBillId!=null?t("tripbill.ledger_label")
+  :txn.displayType==="fuel_given"?t("finance.fuel_given_label")
   :(LEDGER_TYPE_LABELS[txn.displayType==="wallet_material"?"material_purchase":txn.txnType]||txn.type||txn.txnType||"Transaction");
 const ledgerProjOf=(txn)=>txn.project||txn.project_name||"";
 // f = {q, type, proj, from, to}
@@ -3719,6 +3959,8 @@ function FinanceModule(){
   const [selTxnHighlight,setSelTxnHighlight]=useState(null);
   // Transaction detail drawer (used from Fin Activity + Party Ledger)
   const [selTxn,setSelTxn]=useState(null);
+  // Party ledger ki "Trip bill" row → bill ki detail (GET /trips/bills/:id).
+  const [tripBill,setTripBill]=useState(null);   // {id, txn}
   // Staff wallets — live data (Phase 2; replaces the old mock array)
   const [walletList,setWalletList]=useState([]);
   // Salary bucket: outstanding due per staff party (separate ledger — imprest
@@ -4320,6 +4562,8 @@ function FinanceModule(){
           taxAmt:t.tax_amt!=null?parseFloat(t.tax_amt):null,
           referenceNo:t.reference_no||null,
           mop:t.mop||null,
+          // Trip bill (7 Oct 2026): bill banate hi vendor ledger me ek row/project — dabane par bill ki detail.
+          tripBillId:t.trip_bill_id??null,
         }))}));
       }
     }catch(e){console.log("Ledger fetch error");}
@@ -5277,7 +5521,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
                     {viewRows.map(txn=>(
                       <div key={txn.id}>
                         {(()=>{
-                          const isBillType=["material_purchase","site_expense","subcon_expense","Material Purchase","Site Expense","Sub-Con Expense"].includes(txn.txnType||txn.type||"");
+                          const isBillType=txn.tripBillId==null&&["material_purchase","site_expense","subcon_expense","Material Purchase","Site Expense","Sub-Con Expense"].includes(txn.txnType||txn.type||"");
                           const isExpanded=selBill===txn.id;
                           const hasItems=txn.items&&txn.items.length>0;
                           return(<>
@@ -5299,7 +5543,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
                             const balSfx  = (txn.runBal||0)===0 ? "" : (txn.runBal>0 ? "Dr" : "Cr");
                             const sgn = txn.ledSign||0;
                             return(
-                          <div onClick={()=>setSelTxn(txn.syntheticOf!=null?(ledgerRows.find(x=>x.id===txn.syntheticOf)||txn):txn)}
+                          <div onClick={()=>{ if(txn.tripBillId!=null) setTripBill({id:txn.tripBillId,txn}); else setSelTxn(txn.syntheticOf!=null?(ledgerRows.find(x=>x.id===txn.syntheticOf)||txn):txn); }}
             style={{display:"grid",gridTemplateColumns:LG_COLS,padding:"9px 14px",gap:4,borderBottom:isExpanded?`1px solid ${T.bluM}`:`1px solid ${T.b1}`,alignItems:"center",cursor:"pointer",background:isExpanded?T.bluL+"44":"none",borderLeft:`3px solid ${sgn<0?T.grn:sgn>0?T.red:T.b2}33`,transition:"background 0.1s",opacity:txn.counted===false?0.55:1}}
                             onMouseEnter={e=>{if(!isExpanded)e.currentTarget.style.background=T.surfaceB;}}
                             onMouseLeave={e=>{if(!isExpanded)e.currentTarget.style.background="none";}}>
@@ -5321,6 +5565,9 @@ Status: ${ledgerRow.status||"unpaid"}`;
                                 <span style={{fontSize:9,fontWeight:700,color:T.red,textTransform:"uppercase",letterSpacing:.3,marginTop:1}}>
                                   {t("finance.not_counted_reason", { reason: txn.notCountedReason || t("finance.not_counted") })}
                                 </span>
+                              )}
+                              {txn.tripBillId!=null && (
+                                <span onClick={e=>{e.stopPropagation();setTripBill({id:txn.tripBillId,txn});}} style={{fontSize:9,color:T.blu,fontWeight:600,cursor:"pointer",marginTop:1}}>{t("tripbill.fn_open_bill")}</span>
                               )}
                               {isBillType && txn.sourceKind!=="customer_invoice" && (
                                 <span onClick={e=>{e.stopPropagation();setSelBill(isExpanded?null:txn.id);}} style={{fontSize:9,color:T.blu,fontWeight:600,cursor:"pointer",marginTop:1}}>{isExpanded?t("finance.hide"):t("finance.view_bill")}{hasItems?` (${txn.items.length})`:""}</span>
@@ -6846,6 +7093,11 @@ Status: ${ledgerRow.status||"unpaid"}`;
         onDownloadInvoice={(t)=>downloadInvoicePDF(t.refId, t.party||"")}
         onShareInvoice={(t)=>shareInvoice(t, t.party||"", "whatsapp")}
       />
+
+      {tripBill&&(
+        <TbBillDetail id={tripBill.id} onClose={()=>setTripBill(null)}
+          footerExtra={<button type="button" onClick={()=>{ const x=tripBill.txn; setTripBill(null); setSelTxn(x); }} style={tbBtn(false)}>{t("tripbill.fn_ledger_entry")}</button>} />
+      )}
 
       {/* ══ Bill Conflict Warning Modal ══ */}
       {conflictData && (

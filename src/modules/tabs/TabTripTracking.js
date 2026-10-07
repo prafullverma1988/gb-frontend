@@ -7,6 +7,7 @@ import { currentUser, canAny, canEntry } from "../../utils/perms";
 import { t, Rich } from "../../i18n";
 import { cld } from "../../utils/cloudinary";
 import SearchSelect from "../../components/SearchSelect";
+import { BackClose } from "../../utils/backNav";
 
 // ── Kaun kya kar sakta hai (is tab ka apna — module independence) ──
 // 3 Oct 2026 se Trip Tracking Roles & Access ki "Equipment" row se chalta hai
@@ -53,6 +54,11 @@ function canRoute(action, u = currentUser()) {
 function canBillTrips(u = currentUser()) {
   return canAny("Finance", "create", { strict: true }, u);
 }
+// Bill dekhna (Bills ki list, gaadi ke bills) = Finance View (admin hamesha) — 7 Oct 2026.
+// Bill banana ab yahan nahi, Machinery → Trips & Billing me (Finance Create).
+function canSeeBills(u = currentUser()) {
+  return canAny("Finance", "view", { strict: true }, u);
+}
 // Cancel: approver kisi ki bhi (remark ke saath); Entry wala sirf APNI raste
 // wali trip, load ke 10 min ke andar. Ghadi ka thoda farak ho to server bata dega.
 function canCancelTrip(trip, u = currentUser()) {
@@ -76,8 +82,12 @@ function canOverrideRate(u = currentUser()) {
 // ownership se — Owned = 'own' (server ka tripBilling), warna 'trip'.
 const tripBillingOf = (tr) => (["km", "trip", "monthly", "own", "pending"].includes(tr.billing_snap) ? tr.billing_snap
   : (String(tr.ownership || "").toLowerCase() === "owned" ? "own" : "trip"));
-const canOverrideTrip = (tr) => !!tr && tr.status === "completed" && tr.bill_id == null && tr.verify_status !== "rejected"
-  && !["own", "monthly"].includes(tripBillingOf(tr));
+// Naya server har trip par bill_state bhejta hai — wahi pehle (own / monthly / billed… me nahi).
+const canOverrideTrip = (tr) => {
+  if (!tr || tr.status !== "completed" || tr.bill_id != null || tr.verify_status === "rejected") return false;
+  if (tr.bill_state) return ["ready", "rate_pending", "flagged"].includes(tr.bill_state);
+  return !["own", "monthly"].includes(tripBillingOf(tr));
+};
 
 // ════════════════════════════════════════════════════════════════
 // TabTripTracking — web management view for the Trip Tracking module
@@ -190,12 +200,6 @@ function rcAmount(card, km) {
   }
   return r2(rcRateAt(card, K <= n ? Math.ceil(K) : n + 1) * K);
 }
-// 1st, 2nd, 3rd, 4th … 11th, 12th, 13th … 21st
-const nth = (n) => {
-  const h = n % 100;
-  if (h >= 11 && h <= 13) return n + "th";
-  return n + ({ 1: "st", 2: "nd", 3: "rd" }[n % 10] || "th");
-};
 // Server rates / rate_card_snap JSON text bhi bhej sakta hai, array bhi.
 const parseRates = (v) => {
   try { const a = Array.isArray(v) ? v : JSON.parse(v || "[]"); return Array.isArray(a) ? a.map(Number) : []; }
@@ -229,22 +233,10 @@ const inp = { width: "100%", padding: "9px 11px", borderRadius: 7, border: `1.5p
   fontSize: 13, outline: "none", fontFamily: "inherit", color: T.t1, background: T.surface, boxSizing: "border-box" };
 const lblS = { fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 };
 
-// ── Capacity aur gaadi ki khoj (4 Oct 2026) ──────────────────────
+// ── Capacity (4 Oct 2026) ────────────────────────────────────────
 // Trip gaadi ki capacity = number + unit (cft / cum / ton); server saath me
-// "500 cft" text (capacity) bhi bhejta hai. Khoj ka niyam server ke
-// /trucks?all=1 jaisa: har shabd gaadi number (space / dash / dot ke bina),
-// naam, vendor, capacity ya card ke naam me kahin mile ("sharma 500").
+// "500 cft" text (capacity) bhi bhejta hai.
 const CAP_UNITS = ["cft", "cum", "ton"];
-const normReg = (v) => String(v == null ? "" : v).replace(/[\s.-]/g, "").toUpperCase();
-const capOf = (r) => (r && (r.capacity || (r.capacity_qty != null ? (Number(r.capacity_qty) + " " + (r.capacity_unit || "")).trim() : ""))) || "";
-function matchTruck(r, q) {
-  const toks = String(q || "").trim().toLowerCase().split(/\s+/).filter(Boolean);
-  if (!toks.length) return true;
-  const hay = [r.name, r.code, r.registration_no, r.vendor_name || r.default_vendor_name, capOf(r), r.rate_card_name]
-    .map(x => String(x || "").toLowerCase());
-  const regs = [normReg(r.registration_no), normReg(r.name)];
-  return toks.every(tok => hay.some(h => h.includes(tok)) || (!!normReg(tok) && regs.some(x => x.includes(normReg(tok)))));
-}
 // Khaana → { empty } (kuch nahi bhara) · { bad } · { ok, qty, unit }.
 function capCheck(qty, unit) {
   const s = String(qty == null ? "" : qty).trim();
@@ -323,22 +315,7 @@ function TabTripTracking({ projectId }) {
   }, [projectId]);
   useEffect(() => { loadSummary(); }, [loadSummary]);
 
-  // Naam wale rate card (4 Oct 2026) + purane vendor card (legacy, abhi bhi
-  // fallback) + "Rate tay karna baaki" wali gaadi (rate_pending_list). null =
-  // server purana (404) ya ijazat nahi — tab "Rate card" sub-tab dikhta hi nahi.
-  // Card yahan sirf dikhta hai — banta / lagta Machinery → Trip vehicles me.
-  const [cards, setCards] = useState(null);
-  const loadCards = useCallback(() => {
-    api.get("/trips/rate-templates")
-      .then(r => setCards(r && r.success
-        ? { list: Array.isArray(r.data) ? r.data : [], legacy: Array.isArray(r.legacy_cards) ? r.legacy_cards : [],
-            pending: Array.isArray(r.rate_pending_list) ? r.rate_pending_list : [], pendingN: Number(r.rate_pending_vehicles) || 0 }
-        : null))
-      .catch(() => setCards(null));
-  }, []);
-  useEffect(() => { loadCards(); }, [loadCards]);
-  const curSub = sub === "ratecard" && !cards ? "monitor" : sub;
-
+  // Rate card aur bill ab yahan nahi — Machinery → Trips & Billing me (7 Oct 2026).
   return (
     <div style={{ padding: "16px 18px" }}>
       {/* KPI */}
@@ -353,20 +330,16 @@ function TabTripTracking({ projectId }) {
           options={[
             { id: "monitor", label: t("trip_tracking.monitor") },
             { id: "routes",  label: t("trip_tracking.routes_leads") },
-            { id: "trucks",  label: t("trip_tracking.trucks") },
-            ...(cards ? [{ id: "ratecard", label: t("trip_tracking.rate_card") }] : []),
+            { id: "trucks",  label: t("tripbill.pt_gaadi") },
             { id: "reports", label: t("common.reports") },
-            { id: "billing", label: t("trip_tracking.billing") },
           ]}
-          active={curSub} onChange={setSub} />
+          active={sub} onChange={setSub} />
       </div>
 
-      {curSub === "monitor"  && <MonitorTab projectId={projectId} onChange={loadSummary} />}
-      {curSub === "routes"   && <RoutesTab projectId={projectId} />}
-      {curSub === "trucks"   && <TrucksTab cards={cards} onChange={loadCards} />}
-      {curSub === "ratecard" && <RateCardTab data={cards} />}
-      {curSub === "reports"  && <ReportsTab projectId={projectId} />}
-      {curSub === "billing"  && <BillingTab projectId={projectId} />}
+      {sub === "monitor"  && <MonitorTab projectId={projectId} onChange={loadSummary} />}
+      {sub === "routes"   && <RoutesTab projectId={projectId} />}
+      {sub === "trucks"   && <GaadiTab projectId={projectId} />}
+      {sub === "reports"  && <ReportsTab projectId={projectId} />}
     </div>
   );
 }
@@ -923,133 +896,66 @@ function RouteForm({ projectId, tasks, route, onCancel, onSaved }) {
 // vendor / capacity) + capacity ki chhanni. Trip gaadi ki capacity zaroori.
 // Rate office tay karega (4 Oct 2026): phone se judi gaadi "Rate baaki" —
 // upar amber "Rate tay karna baaki" aur note ki card Machinery me lagta hai.
-const ownTruck = (r) => (r.trip_billing ? r.trip_billing === "own" : String(r.ownership || "").toLowerCase() === "owned");
 const truckVendorId = (r) => (r.vendor_id != null ? r.vendor_id : (r.default_vendor_id != null ? r.default_vendor_id : null));
 
-function TrucksTab({ cards, onChange }) {
-  const [list, setList] = useState([]);
-  const [loading, setLoading] = useState(true);
+// ── GAADI (project ki gaadi, vendor-wise) ─────────────────────────
+// 7 Oct 2026: is project ki trip wali gaadiyan vendor-wise (GET /trips/office/
+// vendors + /vendors/:id/vehicles, project_id ke saath) — vendor dabao to
+// gaadiyan, gaadi ka number dabao to Vehicle page (is project ki trips).
+// Nayi gaadi = Equipment Entry; Edit = Equipment Edit (sirf trip gaadi).
+// Rate card / bill yahan nahi — Machinery → Trips & Billing.
+function GaadiTab({ projectId }) {
+  const init = istRange();
+  const [from, setFrom] = useState(init.from);
+  const [to, setTo] = useState(init.to);
+  const [q, setQ] = useState("");
+  const [rk, setRk] = useState(0);
+  const [page, setPage] = useState(null);
+  const [trucks, setTrucks] = useState([]);
   const [parties, setParties] = useState([]);
   const [form, setForm] = useState(null); // null | {} nayi | truck (edit)
-  const [q, setQ] = useState("");
-  const [fCap, setFCap] = useState("");
-
-  const load = useCallback(() => {
-    setLoading(true);
-    Promise.all([
-      api.get("/trips/trucks").catch(() => null),
-      api.get("/trips/trucks?own=1").catch(() => null),
-    ]).then(([a, b]) => {
-      const rows = a && a.success && Array.isArray(a.data) ? a.data : [];
-      const own = b && b.success && Array.isArray(b.data) ? b.data : null;
-      // Naya server: trip gaadi pehli list se, "Apni gaadi" poori fleet (?own=1).
-      // Purana server (is_trip_vehicle nahi bhejta): pehle jaisi ek list.
-      if (own && rows.some(r => r && "is_trip_vehicle" in r)) {
-        const seen = new Set();
-        setList([...rows.filter(r => r.is_trip_vehicle), ...own].filter(r => (seen.has(r.id) ? false : (seen.add(r.id), true))));
-      } else setList(rows);
-      setLoading(false);
-    });
+  const loadTrucks = useCallback(() => {
+    api.get("/trips/trucks").then(r => setTrucks(r && r.success && Array.isArray(r.data) ? r.data : [])).catch(() => setTrucks([]));
   }, []);
   useEffect(() => {
-    load();
+    loadTrucks();
     api.get("/finance/parties").then(r => setParties(r && r.success && Array.isArray(r.data) ? r.data : [])).catch(() => setParties([]));
-  }, [load]);
-
-  // Naya server har row par trip_billing bhejta hai — tabhi gaadi badalne
-  // (PUT) ka raasta hai. Purane par Edit dikhana = 404.
-  const newApi = list.some(r => r && "trip_billing" in r);
-  const caps = [...new Set(list.map(capOf).filter(Boolean))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
-  const shown = list.filter(r => (!fCap || capOf(r) === fCap) && matchTruck(r, q));
-  const gmap = {};
-  shown.forEach(r => {
-    const own = ownTruck(r);
-    const vid = own ? null : truckVendorId(r);
-    const key = own ? "own" : (vid != null ? "v" + vid : "none");
-    if (!gmap[key]) {
-      gmap[key] = { key, own, vendor_id: vid, rows: [],
-        name: own ? t("trip_tracking.apni_gaadi") : (r.vendor_name || r.default_vendor_name || (vid != null ? "#" + vid : t("trip_tracking.vendor_nahi"))) };
-    }
-    gmap[key].rows.push(r);
-  });
-  // Apni gaadi upar (app me bhi pehli chip wahi), phir vendor A–Z, bina vendor wali aakhir me.
-  const rank = (g) => (g.own ? 0 : g.key === "none" ? 2 : 1);
-  const groups = Object.values(gmap).sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
-  const COLS = "1.2fr 90px 100px 1.1fr 1.1fr 80px 100px 64px";
+  }, [loadTrucks]);
+  const showBills = canSeeBills();
+  const newApi = trucks.some(r => r && "trip_billing" in r);
   const fltS = { ...inp, width: "auto", padding: "7px 10px", fontSize: 12 };
-
   return (
     <Panel>
-      <div style={{ padding: "10px 15px", borderBottom: `1px solid ${T.b1}`, background: T.surfaceB, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <span style={{ fontSize: 12.5, fontWeight: 700, color: T.t1 }}>{t("trip_tracking.trucks_list", { list: list.length ? `(${list.length})` : "" })}</span>
+      <div style={{ padding: "10px 15px", borderBottom: `1px solid ${T.b1}`, background: T.surfaceB, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+        <span style={{ fontSize: 12.5, fontWeight: 700, color: T.t1 }}>{t("tripbill.pt_gaadi_title")}</span>
         {/* Naya truck = Equipment ki Entry (ya Create) — server ka POST /trips/trucks (5 Oct 2026) */}
         {canEntry("Equipment") && <AddBtn label={t("trip_tracking.add_truck")} onClick={() => setForm(f => (f && !f.id ? null : {}))} />}
       </div>
-      {cards && cards.pending.length > 0 && (
-        <div style={{ padding: "10px 15px 0" }}>
-          <RatePendingBlock data={cards} note />
-        </div>
-      )}
       {form && <TruckForm key={form.id || "new"} truck={form.id ? form : null} parties={parties}
-        onCancel={() => setForm(null)} onSaved={() => { setForm(null); load(); if (onChange) onChange(); }} />}
-      {!loading && list.length > 0 && (
-        <div style={{ display: "flex", gap: 8, alignItems: "center", padding: "9px 15px", borderBottom: `1px solid ${T.b1}`, flexWrap: "wrap" }}>
-          <input value={q} onChange={e => setQ(e.target.value)} placeholder={t("trip_tracking.gaadi_khoj_ph")}
-            style={{ ...fltS, flex: 1, minWidth: 220, borderColor: q ? T.ind : T.b1 }} />
-          {caps.length > 0 && (
-            <PickSelect value={fCap} onChange={e => setFCap(e.target.value)} style={{ ...fltS, borderColor: fCap ? T.ind : T.b1 }}>
-              <option value="">{t("trip_tracking.sab_capacity")}</option>
-              {caps.map(c => <option key={c} value={c}>{c}</option>)}
-            </PickSelect>
-          )}
-          <span style={{ fontSize: 11.5, color: T.t4 }}>{t("trip_tracking.n_gaadi", { n: shown.length })}</span>
-          {(q || fCap) && <MiniBtn onClick={() => { setQ(""); setFCap(""); }}>{t("common.clear")}</MiniBtn>}
-        </div>
-      )}
-      {loading && <div style={{ textAlign: "center", padding: "30px 0", color: T.t4, fontSize: 13 }}>{t("common.loading_2")}</div>}
-      {!loading && list.length === 0 && <div style={{ textAlign: "center", padding: "34px 20px", color: T.t4, fontSize: 13 }}>{t("trip_tracking.abhi_koi_truck_nahi")}</div>}
-      {!loading && list.length > 0 && shown.length === 0 && <div style={{ textAlign: "center", padding: "30px 20px", color: T.t4, fontSize: 13 }}>{t("trip_tracking.khoj_me_koi_gaadi_nahi")}</div>}
-      {!loading && shown.length > 0 && (
-        <>
-          <THead cols={COLS} headers={[t("trip_tracking.hdr_registration"), t("trip_tracking.hdr_capacity"), t("trip_tracking.hdr_billing"), t("trip_tracking.hdr_rate_card"), t("trip_tracking.hdr_driver"), t("trip_tracking.hdr_today_trips"), t("trip_tracking.hdr_status"), ""]} />
-          {groups.map(g => (
-            <div key={g.key}>
-              <div style={{ padding: "8px 15px", background: T.surfaceB, borderBottom: `1px solid ${T.b1}`, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                <span style={{ fontSize: 12.5, fontWeight: 700, color: T.t1 }}>{g.name}</span>
-                <span style={{ fontSize: 11, color: T.t4 }}>{t("trip_tracking.n_gaadi", { n: g.rows.length })}</span>
-                {g.own && <span style={{ fontSize: 10.5, color: T.t4 }}>{t("trip_tracking.apni_gaadi_fleet_bill_nahi")}</span>}
-              </div>
-              {g.rows.map(item5 => {
-                const own = ownTruck(item5);
-                const bm = BILLING[item5.trip_billing] || BILLING[own ? "own" : "trip"];
-                const canEdit = newApi && canEq("edit") && !own;
-                const cap = capOf(item5);
-                return (
-                  <div key={item5.id} style={{ display: "grid", gridTemplateColumns: COLS, padding: "10px 15px", borderBottom: `1px solid ${T.b1}`, alignItems: "center", gap: 6 }}>
-                    <span style={{ minWidth: 0 }}>
-                      <span style={{ display: "block", fontSize: 13, fontWeight: 700, color: T.t1 }}>{item5.registration_no || item5.name}</span>
-                      {item5.registration_no && item5.name && item5.name !== item5.registration_no && <span style={{ display: "block", fontSize: 10.5, color: T.t4 }}>{item5.name}</span>}
-                    </span>
-                    <span style={{ fontSize: 11.5, color: cap ? T.t2 : T.t4, fontVariantNumeric: "tabular-nums" }}>{cap || "—"}</span>
-                    <span><Pill label={bm.label} c={bm.c} bg={bm.bg} /></span>
-                    <span style={{ minWidth: 0 }}>
-                      {own || item5.trip_billing === "monthly" ? <span style={{ fontSize: 11.5, color: T.t4 }}>—</span>
-                        : item5.rate_card_name ? <Pill label={item5.rate_card_name} c={T.ind} bg={T.indL} />
-                        : newApi && "rate_card_id" in item5 && ["km", "trip", "pending"].includes(item5.trip_billing) ? <Pill label={t("trip_tracking.card_nahi")} c={T.amb} bg={T.ambL} />
-                        : <span style={{ fontSize: 11.5, color: T.t4 }}>—</span>}
-                    </span>
-                    <span style={{ fontSize: 11.5, color: T.t2 }}>{item5.last_driver_name || "—"}</span>
-                    <span style={{ fontSize: 12, color: T.t2, fontVariantNumeric: "tabular-nums" }}>{Number(item5.today_trip_count || 0)}</span>
-                    <span>{Number(item5.open_trip_count) > 0 ? <Pill label={t("trip_tracking.in_transit")} c={T.amb} bg={T.ambL} /> : <Pill label={t("common.idle")} c={T.t3} bg={T.sltL} />}</span>
-                    {canEdit
-                      ? <button onClick={() => setForm(item5)} type="button" style={{ justifySelf: "end", fontSize: 11.5, color: T.blu, background: "none", border: "none", cursor: "pointer", fontWeight: 600, fontFamily: "inherit" }}>{t("common.edit_2")}</button>
-                      : <span />}
-                  </div>
-                );
-              })}
-            </div>
-          ))}
-        </>
+        onCancel={() => setForm(null)} onSaved={() => { setForm(null); loadTrucks(); setRk(k => k + 1); }} />}
+      <div style={{ display: "flex", gap: 8, alignItems: "center", padding: "9px 15px", borderBottom: `1px solid ${T.b1}`, flexWrap: "wrap" }}>
+        <span style={{ fontSize: 12, fontWeight: 600, color: T.t2 }}>{t("common.from")}</span>
+        <input type="date" value={from} max={to} onChange={e => e.target.value && setFrom(e.target.value)} style={{ ...fltS, padding: "5px 8px" }} />
+        <span style={{ fontSize: 12, fontWeight: 600, color: T.t2 }}>{t("common.to")}</span>
+        <input type="date" value={to} min={from} onChange={e => e.target.value && setTo(e.target.value)} style={{ ...fltS, padding: "5px 8px" }} />
+        <input value={q} onChange={e => setQ(e.target.value)} placeholder={t("trip_tracking.gaadi_khoj_ph")}
+          style={{ ...fltS, flex: 1, minWidth: 200, borderColor: q ? T.ind : T.b1 }} />
+        {q && <MiniBtn onClick={() => setQ("")}>{t("common.clear")}</MiniBtn>}
+      </div>
+      <div style={{ padding: "12px 15px" }}>
+        <TbVendorVehicles projectId={projectId} from={from} to={to} q={q} reloadKey={rk}
+          emptyHint={t("tripbill.pt_gaadi_empty")}
+          onVehicle={v => setPage({ vehicle: v })}
+          vehicleExtra={v => {
+            const tr = !v.is_fleet ? trucks.find(x => x.id === v.id) : null;
+            return tr && newApi && canEq("edit")
+              ? <button onClick={() => setForm(tr)} type="button" style={{ fontSize: 11.5, color: T.blu, background: "none", border: "none", cursor: "pointer", fontWeight: 600, fontFamily: "inherit" }}>{t("common.edit_2")}</button>
+              : null;
+          }} />
+      </div>
+      {page && (
+        <TbVehiclePage key={page.vehicle.id} vehicle={page.vehicle} projectId={projectId} from={from} to={to} showBills={showBills}
+          onClose={() => setPage(null)} onChanged={() => setRk(k => k + 1)} />
       )}
     </Panel>
   );
@@ -1126,124 +1032,6 @@ function TruckForm({ truck, parties, onCancel, onSaved }) {
   );
 }
 
-// ── RATE CARD (sirf dekhna) ──────────────────────────────────────
-// Naam wala rate card (4 Oct 2026). Prafull: rate OFFICE tay karta hai, aur
-// office Machinery → Trip vehicles me kaam karta hai (company level) — Trip
-// Tracking project ke andar hai. Isliye card banana / badalna / hatana,
-// "Gaadi select karo" aur gaadi-wise "Card lagao" ab Machinery → Trip
-// vehicles → "Rate card" me hain (wahan le jaaye gaye — module independence,
-// yahan copy nahi). Yahan sirf list: naam, kiska, tareeka, rate, kitni gaadi,
-// aur amber "Rate tay karna baaki" — saath me note ki card kahan banta hai.
-const RC_ROUND = {
-  nearest: { get label() { return t("trip_tracking.rc_r_nearest"); } },
-  up:      { get label() { return t("trip_tracking.rc_r_up"); } },
-  none:    { get label() { return t("trip_tracking.rc_r_none"); } },
-};
-const RC_METHOD = {
-  slab:       { get label() { return t("trip_tracking.rc_m_slab"); } },
-  cumulative: { get label() { return t("trip_tracking.rc_m_cum"); } },
-};
-const RT_KIND = {
-  km:   { get label() { return t("trip_tracking.rt_kind_km"); } },
-  trip: { get label() { return t("trip_tracking.rt_kind_trip"); } },
-};
-// Server se aaya card — rates JSON text ho sakta hai, paisa string.
-const normCard = (c) => ({ ...c, rates: parseRates(c.rates), onward_rate: Number(c.onward_rate) || 0,
-  method: c.method === "cumulative" ? "cumulative" : "slab", round_mode: RC_ROUND[c.round_mode] ? c.round_mode : "nearest" });
-const slabText = (c) => {
-  const shown = c.rates.slice(0, 5).map((r, i) => nth(i + 1) + " " + rs2(r));
-  if (c.rates.length > 5) shown.push("… +" + (c.rates.length - 5));
-  shown.push(t("trip_tracking.rc_onward_short", { rate: rs2(c.onward_rate) }));
-  return shown.join(" · ");
-};
-const kiskaOf = (c) => (c.vendor_id == null ? t("trip_tracking.rt_sab_vendor") : c.vendor_name || "#" + c.vendor_id);
-
-// "Card kahan banta hai" — Trucks aur Rate card dono par.
-function OfficeNote() {
-  return (
-    <div style={{ border: `1px solid ${T.b1}`, background: T.surfaceB, borderRadius: 8, padding: "8px 12px", marginBottom: 12, fontSize: 12, color: T.t2, fontWeight: 600 }}>
-      {t("trip_tracking.rc_office_note")}
-    </div>
-  );
-}
-
-// Amber "Rate tay karna baaki" — server ki rate_pending_list (/rate-templates):
-// trip gaadi jinpar koi card nahi aur billing "Rate baaki" (site par phone se
-// judi — rate office tay karega) ya Km rate / Per trip. Inki trip RATE
-// PENDING, bill me nahi aati. Yahan sirf dikhti hai — card Machinery me lagta
-// hai (note = neeche wahi baat likho; Rate card tab par upar pehle se likhi hai).
-function RatePendingBlock({ data, note }) {
-  const list = (data && data.pending) || [];
-  if (!list.length) return null;
-  const legacyVendor = new Set(((data && data.legacy) || []).map(c => String(c.vendor_id)));
-  const SHOW = 30;
-  return (
-    <div style={{ border: `1px solid ${T.ambM}`, background: T.ambL, borderRadius: 8, padding: "10px 13px", marginBottom: 12, fontSize: 12, color: T.t2, lineHeight: 1.55 }}>
-      <div style={{ fontWeight: 700, color: T.amb, marginBottom: 2 }}>{t("trip_tracking.rp_title", { n: data.pendingN || list.length })}</div>
-      <div>{t("trip_tracking.rp_hint")}</div>
-      <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 7 }}>
-        {list.slice(0, SHOW).map(r => {
-          const bits = [r.vendor_name || t("trip_tracking.vendor_nahi"), r.capacity || "—", (BILLING[r.trip_billing] || BILLING.trip).label];
-          if (r.trip_billing === "km" && legacyVendor.has(String(r.vendor_id))) bits.push(t("trip_tracking.rt_purana_card_lagta"));
-          return (
-            <span key={r.id} style={{ fontSize: 11, fontWeight: 700, color: T.t1, background: T.surface, border: `1px solid ${T.b1}`, borderRadius: 5, padding: "2px 7px" }}>
-              {r.registration_no || r.name}
-              <span style={{ fontWeight: 500, color: T.t4 }}> · {bits.join(" · ")}</span>
-              {Number(r.pending_trips) > 0 && <span style={{ color: T.amb }}> · {t("trip_tracking.rp_trips", { n: Number(r.pending_trips) })}</span>}
-            </span>
-          );
-        })}
-        {list.length > SHOW && <span style={{ fontSize: 11, color: T.t4, alignSelf: "center" }}>+{list.length - SHOW}</span>}
-      </div>
-      {note && <div style={{ marginTop: 7, fontWeight: 600 }}>{t("trip_tracking.rc_office_note")}</div>}
-    </div>
-  );
-}
-
-function RateCardTab({ data }) {
-  const list = (data.list || []).map(c => (c.kind === "trip" ? c : normCard(c)));
-  const COLS = "1.3fr 2fr 90px";
-  return (
-    <div>
-      <OfficeNote />
-      <RatePendingBlock data={data} />
-      <Panel>
-        <div style={{ padding: "10px 15px", borderBottom: `1px solid ${T.b1}`, background: T.surfaceB }}>
-          <span style={{ fontSize: 12.5, fontWeight: 700, color: T.t1 }}>{t("trip_tracking.rc_list", { list: list.length ? `(${list.length})` : "" })}</span>
-        </div>
-        {list.length === 0 && <div style={{ textAlign: "center", padding: "34px 20px", color: T.t4, fontSize: 13 }}>{t("trip_tracking.rc_empty")}</div>}
-        {list.length > 0 && (
-          <>
-            <THead cols={COLS} headers={[t("trip_tracking.rt_hdr_card"), t("trip_tracking.rt_hdr_rate"), t("trip_tracking.rt_hdr_gaadi")]} />
-            {list.map(c => (
-              <div key={c.id} style={{ display: "grid", gridTemplateColumns: COLS, padding: "10px 15px", borderBottom: `1px solid ${T.b1}`, alignItems: "center", gap: 8 }}>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 12.5, fontWeight: 700, color: T.t1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.name}</div>
-                  <div style={{ fontSize: 11, color: T.t3, marginTop: 1 }}>{kiskaOf(c)}</div>
-                  <div style={{ display: "flex", gap: 4, marginTop: 3, flexWrap: "wrap" }}>
-                    <Pill label={RT_KIND[c.kind === "trip" ? "trip" : "km"].label} c={T.ind} bg={T.indL} />
-                    {c.capacity && <Pill label={c.capacity} c={T.t3} bg={T.sltL} />}
-                  </div>
-                </div>
-                <div style={{ fontSize: 11.5, color: T.t2, lineHeight: 1.5, fontVariantNumeric: "tabular-nums" }}>
-                  {c.kind === "trip"
-                    ? <span style={{ fontSize: 12.5, fontWeight: 700, color: T.t1 }}>{t("trip_tracking.rt_per_trip_amt", { amt: rs2(c.trip_rate) })}</span>
-                    : <>
-                        {slabText(c)}
-                        <div style={{ fontSize: 10.5, color: T.t4 }}>{RC_METHOD[c.method].label} · {RC_ROUND[c.round_mode].label} · {t("trip_tracking.rc_ex_10", { amt: rs2(rcAmount(c, 10)) })}</div>
-                      </>}
-                  {c.note && <div style={{ fontSize: 10.5, color: T.t4 }}>{c.note}</div>}
-                </div>
-                <span style={{ fontSize: 12, fontWeight: 700, color: Number(c.vehicles) ? T.t1 : T.t4, fontVariantNumeric: "tabular-nums" }}>{t("trip_tracking.n_gaadi", { n: Number(c.vehicles) || 0 })}</span>
-              </div>
-            ))}
-          </>
-        )}
-      </Panel>
-    </div>
-  );
-}
-
 // ── REPORTS ──────────────────────────────────────────────────────
 function ReportsTab({ projectId }) {
   const [kind, setKind] = useState("truck");
@@ -1265,6 +1053,10 @@ function ReportsTab({ projectId }) {
 
   return (
     <div>
+      {/* Bill ab Machinery → Trips & Billing me trip tick karke banta hai (7 Oct 2026). */}
+      <div style={{ border: `1px solid ${T.b1}`, background: T.surfaceB, borderRadius: 8, padding: "8px 12px", marginBottom: 12, fontSize: 12, color: T.t2, fontWeight: 600 }}>
+        {t("tripbill.pt_bill_note")}
+      </div>
       <div style={{ display: "flex", gap: 12, alignItems: "flex-end", marginBottom: 12, flexWrap: "wrap" }}>
         <FilterTabs options={[{ id: "truck", label: t("trip_tracking.by_truck") }, { id: "vendor", label: t("trip_tracking.by_vendor") }, { id: "task", label: t("trip_tracking.by_task") }]} active={kind} onChange={setKind} />
         <div><div style={lblS}>{t("common.from")}</div><input type="date" value={from} onChange={e => setFrom(e.target.value)} style={{ ...inp, width: 150 }} /></div>
@@ -1289,168 +1081,6 @@ function ReportsTab({ projectId }) {
             ))}
           </>
         )}
-      </Panel>
-    </div>
-  );
-}
-
-// ── BILLING ──────────────────────────────────────────────────────
-function BillingTab({ projectId }) {
-  const [vendors, setVendors] = useState([]);
-  const [vendorId, setVendorId] = useState("");
-  const init = istRange();
-  const [from, setFrom] = useState(init.from);
-  const [to, setTo] = useState(init.to);
-  const [preview, setPreview] = useState(null);
-  const [loadingPrev, setLoadingPrev] = useState(false);
-  const [generating, setGenerating] = useState(false);
-  const [bills, setBills] = useState([]);
-  const [expanded, setExpanded] = useState(null);
-
-  const loadBills = useCallback(() => {
-    if (!projectId) return;
-    api.get("/trips/bills?project_id=" + projectId).then(r => setBills(r && r.success && Array.isArray(r.data) ? r.data : [])).catch(() => setBills([]));
-  }, [projectId]);
-  useEffect(() => {
-    api.get("/finance/parties").then(r => setVendors(r && r.success && Array.isArray(r.data) ? r.data : [])).catch(() => setVendors([]));
-    loadBills();
-  }, [loadBills]);
-
-  useEffect(() => {
-    if (!vendorId) { setPreview(null); return; }
-    setLoadingPrev(true);
-    const qs = "vendor_id=" + vendorId + "&from=" + from + "&to=" + to + "&project_id=" + projectId;
-    api.get("/trips/bills/preview?" + qs).then(r => setPreview(r && r.success ? r.data : null)).catch(() => setPreview(null)).finally(() => setLoadingPrev(false));
-  }, [vendorId, from, to, projectId]);
-
-  const generate = async () => {
-    if (!vendorId || !preview || !preview.trip_count) return;
-    setGenerating(true);
-    const r = await api.post("/trips/bills", { vendor_id: vendorId, from, to, project_id: projectId });
-    setGenerating(false);
-    if (!r || r.success === false) { window.alert((r && r.message) || t("trip_tracking.bill_generate_fail")); return; }
-    window.alert(t("trip_tracking.bill_ban_gaya", { id: r.data.id, amount: rs(r.data.total_amount) }));
-    setPreview(null); setVendorId(""); loadBills();
-  };
-  // Naya server breakdown ko route + billing (km / trip) se baant kar deta hai —
-  // har line ka apna b.billing, b.km_billed. Purana server sirf route-wise
-  // deta tha; tab preview ki trips se route ka andaza (neeche kmOfRoute).
-  // kmOfRoute["route|billing"] me us line ke trip amounts bhi — per-trip line
-  // me rate beech me badla ho to "N × rate" ek jhootha ausat ban jaata.
-  const kmOfRoute = {};
-  let totalKm = 0;
-  ((preview && preview.trips) || []).forEach(tr => {
-    const keys = [String(tr.route_id || 0), (tr.route_id || 0) + "|" + (tr.billing_snap === "km" ? "km" : "trip")];
-    keys.forEach(k => {
-      const o = kmOfRoute[k] || (kmOfRoute[k] = { km: 0, kmTrips: 0, amts: new Set() });
-      if (tr.km_billed != null) o.km += Number(tr.km_billed) || 0;
-      if (tr.billing_snap === "km") o.kmTrips += 1;
-      o.amts.add(Number(tr.amount) || 0);
-    });
-    if (tr.km_billed != null) totalKm += Number(tr.km_billed) || 0;
-  });
-  const toggleBill = async (b) => {
-    if (expanded && expanded.billId === b.id) { setExpanded(null); return; }
-    const r = await api.get("/trips/bills/" + b.id);
-    setExpanded({ billId: b.id, trips: r && r.success ? (r.data.trips || []) : [] });
-  };
-
-  return (
-    <div>
-      <Panel style={{ marginBottom: 12 }}>
-        <div style={{ padding: "12px 15px", display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap" }}>
-          <div style={{ flex: 1, minWidth: 200 }}><div style={lblS}>{t("common.vendor")}</div>
-            <PickSelect value={vendorId} onChange={e => setVendorId(e.target.value ? Number(e.target.value) : "")} style={inp}>
-              <option value="">{t("trip_tracking.vendor_chuniye")}</option>{vendors.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
-            </PickSelect>
-          </div>
-          <div><div style={lblS}>{t("common.from")}</div><input type="date" value={from} onChange={e => setFrom(e.target.value)} style={{ ...inp, width: 150 }} /></div>
-          <div><div style={lblS}>{t("common.to")}</div><input type="date" value={to} onChange={e => setTo(e.target.value)} style={{ ...inp, width: 150 }} /></div>
-        </div>
-
-        {vendorId && (
-          <div style={{ padding: "0 15px 15px" }}>
-            {loadingPrev && <div style={{ color: T.t4, fontSize: 12.5, padding: "6px 0" }}>{t("trip_tracking.preview_le_raha")}</div>}
-            {!loadingPrev && preview && preview.trip_count === 0 && <div style={{ color: T.t4, fontSize: 12.5, padding: "6px 0" }}>{t("trip_tracking.is_vendor_ki_is_range_me")}</div>}
-            {!loadingPrev && preview && preview.trip_count > 0 && (
-              <div style={{ border: `1px solid ${T.b1}`, borderRadius: 8, padding: 14 }}>
-                <div style={{ fontSize: 11.5, fontWeight: 700, color: T.t3, marginBottom: 8 }}>{t("trip_tracking.trip_count_verified_trips", { trip_count: preview.trip_count })}</div>
-                {preview.breakdown.map((b, i) => {
-                  const rate = b.trips ? Math.round(b.amount / b.trips) : 0;
-                  // Km wali trips ka rate har trip par alag hota hai (doori se) —
-                  // wahan "N × rate" jhooth hai, isliye "trips · km · ₹".
-                  // (Har trip ka amount ek jaisa ho to "N × rate" hi sach hai.)
-                  const k = b.billing ? kmOfRoute[(b.route_id || 0) + "|" + b.billing] : kmOfRoute[String(b.route_id || 0)];
-                  const kmRow = b.billing
-                    ? b.billing === "km"
-                    : !!k && (k.kmTrips > 0 || Number(b.km_trips) > 0 || (k.km > 0 && k.amts.size > 1));
-                  const mixedRate = !!k && k.amts.size > 1;
-                  return (
-                    <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", fontSize: 12 }}>
-                      <span style={{ color: T.t2 }}>
-                        {kmRow
-                          ? t("trip_tracking.bp_route_km", { route: b.route_name, trips: b.trips, km: fmtKm(b.km_billed != null ? b.km_billed : (k ? k.km : 0)) })
-                          : mixedRate
-                            ? <>{b.route_name} · {t("trip_tracking.n_trips", { n: b.trips })}</>
-                            : <>{b.route_name} · {b.trips} × {rs(rate)}</>}
-                      </span>
-                      <span style={{ color: T.t1, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{rs(b.amount)}</span>
-                    </div>
-                  );
-                })}
-                {totalKm > 0 && (
-                  <div style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", fontSize: 12, color: T.t3 }}>
-                    <span>{t("trip_tracking.bp_total_km")}</span>
-                    <span style={{ fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{t("trip_tracking.n_km", { n: fmtKm(totalKm) })}</span>
-                  </div>
-                )}
-                <div style={{ height: 1, background: T.b1, margin: "8px 0" }} />
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <span style={{ fontSize: 13, fontWeight: 700, color: T.t2 }}>{t("trip_tracking.total_payable")}</span>
-                  <span style={{ fontSize: 18, fontWeight: 800, color: T.grn, fontVariantNumeric: "tabular-nums" }}>{rs(preview.total_amount)}</span>
-                </div>
-                <div style={{ fontSize: 10.5, color: T.t4, marginTop: 8 }}>{t("trip_tracking.sirf_verified_approved_trips_billed_trips")}</div>
-                <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 12 }}>
-                  {canBillTrips()
-                    ? <button onClick={generate} disabled={generating} type="button" style={{ padding: "9px 20px", borderRadius: 7, border: "none", background: generating ? T.b1 : T.blu, color: generating ? T.t4 : "white", fontSize: 12.5, fontWeight: 700, cursor: generating ? "not-allowed" : "pointer", fontFamily: "inherit" }}>{generating ? t("trip_tracking.generating") : t("trip_tracking.generate_bill")}</button>
-                    : <span style={{ fontSize: 11.5, color: T.t4 }}>{t("trip_tracking.bill_finance_create_chahiye")}</span>}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-      </Panel>
-
-      <Panel>
-        <div style={{ padding: "10px 15px", borderBottom: `1px solid ${T.b1}`, background: T.surfaceB }}>
-          <span style={{ fontSize: 12.5, fontWeight: 700, color: T.t1 }}>{t("trip_tracking.bills_bills", { bills: bills.length ? `(${bills.length})` : "" })}</span>
-        </div>
-        {bills.length === 0 && <div style={{ textAlign: "center", padding: "30px 20px", color: T.t4, fontSize: 13 }}>{t("trip_tracking.abhi_koi_bill_nahi_bana")}</div>}
-        {bills.map(b => (
-          <div key={b.id} style={{ borderBottom: `1px solid ${T.b1}` }}>
-            <div onClick={() => toggleBill(b)} style={{ display: "grid", gridTemplateColumns: "80px 1.4fr 1.4fr 100px 120px", padding: "10px 15px", alignItems: "center", gap: 6, cursor: "pointer" }}>
-              <span style={{ fontSize: 12.5, fontWeight: 700, color: T.t1 }}>#{b.id}</span>
-              <span style={{ fontSize: 12.5, color: T.t1 }}>{b.vendor_name || "—"}</span>
-              <span style={{ fontSize: 11.5, color: T.t3 }}>{String(b.from_date).slice(0, 10)} → {String(b.to_date).slice(0, 10)}</span>
-              <span style={{ fontSize: 12, color: T.t2, fontVariantNumeric: "tabular-nums" }}>{t("trip_tracking.n_trips", { n: b.trip_count })}</span>
-              <span style={{ fontSize: 13, fontWeight: 800, color: T.t1, fontVariantNumeric: "tabular-nums", justifySelf: "end" }}>{rs(b.total_amount)}</span>
-            </div>
-            {expanded && expanded.billId === b.id && (
-              <div style={{ padding: "6px 15px 12px", background: T.surfaceB }}>
-                {expanded.trips.length === 0 && <div style={{ fontSize: 11.5, color: T.t4, padding: "6px 0" }}>{t("trip_tracking.koi_trip_detail_nahi")}</div>}
-                {expanded.trips.map(item6 => (
-                  <div key={item6.id} style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", fontSize: 11.5 }}>
-                    <span style={{ color: T.t3, display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-                      <span>{(item6.registration_no || t("trip_tracking.truck"))} · #{item6.trip_no} · {item6.route_name || "—"}{item6.km_billed != null ? " · " + t("trip_tracking.n_km", { n: fmtKm(item6.km_billed) }) : ""}</span>
-                      <OverrideChip trip={item6} />
-                    </span>
-                    <span style={{ color: T.t1, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{rs(item6.amount)}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        ))}
       </Panel>
     </div>
   );
@@ -1736,7 +1366,9 @@ function OverrideChip({ trip }) {
   return <span title={overrideLine(o)} style={{ display: "inline-flex", cursor: "help" }}><Pill label={t("trip_tracking.ro_chip")} c={T.blu} bg={T.bluL} /></span>;
 }
 function RateOverrideModal({ trip, onClose, onSaved }) {
-  const isKm = trip.billing_snap === "km";
+  // Km trip: billing_snap, ya (trip ki detail se aaye to) us waqt ke card ki copy me km slab.
+  const snap = parseCard(trip.rate_card_snap);
+  const isKm = trip.billing_snap === "km" || (!!snap && (snap.kind === "km" || (snap.kind !== "trip" && parseRates(snap.rates).length > 0)));
   const [amount, setAmount] = useState(trip.amount != null ? String(Number(trip.amount)) : "");
   const [km, setKm] = useState(trip.km_billed != null ? String(Number(trip.km_billed)) : "");
   const [note, setNote] = useState("");
@@ -1746,7 +1378,6 @@ function RateOverrideModal({ trip, onClose, onSaved }) {
   const err = !numOk(amount) ? t("trip_tracking.ro_err_amount")
     : note.trim().length < 3 ? t("trip_tracking.ro_err_note")
     : isKm && km !== "" && !numOk(km) ? t("trip_tracking.ro_err_km") : null;
-  const snap = parseCard(trip.rate_card_snap);
   const save = async () => {
     setTried(true);
     if (err) return;
@@ -1839,6 +1470,727 @@ function BtnOutline({ label, color, busy, onClick }) {
 }
 function BtnSolid({ label, color, busy, onClick }) {
   return <button onClick={onClick} disabled={busy} type="button" style={{ padding: "8px 18px", borderRadius: 7, border: "none", background: color, color: "white", fontSize: 12, fontWeight: 700, cursor: busy ? "wait" : "pointer", fontFamily: "inherit" }}>{label}</button>;
+}
+
+// ════════════════════════════════════════════════════════════════
+// TRIP BILLING v2 — office screens (7 Oct 2026)
+//
+// Server: GET /trips/office/*, /trips/:id/detail, /trips/bills*. Trip ka
+// "bill_state" server nikalta hai (in_transit · cancelled · rejected ·
+// flagged · own · monthly · rate_pending · ready · billed) — screen sirf
+// dikhati hai, khud kuch tay nahi karti.
+// Ye hissa (Tb…) har module me apni alag copy hai — module independence:
+// koi shared component nahi. Paisa (amount) jise Finance VIEW nahi usko
+// server null bhejta hai — null "—" dikhta hai, ₹0 nahi.
+// ════════════════════════════════════════════════════════════════
+const TB_MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const tbParse = (raw) => {
+  if (!raw) return null;
+  const s = String(raw);
+  const d = new Date(/^\d{4}-\d{2}-\d{2}$/.test(s) ? s + "T00:00:00" : s.replace(" ", "T"));
+  return isNaN(d.getTime()) ? null : d;
+};
+const tbDate = (raw) => {
+  const d = tbParse(raw);
+  return d ? d.getDate() + " " + TB_MON[d.getMonth()] + " " + String(d.getFullYear()).slice(2) : (raw ? String(raw).slice(0, 10) : "—");
+};
+const tbDT = (raw) => {
+  const d = tbParse(raw);
+  if (!d) return "—";
+  let h = d.getHours(); const m = d.getMinutes(); const ap = h >= 12 ? "PM" : "AM"; h = h % 12 || 12;
+  return tbDate(raw) + ", " + h + ":" + String(m).padStart(2, "0") + " " + ap;
+};
+const tbYmd = (raw) => { const d = tbParse(raw); return d ? d.toLocaleDateString("en-CA") : ""; };
+const tbToday = () => new Date().toLocaleDateString("en-CA");
+const tbMoney = (v) => (v == null || v === "" ? "—" : "₹" + (Number(v) || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 }));
+const tbNum = (v) => (v == null || v === "" ? "—" : (Number(v) || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 }));
+// Naye endpoint ka jawab { success, data } ya seedha body — dono chalte hain.
+const tbBody = (r) => (r && r.success !== false ? (r.data !== undefined ? r.data : r) : null);
+const tbEsc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const tbFlags = (v) => { try { const a = Array.isArray(v) ? v : (v ? JSON.parse(v) : []); return Array.isArray(a) ? a : []; } catch { return []; } };
+const tbLbl = { fontSize: 10, color: T.t4, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".4px", marginBottom: 2 };
+
+function TbPill({ label, c, bg }) {
+  return <span style={{ display: "inline-block", background: bg, color: c, fontSize: 10.5, fontWeight: 700, padding: "2px 8px", borderRadius: 20, border: `1px solid ${c}33`, whiteSpace: "nowrap" }}>{label}</span>;
+}
+// Bill ka haal: unpaid (normal) · partial · paid; due nikal gayi aur paid nahi = laal.
+function TbBillStatus({ status, due }) {
+  const over = !!due && status !== "paid" && tbYmd(due) !== "" && tbYmd(due) < tbToday();
+  const m = status === "paid" ? { l: t("tripbill.bs_paid"), c: T.grn, bg: T.grnL }
+    : status === "partial" ? { l: t("tripbill.bs_partial"), c: T.amb, bg: T.ambL }
+    : { l: t("tripbill.bs_unpaid"), c: T.slt, bg: T.sltL };
+  return (
+    <span style={{ display: "inline-flex", gap: 4, alignItems: "center", flexWrap: "wrap" }}>
+      <TbPill label={m.l} c={m.c} bg={m.bg} />
+      {over && <TbPill label={t("tripbill.bs_overdue")} c={T.red} bg={T.redL} />}
+    </span>
+  );
+}
+
+function TbModal({ title, sub, width = 760, onClose, footer, children }) {
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center" }} onClick={onClose}>
+      <BackClose onClose={onClose} />
+      <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.4)" }} />
+      <div onClick={(e) => e.stopPropagation()}
+        style={{ position: "relative", width, maxWidth: "96vw", maxHeight: "92vh", background: T.surface, borderRadius: 12, boxShadow: "0 12px 40px rgba(0,0,0,0.18)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+        <div style={{ padding: "13px 18px", borderBottom: `1px solid ${T.b1}`, display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 14.5, fontWeight: 700, color: T.t1 }}>{title}</div>
+            {sub && <div style={{ fontSize: 11.5, color: T.t3, marginTop: 2 }}>{sub}</div>}
+          </div>
+          <button onClick={onClose} type="button" aria-label={t("common.close")} style={{ background: T.surfaceB, border: "none", borderRadius: 6, padding: "4px 9px", cursor: "pointer", fontSize: 16, lineHeight: 1, color: T.t3 }}>×</button>
+        </div>
+        <div style={{ padding: "14px 18px", overflowY: "auto", flex: 1 }}>{children}</div>
+        {footer && <div style={{ padding: "11px 18px", borderTop: `1px solid ${T.b1}`, display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap" }}>{footer}</div>}
+      </div>
+    </div>
+  );
+}
+const tbBtn = (primary) => ({ padding: "7px 14px", borderRadius: 8, border: primary ? "none" : `1.5px solid ${T.b1}`, background: primary ? T.ind : T.surface,
+  color: primary ? "#fff" : T.t2, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" });
+
+// Photo bade size me — kahin bhi click par band.
+function TbZoom({ photo, onClose }) {
+  if (!photo || !photo.url) return null;
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 10050, background: "rgba(0,0,0,0.85)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 16, cursor: "zoom-out" }}>
+      <img src={cld(photo.url, "view")} alt={photo.label || ""} style={{ maxWidth: "96vw", maxHeight: "82vh", objectFit: "contain", borderRadius: 8 }} />
+      {photo.label && <div style={{ color: "#fff", fontSize: 12.5, marginTop: 10, fontWeight: 600 }}>{photo.label}</div>}
+      <a href={photo.url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} style={{ color: "#C7D2FE", fontSize: 11.5, marginTop: 6 }}>{t("tripbill.open_original")}</a>
+    </div>
+  );
+}
+function TbThumb({ url, label, size = 34, onZoom }) {
+  if (!url) return <span style={{ width: size, height: size, borderRadius: 6, border: `1px dashed ${T.b1}`, display: "inline-block" }} />;
+  return (
+    <img src={cld(url, "thumb")} alt={label || ""} title={label || ""}
+      onClick={onZoom ? (e) => { e.stopPropagation(); onZoom({ url, label }); } : undefined}
+      style={{ width: size, height: size, objectFit: "cover", borderRadius: 6, border: `1px solid ${T.b1}`, cursor: onZoom ? "zoom-in" : "inherit", display: "block" }} />
+  );
+}
+
+// Bill ka print — naya window, browser ka print.
+function tbPrint(title, body) {
+  const w = window.open("", "_blank");
+  if (!w) { window.alert(t("tripbill.print_blocked")); return; }
+  w.document.write(`<html><head><title>${tbEsc(title)}</title><style>
+    *{font-family:Arial,sans-serif;font-size:12px;margin:0;padding:0}
+    body{padding:22px;color:#111827}h2{font-size:17px;margin-bottom:4px}p{color:#4B5563;margin-bottom:4px}
+    table{width:100%;border-collapse:collapse;margin-top:12px}
+    th{background:#EEEDFB;color:#3B369E;padding:7px 9px;text-align:left;border:1px solid #D1D5DB;font-size:10.5px;text-transform:uppercase;letter-spacing:.4px}
+    td{padding:6px 9px;border:1px solid #E5E7EB;vertical-align:top}.r{text-align:right}h3{font-size:13px;margin-top:16px}
+    .tot td{font-weight:700;background:#F8F9FB}
+  </style></head><body>${body}</body></html>`);
+  w.document.close();
+  setTimeout(() => w.print(), 400);
+}
+
+// ── Trip ka bill_state chip ─────────────────────────────────────────
+const tbStateMeta = (s) => ({
+  in_transit:   { l: t("tripbill.st_in_transit"),   c: T.amb, bg: T.ambL },
+  cancelled:    { l: t("tripbill.st_cancelled"),    c: T.t3,  bg: T.sltL },
+  rejected:     { l: t("tripbill.st_rejected"),     c: T.red, bg: T.redL },
+  flagged:      { l: t("tripbill.st_flagged"),      c: T.red, bg: T.redL },
+  own:          { l: t("tripbill.st_own"),          c: T.t3,  bg: T.sltL },
+  monthly:      { l: t("tripbill.st_monthly"),      c: T.t3,  bg: T.sltL },
+  rate_pending: { l: t("tripbill.st_rate_pending"), c: T.amb, bg: T.ambL },
+  ready:        { l: t("tripbill.st_ready"),        c: T.ind, bg: T.indL },
+  billed:       { l: t("tripbill.st_billed"),       c: T.grn, bg: T.grnL },
+}[s] || null);
+function TbChip({ trip }) {
+  const m = tbStateMeta(trip.bill_state);
+  if (!m) return null;
+  return <TbPill c={m.c} bg={m.bg} label={trip.bill_state === "billed" && trip.bill_no ? t("tripbill.st_billed_no", { no: trip.bill_no }) : m.l} />;
+}
+// Flag ka naam: purane Trip Tracking wale keys (trip_tracking.<flag>); na mile to flag ka code.
+const tbFlagLabel = (f) => { const k = "trip_tracking." + f; const v = t(k); return v === k ? String(f || "").toUpperCase() : v; };
+const tbVerifyLabel = (v) => (v === "auto_verified" ? t("trip_tracking.auto_verified") : v === "approved" ? t("common.approved")
+  : v === "flagged" ? t("trip_tracking.flagged") : v === "rejected" ? t("common.rejected") : t("common.pending"));
+// Photo ka naam: key se (load_/unload_ + bucket / slip / plate); na pehchane to server ka label.
+function tbPhotoLabel(p) {
+  const k = String(p.key || "").toLowerCase();
+  const un = k.includes("unload");
+  const kind = k.includes("plate") ? t("trip_tracking.ph_plate")
+    : (k.includes("sign") || (un && k.includes("slip"))) ? t("trip_tracking.ph_sign_slip")
+    : k.includes("slip") ? t("trip_tracking.ph_slip")
+    : k.includes("bucket") ? t("trip_tracking.ph_bucket") : "";
+  if (!kind) { const lk = p.label_key ? t(p.label_key) : ""; return lk && lk !== p.label_key ? lk : String(p.key || ""); }
+  return (un ? t("trip_tracking.unloading") : t("trip_tracking.loading")) + " — " + kind;
+}
+// Slip / plate se padhi hui cheezein — jo mili wahi, ek line me.
+function tbReadLines(reads) {
+  if (!reads || typeof reads !== "object") return [];
+  const out = [];
+  Object.keys(reads).forEach((k) => {
+    const v = reads[k];
+    if (!v || typeof v !== "object") return;
+    const bits = [];
+    if (v.vehicle_no) bits.push(t("tripbill.rd_vehicle", { v: v.vehicle_no }));
+    if (v.challan_no) bits.push(t("tripbill.rd_challan", { v: v.challan_no }));
+    if (v.material) bits.push(t("tripbill.rd_material", { v: v.material }));
+    if (v.qty != null && v.qty !== "") bits.push(t("tripbill.rd_qty", { v: v.qty + (v.qty_unit ? " " + v.qty_unit : "") }));
+    if (!bits.length) return;
+    const kk = k.toLowerCase();
+    const name = (kk.includes("unload") ? t("trip_tracking.unloading") : kk.includes("load") ? t("trip_tracking.loading") : "")
+      + (kk.includes("plate") ? " " + t("trip_tracking.ph_plate") : kk.includes("slip") ? " " + t("trip_tracking.ph_slip") : "");
+    out.push([name.trim() || k, bits.join(" · ")]);
+  });
+  return out;
+}
+
+// ── Trip ki poori detail (GET /trips/:id/detail) ────────────────────
+// Saari photo bade, flag + review ki ek line ("Flagged: … · Approved: naam,
+// tareekh (note)"), km, ₹, bill. Rate badlo / bill kholna caller deta hai.
+function TbTripDetail({ id, onClose, onOverride, onBill }) {
+  const [st, setSt] = useState({ loading: true });
+  const [zoom, setZoom] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    setSt({ loading: true });
+    api.get(`/trips/${id}/detail`).then((r) => {
+      if (!alive) return;
+      const d = tbBody(r);
+      setSt(d && typeof d === "object" && d.id != null ? { d } : { err: (r && r.message) || t("tripbill.load_fail") });
+    }).catch(() => { if (alive) setSt({ err: t("tripbill.load_fail") }); });
+    return () => { alive = false; };
+  }, [id]);
+  const d = st.d;
+  const flags = d ? tbFlags(d.flag_reasons) : [];
+  const reviewed = d && d.review_by_name && (d.verify_status === "approved" || d.verify_status === "rejected");
+  const reviewLine = d ? [
+    flags.length ? t("tripbill.d_flagged", { reasons: flags.map(tbFlagLabel).join(", ") }) : "",
+    reviewed ? t(d.verify_status === "approved" ? "tripbill.d_approved_by" : "tripbill.d_rejected_by", { name: d.review_by_name, date: tbDate(d.review_at) }) + (d.review_note ? " (" + d.review_note + ")" : "")
+      : d.verify_status === "flagged" ? t("tripbill.d_review_baaki") : "",
+  ].filter(Boolean).join(" · ") : "";
+  const photos = d && Array.isArray(d.photos) ? d.photos.filter((p) => p && p.url) : [];
+  const reads = d ? tbReadLines(d.reads) : [];
+  const fld = (k, v) => (v == null || v === "" ? null : (
+    <div key={k} style={{ minWidth: 0 }}>
+      <div style={tbLbl}>{k}</div>
+      <div style={{ fontSize: 12.5, color: T.t1, fontWeight: 600, wordBreak: "break-word" }}>{v}</div>
+    </div>
+  ));
+  const srcL = d && d.km_source ? ({ gps: t("trip_tracking.km_src_gps"), route: t("trip_tracking.km_src_route"), manual: t("trip_tracking.km_src_manual"), edited: t("trip_tracking.km_src_edited") }[d.km_source] || d.km_source) : "";
+  const o = d && d.rate_override ? (typeof d.rate_override === "object" ? d.rate_override : (() => { try { return JSON.parse(d.rate_override); } catch { return null; } })()) : null;
+  const title = d ? (d.registration_no || d.vehicle_name || "") + " #" + d.trip_no : "…";
+  return (
+    <>
+      <TbModal width={840} onClose={onClose} title={t("tripbill.td_title", { trip: title })}
+        sub={d ? [tbDate(d.trip_date), d.project_name, d.route_name].filter(Boolean).join(" · ") : ""}
+        footer={<>
+          {d && onOverride && <button type="button" onClick={() => onOverride(d)} style={tbBtn(false)}>{t("tripbill.rate_badlo")}</button>}
+          <button type="button" onClick={onClose} style={tbBtn(false)}>{t("common.close")}</button>
+        </>}>
+        {st.loading && <div style={{ textAlign: "center", padding: 30, color: T.t4, fontSize: 12.5 }}>{t("common.loading_2")}</div>}
+        {st.err && <div style={{ border: `1px solid ${T.red}33`, background: T.redL, color: T.red, borderRadius: 8, padding: "9px 12px", fontSize: 12, fontWeight: 600 }}>{st.err}</div>}
+        {d && (
+          <>
+            <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", marginBottom: 12 }}>
+              <TbChip trip={d} />
+              <TbPill label={tbVerifyLabel(d.verify_status)} c={d.verify_status === "flagged" || d.verify_status === "rejected" ? T.red : d.verify_status === "pending" ? T.amb : T.grn}
+                bg={d.verify_status === "flagged" || d.verify_status === "rejected" ? T.redL : d.verify_status === "pending" ? T.ambL : T.grnL} />
+              {o && <span title={t("trip_tracking.ro_tip", { from: o.from_amount == null ? t("trip_tracking.rate_pending") : tbMoney(o.from_amount), to: tbMoney(o.to_amount), note: o.note || "—", by: o.by_name || "—", at: tbDT(o.at) })}
+                style={{ cursor: "help" }}><TbPill label={t("trip_tracking.ro_chip")} c={T.blu} bg={T.bluL} /></span>}
+            </div>
+            {reviewLine && (
+              <div style={{ border: `1px solid ${d.verify_status === "approved" ? T.b1 : T.red + "33"}`, background: d.verify_status === "approved" ? T.surfaceB : T.redL, color: T.t1, borderRadius: 8, padding: "8px 11px", marginBottom: 12, fontSize: 12, lineHeight: 1.55 }}>{reviewLine}</div>
+            )}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(190px,1fr))", gap: "12px 16px", marginBottom: 14 }}>
+              {fld(t("common.vendor"), d.vendor_name)}
+              {fld(t("tripbill.td_vehicle"), [d.registration_no, d.vehicle_name && d.vehicle_name !== d.registration_no ? d.vehicle_name : ""].filter(Boolean).join(" · "))}
+              {fld(t("tripbill.td_material"), [d.material_name, d.qty != null ? tbNum(d.qty) + (d.qty_unit ? " " + d.qty_unit : "") : ""].filter(Boolean).join(" · "))}
+              {fld(t("tripbill.td_challan"), d.challan_no)}
+              {fld(t("tripbill.td_party"), d.party_name)}
+              {fld(t("tripbill.td_driver"), d.driver_name)}
+              {fld(t("tripbill.td_load"), d.load_at ? tbDT(d.load_at) + (d.load_by_name ? " · " + d.load_by_name : "") : "")}
+              {fld(t("tripbill.td_unload"), d.unload_at ? tbDT(d.unload_at) + (d.unload_by_name ? " · " + d.unload_by_name : "") : (d.status === "completed" ? t("trip_tracking.unload_nahi") : ""))}
+              {fld(t("tripbill.td_km"), d.km_actual != null || d.km_billed != null ? t("tripbill.td_km_val", { actual: d.km_actual != null ? tbNum(d.km_actual) : "—", bill: d.km_billed != null ? tbNum(d.km_billed) : "—" }) + (srcL ? " · " + srcL : "") : "")}
+              {fld(t("tripbill.td_amount"), tbMoney(d.amount))}
+              {d.bill_no && (
+                <div style={{ minWidth: 0 }}>
+                  <div style={tbLbl}>{t("tripbill.td_bill")}</div>
+                  {onBill && d.bill_id != null
+                    ? <button type="button" onClick={() => onBill(d.bill_id)} style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit", fontSize: 12.5, fontWeight: 700, color: T.ind, textDecoration: "underline" }}>{d.bill_no}</button>
+                    : <div style={{ fontSize: 12.5, color: T.t1, fontWeight: 600 }}>{d.bill_no}</div>}
+                </div>
+              )}
+            </div>
+            {reads.length > 0 && (
+              <div style={{ marginBottom: 14 }}>
+                <div style={tbLbl}>{t("tripbill.td_reads")}</div>
+                {reads.map(([k, v], i) => <div key={i} style={{ fontSize: 12, color: T.t2, lineHeight: 1.6 }}><b>{k}</b>: {v}</div>)}
+              </div>
+            )}
+            <div style={tbLbl}>{t("tripbill.td_photos")}</div>
+            {photos.length === 0
+              ? <div style={{ fontSize: 12, color: T.t4, padding: "6px 0" }}>{t("tripbill.td_no_photo")}</div>
+              : (
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(170px,1fr))", gap: 10, marginTop: 4 }}>
+                  {photos.map((p, i) => {
+                    const lab = tbPhotoLabel(p);
+                    return (
+                      <div key={p.key || i}>
+                        <div style={{ fontSize: 10.5, color: T.t3, fontWeight: 700, marginBottom: 3 }}>{lab}</div>
+                        <img src={cld(p.url, "tile")} alt={lab} onClick={() => setZoom({ url: p.url, label: lab })}
+                          style={{ width: "100%", aspectRatio: "4 / 3", objectFit: "cover", borderRadius: 8, border: `1px solid ${T.b1}`, cursor: "zoom-in", display: "block" }} />
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+          </>
+        )}
+      </TbModal>
+      <TbZoom photo={zoom} onClose={() => setZoom(null)} />
+    </>
+  );
+}
+
+// ── Bill ki poori detail (GET /trips/bills/:id) ─────────────────────
+// Project-wise jod, bill ki trips photo ke saath, due aur paid. onTrip diya
+// ho to trip dabane par uski detail. footerExtra = module ka apna button.
+function TbBillDetail({ id, onClose, onTrip, footerExtra }) {
+  const [st, setSt] = useState({ loading: true });
+  const [zoom, setZoom] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    setSt({ loading: true });
+    api.get(`/trips/bills/${id}`).then((r) => {
+      if (!alive) return;
+      const d = tbBody(r);
+      setSt(d && typeof d === "object" && d.id != null ? { d } : { err: (r && r.message) || t("tripbill.load_fail") });
+    }).catch(() => { if (alive) setSt({ err: t("tripbill.load_fail") }); });
+    return () => { alive = false; };
+  }, [id]);
+  const d = st.d;
+  const trips = (d && Array.isArray(d.trips)) ? d.trips : [];
+  const byProject = (() => {
+    if (!d) return [];
+    if (Array.isArray(d.by_project) && d.by_project.length) return d.by_project;
+    const m = new Map();
+    trips.forEach((tr) => {
+      const k = tr.project_id == null ? "0" : String(tr.project_id);
+      const o = m.get(k) || { project_id: tr.project_id, project_name: tr.project_name || "—", trips: 0, amount: 0 };
+      o.trips += 1; o.amount += Number(tr.amount) || 0; m.set(k, o);
+    });
+    return [...m.values()];
+  })();
+  const total = d && d.total_amount != null ? Number(d.total_amount) : null;
+  const paid = d && d.paid_amount != null ? Number(d.paid_amount) : null;
+  const balance = total != null && paid != null ? Math.max(0, total - paid) : null;
+  const print = () => {
+    if (!d) return;
+    const head = `<h2>${tbEsc(d.bill_no || "#" + d.id)} · ${tbEsc(d.vendor_name || "")}</h2>`
+      + `<p>${tbEsc(t("tripbill.bd_bill_date"))}: ${tbEsc(tbDate(d.bill_date))} · ${tbEsc(t("tripbill.bd_due_date"))}: ${tbEsc(tbDate(d.due_date))}</p>`
+      + `<p>${tbEsc(t("tripbill.bd_total"))}: ${tbEsc(tbMoney(total))} · ${tbEsc(t("tripbill.bd_paid"))}: ${tbEsc(tbMoney(paid))} · ${tbEsc(t("tripbill.bd_balance"))}: ${tbEsc(tbMoney(balance))}</p>`
+      + (d.note ? `<p>${tbEsc(d.note)}</p>` : "");
+    const proj = `<h3>${tbEsc(t("tripbill.bd_by_project"))}</h3><table><tr><th>${tbEsc(t("common.project"))}</th><th class="r">${tbEsc(t("tripbill.col_trips"))}</th><th class="r">${tbEsc(t("tripbill.col_amount"))}</th></tr>`
+      + byProject.map((p) => `<tr><td>${tbEsc(p.project_name || "—")}</td><td class="r">${tbEsc(p.trips)}</td><td class="r">${tbEsc(tbMoney(p.amount))}</td></tr>`).join("")
+      + `<tr class="tot"><td>${tbEsc(t("tripbill.bd_total"))}</td><td class="r">${tbEsc(trips.length || d.trip_count || "")}</td><td class="r">${tbEsc(tbMoney(total))}</td></tr></table>`;
+    const rows = `<h3>${tbEsc(t("tripbill.bd_trips"))}</h3><table><tr><th>${tbEsc(t("common.date"))}</th><th>${tbEsc(t("tripbill.col_vehicle"))}</th><th>${tbEsc(t("common.project"))}</th><th>${tbEsc(t("tripbill.col_route"))}</th><th class="r">${tbEsc(t("tripbill.col_km"))}</th><th class="r">${tbEsc(t("tripbill.col_amount"))}</th></tr>`
+      + trips.map((tr) => `<tr><td>${tbEsc(tbDate(tr.trip_date))} #${tbEsc(tr.trip_no)}</td><td>${tbEsc(tr.registration_no || "")}</td><td>${tbEsc(tr.project_name || "")}</td><td>${tbEsc(tr.route_name || "")}</td><td class="r">${tbEsc(tr.km_billed != null ? tbNum(tr.km_billed) : "")}</td><td class="r">${tbEsc(tbMoney(tr.amount))}</td></tr>`).join("")
+      + `</table>`;
+    tbPrint(t("tripbill.bd_title", { no: d.bill_no || "#" + d.id }), head + proj + rows);
+  };
+  const tile = (label, value, tone) => (
+    <div style={{ border: `1px solid ${T.b1}`, borderRadius: 9, padding: "9px 12px", background: T.surface }}>
+      <div style={tbLbl}>{label}</div>
+      <div style={{ fontSize: 16, fontWeight: 800, color: tone || T.t1, fontVariantNumeric: "tabular-nums" }}>{value}</div>
+    </div>
+  );
+  const TCOLS = "92px minmax(90px,1fr) minmax(90px,1fr) minmax(90px,1.1fr) 62px 92px 40px";
+  return (
+    <>
+      <TbModal width={880} onClose={onClose}
+        title={d ? t("tripbill.bd_title", { no: d.bill_no || "#" + d.id }) : t("tripbill.bd_title", { no: "…" })}
+        sub={d ? [d.vendor_name || t("tripbill.vendor_nahi"), t("tripbill.bd_n_trips", { n: Number(d.trip_count) || trips.length })].join(" · ") : ""}
+        footer={<>
+          {footerExtra}
+          {d && <button type="button" onClick={print} style={tbBtn(false)}>{t("tripbill.print")}</button>}
+          <button type="button" onClick={onClose} style={tbBtn(false)}>{t("common.close")}</button>
+        </>}>
+        {st.loading && <div style={{ textAlign: "center", padding: 30, color: T.t4, fontSize: 12.5 }}>{t("common.loading_2")}</div>}
+        {st.err && <div style={{ border: `1px solid ${T.red}33`, background: T.redL, color: T.red, borderRadius: 8, padding: "9px 12px", fontSize: 12, fontWeight: 600 }}>{st.err}</div>}
+        {d && (
+          <>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(130px,1fr))", gap: 8, marginBottom: 12 }}>
+              {tile(t("tripbill.bd_total"), tbMoney(total))}
+              {tile(t("tripbill.bd_paid"), tbMoney(paid))}
+              {tile(t("tripbill.bd_balance"), tbMoney(balance))}
+              <div style={{ border: `1px solid ${T.b1}`, borderRadius: 9, padding: "9px 12px", background: T.surface }}>
+                <div style={tbLbl}>{t("common.status")}</div>
+                <TbBillStatus status={d.status} due={d.due_date} />
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 18, flexWrap: "wrap", fontSize: 12, color: T.t2, marginBottom: 12 }}>
+              <span>{t("tripbill.bd_bill_date")}: <b>{tbDate(d.bill_date)}</b></span>
+              <span>{t("tripbill.bd_due_date")}: <b style={{ color: d.status !== "paid" && tbYmd(d.due_date) && tbYmd(d.due_date) < tbToday() ? T.red : T.t1 }}>{tbDate(d.due_date)}</b></span>
+              {d.from_date && <span>{t("tripbill.bd_period")}: <b>{tbDate(d.from_date)} – {tbDate(d.to_date)}</b></span>}
+              {d.created_by_name && <span>{t("tripbill.bd_made_by")}: <b>{d.created_by_name}</b></span>}
+            </div>
+            {d.note && <div style={{ fontSize: 12, color: T.t2, background: T.surfaceB, border: `1px solid ${T.b1}`, borderRadius: 8, padding: "8px 11px", marginBottom: 12 }}>{d.note}</div>}
+
+            <div style={{ fontSize: 11, fontWeight: 700, color: T.t3, textTransform: "uppercase", letterSpacing: ".4px", marginBottom: 6 }}>{t("tripbill.bd_by_project")}</div>
+            <div style={{ border: `1px solid ${T.b1}`, borderRadius: 8, marginBottom: 14, overflow: "hidden" }}>
+              {byProject.map((p, i) => (
+                <div key={i} style={{ display: "flex", justifyContent: "space-between", gap: 10, padding: "8px 12px", borderTop: i ? `1px solid ${T.b1}` : "none", fontSize: 12.5 }}>
+                  <span style={{ color: T.t1, fontWeight: 600, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.project_name || "—"}</span>
+                  <span style={{ color: T.t3, whiteSpace: "nowrap" }}>{t("tripbill.n_trips", { n: Number(p.trips) || 0 })}</span>
+                  <span style={{ color: T.t1, fontWeight: 700, fontVariantNumeric: "tabular-nums", minWidth: 90, textAlign: "right" }}>{tbMoney(p.amount)}</span>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ fontSize: 11, fontWeight: 700, color: T.t3, textTransform: "uppercase", letterSpacing: ".4px", marginBottom: 6 }}>{t("tripbill.bd_trips")}</div>
+            <div style={{ overflowX: "auto", border: `1px solid ${T.b1}`, borderRadius: 8 }}>
+              <div style={{ minWidth: 700 }}>
+                <div style={{ display: "grid", gridTemplateColumns: TCOLS, gap: 8, padding: "7px 12px", background: T.surfaceB, fontSize: 10, fontWeight: 700, color: T.t4, textTransform: "uppercase", letterSpacing: ".4px" }}>
+                  <span>{t("common.date")}</span><span>{t("tripbill.col_vehicle")}</span><span>{t("common.project")}</span><span>{t("tripbill.col_route")}</span>
+                  <span style={{ textAlign: "right" }}>{t("tripbill.col_km")}</span><span style={{ textAlign: "right" }}>{t("tripbill.col_amount")}</span><span />
+                </div>
+                {trips.map((tr) => (
+                  <div key={tr.id} onClick={onTrip ? () => onTrip(tr.id) : undefined}
+                    style={{ display: "grid", gridTemplateColumns: TCOLS, gap: 8, padding: "8px 12px", borderTop: `1px solid ${T.b1}`, alignItems: "center", fontSize: 12, color: T.t2, cursor: onTrip ? "pointer" : "default" }}>
+                    <span style={{ whiteSpace: "nowrap" }}>{tbDate(tr.trip_date)}<span style={{ display: "block", fontSize: 10, color: T.t4 }}>#{tr.trip_no}</span></span>
+                    <span style={{ fontWeight: 700, color: T.t1 }}>{tr.registration_no || "—"}</span>
+                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tr.project_name || "—"}</span>
+                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tr.route_name || "—"}</span>
+                    <span style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{tr.km_billed != null ? tbNum(tr.km_billed) : "—"}</span>
+                    <span style={{ textAlign: "right", fontWeight: 700, color: T.t1, fontVariantNumeric: "tabular-nums" }}>{tbMoney(tr.amount)}</span>
+                    <span><TbThumb url={tr.unload_photo_url || tr.load_photo_url} label={tr.registration_no} onZoom={setZoom} /></span>
+                  </div>
+                ))}
+                {trips.length === 0 && <div style={{ padding: 16, textAlign: "center", fontSize: 12, color: T.t4 }}>{t("tripbill.bd_no_trips")}</div>}
+              </div>
+            </div>
+          </>
+        )}
+      </TbModal>
+      <TbZoom photo={zoom} onClose={() => setZoom(null)} />
+    </>
+  );
+}
+
+// ── Gaadi ka "Paisa kaise": km · trip · monthly · pending · own · unset ──
+// unset = "tay nahi" (fleet ki kiraye ki gaadi, jis par abhi koi tareeka nahi).
+const tbBillingMeta = (k) => ({
+  km:      { l: t("trip_tracking.bill_km"),      c: T.ind, bg: T.indL },
+  trip:    { l: t("trip_tracking.bill_trip"),    c: T.blu, bg: T.bluL },
+  monthly: { l: t("trip_tracking.bill_monthly"), c: T.amb, bg: T.ambL },
+  pending: { l: t("trip_tracking.bill_pending"), c: T.amb, bg: T.ambL },
+  own:     { l: t("trip_tracking.bill_own"),     c: T.t3,  bg: T.sltL },
+  unset:   { l: t("tripbill.bill_unset"),        c: T.amb, bg: T.ambL },
+}[k == null ? "unset" : k] || null);
+const tbNormReg = (s) => String(s == null ? "" : s).replace(/[\s.-]/g, "").toUpperCase();
+// Khoj: har shabd gaadi number (space / dash / dot ke bina), naam, vendor, capacity ya card ke naam me.
+const tbMatch = (v, vendorName, q) => {
+  const toks = String(q || "").trim().toLowerCase().split(/\s+/).filter(Boolean);
+  if (!toks.length) return true;
+  const hay = [v.name, v.registration_no, vendorName, v.capacity, v.rate_card_name, v.city_name].map((x) => String(x || "").toLowerCase());
+  const regs = [tbNormReg(v.registration_no), tbNormReg(v.name)];
+  return toks.every((tok) => hay.some((h) => h.includes(tok)) || (!!tbNormReg(tok) && regs.some((x) => x.includes(tbNormReg(tok)))));
+};
+
+// Bada drawer (dahine se) — gaadi ka poora page.
+function TbDrawer({ title, sub, onClose, children }) {
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 9990 }} onClick={onClose}>
+      <BackClose onClose={onClose} />
+      <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.35)" }} />
+      <div onClick={(e) => e.stopPropagation()}
+        style={{ position: "absolute", top: 0, right: 0, bottom: 0, width: 1040, maxWidth: "100vw", background: T.bg, boxShadow: "-8px 0 30px rgba(0,0,0,0.15)", display: "flex", flexDirection: "column" }}>
+        <div style={{ padding: "13px 16px", background: T.surface, borderBottom: `1px solid ${T.b1}`, display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
+          <div style={{ minWidth: 0 }}>{title}{sub && <div style={{ fontSize: 11.5, color: T.t3, marginTop: 3 }}>{sub}</div>}</div>
+          <button onClick={onClose} type="button" aria-label={t("common.close")} style={{ background: T.surfaceB, border: "none", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 18, lineHeight: 1, color: T.t3 }}>×</button>
+        </div>
+        <div style={{ flex: 1, overflowY: "auto", padding: "14px 16px 24px" }}>{children}</div>
+      </div>
+    </div>
+  );
+}
+
+// ── Vehicle page — GET /trips/office/vehicles/:id ───────────────────
+// Upar tiles (Trips · Bill hua · Bill ke liye taiyaar · Rate baaki · Flagged),
+// trip table (project, route, material, km, ₹, bill_state, photo), "Rate badlo",
+// aur is gaadi ke bills (sirf jise Finance VIEW — showBills). Trip dabao =
+// poori detail. projectId diya ho to sirf us project ki trips.
+const TB_TCOLS = "84px minmax(90px,1fr) minmax(90px,1fr) minmax(90px,1fr) 62px 90px 150px 40px 78px";
+function TbVehiclePage({ vehicle, projectId, from: f0, to: t0, showBills, onClose, onChanged }) {
+  const [from, setFrom] = useState(f0);
+  const [to, setTo] = useState(t0);
+  const [st, setSt] = useState({ loading: true });
+  const [flash, setFlash] = useState("");
+  const [detail, setDetail] = useState(null);     // trip id
+  const [billId, setBillId] = useState(null);
+  const [over, setOver] = useState(null);         // trip jiska "Rate badlo" khula
+  const canOver = canOverrideRate();
+  const load = useCallback(() => {
+    let alive = true;
+    setSt((p) => ({ ...p, loading: true, err: null }));
+    api.get(`/trips/office/vehicles/${vehicle.id}?from=${from}&to=${to}` + (projectId ? "&project_id=" + projectId : "")).then((r) => {
+      if (!alive) return;
+      const d = tbBody(r);
+      setSt(d && typeof d === "object" && !Array.isArray(d) ? { loading: false, d } : { loading: false, err: (r && r.message) || t("tripbill.load_fail") });
+    }).catch(() => { if (alive) setSt({ loading: false, err: t("tripbill.load_fail") }); });
+    return () => { alive = false; };
+  }, [vehicle.id, from, to, projectId]);
+  useEffect(() => load(), [load]);
+  const d = st.d || {};
+  const v = { ...vehicle, ...(d.vehicle || {}) };
+  const tot = d.totals || {};
+  const trips = Array.isArray(d.trips) ? d.trips : [];
+  const bills = Array.isArray(d.bills) ? d.bills : [];
+  const reg = v.registration_no || v.name || "#" + v.id;
+  const bm = tbBillingMeta(v.trip_billing);
+  const tile = (label, value, sub, tone) => (
+    <div style={{ background: T.surface, border: `1px solid ${T.b1}`, borderRadius: 10, padding: "10px 13px" }}>
+      <div style={tbLbl}>{label}</div>
+      <div style={{ fontSize: 19, fontWeight: 800, color: tone || T.t1, fontVariantNumeric: "tabular-nums", lineHeight: 1.15 }}>{value}</div>
+      {sub != null && <div style={{ fontSize: 10.5, color: T.t4, marginTop: 2 }}>{sub}</div>}
+    </div>
+  );
+  const dateS = { height: 30, padding: "0 8px", borderRadius: 6, border: `1.5px solid ${T.b1}`, fontSize: 12, fontFamily: "inherit", color: T.t1, background: T.surface, outline: "none" };
+  return (
+    <>
+      <TbDrawer onClose={onClose}
+        title={<div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <span style={{ fontSize: 17, fontWeight: 800, color: T.t1, letterSpacing: 0.3 }}>{reg}</span>
+          {v.name && v.name !== v.registration_no && <span style={{ fontSize: 12.5, color: T.t3 }}>{v.name}</span>}
+          {bm && <TbPill label={bm.l} c={bm.c} bg={bm.bg} />}
+          {v.is_fleet && <TbPill label={t("tripbill.fleet_pill")} c={T.t3} bg={T.sltL} />}
+        </div>}
+        sub={[v.vendor_name || t("tripbill.vendor_nahi"), v.capacity, v.rate_card_name, v.city_name].filter(Boolean).join(" · ")}>
+        {flash && <div style={{ border: `1px solid ${T.grn}44`, background: T.grnL, borderRadius: 8, padding: "8px 12px", marginBottom: 10, fontSize: 12, color: T.grn, fontWeight: 600 }}>{flash}</div>}
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 12 }}>
+          <span style={{ fontSize: 12, fontWeight: 600, color: T.t2 }}>{t("common.from")}</span>
+          <input type="date" value={from} max={to} onChange={(e) => e.target.value && setFrom(e.target.value)} style={dateS} />
+          <span style={{ fontSize: 12, fontWeight: 600, color: T.t2 }}>{t("common.to")}</span>
+          <input type="date" value={to} min={from} onChange={(e) => e.target.value && setTo(e.target.value)} style={dateS} />
+          {projectId && <span style={{ fontSize: 11, color: T.t4 }}>{t("tripbill.vp_is_project")}</span>}
+        </div>
+        {st.loading && !st.d && <div style={{ textAlign: "center", padding: 30, color: T.t4, fontSize: 12.5 }}>{t("common.loading_2")}</div>}
+        {st.err && <div style={{ border: `1px solid ${T.red}33`, background: T.redL, color: T.red, borderRadius: 8, padding: "9px 12px", fontSize: 12, fontWeight: 600 }}>{st.err}</div>}
+        {st.d && (
+          <>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 8, marginBottom: 14 }}>
+              {tile(t("tripbill.tile_trips"), Number(tot.trips) || 0, t("tripbill.tile_km", { n: tbNum(tot.km_billed || 0) }))}
+              {tile(t("tripbill.tile_billed"), tbMoney(tot.billed_amount), t("tripbill.n_trips", { n: Number(tot.billed_trips) || 0 }))}
+              {tile(t("tripbill.tile_ready"), tbMoney(tot.ready_amount), t("tripbill.n_trips", { n: Number(tot.ready_trips) || 0 }))}
+              {tile(t("tripbill.tile_rate_baaki"), Number(tot.rate_pending_trips) || 0, null, Number(tot.rate_pending_trips) > 0 ? T.amb : null)}
+              {tile(t("tripbill.tile_flagged"), Number(tot.flagged_trips) || 0, Number(tot.in_transit) > 0 ? t("tripbill.n_in_transit", { n: Number(tot.in_transit) }) : null, Number(tot.flagged_trips) > 0 ? T.red : null)}
+            </div>
+
+            <div style={{ background: T.surface, border: `1px solid ${T.b1}`, borderRadius: 10, overflow: "hidden", marginBottom: 14 }}>
+              <div style={{ padding: "9px 14px", borderBottom: `1px solid ${T.b1}`, background: T.surfaceB, fontSize: 12.5, fontWeight: 700, color: T.t1 }}>{t("tripbill.vp_trips_title", { n: trips.length })}</div>
+              {trips.length === 0 && <div style={{ padding: 24, textAlign: "center", fontSize: 12.5, color: T.t4 }}>{t("tripbill.vp_no_trips")}</div>}
+              {trips.length > 0 && (
+                <div style={{ overflowX: "auto" }}>
+                  <div style={{ minWidth: 900 }}>
+                    <div style={{ display: "grid", gridTemplateColumns: TB_TCOLS, gap: 8, padding: "7px 14px", fontSize: 10, fontWeight: 700, color: T.t4, textTransform: "uppercase", letterSpacing: ".4px", borderBottom: `1px solid ${T.b1}` }}>
+                      <span>{t("common.date")}</span><span>{t("common.project")}</span><span>{t("tripbill.col_route")}</span><span>{t("tripbill.col_material")}</span>
+                      <span style={{ textAlign: "right" }}>{t("tripbill.col_km")}</span><span style={{ textAlign: "right" }}>{t("tripbill.col_amount")}</span><span>{t("common.status")}</span><span /><span />
+                    </div>
+                    {trips.map((tr) => (
+                      <div key={tr.id} onClick={() => setDetail(tr.id)}
+                        style={{ display: "grid", gridTemplateColumns: TB_TCOLS, gap: 8, padding: "9px 14px", borderBottom: `1px solid ${T.b1}`, alignItems: "center", fontSize: 12, color: T.t2, cursor: "pointer" }}>
+                        <span style={{ whiteSpace: "nowrap" }}>{tbDate(tr.trip_date)}<span style={{ display: "block", fontSize: 10, color: T.t4 }}>#{tr.trip_no}</span></span>
+                        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={tr.project_name || ""}>{tr.project_name || "—"}</span>
+                        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={tr.route_name || ""}>{tr.route_name || "—"}</span>
+                        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{[tr.material_name, tr.qty != null ? tbNum(tr.qty) + (tr.qty_unit ? " " + tr.qty_unit : "") : ""].filter(Boolean).join(" · ") || "—"}</span>
+                        <span style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{tr.km_billed != null ? tbNum(tr.km_billed) : "—"}</span>
+                        <span style={{ textAlign: "right", fontWeight: 700, color: T.t1, fontVariantNumeric: "tabular-nums" }}>{tr.status === "in_transit" ? "—" : tbMoney(tr.amount)}</span>
+                        <span style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}><TbChip trip={tr} /><OverrideChip trip={tr} /></span>
+                        <span><TbThumb url={tr.unload_photo_url || tr.load_photo_url} label={reg} /></span>
+                        <span style={{ textAlign: "right" }}>
+                          {canOver && canOverrideTrip(tr) && (
+                            <button type="button" onClick={(e) => { e.stopPropagation(); setOver(tr); }}
+                              style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit", fontSize: 11.5, fontWeight: 700, color: T.ind }}>{t("tripbill.rate_badlo")}</button>
+                          )}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {showBills && (
+              <div style={{ background: T.surface, border: `1px solid ${T.b1}`, borderRadius: 10, overflow: "hidden" }}>
+                <div style={{ padding: "9px 14px", borderBottom: `1px solid ${T.b1}`, background: T.surfaceB, fontSize: 12.5, fontWeight: 700, color: T.t1 }}>{t("tripbill.vp_bills_title", { n: bills.length })}</div>
+                {bills.length === 0 && <div style={{ padding: 18, textAlign: "center", fontSize: 12.5, color: T.t4 }}>{t("tripbill.vp_no_bills")}</div>}
+                {bills.map((b) => (
+                  <div key={b.id} onClick={() => setBillId(b.id)}
+                    style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", padding: "9px 14px", borderBottom: `1px solid ${T.b1}`, fontSize: 12, cursor: "pointer" }}>
+                    <span style={{ fontWeight: 800, color: T.ind, minWidth: 70 }}>{b.bill_no || "#" + b.id}</span>
+                    <span style={{ color: T.t3 }}>{t("tripbill.vp_bill_on", { date: tbDate(b.bill_date) })}</span>
+                    <span style={{ color: T.t3 }}>{t("tripbill.vp_due_on", { date: tbDate(b.due_date) })}</span>
+                    <span style={{ color: T.t3, flex: 1 }}>{t("tripbill.n_trips", { n: Number(b.trip_count) || 0 })}</span>
+                    <span style={{ fontWeight: 700, color: T.t1, fontVariantNumeric: "tabular-nums" }}>{tbMoney(b.amount)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+      </TbDrawer>
+      {detail != null && (
+        <TbTripDetail id={detail} onClose={() => setDetail(null)}
+          onOverride={canOver ? (tr) => { if (canOverrideTrip(tr)) { setDetail(null); setOver(tr); } else window.alert(t("tripbill.rate_badlo_na")); } : null}
+          onBill={showBills ? (bid) => { setDetail(null); setBillId(bid); } : null} />
+      )}
+      {billId != null && <TbBillDetail id={billId} onClose={() => setBillId(null)} onTrip={(tid) => { setBillId(null); setDetail(tid); }} />}
+      {over && (
+        <RateOverrideModal trip={over} onClose={() => setOver(null)}
+          onSaved={(saved, msg) => { setOver(null); setFlash(msg); load(); onChanged && onChanged(); }} />
+      )}
+    </>
+  );
+}
+
+// ── Vendor → gaadi list (API 2 + API 3) ─────────────────────────────
+// Vendor ki patti dabao = uski gaadiyan khulti hain; gaadi ka number dabao =
+// Vehicle page. Khoj chal rahi ho to saare vendor ki gaadiyan laa kar dhoondhta
+// hai (Ctrl+K se number bhar kar aane par bhi). vendorExtra / vehicleExtra =
+// module ke apne button (Bill banao, Edit, Card…).
+const TB_VCOLS = "minmax(170px,1.5fr) 96px 48px 100px 100px 78px 56px 66px 74px 120px";
+function TbVendorVehicles({ projectId, from, to, q, reloadKey, onVehicle, vendorExtra, vehicleExtra, emptyHint }) {
+  const [vs, setVs] = useState({ loading: true, rows: [] });
+  const [open, setOpen] = useState({});
+  const [veh, setVeh] = useState({});
+  const sig = "from=" + from + "&to=" + to + (projectId ? "&project_id=" + projectId : "") + "#" + (reloadKey || 0);
+  const sigRef = useRef(sig);
+  sigRef.current = sig;
+  const keyOf = (v) => (v.vendor_id == null ? "none" : String(v.vendor_id));
+  const searching = !!String(q || "").trim();
+
+  useEffect(() => {
+    let alive = true;
+    setVs((p) => ({ ...p, loading: true }));
+    setVeh({});
+    api.get("/trips/office/vendors?" + sig.split("#")[0]).then((r) => {
+      if (!alive) return;
+      const d = tbBody(r);
+      setVs(Array.isArray(d) ? { loading: false, rows: d } : { loading: false, rows: [], err: (r && r.message) || t("tripbill.load_fail") });
+    }).catch(() => { if (alive) setVs({ loading: false, rows: [], err: t("tripbill.load_fail") }); });
+    return () => { alive = false; };
+  }, [sig]);
+
+  const loadVeh = useCallback((k) => {
+    const mine = sig;
+    setVeh((p) => (p[k] ? p : { ...p, [k]: { loading: true, rows: [] } }));
+    api.get(`/trips/office/vendors/${k}/vehicles?` + mine.split("#")[0]).then((r) => {
+      if (sigRef.current !== mine) return;
+      const d = tbBody(r);
+      setVeh((p) => ({ ...p, [k]: Array.isArray(d) ? { loading: false, rows: d } : { loading: false, rows: [], err: (r && r.message) || t("tripbill.load_fail") } }));
+    }).catch(() => { if (sigRef.current === mine) setVeh((p) => ({ ...p, [k]: { loading: false, rows: [], err: t("tripbill.load_fail") } })); });
+  }, [sig]);
+  const need = vs.rows.map(keyOf).filter((k) => (searching || open[k]) && !veh[k]);
+  const needSig = need.join(",");
+  useEffect(() => { if (needSig) needSig.split(",").forEach(loadVeh); }, [needSig, loadVeh]);
+
+  const nameOf = (g) => g.vendor_name || t("tripbill.vendor_nahi");
+  const shown = vs.rows.map((g) => {
+    const k = keyOf(g);
+    const all = (veh[k] && veh[k].rows) || [];
+    if (!searching) return { g, k, list: all, show: true };
+    const nameHit = tbMatch({}, nameOf(g), q);
+    const hit = all.filter((v) => tbMatch(v, nameOf(g), q));
+    return { g, k, list: hit.length ? hit : (nameHit ? all : []), show: nameHit || hit.length > 0 };
+  }).filter((x) => x.show).sort((a, b) => nameOf(a.g).localeCompare(nameOf(b.g)));
+  const searchBusy = searching && vs.rows.some((g) => !veh[keyOf(g)] || veh[keyOf(g)].loading);
+  const chip = (n, label, c, bg) => (n > 0 ? <TbPill key={label} label={label} c={c} bg={bg} /> : null);
+
+  return (
+    <div>
+      {vs.loading && vs.rows.length === 0 && <div style={{ textAlign: "center", padding: 30, color: T.t4, fontSize: 12.5 }}>{t("common.loading_2")}</div>}
+      {vs.err && <div style={{ border: `1px solid ${T.red}33`, background: T.redL, color: T.red, borderRadius: 8, padding: "9px 12px", fontSize: 12, fontWeight: 600, marginBottom: 10 }}>{vs.err}</div>}
+      {!vs.loading && !vs.err && vs.rows.length === 0 && (
+        <div style={{ textAlign: "center", padding: "40px 20px", background: T.surface, borderRadius: 8, border: `1px solid ${T.b1}` }}>
+          <div style={{ fontSize: 14, fontWeight: 600, color: T.t3, marginBottom: 4 }}>{t("tripbill.vv_empty")}</div>
+          {emptyHint && <div style={{ fontSize: 12, color: T.t4 }}>{emptyHint}</div>}
+        </div>
+      )}
+      {searching && vs.rows.length > 0 && shown.length === 0 && !searchBusy && <div style={{ textAlign: "center", padding: 24, color: T.t4, fontSize: 12.5 }}>{t("tripbill.vv_khoj_nahi")}</div>}
+      {searchBusy && <div style={{ fontSize: 11, color: T.t4, marginBottom: 6 }}>{t("tripbill.vv_khoj_chal")}</div>}
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {shown.map(({ g, k, list }) => {
+          const isOpen = searching || !!open[k];
+          const vd = veh[k] || {};
+          return (
+            <div key={k} style={{ background: T.surface, borderRadius: 8, border: `1px solid ${T.b1}`, overflow: "hidden" }}>
+              <div onClick={() => setOpen((p) => ({ ...p, [k]: !p[k] }))}
+                style={{ padding: "11px 14px", display: "flex", alignItems: "center", gap: 10, cursor: "pointer", flexWrap: "wrap" }}>
+                <div style={{ flex: "1 1 200px", minWidth: 0 }}>
+                  <div style={{ fontSize: 13.5, fontWeight: 700, color: g.vendor_id == null ? T.amb : T.t1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{nameOf(g)}</div>
+                  <div style={{ fontSize: 10.5, color: T.t4, marginTop: 2 }}>{t("tripbill.vv_sub", { n: Number(g.vehicles) || 0, trips: Number(g.trips) || 0, km: tbNum(g.km_billed || 0) })}</div>
+                </div>
+                <span style={{ display: "flex", gap: 5, flexWrap: "wrap", alignItems: "center" }}>
+                  {chip(Number(g.flagged_trips), t("tripbill.chip_flagged", { n: Number(g.flagged_trips) }), T.red, T.redL)}
+                  {chip(Number(g.in_transit), t("tripbill.chip_in_transit", { n: Number(g.in_transit) }), T.amb, T.ambL)}
+                  {chip(Number(g.rate_pending_trips), t("tripbill.chip_rate_pending", { n: Number(g.rate_pending_trips) }), T.amb, T.ambL)}
+                  {chip(Number(g.ready_trips), t("tripbill.chip_ready", { n: Number(g.ready_trips) }), T.ind, T.indL)}
+                </span>
+                <span style={{ textAlign: "right", minWidth: 120 }}>
+                  <span style={{ display: "block", fontSize: 13.5, fontWeight: 800, color: T.t1, fontVariantNumeric: "tabular-nums" }}>{tbMoney(g.ready_amount)}</span>
+                  <span style={{ display: "block", fontSize: 10, color: T.t4 }}>{t("tripbill.vv_ready_lbl")}{Number(g.billed_trips) > 0 ? " · " + t("tripbill.vv_billed_lbl", { amt: tbMoney(g.billed_amount) }) : ""}</span>
+                </span>
+                {vendorExtra && <span onClick={(e) => e.stopPropagation()}>{vendorExtra(g)}</span>}
+                <span style={{ color: T.t4, fontSize: 14, transform: isOpen ? "rotate(180deg)" : "none", transition: "transform .15s", display: "inline-block" }}>⌄</span>
+              </div>
+              {isOpen && (
+                <div style={{ borderTop: `1px solid ${T.b1}`, background: T.surfaceB, padding: "10px 14px", overflowX: "auto" }}>
+                  {vd.loading && <div style={{ fontSize: 12, color: T.t4, padding: 6 }}>{t("common.loading_2")}</div>}
+                  {vd.err && <div style={{ fontSize: 12, color: T.red, padding: 6 }}>{vd.err}</div>}
+                  {!vd.loading && !vd.err && list.length === 0 && <div style={{ fontSize: 12, color: T.t4, padding: 6 }}>{t("tripbill.vv_no_vehicles")}</div>}
+                  {list.length > 0 && (
+                    <div style={{ minWidth: 930 }}>
+                      <div style={{ display: "grid", gridTemplateColumns: TB_VCOLS, gap: 6, padding: "6px 8px", background: T.surface, borderRadius: 6, border: `1px solid ${T.b1}`, fontSize: 9.5, fontWeight: 700, color: T.t4, textTransform: "uppercase", letterSpacing: ".4px" }}>
+                        <span>{t("tripbill.col_vehicle")}</span><span>{t("tripbill.col_billing")}</span><span style={{ textAlign: "right" }}>{t("tripbill.col_trips")}</span>
+                        <span style={{ textAlign: "right" }}>{t("tripbill.col_ready")}</span><span style={{ textAlign: "right" }}>{t("tripbill.col_billed")}</span>
+                        <span style={{ textAlign: "right" }}>{t("tripbill.col_rate_pending")}</span><span style={{ textAlign: "right" }}>{t("tripbill.col_flagged")}</span>
+                        <span style={{ textAlign: "right" }}>{t("tripbill.col_in_transit")}</span><span>{t("tripbill.col_last")}</span><span />
+                      </div>
+                      {list.map((v) => {
+                        const bm = tbBillingMeta(v.trip_billing);
+                        return (
+                          <div key={v.id} style={{ display: "grid", gridTemplateColumns: TB_VCOLS, gap: 6, padding: "8px 8px", borderBottom: `1px solid ${T.b1}`, alignItems: "center", fontSize: 12, color: T.t2 }}>
+                            <span style={{ minWidth: 0 }}>
+                              <button type="button" title={t("tripbill.vv_open_vehicle")} onClick={() => onVehicle({ ...v, vendor_id: g.vendor_id, vendor_name: g.vendor_name })}
+                                style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: 0.3, color: T.ind, background: T.indL, border: `1px solid ${T.ind}22`, borderRadius: 5, padding: "1px 7px", cursor: "pointer", fontFamily: "inherit" }}>{v.registration_no || v.name || "—"}</button>
+                              <span style={{ display: "flex", gap: 5, alignItems: "center", flexWrap: "wrap", marginTop: 3, fontSize: 10.5, color: T.t4 }}>
+                                {v.capacity ? <span>{v.capacity}</span> : null}
+                                {v.is_fleet && <TbPill label={t("tripbill.fleet_pill")} c={T.t3} bg={T.sltL} />}
+                                {v.city_name ? <span>{v.city_name}</span> : null}
+                                {v.rate_card_name ? <TbPill label={v.rate_card_name} c={T.ind} bg={T.indL} /> : null}
+                              </span>
+                            </span>
+                            <span>{bm && <TbPill label={bm.l} c={bm.c} bg={bm.bg} />}</span>
+                            <span style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{Number(v.trips) || 0}</span>
+                            <span style={{ textAlign: "right", fontVariantNumeric: "tabular-nums", fontWeight: Number(v.ready_trips) > 0 ? 700 : 400, color: Number(v.ready_trips) > 0 ? T.ind : T.t2 }}>
+                              {tbMoney(v.ready_amount)}<span style={{ display: "block", fontSize: 10, fontWeight: 500, color: T.t4 }}>{t("tripbill.n_trips", { n: Number(v.ready_trips) || 0 })}</span>
+                            </span>
+                            <span style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
+                              {tbMoney(v.billed_amount)}<span style={{ display: "block", fontSize: 10, color: T.t4 }}>{t("tripbill.n_trips", { n: Number(v.billed_trips) || 0 })}</span>
+                            </span>
+                            <span style={{ textAlign: "right", fontVariantNumeric: "tabular-nums", color: Number(v.rate_pending_trips) > 0 ? T.amb : T.t2, fontWeight: Number(v.rate_pending_trips) > 0 ? 700 : 400 }}>{Number(v.rate_pending_trips) || 0}</span>
+                            <span style={{ textAlign: "right", fontVariantNumeric: "tabular-nums", color: Number(v.flagged_trips) > 0 ? T.red : T.t2, fontWeight: Number(v.flagged_trips) > 0 ? 700 : 400 }}>{Number(v.flagged_trips) || 0}</span>
+                            <span style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{Number(v.in_transit) || 0}</span>
+                            <span style={{ fontSize: 10.5, color: T.t4 }}>{tbDate(v.last_trip_at)}</span>
+                            <span style={{ display: "flex", gap: 4, justifyContent: "flex-end", flexWrap: "wrap" }}>{vehicleExtra && vehicleExtra(v, g)}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 export default TabTripTracking;
