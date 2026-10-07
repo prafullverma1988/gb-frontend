@@ -65,6 +65,7 @@ const Ic = ({ d, size = 18, color = "currentColor", sw = 1.8, fill = "none" }) =
 const IcTruck  = (p) => <Ic {...p} d="M1 3h15v13H1zM16 8h4l3 3v5h-7V8zM5.5 19a2 2 0 100-4 2 2 0 000 4zM18.5 19a2 2 0 100-4 2 2 0 000 4z" />;
 const IcBell   = (p) => <Ic {...p} d="M15 17h5l-1.4-1.4A2 2 0 0118 14.2V11a6 6 0 10-12 0v3.2a2 2 0 01-.6 1.4L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />;
 const IcSpark  = (p) => <Ic {...p} d="M12 3l2.2 5.8L20 11l-5.8 2.2L12 19l-2.2-5.8L4 11l5.8-2.2L12 3z" />;
+const IcSliders = (p) => <Ic {...p} d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6" />;
 const IcChart  = (p) => <Ic {...p} d="M9 17v-2m3 2v-4m3 4v-6M5 21h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v14a2 2 0 002 2z" />;
 const IcDoc    = (p) => <Ic {...p} d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8zM14 2v6h6M9 13h6M9 17h6" />;
 const IcGauge  = (p) => <Ic {...p} d="M12 20a8 8 0 100-16 8 8 0 000 16zM12 12l3.5-3.5M12 20v2M4 12H2M22 12h-2" />;
@@ -6126,6 +6127,59 @@ const MR_PRIO = [
   { k: "normal", get l() { return t("machinery.mr_p_normal"); }, c: T.t3,  bg: T.sltL, rank: 2 },
 ];
 const mrPrio = (k) => MR_PRIO.find((p) => p.k === k) || MR_PRIO[2];
+// ══════════════════════════════════════════════════════════════════
+// MACHINERY SETTINGS (7 Oct 2026) — company ki machine wali setting ek jagah.
+// Photo kab zaroori hai wo yahan nahi — Settings → Photo (wahi ek jagah).
+// ══════════════════════════════════════════════════════════════════
+function MachinerySettingsTab() {
+  const [st, setSt] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+  const [hours, setHours] = useState("");
+  useEffect(() => {
+    api.get("/equipment/settings").then((r) => {
+      const d = r && r.success ? r.data : null;
+      setSt(d); setHours(d ? String(d.run_remind_hours) : "");
+    }).catch(() => setSt(null));
+  }, []);
+  const save = async (patch) => {
+    setBusy(true); setMsg("");
+    const r = await api.put("/equipment/settings", { ...st, ...patch }).catch((e) => ({ success: false, message: e.message }));
+    setBusy(false);
+    if (!r || r.success === false) { setMsg(srvMsg(r)); return; }
+    setSt(r.data); setHours(String(r.data.run_remind_hours)); setMsg(t("machinery.ms_saved"));
+  };
+  if (!st) return <div style={{ padding: 30, textAlign: "center", color: T.t4, fontSize: 13 }}>{t("common.loading")}</div>;
+  const row = (k, title, hint) => (
+    <label key={k} style={{ display: "flex", gap: 12, alignItems: "flex-start", padding: "14px 16px", borderBottom: `1px solid ${T.b1}`, cursor: busy ? "wait" : "pointer" }}>
+      <input type="checkbox" checked={!!st[k]} disabled={busy} onChange={(e) => save({ [k]: e.target.checked })} style={{ marginTop: 3 }} />
+      <span>
+        <span style={{ display: "block", fontSize: 13, fontWeight: 700, color: T.t1 }}>{title}</span>
+        <span style={{ display: "block", fontSize: 11.5, color: T.t3, marginTop: 3, lineHeight: 1.5 }}>{hint}</span>
+      </span>
+    </label>
+  );
+  return (
+    <div style={{ maxWidth: 720, background: T.surface, border: `1px solid ${T.b1}`, borderRadius: 10 }}>
+      <div style={{ padding: "14px 16px", borderBottom: `1px solid ${T.b1}`, fontSize: 14, fontWeight: 800, color: T.t1 }}>{t("machinery.ms_title")}</div>
+      {row("site_rate", t("machinery.ms_site_rate"), t("machinery.ms_site_rate_hint"))}
+      {row("start_stop", t("machinery.ms_start_stop"), t("machinery.ms_start_stop_hint"))}
+      <div style={{ padding: "14px 16px", borderBottom: `1px solid ${T.b1}`, display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+        <span style={{ flex: 1, minWidth: 220 }}>
+          <span style={{ display: "block", fontSize: 13, fontWeight: 700, color: T.t1 }}>{t("machinery.ms_remind")}</span>
+          <span style={{ display: "block", fontSize: 11.5, color: T.t3, marginTop: 3 }}>{t("machinery.ms_remind_hint")}</span>
+        </span>
+        <input value={hours} inputMode="numeric" disabled={busy}
+          onChange={(e) => setHours(e.target.value.replace(/[^0-9]/g, ""))}
+          onBlur={() => { if (hours && Number(hours) !== Number(st.run_remind_hours)) save({ run_remind_hours: Number(hours) }); }}
+          style={{ width: 80, padding: "7px 9px", borderRadius: 7, border: `1.5px solid ${T.b1}`, fontSize: 13, fontFamily: "inherit" }} />
+      </div>
+      <div style={{ padding: "12px 16px", fontSize: 11.5, color: T.t3, lineHeight: 1.5 }}>{t("machinery.ms_photo_note")}</div>
+      {msg && <div style={{ padding: "0 16px 12px", fontSize: 12, fontWeight: 600, color: T.grn }}>{msg}</div>}
+    </div>
+  );
+}
+
 const MR_STATUS = [
   { k: "pending",   get l() { return t("machinery.mr_st_pending"); },   c: T.amb, bg: T.ambL },
   { k: "fulfilled", get l() { return t("machinery.mr_st_fulfilled"); }, c: T.grn, bg: T.grnL },
@@ -6200,8 +6254,22 @@ function MachineRequestsTab({ fleet, projects, cities, onChanged }) {
       ? { equipment_id: act.eq ? Number(act.eq) : null, admin_note: act.note.trim() || null }
       : { admin_note: act.note.trim() };
     const r = await api.post(`/equipment/request/${act.id}/${act.kind}`, body).catch((e) => ({ success: false, message: e.message }));
-    if (!r || r.success === false) { setAct((a) => ({ ...a, busy: false, err: srvMsg(r) })); return; }
+    // Machine doosri site (A) par chal rahi hai → A se maango; A ki site
+    // "bhej do" ya "abhi kaam chal raha hai" (wajah + photo) se jawab degi.
+    if (r && r.success === false && r.code === "machine_on_site" && act.kind === "fulfill") {
+      if (!window.confirm(t("machinery.mr_a_se_maango_q", { project: r.holder_project_name || "—" }))) { setAct((a) => ({ ...a, busy: false })); return; }
+      const r2 = await api.post(`/equipment/request/${act.id}/fulfill`, { ...body, ask_holder: true }).catch((e) => ({ success: false, message: e.message }));
+      if (!r2 || r2.success === false) { setAct((a) => ({ ...a, busy: false, err: srvMsg(r2) })); return; }
+    } else if (!r || r.success === false) { setAct((a) => ({ ...a, busy: false, err: srvMsg(r) })); return; }
     setAct(null);
+    await load();
+    if (onChanged) onChanged();
+  };
+  // A ne offer kiya / A busy par phir bhi chahiye → bhejo (A par Returned, yahan raste me)
+  const confirmHolder = async (r) => {
+    if (!window.confirm(t("machinery.mr_phir_bhi_bhejo_q", { project: r.holder_project_name || "—" }))) return;
+    const x = await api.post(`/equipment/request/${r.id}/holder-confirm`, {}).catch((e) => ({ success: false, message: e.message }));
+    if (!x || x.success === false) { window.alert(srvMsg(x)); return; }
     await load();
     if (onChanged) onChanged();
   };
@@ -6324,6 +6392,27 @@ function MachineRequestsTab({ fleet, projects, cities, onChanged }) {
                   </div>
                 )}
                 {!pending && r.admin_note && <div style={{ fontSize: 10.5, color: T.t3, marginTop: 2, lineHeight: 1.4 }}>{r.admin_note}</div>}
+                {/* A se maangi gayi — site A ka jawab (7 Oct 2026) */}
+                {r.status === "holder" && (
+                  <div style={{ marginTop: 6, padding: "6px 9px", borderRadius: 7, background: T.ambL, border: `1px solid ${T.amb}33` }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: T.amb }}>
+                      {r.holder_status === "busy" ? t("machinery.mr_holder_busy", { project: r.holder_project_name || "—" })
+                        : r.holder_status === "offered" ? t("machinery.mr_holder_offered", { project: r.holder_project_name || "—" })
+                        : t("machinery.mr_holder_asked", { project: r.holder_project_name || "—" })}
+                    </div>
+                    {r.holder_status === "busy" && r.holder_note && (
+                      <div style={{ fontSize: 10.5, color: T.t2, marginTop: 2 }}>
+                        {r.holder_note}{r.holder_free_by ? " · " + t("machinery.mr_free_by", { date: fmtD(r.holder_free_by) }) : ""}{r.holder_by_name ? " · " + r.holder_by_name : ""}
+                      </div>
+                    )}
+                    {(r.holder_status === "busy" || r.holder_status === "offered") && (
+                      <button type="button" onClick={() => confirmHolder(r)}
+                        style={{ marginTop: 6, padding: "5px 12px", borderRadius: 7, border: "none", background: T.grn, color: "#fff", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
+                        {r.holder_status === "offered" ? t("machinery.mr_haan_bhejo") : t("machinery.mr_phir_bhi_bhejo")}
+                      </button>
+                    )}
+                  </div>
+                )}
                 {pending && canDecide && !open && (
                   <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
                     <Btn size="sm" c={T.grn} onClick={() => openFulfill(r)}>{t("machinery.mr_fulfill")}</Btn>
@@ -6529,6 +6618,8 @@ function MachineryModule() {
     { id: "gps", l: "GPS", I: IcSignal, badge: (tele && tele.account && tele.pending.length) || null },
     { id: "insights", l: t("machinery.insights"), I: IcSpark },
     { id: "reports", l: t("common.reports"), I: IcChart },
+    // Company ki machine wali setting (site rate, Start/Stop) — Settings ka Edit
+    ...(canAny("Settings", "edit", { strict: true }) ? [{ id: "msettings", l: t("machinery.ms_tab"), I: IcSliders }] : []),
   ];
   // Chuna hua tab list se gayab ho jaaye (trip vehicles ka server jawab na de)
   // to khaali screen nahi — Fleet.
@@ -6577,6 +6668,7 @@ function MachineryModule() {
             {curTab === "requests" && (
               <MachineRequestsTab fleet={fleet} projects={projects} cities={cities} onChanged={loadReqCount} />
             )}
+            {curTab === "msettings" && <MachinerySettingsTab />}
 
             {curTab === "reports" && (
               <ReportsTab fleet={fleet} projects={projects} from={repFrom} to={repTo}
