@@ -115,6 +115,50 @@ const itemStatusLabel = (s) => (s ? t("assets.istatus_" + s) : "—");
 const UNITS = ["Nos", "Set", "Pcs", "Mtr", "Rft", "Sqm", "Sqft", "Kg", "Bundle", "Pair", "Box"];
 const isMobileWidth = () => (typeof window !== "undefined" ? window.innerWidth < 768 : false);
 
+// Unit Library (Library → Units, uom_master) se — 7 Oct 2026. Pehle har form me
+// upar wali chhoti pakki list thi aur box me "Nos" pehle se likha rehta — browser
+// sujhaav usi se chhaant deta, to list me sirf "Nos" dikhta aur lagta unit atki
+// hai (Prafull: "unit nos me lock hai, library se le ke aao"). Ab dropdown: chhota
+// roop (symbol) save hota hai, dikhta "Kg — Kilogram". Jo unit Library me nahi
+// (purana data, jaise "Rft") wo bhi list me sabse upar rehti hai — chupchaap
+// badalti nahi. Library na aaye to purani list.
+let _uomPromise = null;
+const loadUoms = () => {
+  if (!_uomPromise) {
+    _uomPromise = api.get("/library/uom")
+      .then((r) => { if (r && r.success && Array.isArray(r.data)) return r.data; _uomPromise = null; return []; })
+      .catch(() => { _uomPromise = null; return []; });
+  }
+  return _uomPromise;
+};
+function useUnits() {
+  const [uoms, setUoms] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    loadUoms().then((u) => { if (alive) setUoms(u); });
+    return () => { alive = false; };
+  }, []);
+  return useMemo(() => {
+    const seen = new Map();
+    for (const u of uoms || []) {
+      const sym = String(u.symbol || u.name || "").trim();
+      const nm = String(u.name || "").trim();
+      if (sym && !seen.has(sym)) seen.set(sym, { value: sym, label: nm && nm.toLowerCase() !== sym.toLowerCase() ? `${sym} — ${nm}` : sym });
+    }
+    return seen.size ? [...seen.values()] : UNITS.map((u) => ({ value: u, label: u }));
+  }, [uoms]);
+}
+const UnitSelect = ({ value, onChange, style }) => {
+  const units = useUnits();
+  const v = String(value || "");
+  const opts = v && !units.some((o) => o.value === v) ? [{ value: v, label: v }, ...units] : units;
+  return (
+    <PickSelect value={v} onChange={(e) => onChange(e.target.value)} style={style}>
+      {opts.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+    </PickSelect>
+  );
+};
+
 // Status ka rang ek hi jagah tay hota hai — list, drawer aur dashboard kabhi
 // alag-alag na bolein.
 const statusTone = (s) =>
@@ -987,62 +1031,109 @@ function RegisterTab({ items, cats, warehouses, canSetup, canCreate, canExport, 
 }
 
 // ── ITEM DRAWER — details (edit), kahan hai, history ─────────────
+// Badlav ke itihaas me khaane ka naam aur value — server field ke naam bhejta hai.
+const editFieldLabel = (f) => ({
+  name: t("assets.item_name"), spec: t("assets.spec"), unit: t("assets.unit"), category: t("assets.category"),
+  purchase_date: t("assets.purchase_date"), purchase_cost: t("assets.purchase_cost"), vendor_name: t("assets.vendor"),
+  notes: t("assets.notes"), photo_url: t("assets.photo"),
+})[f] || f;
+const editVal = (field, v) => (v == null || v === "" ? "—"
+  : field === "purchase_date" ? fmtD(v) : field === "purchase_cost" ? "₹" + fmtN(v) : String(v));
+const fmtDT = (raw) => {
+  const d = new Date(raw);
+  return isNaN(d.getTime()) ? "—" : fmtD(raw) + " · " + d.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
+};
+// Sirf padhne ka khaana — input jaisa dikhe par likha na ja sake.
+const ViewBox = ({ label, v, span }) => (
+  <Field label={label} span={span}>
+    <div style={{ ...inp, background: T.surfaceB, color: v ? T.t1 : T.t4, minHeight: 36, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{v || "—"}</div>
+  </Field>
+);
+
+// Register ke item ka drawer. Pehle Details seedha form tha — Edit tick wale ke
+// liye har khaana khula aur Save bina kisi wajah ke (Prafull, 7 Oct 2026: "asset
+// click pe side slide pe sidha edit option hai ye dikkat hai"). Ab khulte hi sirf
+// dekhna; "Edit karo" sirf Assets ke Edit tick wale ko, aur badlav wajah ke bina
+// save nahi hota — server bhi rokta hai. Har badlav (purana → naya, kisne, kab,
+// kyon) History me "Badlav" ke neeche.
+const itemForm = (it) => ({
+  name: it.name || "", spec: it.spec || "", unit: it.unit || "", category_id: it.category_id ? String(it.category_id) : "",
+  purchase_date: isoDate(it.purchase_date), purchase_cost: it.purchase_cost == null ? "" : String(Number(it.purchase_cost)),
+  vendor_name: it.vendor_name || "", notes: it.notes || "",
+});
+
 function ItemDrawer({ item, cats, canEdit, onClose, onChanged, onOpenVoucher }) {
   const toast = useToast();
   const [tab, setTab] = useState("details");
+  const [editing, setEditing] = useState(false);
   const [f, setF] = useState({});
+  const [reason, setReason] = useState("");
   const [holdings, setHoldings] = useState(null);
   const [history, setHistory] = useState(null);
   const [counts, setCounts] = useState(null);    // is item ki saari ginti (kab, kitna, kyun)
+  const [edits, setEdits] = useState(null);      // badlav ka itihaas (wajah ke saath)
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const id = item && item.id;
 
-  // Tab sirf item badalne par reset ho — background refresh (voucher accept
-  // ke baad list dobara aayi) par aadmi History se Details par na gire.
-  useEffect(() => { setTab("details"); }, [id]);
+  // Tab aur edit sirf item badalne par reset ho — background refresh (voucher
+  // accept ke baad list dobara aayi) par aadmi History se Details par na gire,
+  // aur aadha bhara edit na mite.
+  useEffect(() => { setTab("details"); setEditing(false); }, [id]);
   useEffect(() => {
-    if (!item) return;
+    if (!item || editing) return;
     setError("");
-    setF({
-      name: item.name || "", spec: item.spec || "", unit: item.unit || "", category_id: item.category_id || "",
-      purchase_date: isoDate(item.purchase_date), purchase_cost: item.purchase_cost == null ? "" : String(item.purchase_cost),
-      vendor_name: item.vendor_name || "", notes: item.notes || "",
-    });
+    setF(itemForm(item));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [item]);
+
+  const loadEdits = useCallback(() => {
+    if (!id) return;
+    api.get(`/assets/items/${id}/edits`).then((r) => setEdits(r && r.success ? r.data || [] : [])).catch(() => setEdits([]));
+  }, [id]);
 
   useEffect(() => {
     if (!id) return;
     let alive = true;
-    setHoldings(null); setHistory(null); setCounts(null);
+    setHoldings(null); setHistory(null); setCounts(null); setEdits(null);
     Promise.all([
       api.get(`/assets/items/${id}/holdings`).catch(() => null),
       api.get(`/assets/items/${id}/history`).catch(() => null),
       api.get(`/assets/items/${id}/verifications`).catch(() => null),
-    ]).then(([h, hs, cs]) => {
+      api.get(`/assets/items/${id}/edits`).catch(() => null),
+    ]).then(([h, hs, cs, es]) => {
       if (!alive) return;
       setHoldings(h && h.success ? h.data || [] : []);
       setHistory(hs && hs.success ? hs.data || [] : []);
       setCounts(cs && cs.success ? cs.data || [] : []);
+      setEdits(es && es.success ? es.data || [] : []);
     });
     return () => { alive = false; };
   }, [id]);
 
   if (!item) return null;
   const upd = (k, v) => setF((p) => ({ ...p, [k]: v }));
+  const startEdit = () => { setF(itemForm(item)); setReason(""); setError(""); setEditing(true); };
+  const cancelEdit = () => { setF(itemForm(item)); setReason(""); setError(""); setEditing(false); };
 
   const save = async () => {
     setError("");
     if (!String(f.name || "").trim()) { setError(t("assets.err_name_required")); return; }
+    // Kuch badla hi nahi to wajah kyon maangein — bas edit band.
+    if (JSON.stringify(itemForm(item)) === JSON.stringify(f)) { toast.success(t("assets.edit_no_change")); cancelEdit(); return; }
+    if (!reason.trim()) { setError(t("assets.edit_reason_required")); return; }
     setBusy(true);
     const r = await api.put(`/assets/items/${id}`, {
       name: f.name.trim(), spec: f.spec, unit: f.unit || null, category_id: f.category_id || null,
       purchase_date: f.purchase_date || null, purchase_cost: f.purchase_cost === "" ? null : Number(f.purchase_cost),
-      vendor_name: f.vendor_name, notes: f.notes,
+      vendor_name: f.vendor_name, notes: f.notes, reason: reason.trim(),
     });
     setBusy(false);
-    if (r && r.success) { toast.success(r.message || t("assets.saved")); onChanged(); }
-    else setError((r && r.message) || t("assets.save_failed"));
+    if (r && r.success) {
+      toast.success(r.message || t("assets.saved"));
+      setEditing(false); setReason("");
+      loadEdits(); onChanged();
+    } else setError((r && r.message) || t("assets.save_failed"));
   };
 
   const TABS = [
@@ -1056,9 +1147,11 @@ function ItemDrawer({ item, cats, canEdit, onClose, onChanged, onOpenVoucher }) 
       title={[item.code, item.name].filter(Boolean).join(" · ")}
       sub={[item.spec, item.category, trackLabel(item.tracking_mode)].filter(Boolean).join(" · ")}
       head={item.tracking_mode === "serialized" ? <Pill label={itemStatusLabel(item.status)} c={T.ind} bg={T.indL} /> : null}
-      footer={tab === "details" && canEdit
-        ? <><Btn ghost onClick={onClose}>{t("assets.close")}</Btn><Btn onClick={save} disabled={busy}>{busy ? t("assets.saving") : t("assets.save")}</Btn></>
-        : <Btn ghost onClick={onClose}>{t("assets.close")}</Btn>}>
+      footer={tab === "details" && editing
+        ? <><Btn ghost onClick={cancelEdit} disabled={busy}>{t("assets.cancel")}</Btn><Btn onClick={save} disabled={busy}>{busy ? t("assets.saving") : t("assets.save")}</Btn></>
+        : tab === "details" && canEdit
+          ? <><Btn ghost onClick={onClose}>{t("assets.close")}</Btn><Btn onClick={startEdit}>{t("assets.edit_item")}</Btn></>
+          : <Btn ghost onClick={onClose}>{t("assets.close")}</Btn>}>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, padding: "10px 12px", background: T.surfaceB, border: `1px solid ${T.b1}`, borderRadius: 10, marginBottom: 14 }}>
         <KV k={t("assets.total")} v={fmtN(item.total_qty)} />
         <KV k={t("assets.in_store")} v={fmtN(item.in_store_qty)} />
@@ -1068,43 +1161,63 @@ function ItemDrawer({ item, cats, canEdit, onClose, onChanged, onOpenVoucher }) 
       </div>
       <SubTabs tabs={TABS} value={tab} onChange={setTab} />
 
-      {tab === "details" && (
+      {tab === "details" && !editing && (
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <ViewBox label={t("assets.item_name")} v={item.name} span={2} />
+          <ViewBox label={t("assets.spec")} v={item.spec} />
+          <ViewBox label={t("assets.unit")} v={item.unit} />
+          <ViewBox label={t("assets.category")} v={item.category} />
+          <ViewBox label={t("assets.tracking")} v={trackLabel(item.tracking_mode)} />
+          <ViewBox label={t("assets.purchase_date")} v={item.purchase_date ? fmtD(item.purchase_date) : ""} />
+          <ViewBox label={t("assets.purchase_cost")} v={item.purchase_cost != null && item.purchase_cost !== "" ? "₹" + fmtN(item.purchase_cost) : ""} />
+          <ViewBox label={t("assets.vendor")} v={item.vendor_name} span={2} />
+          <ViewBox label={t("assets.notes")} v={item.notes} span={2} />
+          {item.photo_url && (
+            <Field label={t("assets.photo")} span={2}>
+              <a href={item.photo_url} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: T.ind, fontWeight: 700 }}>{t("assets.photo_view")}</a>
+            </Field>
+          )}
+          {!canEdit && <div style={{ gridColumn: "span 2", fontSize: 11, color: T.t4 }}>{t("assets.edit_no_access")}</div>}
+        </div>
+      )}
+
+      {tab === "details" && editing && (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <div style={{ gridColumn: "span 2" }}><Notice>{t("assets.edit_notice")}</Notice></div>
           <Field label={t("assets.item_name")} span={2}>
-            <input value={f.name || ""} onChange={(e) => upd("name", e.target.value)} style={inp} readOnly={!canEdit} />
+            <input value={f.name || ""} onChange={(e) => upd("name", e.target.value)} style={inp} />
           </Field>
           <Field label={t("assets.spec")}>
-            <input value={f.spec || ""} onChange={(e) => upd("spec", e.target.value)} style={inp} readOnly={!canEdit} />
+            <input value={f.spec || ""} onChange={(e) => upd("spec", e.target.value)} style={inp} />
           </Field>
           <Field label={t("assets.unit")}>
-            <input value={f.unit || ""} onChange={(e) => upd("unit", e.target.value)} style={inp} readOnly={!canEdit} list="assets-units" />
+            <UnitSelect value={f.unit} onChange={(v) => upd("unit", v)} style={inp} />
           </Field>
           <Field label={t("assets.category")}>
-            <PickSelect value={f.category_id || ""} onChange={(e) => upd("category_id", e.target.value)} style={inp} disabled={!canEdit}>
+            <PickSelect value={f.category_id || ""} onChange={(e) => upd("category_id", e.target.value)} style={inp}>
               <option value="">—</option>
-              {(cats || []).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              {(cats || []).map((c) => <option key={c.id} value={String(c.id)}>{c.name}</option>)}
             </PickSelect>
           </Field>
           <Field label={t("assets.tracking")}>
             <input value={trackLabel(item.tracking_mode)} readOnly style={{ ...inp, background: T.surfaceB, color: T.t3 }} />
           </Field>
           <Field label={t("assets.purchase_date")}>
-            <input type="date" value={f.purchase_date || ""} onChange={(e) => upd("purchase_date", e.target.value)} style={inp} readOnly={!canEdit} />
+            <input type="date" value={f.purchase_date || ""} onChange={(e) => upd("purchase_date", e.target.value)} style={inp} />
           </Field>
           <Field label={t("assets.purchase_cost")}>
-            <input value={f.purchase_cost || ""} inputMode="decimal" onChange={(e) => upd("purchase_cost", e.target.value.replace(/[^0-9.]/g, ""))} style={inp} readOnly={!canEdit} />
+            <input value={f.purchase_cost || ""} inputMode="decimal" onChange={(e) => upd("purchase_cost", e.target.value.replace(/[^0-9.]/g, ""))} style={inp} />
           </Field>
           <Field label={t("assets.vendor")} span={2}>
-            <input value={f.vendor_name || ""} onChange={(e) => upd("vendor_name", e.target.value)} style={inp} readOnly={!canEdit} />
+            <input value={f.vendor_name || ""} onChange={(e) => upd("vendor_name", e.target.value)} style={inp} />
           </Field>
           <Field label={t("assets.notes")} span={2}>
-            <textarea value={f.notes || ""} onChange={(e) => upd("notes", e.target.value)} style={{ ...inp, minHeight: 64, resize: "vertical" }} readOnly={!canEdit} />
+            <textarea value={f.notes || ""} onChange={(e) => upd("notes", e.target.value)} style={{ ...inp, minHeight: 64, resize: "vertical" }} />
           </Field>
-          {item.photo_url && (
-            <Field label={t("assets.photo")} span={2}>
-              <a href={item.photo_url} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: T.ind, fontWeight: 700 }}>{t("assets.photo_view")}</a>
-            </Field>
-          )}
+          <Field label={t("assets.edit_reason")} span={2} hint={t("assets.edit_reason_hint")}>
+            <textarea value={reason} onChange={(e) => setReason(e.target.value)} maxLength={500}
+              style={{ ...inp, minHeight: 56, resize: "vertical" }} placeholder={t("assets.edit_reason_ph")} />
+          </Field>
           <div style={{ gridColumn: "span 2" }}><ErrBox>{error}</ErrBox></div>
         </div>
       )}
@@ -1132,6 +1245,30 @@ function ItemDrawer({ item, cats, canEdit, onClose, onChanged, onOpenVoucher }) 
         </Panel>
       )}
 
+      {/* Register ke item ka badlav — kisne, kab, kya (purana → naya), kyon. */}
+      {tab === "history" && edits && edits.length > 0 && (
+        <div style={{ marginBottom: 14 }}>
+          <Panel title={t("assets.item_edits")}>
+            {edits.map((e) => (
+              <div key={e.id} style={{ padding: "10px 14px", borderBottom: `1px solid ${T.b1}` }}>
+                <div style={{ display: "flex", gap: 8, alignItems: "baseline", flexWrap: "wrap", fontSize: 11.5 }}>
+                  <b style={{ color: T.t1 }}>{e.edited_by_name || "—"}</b>
+                  <span style={{ color: T.t4 }}>{fmtDT(e.created_at)}</span>
+                </div>
+                {(e.changes || []).map((c, i) => (
+                  <div key={i} style={{ fontSize: 12, marginTop: 4, color: T.t2 }}>
+                    <span style={{ color: T.t3 }}>{editFieldLabel(c.field)}: </span>
+                    <span style={{ color: T.t4, textDecoration: "line-through" }}>{editVal(c.field, c.old)}</span>
+                    {" → "}
+                    <b style={{ color: T.t1 }}>{editVal(c.field, c.new)}</b>
+                  </div>
+                ))}
+                <div style={{ fontSize: 11.5, color: T.t3, marginTop: 4 }}>{t("assets.edit_reason_x", { reason: e.reason })}</div>
+              </div>
+            ))}
+          </Panel>
+        </div>
+      )}
       {/* Ginti ka itihaas — kab gina, ledger me kitna tha, kitna mila, kya wajah. */}
       {tab === "history" && counts && counts.length > 0 && (
         <div style={{ marginBottom: 14 }}>
@@ -1194,7 +1331,6 @@ function ItemDrawer({ item, cats, canEdit, onClose, onChanged, onOpenVoucher }) 
           )}
         </Panel>
       )}
-      <datalist id="assets-units">{UNITS.map((u) => <option key={u} value={u} />)}</datalist>
     </Drawer>
   );
 }
@@ -1245,7 +1381,7 @@ function CategoriesModal({ open, cats, onClose, onChanged }) {
             <option value="serialized">{t("assets.tracking_serialized")}</option>
           </PickSelect>
         </Field>
-        <Field label={t("assets.unit")}><input value={add.default_unit} onChange={(e) => setAdd({ ...add, default_unit: e.target.value })} style={inp} list="assets-units-cat" /></Field>
+        <Field label={t("assets.unit")}><UnitSelect value={add.default_unit} onChange={(v) => setAdd({ ...add, default_unit: v })} style={inp} /></Field>
         <Btn icon={IcAdd} onClick={create} disabled={busy}>{t("assets.add")}</Btn>
       </div>
       <Panel>
@@ -1258,7 +1394,7 @@ function CategoriesModal({ open, cats, onClose, onChanged }) {
                 <option value="bulk">{t("assets.tracking_bulk")}</option>
                 <option value="serialized">{t("assets.tracking_serialized")}</option>
               </PickSelect>
-              <input value={edit.default_unit || ""} onChange={(e) => setEdit({ ...edit, default_unit: e.target.value })} style={inpSm} />
+              <UnitSelect value={edit.default_unit || ""} onChange={(v) => setEdit({ ...edit, default_unit: v })} style={inpSm} />
               <div style={{ display: "flex", gap: 5 }}>
                 <Btn size="sm" onClick={saveEdit} disabled={busy}>{t("assets.save")}</Btn>
                 <Btn size="sm" ghost onClick={() => setEdit(null)}>{t("assets.cancel")}</Btn>
@@ -1278,7 +1414,6 @@ function CategoriesModal({ open, cats, onClose, onChanged }) {
         ))}
       </Panel>
       <ErrBox>{error}</ErrBox>
-      <datalist id="assets-units-cat">{UNITS.map((u) => <option key={u} value={u} />)}</datalist>
     </Modal>
   );
 }
@@ -1661,7 +1796,7 @@ function GrnForm({ open, meta, pickers, cats, canAll, onClose, onSaved }) {
               <div style={{ display: "grid", gridTemplateColumns: "1.6fr 1fr 80px 110px 1fr 90px 110px", gap: 8 }}>
                 <Field label={t("assets.item_name")}><input value={l.name} onChange={(e) => updLine(i, { ...l, name: e.target.value })} style={inp} placeholder={t("assets.item_name_ph")} /></Field>
                 <Field label={t("assets.spec")}><input value={l.spec} onChange={(e) => updLine(i, { ...l, spec: e.target.value })} style={inp} placeholder={t("assets.spec_ph")} /></Field>
-                <Field label={t("assets.unit")}><input value={l.unit} onChange={(e) => updLine(i, { ...l, unit: e.target.value })} style={inp} list="assets-units-grn" /></Field>
+                <Field label={t("assets.unit")}><UnitSelect value={l.unit} onChange={(v) => updLine(i, { ...l, unit: v })} style={inp} /></Field>
                 <Field label={t("assets.tracking")}>
                   <PickSelect value={l.tracking_mode} onChange={(e) => updLine(i, { ...l, tracking_mode: e.target.value })} style={inp}>
                     <option value="bulk">{t("assets.tracking_bulk")}</option>
@@ -1696,7 +1831,6 @@ function GrnForm({ open, meta, pickers, cats, canAll, onClose, onSaved }) {
       </div>
       <div style={{ fontSize: 11, color: T.t4, marginTop: 10 }}>{t("assets.grn_finance_note")}</div>
       <ErrBox>{error}</ErrBox>
-      <datalist id="assets-units-grn">{UNITS.map((u) => <option key={u} value={u} />)}</datalist>
     </Modal>
   );
 }
@@ -1833,7 +1967,7 @@ function NewPurchaseModal({ open, meta, pickers, cats, canAll, onClose, onSaved 
               <div style={{ display: "grid", gridTemplateColumns: "1.6fr 1fr 80px 110px 1fr 90px 110px", gap: 8 }}>
                 <Field label={t("assets.item_name")}><input value={l.name} onChange={(e) => updLine(i, { ...l, name: e.target.value })} style={inp} placeholder={t("assets.item_name_ph")} /></Field>
                 <Field label={t("assets.spec")}><input value={l.spec} onChange={(e) => updLine(i, { ...l, spec: e.target.value })} style={inp} placeholder={t("assets.spec_ph")} /></Field>
-                <Field label={t("assets.unit")}><input value={l.unit} onChange={(e) => updLine(i, { ...l, unit: e.target.value })} style={inp} list="assets-units-buy" /></Field>
+                <Field label={t("assets.unit")}><UnitSelect value={l.unit} onChange={(v) => updLine(i, { ...l, unit: v })} style={inp} /></Field>
                 <Field label={t("assets.tracking")}>
                   <PickSelect value={l.tracking_mode} onChange={(e) => updLine(i, { ...l, tracking_mode: e.target.value })} style={inp}>
                     <option value="bulk">{t("assets.tracking_bulk")}</option>
@@ -1863,7 +1997,6 @@ function NewPurchaseModal({ open, meta, pickers, cats, canAll, onClose, onSaved 
       </Panel>
       <Notice>{t("assets.buy_note")}</Notice>
       <ErrBox>{error}</ErrBox>
-      <datalist id="assets-units-buy">{UNITS.map((u) => <option key={u} value={u} />)}</datalist>
     </Modal>
   );
 }
@@ -2688,7 +2821,7 @@ function AddAssetForm({ open, meta, pickers, cats, me, onClose, onSaved }) {
           <div style={{ display: "grid", gridTemplateColumns: "1.6fr 1fr 90px 120px", gap: 10 }}>
             <Field label={t("assets.item_name")}><input value={f.name || ""} onChange={(e) => upd("name", e.target.value)} style={inp} placeholder={t("assets.item_name_ph")} /></Field>
             <Field label={t("assets.spec")}><input value={f.spec || ""} onChange={(e) => upd("spec", e.target.value)} style={inp} placeholder={t("assets.spec_ph")} /></Field>
-            <Field label={t("assets.unit")}><input value={f.unit || ""} onChange={(e) => upd("unit", e.target.value)} style={inp} list="assets-units-add" /></Field>
+            <Field label={t("assets.unit")}><UnitSelect value={f.unit} onChange={(v) => upd("unit", v)} style={inp} /></Field>
             <Field label={t("assets.tracking")}>
               <PickSelect value={f.tracking_mode || "bulk"} onChange={(e) => upd("tracking_mode", e.target.value)} style={inp}>
                 <option value="bulk">{t("assets.tracking_bulk")}</option>
@@ -2747,7 +2880,6 @@ function AddAssetForm({ open, meta, pickers, cats, me, onClose, onSaved }) {
         <div style={{ fontSize: 11, color: T.t4 }}>{t("assets.add_note")}</div>
       </div>
       <ErrBox>{error}</ErrBox>
-      <datalist id="assets-units-add">{UNITS.map((u) => <option key={u} value={u} />)}</datalist>
     </Modal>
   );
 }
