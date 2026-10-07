@@ -148,7 +148,7 @@ const dict = {
   "app.qs_fleet": "Fleet (own / Machinery)",
   "app.qs_gaadi": "Vehicles",
   "app.qs_trip_gaadi": "Trip vehicle (no vendor)",
-  "app.qs_trip_vehicles": "Trip vehicles",
+  "app.qs_trip_vehicles": "Trips & Billing",
   "app.quick_search_ctrl_k": "Quick Search (Ctrl+K)",
   "app.real_estate_projects_sales": "Real-Estate Projects & Sales",
   "app.realized_margin": "Realized margin",
