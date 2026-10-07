@@ -1745,7 +1745,7 @@ function NewPurchaseModal({ open, meta, pickers, cats, canAll, onClose, onSaved 
 
   useEffect(() => {
     if (!open) return;
-    setF({ warehouse_id: soleStoreId(whOptions), project_id: "", required_date: "", notes: "" });
+    setF({ warehouse_id: soleStoreId(whOptions), project_id: "", required_date: "", priority: "normal", notes: "" });
     setLines([newBuyLine()]); setError("");
     api.get("/assets/items").then((r) => setItems(r && r.success ? r.data || [] : [])).catch(() => setItems([]));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1776,7 +1776,7 @@ function NewPurchaseModal({ open, meta, pickers, cats, canAll, onClose, onSaved 
     setBusy(true);
     const r = await api.post("/assets/purchase-requests", {
       warehouse_id: Number(f.warehouse_id), project_id: f.project_id ? Number(f.project_id) : null,
-      required_date: f.required_date || null, notes: f.notes || null, items: body,
+      required_date: f.required_date || null, priority: f.priority || "normal", notes: f.notes || null, items: body,
     });
     setBusy(false);
     if (r && r.success) { toast.success(r.message || t("assets.buy_sent_ok")); onSaved(); onClose(); }
@@ -1787,7 +1787,7 @@ function NewPurchaseModal({ open, meta, pickers, cats, canAll, onClose, onSaved 
     <Modal open={open} onClose={onClose} width={920} title={t("assets.buy_new")} sub={t("assets.buy_new_sub")}
       footer={<><Btn ghost onClick={onClose}>{t("assets.cancel")}</Btn><Btn onClick={save} disabled={busy || !whOptions.length} icon={IcCart}>{busy ? t("assets.saving") : t("assets.buy_save")}</Btn></>}>
       {!whOptions.length && <Notice tone="warn">{t("assets.issue_no_warehouse")}</Notice>}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12, marginBottom: 14 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 12, marginBottom: 14 }}>
         <Field label={t("assets.buy_for_store")}>
           <PickSelect value={f.warehouse_id || ""} onChange={(e) => upd("warehouse_id", e.target.value)} style={inp}>
             <option value="">{t("assets.select")}</option>
@@ -1798,6 +1798,12 @@ function NewPurchaseModal({ open, meta, pickers, cats, canAll, onClose, onSaved 
           <SearchSelect value={f.project_id || ""} onChange={(k) => upd("project_id", k)} accent={T.ind}
             options={[{ id: "", name: t("assets.buy_no_project") }, ...(pickers.projects || []).map((p) => ({ id: p.id, name: p.name }))]}
             placeholder={t("assets.buy_no_project")} />
+        </Field>
+        {/* Maang wali hi zaroorat (7 Oct 2026) — Procurement ki MR list aur detail me dikhti hai. */}
+        <Field label={t("assets.req_priority")}>
+          <PickSelect value={f.priority || "normal"} onChange={(e) => upd("priority", e.target.value)} style={inp}>
+            {["low", "normal", "high", "urgent"].map((k) => <option key={k} value={k}>{prioLabel(k)}</option>)}
+          </PickSelect>
         </Field>
         <Field label={t("assets.buy_needed_by")}><input type="date" value={f.required_date || ""} onChange={(e) => upd("required_date", e.target.value)} style={inp} /></Field>
         <Field label={t("assets.remarks")}><input value={f.notes || ""} onChange={(e) => upd("notes", e.target.value)} style={inp} /></Field>
@@ -2043,7 +2049,7 @@ function PurchasePanels({ refreshKey, canCreate, onNewBuy, onReceive }) {
   }, [ordered]);
 
   const oCols = "120px 1.6fr 1fr 90px 90px 110px 96px";
-  const mCols = "110px 1.6fr 1fr 90px 110px 110px";
+  const mCols = "110px 1.6fr 1fr 90px 100px 110px 110px";
   return (
     <>
       <Panel title={t("assets.buy_ordered_title")}
@@ -2082,10 +2088,10 @@ function PurchasePanels({ refreshKey, canCreate, onNewBuy, onReceive }) {
         {mine == null && <Spinner />}
         {mine && mine.length === 0 && <Empty>{t("assets.buy_my_empty")}</Empty>}
         {mine && mine.length > 0 && (
-          <Scroll minWidth={840}>
+          <Scroll minWidth={940}>
             <Row head cols={mCols}>
               <span>{t("assets.req_no")}</span><span>{t("assets.item")}</span><span>{t("assets.buy_for_store")}</span>
-              <span>{t("assets.qty")}</span><span>{t("assets.buy_stage")}</span><span></span>
+              <span>{t("assets.qty")}</span><span>{t("assets.req_priority")}</span><span>{t("assets.buy_stage")}</span><span></span>
             </Row>
             {mine.map((r) => {
               const st = buyStage(r);
@@ -2110,6 +2116,7 @@ function PurchasePanels({ refreshKey, canCreate, onNewBuy, onReceive }) {
                   <span>{fmtN(r.quantity)} <span style={{ fontSize: 10.5, color: T.t4 }}>{r.unit || ""}</span>
                     {N(r.received_qty) > 0 && <div style={{ fontSize: 10.5, color: T.grn }}>{t("assets.buy_came_n", { n: fmtN(r.received_qty) })}</div>}
                   </span>
+                  <span><PrioPill p={r.priority} /></span>
                   <span><Pill label={st.l} c={st.c} bg={st.bg} /></span>
                   <span>{["Pending", "Requested"].includes(r.mr_status) && (
                     <Btn size="sm" ghost disabled={busy} style={{ color: T.red }} onClick={() => close(r)}>{t("assets.buy_close")}</Btn>

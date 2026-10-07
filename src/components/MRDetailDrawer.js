@@ -213,6 +213,11 @@ export default function MRDetailDrawer({ mr, onClose, onChanged, isAdmin: allowE
                 <Tile label={t("common.material")} value={mr.item_name || mr.item || "—"}/>
                 <Tile label={t("common.quantity")} value={`${mr.quantity || mr.qty || "—"} ${mr.unit || ""}`}/>
                 <Tile label={t("common.project")} value={mr.project_name || (mr.asset_warehouse_id ? t("procurement.asset_for_store", { name: mr.asset_warehouse_name || "" }) : "—")}/>
+                {/* Assets ki kharid wali MR ki zaroorat (7 Oct 2026) — aam MR par hoti hi nahi. */}
+                {["low", "normal", "high", "urgent"].includes(mr.priority) && (
+                  <Tile label={t("assets.req_priority")} value={t("assets.prio_" + mr.priority)}
+                    c={mr.priority === "urgent" ? T.red : mr.priority === "high" ? T.amb : undefined}/>
+                )}
                 <Tile label={t("mrdetail.requested_by")} value={mr.requested_by || "—"}/>
                 {mr.required_date && <Tile label={t("common.required_by")} value={fmtDate(mr.required_date)}/>}
                 {mr.approx_amount > 0 && <Tile label={t("mrdetail.approx_amount")} value={`₹${Number(mr.approx_amount).toLocaleString("en-IN")}`}/>}
