@@ -439,6 +439,10 @@ function MachineForm({ open, onClose, onSaved, machine, parties, seed, cities, s
       // Masked key wapas bhejna asli key ko mita dega — isliye box khaali
       // shuru hota hai aur "set hai" alag se dikhaya jaata hai.
       telematics_api_key: "",
+      // Server "Owned"/"Rented" bhejta hai, picker ke options chhote akshar
+      // me hain — bina normalise kiye kiraye ki machine par bhi "Apni" ✓ dikhta tha.
+      // Khaali/ajeeb value = kiraye ki — server isOwned() aur app jaisa hi niyam.
+      ownership: String(machine.ownership || "").toLowerCase() === "owned" ? "owned" : "rented",
       // DECIMAL "500.00" aata hai — box me "500".
       capacity_qty: machine.capacity_qty != null && machine.capacity_qty !== "" ? String(Number(machine.capacity_qty)) : "",
     } : {
