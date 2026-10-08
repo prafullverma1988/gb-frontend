@@ -484,6 +484,8 @@ function MachineForm({ open, onClose, onSaved, machine, parties, seed, cities, s
       operator_name: f.operator_name || null,
       measurement_mode: f.measurement_mode || "hourly",
       default_rate: f.default_rate ? parseFloat(f.default_rate) : 0,
+      // Kiraye ka vendor — apni machine ka koi hire vendor nahi hota.
+      default_vendor_id: owned ? null : (f.default_vendor_id || null),
       meter_unit: f.meter_unit || "hours",
       fuel_responsibility: owned ? "company" : (f.fuel_responsibility || "rent_included"),
       fuel_per_hour: f.fuel_per_hour ? parseFloat(f.fuel_per_hour) : null,
