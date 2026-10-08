@@ -424,10 +424,19 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
 
   const handleDelete = async () => {
     if (deleting) return;
+    // Hatane se pehle: aur kya-kya hilega (9 Oct 2026) — server wahi niyam
+    // padhta hai jo DELETE chalata hai. Na mile to purana prompt hi.
+    const imp = await api.get("/finance/transactions/" + txn.id + "/delete-impact")
+      .then((r) => (r?.success ? r.data : null)).catch(() => null);
+    if (imp?.blocked) {
+      setErr(t(imp.blocked === "TRIP_BILL_LOCKED" ? "txn_impact.blocked_trip" : "txn_impact.blocked_subcon"));
+      return;
+    }
+    const ask = t("transaction_detail.delete_reason_prompt", { label: meta.label, amount: fmtN(txn.amount) });
     // Wajah zaroori (server 3 akshar se kam par 400) — poori entry audit me rehti hai.
     const reason = window.promptAsync
       ? await window.promptAsync({
-          message: t("transaction_detail.delete_reason_prompt", { label: meta.label, amount: fmtN(txn.amount) }),
+          message: imp ? <div>{ask}<DeleteImpact imp={imp} /></div> : ask,
           multiline: true, okLabel: t("transaction_detail.delete"), cancelLabel: t("common.cancel"),
         })
       : null;
@@ -895,6 +904,29 @@ function Field({ label, value, onChange, type = "text" }) {
     <div>
       <label style={lblStyle}>{label}</label>
       <input type={type} value={value || ""} onChange={e => onChange(e.target.value)} style={inpStyle}/>
+    </div>
+  );
+}
+
+// ── Delete ka asar — "saath me hatega" / "rahega, bas link khulega" ──
+function DeleteImpact({ imp }) {
+  const amt = (a) => (a ? " — ₹" + Number(a).toLocaleString("en-IN", { maximumFractionDigits: 0 }) : "");
+  const line = (x) => t("txn_impact." + x.key, { n: x.count, amt: amt(x.amount), name: x.name || "" });
+  const box = (head, list, color, bg) => list.length > 0 && (
+    <div style={{ marginTop: 8, background: bg, borderRadius: 7, padding: "7px 10px" }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color, textTransform: "uppercase", letterSpacing: ".3px", marginBottom: 3 }}>{head}</div>
+      {list.map((x) => <div key={x.key} style={{ fontSize: 12.5, fontWeight: 500, color: "#374151", lineHeight: 1.5 }}>• {line(x)}</div>)}
+    </div>
+  );
+  return (
+    <div style={{ marginTop: 6 }}>
+      <div style={{ fontSize: 12, fontWeight: 600, color: "#6B7280" }}>{t("txn_impact.title")}</div>
+      {!imp.goes.length && !imp.stays.length
+        ? <div style={{ fontSize: 12.5, fontWeight: 500, color: "#374151", marginTop: 4 }}>{t("txn_impact.nothing")}</div>
+        : <>
+            {box(t("txn_impact.goes"), imp.goes, "#B91C1C", "#FEF2F2")}
+            {box(t("txn_impact.stays"), imp.stays, "#92400E", "#FFFBEB")}
+          </>}
     </div>
   );
 }
