@@ -80,6 +80,9 @@ const fmtDT = (d) => {
   return dt.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "2-digit" }) + " " +
          dt.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
 };
+// Server samay UTC me deta hai (9 Oct 2026 se fuel / sensor bhi) — dikhao
+// phone/browser ki apni ghadi me. Kachcha string kaatne se UTC dikhta tha.
+const localYmd = (v) => { const d = new Date(v); return v && !isNaN(d) ? d.toLocaleDateString("en-CA") : String(v || "").slice(0, 10); };
 
 // Same Cloudinary preset/folder the rest of the app uses. Kept local rather
 // than imported — this module owns its own dependencies (see WarehouseModule).
@@ -2182,7 +2185,7 @@ function UnbilledTab({ onReload }) {
                 {g.entries.map((e) => (
                   <Row key={e.id} cols="28px 92px 1fr 76px 68px 92px 90px 70px" onClick={() => openEntry({ kind: "purchase", id: e.id })}>
                     <input type="checkbox" checked={!!ticked[e.id]} onChange={() => toggle(e.id)} onClick={(ev) => ev.stopPropagation()} />
-                    <span>{String(e.filled_at || "").slice(0, 10)}</span>
+                    <span>{localYmd(e.filled_at)}</span>
                     <span>
                       {e.equipment_name || e.store_name || "—"}
                       {e.fuel_type === "petrol" && <b style={{ color: T.amb }}>{" · " + t("fuel.petrol")}</b>}
@@ -3464,7 +3467,7 @@ function CrossCheckTab({ stores, byEquipment, purchases, issues, sensor, onReloa
                   <span style={{ fontSize: 13, fontWeight: 700 }}>
                     {p.vendor_party_name || p.vendor_name || "—"}
                     <span style={{ fontWeight: 500, color: T.t4, fontSize: 11.5 }}>
-                      {"  "}{String(p.filled_at || "").slice(0, 10)}{p.slip_no ? ` · slip ${p.slip_no}` : ""}
+                      {"  "}{localYmd(p.filled_at)}{p.slip_no ? ` · slip ${p.slip_no}` : ""}
                     </span>
                   </span>
                   <span style={{ fontSize: 12.5, fontFamily: "monospace", whiteSpace: "nowrap" }}>

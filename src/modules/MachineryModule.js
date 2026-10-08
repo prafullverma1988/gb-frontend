@@ -26,6 +26,13 @@ import CityPicker from "../components/CityPicker";
 import { can, canAny, canEntry } from "../utils/perms";
 import { canApproveAction } from "../utils/approvalAuthority";
 import { cld } from "../utils/cloudinary";
+// Server samay UTC me deta hai (9 Oct 2026 se fuel / sensor bhi) — dikhao
+// phone/browser ki apni ghadi me. Kachcha string kaatne se UTC dikhta tha.
+const localDT = (v) => {
+  const d = new Date(v); if (!v || isNaN(d)) return String(v || "").replace("T", " ").slice(0, 16);
+  const p = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+};
 
 // Gadi number ka milan: space/dash/dot ka farak nahi ginna — backend bhi
 // theek yahi karta hai (utils/machineIdentity.js). Dono taraf ek jaisa na ho
@@ -2005,7 +2012,7 @@ function MachineDetail({ id, onBack, onChanged, onEdit, onRemoved, canRemove, pa
             {gps.events.length === 0 && <Empty>{t("machinery.is_duration_me_koi_fill_drop")}</Empty>}
             {gps.events.map((ev) => (
               <Row key={ev.id} cols="130px 90px 1fr 1.2fr">
-                <span style={{ fontSize: 11, color: T.t3 }}>{String(ev.event_time).replace("T", " ").slice(0, 16)}</span>
+                <span style={{ fontSize: 11, color: T.t3 }}>{localDT(ev.event_time)}</span>
                 <span>{ev.event_type === "fill"
                   ? <Pill label={"+" + fmtN(ev.litres) + " L"} c={T.grn} bg={T.grnL} />
                   : <Pill label={"−" + fmtN(ev.litres) + " L"} c={T.red} bg={T.redL} />}</span>
@@ -5806,7 +5813,7 @@ function TeleDash({ dash, onAction }) {
         <Panel title={t("fuel.dhyan_dene_layak")}>
           {dash.flags.drops.map((d) => (
             <Row key={"d" + d.id} cols="110px 1.4fr 90px 1fr 100px">
-              <span style={{ fontSize: 11, color: T.t3 }}>{String(d.event_time).replace("T", " ").slice(5, 16)}</span>
+              <span style={{ fontSize: 11, color: T.t3 }}>{localDT(d.event_time).slice(5)}</span>
               <span style={{ fontSize: 12, fontWeight: 600 }}>{d.machine_name || d.unit_name}<span style={{ fontWeight: 400, color: T.t4, fontSize: 10.5 }}> {t("machinery.fuel_drop")}</span></span>
               <span style={{ fontFamily: "monospace", fontSize: 12, color: T.red, fontWeight: 700 }}>−{fmtN(d.litres)} L</span>
               <span style={{ fontSize: 11, color: T.t3 }}>{d.location_text || "—"}</span>
@@ -5815,7 +5822,7 @@ function TeleDash({ dash, onAction }) {
           ))}
           {dash.flags.fills_no_entry.map((f) => (
             <Row key={"f" + f.id} cols="110px 1.4fr 90px 1fr 100px">
-              <span style={{ fontSize: 11, color: T.t3 }}>{String(f.event_time).replace("T", " ").slice(5, 16)}</span>
+              <span style={{ fontSize: 11, color: T.t3 }}>{localDT(f.event_time).slice(5)}</span>
               <span style={{ fontSize: 12, fontWeight: 600 }}>{f.machine_name || f.unit_name}<span style={{ fontWeight: 400, color: T.amb, fontSize: 10.5 }}> {t("machinery.diesel_bhara_entry_nahi")}</span></span>
               <span style={{ fontFamily: "monospace", fontSize: 12 }}>{fmtN(f.litres)} L</span>
               <span style={{ fontSize: 11, color: T.t3 }}>{t("machinery.fuel_module_me_entry_karwao")}</span>
