@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import PickSelect from "../components/PickSelect";
 import api from "../config/api";
 import SearchSelect from "../components/SearchSelect";
@@ -77,6 +77,29 @@ const fmt=(n)=>n>=10000000?`${(n/10000000).toFixed(1)}Cr`:n>=100000?`${(n/100000
 const PROJECTS=[];
 const VENDORS=[];
 const UNITS=["Bags","MT","Nos","Loads","Sqft","Mtrs","Kg","Sheets","Ltrs","Cu.m","Ton","RFT"];
+
+// Unit = Library → Units (uom_master) — har company ki apni list (jaise
+// Ratna me "GD — Gaadi", "RMT", "Cum"). Pehle PO/RFQ me upar wali likhi
+// hui UNITS list thi, library ki unit dikhti hi nahi thi (9 Oct 2026).
+// Symbol save hota hai, "Kg — Kilogram" dikhta hai; poore naam se bhi
+// khoj. UOM khaali / na aaye to purani UNITS.
+function useLibUnits(){
+  const [uoms,setUoms]=useState([]);
+  useEffect(()=>{
+    let alive=true;
+    api.get("/library/uom").then(r=>{ if(alive&&r?.success&&Array.isArray(r.data)) setUoms(r.data); }).catch(()=>{});
+    return ()=>{ alive=false; };
+  },[]);
+  return useMemo(()=>{
+    const lib=uoms.map(u=>{
+      const sym=String(u.symbol||u.name||"").trim(), nm=String(u.name||"").trim();
+      return sym?{value:sym,label:nm&&nm.toLowerCase()!==sym.toLowerCase()?`${sym} — ${nm}`:sym,search:nm}:null;
+    }).filter(Boolean);
+    return lib.length?lib:UNITS.map(u=>({value:u,label:u}));
+  },[uoms]);
+}
+// Purani PO/RFQ ki unit library me na ho to bhi option bane — warna khaali dikhe.
+const withUnit=(opts,v)=>v&&!opts.some(o=>o.value.toLowerCase()===String(v).trim().toLowerCase())?[...opts,{value:v,label:v}]:opts;
 
 const MR_DATA=[];
 
@@ -1142,6 +1165,7 @@ function CreateRFQModal({onClose,onSave,dbProjects,dbVendors=[]}){
   const savingRef=useRef(false);
   const [matLib,setMatLib]=useState([]);
   useEffect(()=>{ api.get("/library/materials").then(r=>{ if(r.success) setMatLib(r.data||[]); }).catch(()=>{}); },[]);
+  const unitOpts=useLibUnits();
   const updItem=(i,k,v)=>{
     const its=[...form.items];
     its[i]={...its[i],[k]:v};
@@ -1176,7 +1200,7 @@ function CreateRFQModal({onClose,onSave,dbProjects,dbVendors=[]}){
               <LibrarySelect type="material" value={it.desc} onChange={v=>updItem(i,"desc",v||"")} placeholder={t("procurement.pick_material")} compact hideAddNew/>
               <input type="number" min="0" value={it.qty} onChange={e=>updItem(i,"qty",e.target.value)} placeholder={t("common.qty")}
                 style={{padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
-              <SearchSelect value={it.unit} options={UNITS} compact onChange={v=>updItem(i,"unit",v)} placeholder={t("common.unit")}/>
+              <SearchSelect value={it.unit} options={withUnit(unitOpts,it.unit)} compact onChange={v=>updItem(i,"unit",v)} placeholder={t("common.unit")}/>
               <button onClick={()=>{if(form.items.length===1)return;setForm(p=>({...p,items:p.items.filter((_,j)=>j!==i)}));}} disabled={form.items.length===1}
                 style={{width:26,height:26,borderRadius:6,background:form.items.length===1?"transparent":T.redL,border:`1px solid ${form.items.length===1?T.b1:T.redM}`,cursor:form.items.length===1?"not-allowed":"pointer",display:"flex",alignItems:"center",justifyContent:"center",opacity:form.items.length===1?.4:1}}>
                 <IcX size={12} color={T.red}/>
@@ -1305,6 +1329,7 @@ function CreatePOModal({onClose,onSave,prefillItems,prefillVendor,editPo,dbProje
   const [matLib,setMatLib]=useState([]);
   const reloadMatLib=()=>api.get("/library/materials").then(r=>{ if(r.success) setMatLib(r.data||[]); }).catch(()=>{});
   useEffect(()=>{ reloadMatLib(); },[]);
+  const unitOpts=useLibUnits();
 
   // Inline "Add new material to library" form (collapsible)
   const [showAddMat,setShowAddMat]=useState(false);
@@ -1532,9 +1557,9 @@ function CreatePOModal({onClose,onSave,prefillItems,prefillVendor,editPo,dbProje
                 <input value={newMat.name} onChange={e=>setNewMat(p=>({...p,name:e.target.value}))} placeholder={t("common.material_name")} autoFocus
                   style={{padding:"7px 10px",borderRadius:6,border:`1.5px solid ${T.purM}`,fontSize:12.5,color:T.t1,background:"white",outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
                 <PickSelect value={newMat.unit} onChange={e=>setNewMat(p=>({...p,unit:e.target.value}))}
-                  style={{padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.purM}`,fontSize:12,color:T.t1,background:"white",outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}>
+                  style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.purM}`,fontSize:12,color:T.t1,background:"white",outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}>
                   <option value="">{t("common.unit")}</option>
-                  {UNITS.map(u=><option key={u}>{u}</option>)}
+                  {unitOpts.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}
                 </PickSelect>
                 <input value={newMat.hsn} onChange={e=>setNewMat(p=>({...p,hsn:e.target.value}))} placeholder={t("procurement.hsn_optional")}
                   style={{padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.purM}`,fontSize:12,color:T.t1,background:"white",outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
@@ -1578,7 +1603,7 @@ function CreatePOModal({onClose,onSave,prefillItems,prefillVendor,editPo,dbProje
                       style={{padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surfaceB,fontFamily:"inherit",fontWeight:700,display:"flex",alignItems:"center",gap:5,justifyContent:"center",cursor:"not-allowed",boxSizing:"border-box"}}>
                       <span style={{fontSize:9,opacity:.55}}>🔒</span>{u}
                     </div>
-                  : <SearchSelect value={it.unit} options={UNITS} compact onChange={v=>updItem(i,"unit",v)} placeholder={t("common.unit")}/>
+                  : <SearchSelect value={it.unit} options={withUnit(unitOpts,it.unit)} compact onChange={v=>updItem(i,"unit",v)} placeholder={t("common.unit")}/>
                 }
                 <input type="number" min="0" value={it.rate} onChange={e=>updItem(i,"rate",e.target.value)} placeholder={t("common.rate")}
                   title={it._d==="rate"?t("finance.auto_total_qty"):(it._pick==="rate"?t("finance.selected_total_adjust_karoge_to_rate"):undefined)}

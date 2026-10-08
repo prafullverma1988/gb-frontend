@@ -218,6 +218,23 @@ function TabMaterial({ project }) {
   const [invUsedForm, setInvUsedForm] = useState({});
   const [invUsedSaving, setInvUsedSaving] = useState(false);
   const UNITS_MR = ["Bags","MT","Nos","Loads","Sqft","Mtrs","Kg","Sheets","Ltrs","Cu.m","Ton","RFT","Brass"];
+  // Unit = Library → Units (uom_master), company ki apni list — pehle upar
+  // wali likhi list thi (9 Oct 2026). Symbol save, "Kg — Kilogram" dikhe.
+  // UOM khaali / na aaye to UNITS_MR. Purani MR ki unit list me na ho to
+  // bhi option bane (unitOptsWith).
+  const [uomList, setUomList] = useState([]);
+  useEffect(() => {
+    api.get("/library/uom").then(r => { if (r?.success && Array.isArray(r.data)) setUomList(r.data); }).catch(() => {});
+  }, []);
+  const unitOptsMR = (() => {
+    const lib = uomList.map(u => {
+      const sym = String(u.symbol || u.name || "").trim(), nm = String(u.name || "").trim();
+      return sym ? { value: sym, label: nm && nm.toLowerCase() !== sym.toLowerCase() ? `${sym} — ${nm}` : sym } : null;
+    }).filter(Boolean);
+    return lib.length ? lib : UNITS_MR.map(u => ({ value: u, label: u }));
+  })();
+  const unitOptsWith = (v) => v && !unitOptsMR.some(o => o.value.toLowerCase() === String(v).trim().toLowerCase())
+    ? [...unitOptsMR, { value: v, label: v }] : unitOptsMR;
   const [matLibReal, setMatLibReal] = useState([]);
 
   // ── Ledger tab state ────────────────────────────────────────
@@ -631,9 +648,9 @@ function TabMaterial({ project }) {
                     <input value={libNewName} onChange={e=>setLibNewName(e.target.value)} placeholder={t("common.material_name")} autoFocus
                       style={{padding:"8px 10px",borderRadius:6,border:`1.5px solid ${T.purM}`,fontSize:12.5,color:T.t1,background:"white",outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
                     <PickSelect value={libNewUnit} onChange={e=>setLibNewUnit(e.target.value)}
-                      style={{padding:"8px 9px",borderRadius:6,border:`1.5px solid ${T.purM}`,fontSize:12,color:T.t1,background:"white",outline:"none",fontFamily:"inherit",boxSizing:"border-box",cursor:"pointer"}}>
+                      style={{width:"100%",padding:"8px 9px",borderRadius:6,border:`1.5px solid ${T.purM}`,fontSize:12,color:T.t1,background:"white",outline:"none",fontFamily:"inherit",boxSizing:"border-box",cursor:"pointer"}}>
                       <option value="">{t("common.unit")}</option>
-                      {UNITS_MR.map(u=><option key={u}>{u}</option>)}
+                      {unitOptsMR.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}
                     </PickSelect>
                     <button onClick={saveLibMaterial} disabled={!libNewName.trim()||libSaving}
                       style={{padding:"8px 0",borderRadius:6,background:libNewName.trim()?T.pur:T.b1,color:libNewName.trim()?"white":T.t4,border:"none",fontSize:12,fontWeight:700,cursor:libNewName.trim()?"pointer":"not-allowed",fontFamily:"inherit"}}>
@@ -699,7 +716,7 @@ function TabMaterial({ project }) {
                         ) : (
                           <PickSelect value={it.unit} onChange={e=>updItem(idx,{unit:e.target.value})}
                             style={{padding:"7px 8px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",cursor:"pointer",width:"100%"}}>
-                            {UNITS_MR.map(u=><option key={u}>{u}</option>)}
+                            {unitOptsWith(it.unit).map(o=><option key={o.value} value={o.value}>{o.label}</option>)}
                           </PickSelect>
                         )}
                         <input type="number" value={it.approx_amount} onChange={e=>updItem(idx,{approx_amount:e.target.value})} placeholder="0"
