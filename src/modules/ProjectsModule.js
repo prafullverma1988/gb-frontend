@@ -2929,9 +2929,13 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
         <div style={{fontSize:12.5,fontWeight:700,color:T.t1}}>₹{Number(it.amount||0).toLocaleString("en-IN")}</div>
         <div style={{fontSize:10.5,color:T.t4,marginTop:2}}><b style={{color:T.t3}}>{it.sender_name}</b> → {it.party_name}{it.project_name?" · "+it.project_name:""}</div>
         {it.note&&<div style={{fontSize:10.5,color:T.t4,marginTop:2,fontStyle:"italic"}}>"{it.note}"</div>}
-        {(it.photo_url||it.photo_pending)&&(
-          <div style={{display:"flex",gap:8,marginTop:5,alignItems:"center"}}>
+        {(it.photo_url||it.photo_pending||(it.extra_photos||[]).length>0)&&(
+          <div style={{display:"flex",gap:8,marginTop:5,alignItems:"center",flexWrap:"wrap"}}>
             {it.photo_url&&<a href={it.photo_url} target="_blank" rel="noreferrer" style={{fontSize:10.5,color:T.blu,fontWeight:600}}>{t("projects.photo_dekhein")}</a>}
+            {/* Staff ne baad me jodi photo (bill turant paas nahi tha) — app se */}
+            {(it.extra_photos||[]).map((u,i)=>(
+              <a key={u} href={u} target="_blank" rel="noreferrer" style={{fontSize:10.5,color:T.blu,fontWeight:600}}>{t("projects.photo_n",{n:i+2})}</a>
+            ))}
             {it.photo_pending&&<span style={{fontSize:9,fontWeight:700,color:T.amb,background:T.ambL,padding:"1px 7px",borderRadius:10}}>{t("projects.photo_pending")}</span>}
           </div>
         )}

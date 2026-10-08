@@ -12800,6 +12800,7 @@ const dict = {
   "tripbill.ed_save": "Save",
   "tripbill.ed_saved": "Bill {no} updated.",
   "tripbill.ed_trips_in": "Trips in this bill",
+  "projects.photo_n": "Photo {n}",
 };
 
 export default dict;

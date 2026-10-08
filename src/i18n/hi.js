@@ -12799,6 +12799,7 @@ const dict = {
   "tripbill.ed_save": "सेव करो",
   "tripbill.ed_saved": "बिल {no} बदल गया।",
   "tripbill.ed_trips_in": "इस बिल की ट्रिप",
+  "projects.photo_n": "फ़ोटो {n}",
 };
 
 export default dict;
