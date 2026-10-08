@@ -36,7 +36,13 @@ const btn = (bg, fg, bd) => ({ padding: "7px 14px", borderRadius: 6, background:
 const secH = { fontSize: 10.5, fontWeight: 700, color: T.t3, textTransform: "uppercase", letterSpacing: ".4px", margin: "14px 0 7px" };
 const STATUS = { InTransit: [T.amb, T.ambL, "weigh.in_transit"], Received: [T.blu, T.bluL, "weigh.unloaded"], Closed: [T.grn, T.grnL, "weigh.closed"], Cancelled: [T.red, T.redL, "weigh.cancelled"] };
 // Cancel ki jaldi wali wajah — tap se bhar jaati hai, phir badal bhi sakte ho.
-const CANCEL_REASONS = ["weigh.cancel_r1", "weigh.cancel_r2", "weigh.cancel_r3", "weigh.cancel_r4", "weigh.cancel_r5"];
+// Har chip ki kism (9 Oct 2026): galat entry / gadi wapas bheji / order cancel — server ko jaati hai.
+const CANCEL_CHIPS = [
+  { k: "weigh.cancel_r1", kind: "wrong_entry" }, { k: "weigh.cancel_r2", kind: "wrong_entry" },
+  { k: "weigh.cancel_r3", kind: "wrong_entry" }, { k: "weigh.cancel_r4", kind: "wrong_entry" },
+  { k: "weigh.cancel_r5", kind: "returned" },    { k: "weigh.cancel_r6", kind: "order_cancel" },
+];
+const CANCEL_REASONS = CANCEL_CHIPS.map(c => c.k);
 // Khali wazan itna purana ho to ⚠ (server ka STALE_TARE_HOURS bhi yahi).
 // Default hai — company ka apna ghanta settings.stale_tare_hours me aata hai.
 const STALE_H = 12;
@@ -353,7 +359,8 @@ export default function WeighbridgePanel({ dest, onChanged }) {
     const reason = cancelReason.trim();
     if (reason.length < 3) { setCancelErr(t("weigh.cancel_reason_required")); return; }
     setBusy(true); setCancelErr("");
-    const r = await api.post(`/weighments/${cancelFor}/cancel`, { reason }).catch(e => ({ success: false, message: e.message }));
+    const kind = (CANCEL_CHIPS.find(c => t(c.k) === reason) || {}).kind || "wrong_entry";
+    const r = await api.post(`/weighments/${cancelFor}/cancel`, { reason, kind }).catch(e => ({ success: false, message: e.message }));
     setBusy(false);
     if (!r?.success) { setCancelErr(r?.message || t("common.something_went_wrong")); return; }
     setCancelFor(null); setCancelReason("");
@@ -897,6 +904,15 @@ export default function WeighbridgePanel({ dest, onChanged }) {
           {showCancelled && cancelled.map(w => (
             <div key={w.id} style={{ background: T.surfaceB, border: "1px solid " + T.b1, borderLeft: "3px solid " + T.red, borderRadius: 8, padding: "9px 12px", marginBottom: 7 }}>
               {tripHead(w)}
+              {w.cancel_kind && (
+                <div style={{ marginTop: 5 }}>
+                  <span style={{ fontSize: 10.5, fontWeight: 700, padding: "2px 8px", borderRadius: 8,
+                    background: w.cancel_kind === "returned" ? T.ambL : w.cancel_kind === "order_cancel" ? T.bluL : T.redL,
+                    color: w.cancel_kind === "returned" ? T.amb : w.cancel_kind === "order_cancel" ? T.blu : T.red }}>
+                    {t("weigh.kind_" + w.cancel_kind)}
+                  </span>
+                </div>
+              )}
               <div style={{ fontSize: 11, color: T.red, fontWeight: 600, marginTop: 5 }}>{t("weigh.cancelled_reason", { reason: w.cancel_reason || "—" })}</div>
               <div style={{ fontSize: 10.5, color: T.t4, marginTop: 2 }}>{t("weigh.cancelled_by", { name: w.cancelled_by_name || "—", when: fmtWhen(w.cancelled_at || w.updated_at) })}</div>
             </div>

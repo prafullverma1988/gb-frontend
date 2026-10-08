@@ -147,10 +147,19 @@ export default function MRDetailDrawer({ mr, onClose, onChanged, isAdmin: allowE
     if (closing) return;
     setClosing(true); setErr("");
     try {
-      const res = await api.put("/procurement/mrs/" + mr.id, {
+      let res = await api.put("/procurement/mrs/" + mr.id, {
         mr_status: "Closed",
         closed_reason: reason,
       });
+      // Gadi kaante par tuli khadi hai (GRN nahi bana) → poochho: gadi bhi wapas? (server 409 open_trucks)
+      if (res?.code === "open_trucks") {
+        if (!(await window.confirmAsync(res.message))) { setClosing(false); return; }
+        res = await api.put("/procurement/mrs/" + mr.id, {
+          mr_status: "Closed",
+          closed_reason: reason,
+          cancel_trucks: true,
+        });
+      }
       if (res?.success === false) {
         setErr(res.message || "Close failed"); setClosing(false); return;
       }

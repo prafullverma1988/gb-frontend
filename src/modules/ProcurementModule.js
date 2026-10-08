@@ -2274,7 +2274,12 @@ function ProcurementModule(){
     if(reason===null) return;
     if(!reason.trim()){ window.alert(t("payroll.reason_zaroori_hai")); return; }
     try{
-      const r=await api.put("/procurement/mrs/"+m.id,{mr_status:"Closed",closed_reason:reason.trim()});
+      let r=await api.put("/procurement/mrs/"+m.id,{mr_status:"Closed",closed_reason:reason.trim()});
+      // Is MR ki gadi kaante par tuli khadi hai (GRN nahi bana) → poochho: gadi bhi wapas?
+      if(r?.code==="open_trucks"){
+        if(!await window.confirmAsync(r.message)) return;
+        r=await api.put("/procurement/mrs/"+m.id,{mr_status:"Closed",closed_reason:reason.trim(),cancel_trucks:true});
+      }
       if(r?.success===false){ window.alert(r.message||"Close failed"); return; }
       setMRs(p=>p.map(x=>x.id===m.id?{...x,mrStatus:"Closed",closed_reason:reason.trim()}:x));
     }catch(e){ window.alert(e?.message||"Network error"); }
@@ -2954,7 +2959,12 @@ function ProcurementModule(){
         onSendToVendor={pEdit?(po)=>{setSendToVendorTarget(po);}:null}
         onEdit={pEdit?(po)=>{setEditPo(po);setShowCreatePO(true);setSelPO(null);}:null}
         onCancel={!pApprove?null:async(po)=>{
-          const res=await api.patch("/procurement/pos/"+po.id+"/cancel",{});
+          let res=await api.patch("/procurement/pos/"+po.id+"/cancel",{});
+          // PO ki gadi kaante par tuli khadi ho to pehle poochho (server 409 open_trucks)
+          if(res?.code==="open_trucks"){
+            if(!await window.confirmAsync(res.message)) return;
+            res=await api.patch("/procurement/pos/"+po.id+"/cancel",{cancel_trucks:true});
+          }
           if(res.success){
             setPOs(p=>p.map(x=>x.id===po.id?{...x,poStatus:"Cancelled"}:x));
             setSelPO(p=>p?{...p,poStatus:"Cancelled"}:p);
