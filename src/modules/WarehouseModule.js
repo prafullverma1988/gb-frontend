@@ -1756,7 +1756,7 @@ function MaterialDetailDrawer({material,onClose,onEdit,onDelete,onIssue,onAddSto
           {onIssue&&<Btn onClick={()=>onIssue(material)} c={T.amb} icon={IcOut} size="sm">{t("mom.issue")}</Btn>}
           {onAddStock&&<Btn onClick={()=>onAddStock(material)} c={T.grn} icon={IcIn} size="sm">{t("warehouse.add_stock")}</Btn>}
           {onEdit&&<GhostBtn onClick={()=>onEdit(material)} icon={IcEdit} c={T.blu}>{t("common.edit_2")}</GhostBtn>}
-          {onDelete&&<GhostBtn onClick={()=>onDelete(material)} icon={IcTrash} c={T.red}>{t("common.delete")}</GhostBtn>}
+          {onDelete&&<GhostBtn onClick={()=>onDelete(material)} icon={IcTrash} c={T.red}>{t("warehouse.hatao")}</GhostBtn>}
         </div>
 
         <div style={{flex:1,overflowY:"auto",padding:"12px 18px"}}>
@@ -1853,7 +1853,54 @@ function WarehousesTab({data,activeId,onOpen}){
   );
 }
 
-function StockTab({stock,grns,issues,onSelect,onAddMaterial,onAddStock,onIssue,onQuickRequest,onDispose}){
+// "Hataye hue" — qty 0 par hataye item (soft delete). Delete se history nahi jaati,
+// isliye yahin se item wapas laa sakte hain; warehouse_id api helper khud lagata hai.
+function HiddenMaterialsModal({canRestore,onClose,onRestored}){
+  const [rows,setRows]=useState([]);
+  const [loading,setLoading]=useState(true);
+  const [busyId,setBusyId]=useState(null);
+  const load=useCallback(async()=>{
+    setLoading(true);
+    try{
+      const r=await api.get("/warehouse/materials?archived=1");
+      setRows(r.success?(r.data||[]):[]);
+    }catch(e){setRows([]);}
+    setLoading(false);
+  },[]);
+  useEffect(()=>{load();},[load]);
+  const restore=async(m)=>{
+    setBusyId(m.id);
+    try{
+      const r=await api.post(`/warehouse/materials/${m.id}/restore`,{});
+      if(r.success){
+        if(r.message)alert(r.message);
+        onRestored&&onRestored();   // main stock list dobara
+        await load();               // hidden list se ye item hat jaaye
+      }else alert(r.message||t("common.something_went_wrong"));
+    }catch(e){alert(e.message);}
+    setBusyId(null);
+  };
+  return (
+    <ModalShell title={t("warehouse.hataye_hue")} sub={t("warehouse.hataye_hue_sub")} onClose={onClose} width={560}>
+      {loading&&<div style={{textAlign:"center",padding:"20px",color:T.t4,fontSize:12}}>{t("common.loading")}</div>}
+      {!loading&&rows.length===0&&<Empty label={t("warehouse.hataye_hue_khaali")}/>}
+      {!loading&&rows.map(m=>(
+        <div key={m.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 0",borderBottom:`1px solid ${T.b1}`}}>
+          <span style={{fontSize:20}}>{getCategoryEmoji(m.category)}</span>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontSize:13,fontWeight:700,color:T.t1}}>{m.name}</div>
+            <div style={{fontSize:10.5,color:T.t4,marginTop:2}}>
+              {[m.unit,m.category].filter(Boolean).join(" · ")} · {t("warehouse.hataya_kab",{date:fmtDate(m.archived_at)})}
+            </div>
+          </div>
+          {canRestore&&<Btn size="sm" c={T.grn} disabled={busyId===m.id} onClick={()=>restore(m)}>{t("warehouse.wapas_laao")}</Btn>}
+        </div>
+      ))}
+    </ModalShell>
+  );
+}
+
+function StockTab({stock,grns,issues,onSelect,onAddMaterial,onAddStock,onIssue,onQuickRequest,onDispose,onHidden}){
   const [search,setSearch]=useState("");
   const [cat,setCat]=useState("All");
   const [showLow,setShowLow]=useState(false);
@@ -1979,6 +2026,8 @@ function StockTab({stock,grns,issues,onSelect,onAddMaterial,onAddStock,onIssue,o
         {onDispose&&stock.some(m=>Number(m.qty_damaged)>0||Number(m.qty_scrap)>0||Number(m.qty_repair)>0)&&(
           <GhostBtn onClick={onDispose} c={T.amb}>{t("warehouse.gt_dispose_btn")}</GhostBtn>
         )}
+        {/* Hataye hue item ki list — sabko dikhti hai, "Wapas laao" sirf Delete tick wale ko */}
+        {onHidden&&<GhostBtn onClick={onHidden}>{t("warehouse.hataye_hue")}</GhostBtn>}
         {onAddMaterial&&<Btn onClick={onAddMaterial} c={T.blu} icon={IcAdd} size="sm">{t("warehouse.new_material")}</Btn>}
       </div>
 
@@ -3351,6 +3400,7 @@ function WarehouseModule(){
   const [grnMR,setGrnMR]=useState(null);           // Tab 1: receive GRN modal target
   const [issueDetail,setIssueDetail]=useState(null);
   const [disposeOpen,setDisposeOpen]=useState(false);   // Kharab / Kabad nikalo
+  const [hiddenOpen,setHiddenOpen]=useState(false);     // "Hataye hue" item ki list
   const [dispSeq,setDispSeq]=useState(0);               // nikasi list dobara laao
   const [gintiPending,setGintiPending]=useState(0);     // approval baaki ginti — tab ka badge
 
@@ -3547,7 +3597,7 @@ function WarehouseModule(){
   const handleDeleteMaterial=async(m)=>{
     if(!await window.confirmAsync(t("warehouse.name_ko_delete_karein_movements_hue", { name: m.name }))) return;
     const res=await api.del(`/warehouse/materials/${m.id}`);
-    if(res.success){setMatDetail(null);loadAll();}
+    if(res.success){setMatDetail(null);loadAll();if(res.message)alert(res.message);} // soft delete — server batata hai "Hataye hue" se wapas aayega
     else alert(res.message||"Delete failed");
   };
 
@@ -3672,7 +3722,7 @@ function WarehouseModule(){
           godownsView={<WarehousesTab data={whOverview} activeId={whId} onOpen={switchWarehouse}/>}
           onGoto={id=>{switchWarehouse(id);setTab("stock");}}/>}
         {tab==="stock"&&<StockTab stock={stock} grns={grns} issues={issues} onSelect={m=>setMatDetail(m)} onAddMaterial={whCreate?()=>setMatModalOpen({}):undefined} onAddStock={whCreate?m=>setAddStockTarget(m):undefined} onIssue={whEntry?m=>setIssueTarget(m):undefined} onQuickRequest={whEntry?m=>{setMrPrefill({name:m.name,unit:m.unit});setMrNewOpen(true);}:undefined}
-          onDispose={canGintiCreate?()=>setDisposeOpen(true):null}/>}
+          onDispose={canGintiCreate?()=>setDisposeOpen(true):null} onHidden={()=>setHiddenOpen(true)}/>}
         {/* Kharab / Kabad nikasi ki list (approve yahin) + "Repair me" — key=whId: store badla to dobara */}
         {tab==="stock"&&<DisposalsPanel key={whId} refreshKey={dispSeq} canApprove={canGintiApprove} meId={meUser?.id}
           isAdmin={["admin","super_admin"].includes((meUser?.role||"").toLowerCase())} onChanged={()=>loadAll()}/>}
@@ -3756,6 +3806,9 @@ function WarehouseModule(){
       {disposeOpen&&(
         <DisposalModal stock={stock} onClose={()=>setDisposeOpen(false)}
           onSaved={(m)=>{setDispSeq(n=>n+1);if(m)alert(m);}}/>
+      )}
+      {hiddenOpen&&(
+        <HiddenMaterialsModal key={whId} canRestore={whDelete} onClose={()=>setHiddenOpen(false)} onRestored={()=>loadAll()}/>
       )}
       {addStockTarget&&(
         <AddStockModal material={addStockTarget} onClose={()=>setAddStockTarget(null)} onSaved={()=>loadAll()}/>
