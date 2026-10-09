@@ -931,6 +931,14 @@ function CompanySettings() {
 // Kaanta (weigh) ab patti (sirf chunne par) aur Hub me bhi; uska More tile Home
 // YA patti — dono me se kahin ho to nahi (overflow ab list bhi ho sakta hai).
 //
+// 9 Oct 2026 (fix — Prafull): ye "kahin nahi" wala niyam sirf naye layout par.
+// Server har save par layout me `v: 2` lagata hai. Purana layout (bina v, AE se
+// pehle save hua) — chhupao sirf More / Hub ka TILE hatata hai, patti / Home
+// par wo cheez aati rehti hai (admin ne aksar tile isliye chhupaya tha ki cheez
+// pehle se patti me thi). Ye screen wahi dikhati hai jo phone par abhi chal
+// raha hai; purane layout par upar ek line — save karte hi naya niyam, aur save
+// ke baad kya is role ko kahin nahi dikhega.
+//
 // 9 Oct 2026 (B2): app ke Home ke do hisse bhi yahin — upar ke dabbe (4 tak)
 // aur Quick Actions (8 tak). Wahi chunav/kram wala tareeka jo patti ka. Kuch
 // set nahi = aaj jaisa Home. Saath me switch: is role ke log app me apna Home
@@ -954,6 +962,8 @@ const MLAY_TILES_OF = { app_nav: "more", project_nav: "hub", home_quick: "more",
 const MLAY_HIDE_KEY = { more: "hide_more", hub: "hide_hub" };
 // overflow ek jagah ya list (server CATALOG).
 const mlayOverflow = (item) => [].concat((item && item.overflow) || []);
+// Layout ka version — server (utils/mobileLayout.js LAYOUT_V) har save par lagata hai.
+const MLAY_V = 2;
 // Purana server `slots` na bheje to.
 const MLAY_SLOTS_DEFAULT = { home_quick: 8, home_tiles: 4 };
 
@@ -1007,9 +1017,15 @@ function MobileLayoutTab({ roleName, dbRole, perms, isAdmin, isViewer, coModules
     return null;
   };
   const allowed = (item) => !blockReason(item);
+  // Phone par abhi kaunsa matlab chal raha hai: naya (v: 2, ya layout hi nahi —
+  // save hote hi v: 2) ya purana (sirf tile). Neeche har hisaab `rule2` leta hai;
+  // na diya to yahi (9 Oct 2026, fix).
+  const newRule = !saved || Number(saved.v) >= MLAY_V;
   // Admin ne chhupaya (AE): patti / Home ke hisse More ke chhupaye se, project
   // ki patti Hub ke chhupaye se. hide_as = More ka id jab Home ka alag ho.
-  const hiddenIn = (key, item) => {
+  // Purane matlab me patti / Home par kuch nahi chhupta.
+  const hiddenIn = (key, item, rule2) => {
+    if (!rule2) return false;
     const list = draft[key === "project_nav" ? "hide_hub" : "hide_more"] || [];
     return list.includes((item && item.hide_as) || (item && item.id));
   };
@@ -1018,7 +1034,7 @@ function MobileLayoutTab({ roleName, dbRole, perms, isAdmin, isViewer, coModules
   // Apne aap me `extra` item nahi aate (Home ke naye Quick Actions, patti ka
   // Kaanta) — taaki bina set kiye Home aaj jaisa hi rahe — aur admin ka
   // chhupaya bhi nahi. Admin ne khud chuna ho to chhupa hone par bhi chalta hai.
-  const navOf = (key) => {
+  const navOf = (key, rule2 = newRule) => {
     const n = slotsOf(key);
     const ok = (cat[key] || []).filter(allowed);
     const pick = draft[key] || [];
@@ -1026,21 +1042,22 @@ function MobileLayoutTab({ roleName, dbRole, perms, isAdmin, isViewer, coModules
       const out = pick.map(id => ok.find(x => x.id === id)).filter(Boolean).slice(0, n);
       if (out.length) return { items: out, auto: false };
     }
-    return { items: ok.filter(x => !x.extra && !hiddenIn(key, x)).slice(0, n), auto: true };
+    return { items: ok.filter(x => !x.extra && !hiddenIn(key, x, rule2)).slice(0, n), auto: true };
   };
-  const navIds = (key) => new Set(navOf(key).items.map(x => x.id));
+  const navIds = (key, rule2 = newRule) => new Set(navOf(key, rule2).items.map(x => x.id));
 
   // Tick = is role ko ye cheez dikhe (admin ne chhupayi nahi). Admin ne khud
   // patti / Home me rakhi ho to tick band (wahan dikh rahi hai). "Apne aap" se
   // patti / Home par ho to tick khula — hatao to wahan se bhi hat'ti hai (AE).
-  const tileState = (surface, item) => {
+  // Purane matlab me "apne aap" wali bhi band — chhupane se wahan se nahi hat'ti.
+  const tileState = (surface, item, rule2 = newRule) => {
     const why = blockReason(item);
     if (why) return { show: false, locked: true, why };
     const ov = mlayOverflow(item);
-    const placedIn = ov.find(k => (draft[k] || []).includes(item.id) && navIds(k).has(item.id));
-    const autoIn = ov.find(k => navIds(k).has(item.id));
+    const placedIn = ov.find(k => (draft[k] || []).includes(item.id) && navIds(k, rule2).has(item.id));
+    const autoIn = ov.find(k => navIds(k, rule2).has(item.id));
     const whyOf = (k) => t(k === "home_quick" || k === "home_tiles" ? "settings.mlay_in_home" : "settings.mlay_in_nav");
-    if (placedIn) return { show: false, locked: true, why: whyOf(placedIn) };
+    if (placedIn || (autoIn && !rule2)) return { show: false, locked: true, why: whyOf(placedIn || autoIn) };
     const hidden = (draft[MLAY_HIDE_KEY[surface]] || []).includes(item.id);
     if (autoIn) return { show: !hidden, locked: false, why: whyOf(autoIn) };
     const onHome = ov.some(k => k === "home_quick" || k === "home_tiles");
@@ -1070,20 +1087,26 @@ function MobileLayoutTab({ roleName, dbRole, perms, isAdmin, isViewer, coModules
   // dikhegi). Home ke hisson me sirf wo dekhte hain jinka More tile isi hisse
   // ke liye hai (Wallet, ER, Kaanta, Approvals, Issues, My Tasks) — baaki ka
   // darwaza kahin aur hai (MR patti/More me, Fuel ka tile, Issue raise → Issues…).
-  const unreachable = [];
-  for (const key of ["app_nav", "project_nav", "home_quick", "home_tiles"]) {
-    if (!cat[key]) continue;
-    const inNav = navIds(key);
-    const surface = MLAY_TILES_OF[key];
-    for (const item of cat[key].filter(allowed)) {
-      if (inNav.has(item.id)) continue;
-      const tile = (cat[surface] || []).find(x => x.id === item.id);
-      if (key.startsWith("home_") && !(tile && mlayOverflow(tile).includes(key))) continue;
-      if (tile && tileState(surface, tile).show) continue;
-      const name = mlayLabel(key, item.id);
-      if (!unreachable.includes(name)) unreachable.push(name);
+  const unreachableOf = (rule2) => {
+    const out = [];
+    for (const key of ["app_nav", "project_nav", "home_quick", "home_tiles"]) {
+      if (!cat[key]) continue;
+      const inNav = navIds(key, rule2);
+      const surface = MLAY_TILES_OF[key];
+      for (const item of cat[key].filter(allowed)) {
+        if (inNav.has(item.id)) continue;
+        const tile = (cat[surface] || []).find(x => x.id === item.id);
+        if (key.startsWith("home_") && !(tile && mlayOverflow(tile).includes(key))) continue;
+        if (tile && tileState(surface, tile, rule2).show) continue;
+        const name = mlayLabel(key, item.id);
+        if (!out.includes(name)) out.push(name);
+      }
     }
-  }
+    return out;
+  };
+  const unreachable = unreachableOf(newRule);
+  // Purana layout: save karte hi naya niyam — tab kya NAYA kahin nahi dikhega.
+  const lostOnSave = newRule ? [] : unreachableOf(true).filter(n => !unreachable.includes(n));
 
   const save = async () => {
     if (!dbRole || saving) { if (!dbRole) alert(t("settings.mlay_no_db_role")); return; }
@@ -1172,6 +1195,16 @@ function MobileLayoutTab({ roleName, dbRole, perms, isAdmin, isViewer, coModules
         </button>
         <SaveBtn label={saving ? t("settings.mlay_saving") : t("settings.mlay_save")} onClick={save} />
       </div>}>
+      {!newRule && (
+        <div style={{ ...box, borderColor: T.blue + "55", background: T.blueSoft }}>
+          <div style={{ fontSize: 12.5, color: T.blue }}>{t("settings.mlay_old_rule")}</div>
+          {lostOnSave.length > 0 && (
+            <div style={{ fontSize: 12.5, color: T.amber, fontWeight: 600, marginTop: 4 }}>
+              {t("settings.mlay_old_rule_lost", { names: lostOnSave.join(", ") })}
+            </div>
+          )}
+        </div>
+      )}
       <div style={box}>
         <div style={head}>{t("settings.mlay_app_nav")}</div>
         {renderNav("app_nav", t("settings.mlay_home"), t("settings.mlay_more"))}
@@ -1228,7 +1261,7 @@ function MobileLayoutTab({ roleName, dbRole, perms, isAdmin, isViewer, coModules
         <div style={{ ...box, borderColor: T.amber + "55", background: T.amberSoft }}>
           {unreachable.map(name => (
             <div key={name} style={{ fontSize: 12.5, color: T.amber, padding: "2px 0" }}>
-              {t("settings.mlay_unreachable", { name })}
+              {t(newRule ? "settings.mlay_unreachable" : "settings.mlay_unreachable_old", { name })}
             </div>
           ))}
         </div>
