@@ -918,8 +918,18 @@ function CompanySettings() {
 //
 // Permission sabse upar: jiska View band hai wo yahan chuna hi nahi ja
 // sakta, aur phone par bhi nahi dikhta. Ye screen sirf sajati hai.
-// Jo cheez patti me nahi aati uska tile More/Hub me apne aap banta hai; admin
-// wo tile bhi chhupa de to neeche laal chetavni — "kahin nahi milega".
+// Jo cheez patti me nahi aati uska tile More/Hub me apne aap banta hai.
+//
+// 9 Oct 2026 (AE — Prafull): ADMIN KA CHHUPAYA AAKHRI. More ka jo tile is role
+// ke liye chhupaya, wo cheez is role ke log phone par KAHIN nahi dekhte — na
+// More, na Home ke dabbe / Quick Actions, na patti ("apne aap" wali bharai se
+// bhi bahar), na unke "Mera Home sajao" me. Hub ka chhupaya project ki patti par
+// bhi. Bas admin ne khud yahin us role ki patti / Home me rakha ho to wahan
+// dikhta hai. Neeche ki peeli patti ab chetavni nahi, sirf yaad dilati hai ki
+// kaun si cheez is role ko kahin nahi dikhegi. Server: utils/mobileLayout.js
+// adminHidden; phone: utils/navLayout.js adminHidden.
+// Kaanta (weigh) ab patti (sirf chunne par) aur Hub me bhi; uska More tile Home
+// YA patti — dono me se kahin ho to nahi (overflow ab list bhi ho sakta hai).
 //
 // 9 Oct 2026 (B2): app ke Home ke do hisse bhi yahin — upar ke dabbe (4 tak)
 // aur Quick Actions (8 tak). Wahi chunav/kram wala tareeka jo patti ka. Kuch
@@ -942,6 +952,8 @@ const mlayLabel = (surface, id) => {
 // Patti ke item ka tile kis list me hai. Home ke hisson ka bhi More me.
 const MLAY_TILES_OF = { app_nav: "more", project_nav: "hub", home_quick: "more", home_tiles: "more" };
 const MLAY_HIDE_KEY = { more: "hide_more", hub: "hide_hub" };
+// overflow ek jagah ya list (server CATALOG).
+const mlayOverflow = (item) => [].concat((item && item.overflow) || []);
 // Purana server `slots` na bheje to.
 const MLAY_SLOTS_DEFAULT = { home_quick: 8, home_tiles: 4 };
 
@@ -995,10 +1007,17 @@ function MobileLayoutTab({ roleName, dbRole, perms, isAdmin, isViewer, coModules
     return null;
   };
   const allowed = (item) => !blockReason(item);
+  // Admin ne chhupaya (AE): patti / Home ke hisse More ke chhupaye se, project
+  // ki patti Hub ke chhupaye se. hide_as = More ka id jab Home ka alag ho.
+  const hiddenIn = (key, item) => {
+    const list = draft[key === "project_nav" ? "hide_hub" : "hide_more"] || [];
+    return list.includes((item && item.hide_as) || (item && item.id));
+  };
 
   // Patti: chuna hua (band wale chhod kar), kuchh na bache to apne aap.
-  // Apne aap me `extra` item nahi aate (Home ke naye Quick Actions) — taaki
-  // bina set kiye Home aaj jaisa hi rahe.
+  // Apne aap me `extra` item nahi aate (Home ke naye Quick Actions, patti ka
+  // Kaanta) — taaki bina set kiye Home aaj jaisa hi rahe — aur admin ka
+  // chhupaya bhi nahi. Admin ne khud chuna ho to chhupa hone par bhi chalta hai.
   const navOf = (key) => {
     const n = slotsOf(key);
     const ok = (cat[key] || []).filter(allowed);
@@ -1007,17 +1026,25 @@ function MobileLayoutTab({ roleName, dbRole, perms, isAdmin, isViewer, coModules
       const out = pick.map(id => ok.find(x => x.id === id)).filter(Boolean).slice(0, n);
       if (out.length) return { items: out, auto: false };
     }
-    return { items: ok.filter(x => !x.extra).slice(0, n), auto: true };
+    return { items: ok.filter(x => !x.extra && !hiddenIn(key, x)).slice(0, n), auto: true };
   };
   const navIds = (key) => new Set(navOf(key).items.map(x => x.id));
 
+  // Tick = is role ko ye cheez dikhe (admin ne chhupayi nahi). Admin ne khud
+  // patti / Home me rakhi ho to tick band (wahan dikh rahi hai). "Apne aap" se
+  // patti / Home par ho to tick khula — hatao to wahan se bhi hat'ti hai (AE).
   const tileState = (surface, item) => {
     const why = blockReason(item);
     if (why) return { show: false, locked: true, why };
-    const onHome = item.overflow === "home_quick" || item.overflow === "home_tiles";
-    if (item.overflow && navIds(item.overflow).has(item.id)) return { show: false, locked: true, why: t(onHome ? "settings.mlay_in_home" : "settings.mlay_in_nav") };
+    const ov = mlayOverflow(item);
+    const placedIn = ov.find(k => (draft[k] || []).includes(item.id) && navIds(k).has(item.id));
+    const autoIn = ov.find(k => navIds(k).has(item.id));
+    const whyOf = (k) => t(k === "home_quick" || k === "home_tiles" ? "settings.mlay_in_home" : "settings.mlay_in_nav");
+    if (placedIn) return { show: false, locked: true, why: whyOf(placedIn) };
     const hidden = (draft[MLAY_HIDE_KEY[surface]] || []).includes(item.id);
-    return { show: !hidden, locked: false, why: item.overflow ? t(onHome ? "settings.mlay_home_overflow_hint" : "settings.mlay_overflow_hint") : null };
+    if (autoIn) return { show: !hidden, locked: false, why: whyOf(autoIn) };
+    const onHome = ov.some(k => k === "home_quick" || k === "home_tiles");
+    return { show: !hidden, locked: false, why: ov.length ? t(onHome ? "settings.mlay_home_overflow_hint" : "settings.mlay_overflow_hint") : null };
   };
 
   const setSlot = (key, slot, id) => {
@@ -1038,10 +1065,11 @@ function MobileLayoutTab({ roleName, dbRole, perms, isAdmin, isViewer, coModules
     });
   };
 
-  // Jo cheez adhikar hote hue bhi na patti/Home me hai na tile me. Home ke
-  // hisson me sirf wo dekhte hain jinka More tile isi hisse ke liye hai
-  // (Wallet, ER, Kaanta, Approvals, Issues, My Tasks) — baaki ka darwaza
-  // kahin aur hai (MR patti/More me, Fuel ka tile, Issue raise → Issues…).
+  // Jo cheez adhikar hote hue bhi na patti/Home me hai na tile me — 9 Oct 2026
+  // se ye admin ke chhupane ka asar hai, galti nahi (is role ko kahin nahi
+  // dikhegi). Home ke hisson me sirf wo dekhte hain jinka More tile isi hisse
+  // ke liye hai (Wallet, ER, Kaanta, Approvals, Issues, My Tasks) — baaki ka
+  // darwaza kahin aur hai (MR patti/More me, Fuel ka tile, Issue raise → Issues…).
   const unreachable = [];
   for (const key of ["app_nav", "project_nav", "home_quick", "home_tiles"]) {
     if (!cat[key]) continue;
@@ -1050,7 +1078,7 @@ function MobileLayoutTab({ roleName, dbRole, perms, isAdmin, isViewer, coModules
     for (const item of cat[key].filter(allowed)) {
       if (inNav.has(item.id)) continue;
       const tile = (cat[surface] || []).find(x => x.id === item.id);
-      if (key.startsWith("home_") && !(tile && tile.overflow === key)) continue;
+      if (key.startsWith("home_") && !(tile && mlayOverflow(tile).includes(key))) continue;
       if (tile && tileState(surface, tile).show) continue;
       const name = mlayLabel(key, item.id);
       if (!unreachable.includes(name)) unreachable.push(name);
@@ -1197,10 +1225,10 @@ function MobileLayoutTab({ roleName, dbRole, perms, isAdmin, isViewer, coModules
       </div>
 
       {unreachable.length > 0 && (
-        <div style={{ ...box, borderColor: T.red + "55", background: T.redSoft }}>
+        <div style={{ ...box, borderColor: T.amber + "55", background: T.amberSoft }}>
           {unreachable.map(name => (
-            <div key={name} style={{ fontSize: 12.5, color: T.red, padding: "2px 0" }}>
-              ⚠ {t("settings.mlay_unreachable", { name })}
+            <div key={name} style={{ fontSize: 12.5, color: T.amber, padding: "2px 0" }}>
+              {t("settings.mlay_unreachable", { name })}
             </div>
           ))}
         </div>
