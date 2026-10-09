@@ -599,6 +599,10 @@ function useChallanPol(){
   useEffect(()=>{ loadPhotoPolicy().then(setD); },[]);
   return policyFor(d,"wh_issue_challan");
 }
+// Challan photo abhi upload ho rahi ho to Save nahi (G review) — warna issue
+// bina photo ke ban jaata aur photo chup-chaap kho jaati.
+const CHALLAN_FOLDER="gb_buildcon/issue_challan";
+const challanUploading=()=>uploadManager.getQueue().some(q=>q.folder===CHALLAN_FOLDER&&(q.status==="queued"||q.status==="uploading"));
 function ChallanPhotoField({pol,photos,setPhotos}){
   if(pol.mode==="off") return null;
   const req=pol.mode==="required";
@@ -629,7 +633,7 @@ function ChallanPhotoField({pol,photos,setPhotos}){
             onChange={e=>{
               Array.from(e.target.files||[]).forEach(file=>{
                 uploadManager.add({
-                  file, folder:"gb_buildcon/issue_challan",
+                  file, folder:CHALLAN_FOLDER,
                   label:t("warehouse.challan_photo_upload_label",{name:file.name}),
                   onDone:(url)=>setPhotos(p=>[...p,url]),
                 });
@@ -810,6 +814,7 @@ function NewIssueModal({stock,projects,users,onClose,onSaved,prefill,fromMR}){
   const toName=projects.find(p=>p.id===f.project_id)?.name;
 
   const submit=async()=>{
+    if(challanUploading()){ alert(t("warehouse.challan_photo_uploading")); return; }
     if(chPol.mode==="required"&&chPhotos.length===0){ alert(t("warehouse.challan_photo_required")); return; }
     setSaving(true);
     try{
@@ -1708,6 +1713,7 @@ function QuickIssueModal({material,projects,users,onClose,onSaved}){
   const overStock=Number(f.qty)>max;
   const submit=async()=>{
     if(!f.qty||Number(f.qty)<=0||overStock) return;
+    if(challanUploading()){ alert(t("warehouse.challan_photo_uploading")); return; }
     if(chPol.mode==="required"&&chPhotos.length===0){ alert(t("warehouse.challan_photo_required")); return; }
     setSaving(true);
     try{

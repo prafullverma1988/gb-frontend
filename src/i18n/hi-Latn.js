@@ -11981,6 +11981,7 @@ const dict = {
   "warehouse.challan_photo":                                   "Sign wale challan ki photo",
   "warehouse.challan_photo_hint":                              "Lene wale ka sign kiya hua challan",
   "warehouse.challan_photo_required":                          "Company setting: sign wale challan ki photo lagana zaroori hai.",
+  "warehouse.challan_photo_uploading":                         "Challan ki photo abhi upload ho rahi hai — poori hone do, phir Save karo.",
   "warehouse.challan_photo_upload_label":                      "Challan photo: {name}",
   "warehouse.choose_batches":                                  "Choose batches",
   "warehouse.choose_stock_batches_materialname":               "Choose Stock Batches — {materialName}",

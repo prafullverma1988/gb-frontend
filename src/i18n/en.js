@@ -11979,6 +11979,7 @@ const dict = {
   "warehouse.challan_photo":                                   "Signed challan photo",
   "warehouse.challan_photo_hint":                              "Challan signed by the receiver",
   "warehouse.challan_photo_required":                          "Company setting: a photo of the signed challan is required.",
+  "warehouse.challan_photo_uploading":                         "The challan photo is still uploading — let it finish, then save.",
   "warehouse.challan_photo_upload_label":                      "Challan photo: {name}",
   "warehouse.choose_batches":                                  "Choose batches",
   "warehouse.choose_stock_batches_materialname":               "Choose Stock Batches — {materialName}",
