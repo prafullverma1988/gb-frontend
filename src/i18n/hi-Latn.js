@@ -10045,6 +10045,12 @@ const dict = {
   "tasks.schedule_alert":                                      "Schedule alert:",
   "tasks.schedule_view_on":                                    "Schedule View ON",
   "tasks.scope_qty_khali_mode":                                "Scope qty (empty = % mode)",
+  "tasks.pm_tareeka":                                          "Progress ka tareeka",
+  "tasks.pm_auto":                                             "Auto — company ki setting",
+  "tasks.pm_qty":                                              "Qty — roz ki quantity",
+  "tasks.pm_pct":                                              "% — roz ka %",
+  "tasks.pm_hint":                                             "Auto = company ki Settings wala tareeka. Kaam darj hone ke baad ye nahi badalta.",
+  "tasks.pm_locked":                                           "Is task par kaam darj ho chuka hai — ab tareeka nahi badal sakta.",
   "tasks.search_or_type_worker_name":                          "Search or type worker name…",
   "tasks.search_subcontractor":                                "Search subcontractor…",
   "tasks.search_task_to_link":                                 "Search task to link…",
@@ -10285,7 +10291,7 @@ const dict = {
   "tender_ai_plan.pm_qty": "qty",
 
 
-  "tender_ai_plan.pm_hint": "Roz ka kaam qty me likha jaye ya % me. Sadak/pipe/naali me qty seedhi hai; structure ki qty aksar 1 hoti hai — wahan 1 likhte hi kaam poora dikh jaata, isliye % behtar. \"—\" = company ki purani setting.",
+  "tender_ai_plan.pm_hint": "Roz ka kaam qty me likha jaye ya % me. Halke rang me = aapne nahi badla — task par company ki setting chalegi (Auto: qty ho to qty, '1 Nos' / '1 LS' jaisa ek kaam %). Yahan badlo to task par wahi tay ho jaata hai.",
 
 
   "tender_ai_plan.mk_area_pin": "Rakba + beech me pin",

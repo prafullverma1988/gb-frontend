@@ -10043,6 +10043,12 @@ const dict = {
   "tasks.schedule_alert":                                      "Schedule alert:",
   "tasks.schedule_view_on":                                    "Schedule View ON",
   "tasks.scope_qty_khali_mode":                                "Scope qty (empty = % mode)",
+  "tasks.pm_tareeka":                                          "Progress method",
+  "tasks.pm_auto":                                             "Auto — company setting",
+  "tasks.pm_qty":                                              "Qty — daily quantity",
+  "tasks.pm_pct":                                              "% — daily %",
+  "tasks.pm_hint":                                             "Auto = the company's Settings method. Can't be changed once work is recorded.",
+  "tasks.pm_locked":                                           "Work is already recorded on this task — the method can't be changed now.",
   "tasks.search_or_type_worker_name":                          "Search or type worker name…",
   "tasks.search_subcontractor":                                "Search subcontractor…",
   "tasks.search_task_to_link":                                 "Search task to link…",
@@ -10283,7 +10289,7 @@ const dict = {
   "tender_ai_plan.pm_qty": "qty",
 
 
-  "tender_ai_plan.pm_hint": "Record daily work as qty or as %. Roads/pipes/drains take qty naturally; a structure is usually qty 1, so entering 1 marks it complete — % suits it better. \"—\" keeps the company default.",
+  "tender_ai_plan.pm_hint": "Record daily work as qty or as %. Shown faded = you haven't set it — the task follows the company setting (Auto: qty when there is a quantity, a single '1 Nos' / '1 LS' item on %). Change it here to fix it on the task.",
 
 
   "tender_ai_plan.mk_area_pin": "Area + centre pin",
