@@ -1333,6 +1333,10 @@ function txnMatchesSearch(raw, { texts = [], amount = null, ds = null }) {
 // Screen ka footer, CSV aur PDF teeno isi se chalte hain. Pehle chhanni
 // sirf render ke andar thi: filter lagane par CR/DR wahi poore ledger ke
 // dikhte rehte the, aur export hamesha saari entry de deta tha.
+// GRN issue ka type — wire value English hi rehti hai. "Weighbridge" (9 Oct
+// 2026) server khud banata hai: kaante / site ke nishaan (plate nahi dikhi, AI
+// ka padha badla, gadi no. badla …) bill se pehle dikhein — iska naam bhasha me.
+const issueTypeLabel=(ty)=>ty==="Weighbridge"?t("grn_issue.type_weighbridge"):ty;
 const LEDGER_TYPE_LABELS={"material_purchase":"Material Purchase","payment":"Payment Made","party_payment":"Payment Made","receipt":"Payment Received","subcon_expense":"Sub-Con Bill","site_expense":"Site Expense","sales_invoice":"Sales Invoice","ra_bill":"RA Bill","emd_forfeit":"EMD Forfeit","bank_transfer":"Bank Transfer","advance_payment":"Advance","petty_cash":"Petty Cash","settle_in":"Settlement","settle_out":"Settlement"};
 // Subcon ko diya diesel (fuel ki katauti) — type material_return, par "Material
 // Return" padhna galat lagta; server display_type="fuel_given" bhejta hai.
@@ -2826,7 +2830,7 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
                             return next;
                           })}
                           style={{cursor:"pointer",width:14,height:14,accentColor:T.red,marginTop:2,flexShrink:0}}/>
-                        <span style={{fontSize:9,fontWeight:700,padding:"2px 6px",borderRadius:8,background:T.red,color:"white",flexShrink:0,marginTop:1}}>{iss.issue_type}</span>
+                        <span style={{fontSize:9,fontWeight:700,padding:"2px 6px",borderRadius:8,background:T.red,color:"white",flexShrink:0,marginTop:1}}>{issueTypeLabel(iss.issue_type)}</span>
                         <span style={{fontSize:11.5,color:T.t1,flex:1,wordBreak:"break-word"}}>
                           {iss.note||"—"}
                           <span style={{color:T.t4,fontSize:10}}> · {iss.raised_by_name||"—"}</span>
@@ -6881,7 +6885,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
                       {grp.issues.length>0&&(
                         <div style={{padding:"6px 14px",background:T.redL,borderBottom:`1px solid ${T.redM}`,fontSize:10.5,color:T.red,fontWeight:600,display:"flex",alignItems:"flex-start",gap:6}}>
                           <span style={{flexShrink:0}}>⚠</span>
-                          <span>{t("finance.is_vendor_ki_delivery_me_grp", { grp: grp.issues.length, v: " ", vnew: [...new Set(grp.issues.map(i=>i.issue_type))].join(" / ") })}</span>
+                          <span>{t("finance.is_vendor_ki_delivery_me_grp", { grp: grp.issues.length, v: " ", vnew: [...new Set(grp.issues.map(i=>issueTypeLabel(i.issue_type)))].join(" / ") })}</span>
                         </div>
                       )}
                       {/* Vendor row */}
@@ -6956,7 +6960,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
                                     </span>
                                   )}
                                   {(it.issues||[]).length>0&&(
-                                    <span title={(it.issues||[]).map(i=>`${i.issue_type}: ${i.note||""}`).join("\n")}
+                                    <span title={(it.issues||[]).map(i=>`${issueTypeLabel(i.issue_type)}: ${i.note||""}`).join("\n")}
                                       style={{marginLeft:6,fontSize:9.5,fontWeight:700,color:T.red,background:T.redL,border:`1px solid ${T.redM}`,borderRadius:8,padding:"1px 6px"}}>
                                       ⚠ {it.issues.length}
                                     </span>

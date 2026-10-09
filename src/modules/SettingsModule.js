@@ -4228,7 +4228,10 @@ function WarehouseSettings({ onGoto }) {
 //   challan qty   Band / Marzi (default) / Zaroori — kaante ki entry ka
 //                 "Challan par likha" khaana (app + web; Zaroori server bhi rokta)
 //   stale hours   khali wazan kitne ghante baad purana (⚠) — khaali = 12
-// Baaki wahi purane: Short ka %, Short issue apne aap, stored tare, plate.
+// Baaki wahi purane: Short ka %, Short issue apne aap, stored tare.
+// "Gadi ki number plate" (plate zaroori) ka switch 9 Oct 2026 ko hata: plate
+// na dikhe to ab Save kabhi nahi rukta — entry par nishaan, jo bill tak jaata
+// hai (Prafull: AI ki galti se kaanta nahi rukna chahiye).
 // Server: PUT /settings/company (sirf admin) → companies.weigh_*; padhta hai
 // routes/weighments.js weighSettings(), aur app/web ka kaante wala form
 // GET /weighments ke saath ye settings paata hai.
@@ -4238,7 +4241,6 @@ function WeighbridgeSettings() {
   const [shortAuto, setShortAuto] = useState(false);
   const [tareMode, setTareMode] = useState("each");   // each | stored
   const [staleH, setStaleH] = useState("");           // "" = server ka default (12)
-  const [plateReq, setPlateReq] = useState(true);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savedTick, setSavedTick] = useState(false);
@@ -4252,7 +4254,6 @@ function WeighbridgeSettings() {
         setShortAuto(Number(d.weigh_short_auto) === 1);
         setTareMode(d.weigh_tare_mode === "stored" ? "stored" : "each");
         setStaleH(d.weigh_stale_tare_hours != null ? String(d.weigh_stale_tare_hours) : "");
-        setPlateReq(d.weigh_plate_required == null ? true : Number(d.weigh_plate_required) === 1);
       }
     }).catch(() => {}).finally(() => setLoading(false));
   }, []);
@@ -4270,7 +4271,6 @@ function WeighbridgeSettings() {
         weigh_short_auto: shortAuto,
         weigh_tare_mode: tareMode,
         weigh_stale_tare_hours: h,
-        weigh_plate_required: plateReq,
       });
       if (r?.success === false) window.alert(r.message || t("common.something_went_wrong"));
       else { setSavedTick(true); setTimeout(() => setSavedTick(false), 1800); }
@@ -4351,15 +4351,6 @@ function WeighbridgeSettings() {
         <div style={{ fontSize: 11.5, color: T.textMid, marginTop: 8, lineHeight: 1.5 }}>{t("weigh.set_stale_hint")}</div>
       </SectionCard>
 
-      <SectionCard title={t("weigh.set_plate_title")} action={SaveBtn}>
-        <label style={{ display: "flex", gap: 10, marginTop: 4, padding: "10px 12px", borderRadius: 9, border: `1.5px solid ${plateReq ? T.blue : T.border}`, background: plateReq ? T.blueSoft : T.card, cursor: "pointer", alignItems: "flex-start" }}>
-          <input type="checkbox" checked={plateReq} onChange={(e) => setPlateReq(e.target.checked)} style={{ marginTop: 3, accentColor: T.blue }} />
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 12.5, fontWeight: 700, color: plateReq ? T.blue : T.text }}>{t("weigh.set_plate")}</div>
-            <div style={{ fontSize: 11.5, color: T.textLight, marginTop: 2, lineHeight: 1.5 }}>{t("weigh.set_plate_sub")}</div>
-          </div>
-        </label>
-      </SectionCard>
     </div>
   );
 }

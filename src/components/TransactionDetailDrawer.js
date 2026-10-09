@@ -25,6 +25,10 @@ import { BackClose } from "../utils/backNav";
 import { cld } from "../utils/cloudinary";
 import { can, canAny } from "../utils/perms";
 
+// GRN issue ka type — wire value English hi rehti hai. "Weighbridge" (9 Oct
+// 2026) server khud banata hai: kaante / site ke nishaan (plate nahi dikhi, AI
+// ka padha badla, gadi no. badla …) bill se pehle dikhein — iska naam bhasha me.
+const issueTypeLabel = (ty) => (ty === "Weighbridge" ? t("grn_issue.type_weighbridge") : ty);
 const T = {
   surface: "#FFFFFF", surfaceB: "#F8F9FB",
   t1: "#111827", t2: "#374151", t3: "#6B7280", t4: "#9CA3AF",
@@ -806,7 +810,7 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
                 {txn.grn_issues.map((iss, i) => (
                   <div key={iss.id || i}
                     style={{ display: "flex", alignItems: "flex-start", gap: 7, background: T.surface, border: `1px solid ${T.redM}`, borderRadius: 6, padding: "7px 8px", marginBottom: i < txn.grn_issues.length - 1 ? 5 : 0 }}>
-                    <span style={{ fontSize: 9, fontWeight: 700, padding: "2px 6px", borderRadius: 8, background: iss.status === "Resolved" ? T.t3 : T.red, color: "white", flexShrink: 0, marginTop: 1 }}>{iss.issue_type}</span>
+                    <span style={{ fontSize: 9, fontWeight: 700, padding: "2px 6px", borderRadius: 8, background: iss.status === "Resolved" ? T.t3 : T.red, color: "white", flexShrink: 0, marginTop: 1 }}>{issueTypeLabel(iss.issue_type)}</span>
                     <span style={{ fontSize: 11.5, color: T.t1, flex: 1, wordBreak: "break-word" }}>
                       {iss.note || "—"}
                       <span style={{ color: T.t4, fontSize: 10 }}> · {iss.raised_by_name || "—"}</span>

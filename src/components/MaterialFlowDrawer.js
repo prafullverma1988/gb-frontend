@@ -44,6 +44,10 @@ const T = {
   pur: "#7C3AED", purL: "#F5F3FF", purM: "#DDD6FE",
 };
 
+// GRN issue ka type — wire value English hi rehti hai. "Weighbridge" (9 Oct
+// 2026) server khud banata hai: kaante / site ke nishaan (plate nahi dikhi, AI
+// ka padha badla, gadi no. badla …) bill se pehle dikhein — iska naam bhasha me.
+const issueTypeLabel = (ty) => (ty === "Weighbridge" ? t("grn_issue.type_weighbridge") : ty);
 const fmtDate = (d) => {
   if (!d) return "—";
   try { return new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }); } catch { return d; }
@@ -602,7 +606,7 @@ export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin 
                         return (
                           <div key={iss.id} style={{ padding: "7px 9px", background: resolved ? "#F1F5F9" : "#FEF2F2", borderRadius: 6, border: `1px solid ${resolved ? T.b1 : T.redM}` }}>
                             <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
-                              <span style={{ fontSize: 9, fontWeight: 700, padding: "1px 6px", borderRadius: 8, background: resolved ? T.t3 : T.red, color: "white" }}>{iss.issue_type}</span>
+                              <span style={{ fontSize: 9, fontWeight: 700, padding: "1px 6px", borderRadius: 8, background: resolved ? T.t3 : T.red, color: "white" }}>{issueTypeLabel(iss.issue_type)}</span>
                               <span style={{ fontSize: 10, fontWeight: 700, color: resolved ? T.t3 : T.red, textTransform: "uppercase" }}>{resolved ? t("material_flow.resolved") : t("material_flow.open")}</span>
                               <div style={{ flex: 1 }}/>
                               <span style={{ fontSize: 10, color: T.t4 }}>{fmtDateTime(iss.created_at)}</span>

@@ -398,7 +398,24 @@ export default function WeighbridgePanel({ dest, onChanged }) {
     : f.type === "plate_mismatch" ? t("weigh.flag_plate_mismatch", { plate: f.plate || "—", vehicle: f.vehicle_no || "—" })
     // Site ki rec slip (app ka gadi-wise GRN, 29 Sep 2026) — wahi number doosri gadi par.
     : f.type === "dup_rec_slip" ? t("weigh.flag_dup_rec_slip", { no: f.rec_slip_no || "—", grn: f.other_grn || "—" })
-    : f.type === "short" ? t("weigh.flag_short") : null;
+    : f.type === "short" ? t("weigh.flag_short")
+    // AI kabhi nahi rokta (9 Oct 2026) — jo pehle rok tha ya sirf app par dikhta
+    // tha, ab nishaan hai, aur GRN par "Weighbridge" issue ban kar bill tak jaata hai.
+    : f.type === "plate_missing" ? t("weigh.flag_plate_missing")
+    : f.type === "vehicle_changed" ? t("weigh.flag_vehicle_changed", { from: f.from || "—", to: f.to || "—" })
+    : f.type === "ai_edited" ? t("weigh.flag_ai_edited", { list: aiItems(f) })
+    : f.type === "site_plate_missing" ? t("weigh.flag_site_plate_missing")
+    : f.type === "site_plate_differs" ? t("weigh.flag_site_plate_differs", { plate: f.plate || "—", vehicle: f.vehicle_no || "—" })
+    : f.type === "rec_wrong_paper" ? t("weigh.flag_rec_wrong_paper", { paper: t(f.paper === "challan" ? "weigh.flag_paper_challan" : "weigh.flag_paper_kaanta"), no: f.no || "—" })
+    : f.type === "rec_vehicle_differs" ? t("weigh.flag_rec_vehicle_differs", { vehicle: f.vehicle_no || "—" })
+    : null;
+  // ai_edited ki har line: "Vehicle no.: CG04AB1234 → CG04AB1284"
+  const AI_FIELD = { vehicle_no: "weigh.flag_f_vehicle_no", slip_no: "weigh.flag_f_slip_no", challan_no: "weigh.flag_f_challan_no", challan_qty: "weigh.flag_f_challan_qty", rec_slip_no: "weigh.flag_f_rec_slip_no" };
+  const aiItems = (f) => (Array.isArray(f.items) ? f.items : []).map(it => t("weigh.flag_ai_item", {
+    what: AI_FIELD[it.field] ? t(AI_FIELD[it.field], { material: it.material || "—" }) : it.field,
+    read: (it.read ?? "—") + (it.read_unit ? " " + it.read_unit : ""),
+    saved: (it.saved ?? "—") + (it.saved != null && it.saved_unit ? " " + it.saved_unit : ""),
+  })).join("; ");
 
   const tripHead = (w) => {
     const [c, bg, k] = STATUS[w.status] || STATUS.InTransit;
