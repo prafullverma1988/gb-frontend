@@ -4,7 +4,9 @@ import api, { getWarehouseId, setWarehouseId } from "../config/api";
 import SearchSelect from "../components/SearchSelect";
 import GrnReceive from "../components/grn/GrnReceive";
 import WeighbridgePanel from "../components/grn/WeighbridgePanel";
-import { loadPhotoPolicy, policyFor } from "../utils/photoPolicy";
+import { loadPhotoPolicy, policyFor, fileInputProps } from "../utils/photoPolicy";
+import uploadManager from "../utils/uploadManager";
+import { cld } from "../utils/cloudinary";
 import { canApproveAction } from "../utils/approvalAuthority";
 import { t, Rich } from "../i18n";
 import { BackClose } from "../utils/backNav";
@@ -587,6 +589,60 @@ function NewGRNModal({stock,projects,users,library,warehouseId,warehouseName,onC
   );
 }
 
+// ── ISSUE CHALLAN PHOTO ───────────────────────────────────────────
+// Lene wale ke sign kiye challan ki photo (photo policy key `wh_issue_challan`,
+// Settings → Photo Settings). NewIssueModal aur QuickIssueModal dono me. Upload
+// + thumbnail wahi jo GRN photo box (components/grn/GrnPhotoBox.js) me hai:
+// uploadManager + fileInputProps. "off" = field chhupa hua, "required" = badge.
+function useChallanPol(){
+  const [d,setD]=useState(null);
+  useEffect(()=>{ loadPhotoPolicy().then(setD); },[]);
+  return policyFor(d,"wh_issue_challan");
+}
+function ChallanPhotoField({pol,photos,setPhotos}){
+  if(pol.mode==="off") return null;
+  const req=pol.mode==="required";
+  const cam=pol.source==="camera";
+  return (
+    <div style={{marginTop:13}}>
+      <div style={{fontSize:10.5,fontWeight:700,color:req&&photos.length===0?T.amb:T.t3,textTransform:"uppercase",letterSpacing:".4px",marginBottom:7,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+        {t("warehouse.challan_photo")}
+        <span style={{textTransform:"none",letterSpacing:0,color:T.t4,fontWeight:500}}>{t("warehouse.challan_photo_hint")}</span>
+        {req&&(
+          <span style={{textTransform:"none",letterSpacing:0,fontSize:9.5,fontWeight:700,color:photos.length===0?T.red:T.grn,background:photos.length===0?T.redL:T.grnL,padding:"2px 8px",borderRadius:10,border:`1px solid ${photos.length===0?T.redM:T.grnM}`}}>
+            {photos.length===0?t("material.required"):t("material.attached")}
+          </span>
+        )}
+      </div>
+      <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+        {photos.map((url,idx)=>(
+          <div key={idx} style={{position:"relative",width:64,height:64,borderRadius:7,overflow:"hidden",border:`1px solid ${T.b1}`}}>
+            <img src={cld(url,"thumb")} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
+            <button type="button" onClick={()=>setPhotos(p=>p.filter((_,i)=>i!==idx))}
+              style={{position:"absolute",top:3,right:3,width:18,height:18,borderRadius:"50%",background:"rgba(0,0,0,0.65)",color:"white",border:"none",fontSize:10,cursor:"pointer",lineHeight:1,padding:0,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
+          </div>
+        ))}
+        <label style={{width:64,height:64,borderRadius:7,border:`1.5px dashed ${T.b2}`,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexDirection:"column",gap:2}}>
+          <span style={{fontSize:18}}>📷</span>
+          <span style={{fontSize:10,color:T.t4,fontWeight:600}}>{t("common.add")}</span>
+          <input {...fileInputProps({source:cam?"camera":"both"},{multiple:true})} style={{display:"none"}}
+            onChange={e=>{
+              Array.from(e.target.files||[]).forEach(file=>{
+                uploadManager.add({
+                  file, folder:"gb_buildcon/issue_challan",
+                  label:t("warehouse.challan_photo_upload_label",{name:file.name}),
+                  onDone:(url)=>setPhotos(p=>[...p,url]),
+                });
+              });
+              e.target.value="";
+            }}/>
+        </label>
+      </div>
+      {cam&&<div style={{marginTop:5,fontSize:10,color:T.t4}}>{t("material.company_setting_sirf_live_camera_mobile")}</div>}
+    </div>
+  );
+}
+
 // ── NEW ISSUE MODAL ───────────────────────────────────────────────
 // NewIssueModal mirrors the Transfer modal:
 //   FROM = Warehouse (locked)
@@ -603,6 +659,8 @@ function NewIssueModal({stock,projects,users,onClose,onSaved,prefill,fromMR}){
     :[{material_id:null,name:"",unit:"Nos",qty:"",rate:"",selected_batches:null,_rateDirty:false}];
   const [items,setItems]=useState(initial);
   const [saving,setSaving]=useState(false);
+  const chPol=useChallanPol();
+  const [chPhotos,setChPhotos]=useState([]);
   // Batch picker — when user clicks "Choose batches" under rate field
   const [batchPickerIdx,setBatchPickerIdx]=useState(null);
   const [batchData,setBatchData]=useState(null); // {batches, fifo_rate, unit}
@@ -752,6 +810,7 @@ function NewIssueModal({stock,projects,users,onClose,onSaved,prefill,fromMR}){
   const toName=projects.find(p=>p.id===f.project_id)?.name;
 
   const submit=async()=>{
+    if(chPol.mode==="required"&&chPhotos.length===0){ alert(t("warehouse.challan_photo_required")); return; }
     setSaving(true);
     try{
       const cleanItems=items.filter(it=>it.material_id&&Number(it.qty)>0).map(it=>({
@@ -764,7 +823,7 @@ function NewIssueModal({stock,projects,users,onClose,onSaved,prefill,fromMR}){
         selected_batches:Array.isArray(it.selected_batches)&&it.selected_batches.length>0?it.selected_batches:undefined,
       }));
       const url=fromMR?`/warehouse/mr/${fromMR}/issue`:"/warehouse/issues";
-      const res=await api.post(url,{...f,items:cleanItems});
+      const res=await api.post(url,{...f,items:cleanItems,photo_urls:chPhotos.length?chPhotos:null});
       if(res.success){onSaved&&onSaved(res.data);onClose();}
       else alert(res.message||"Issue failed");
     }catch(e){alert(e.message);}
@@ -895,6 +954,7 @@ function NewIssueModal({stock,projects,users,onClose,onSaved,prefill,fromMR}){
           ? t("warehouse.project_material_mr_me_decide_ho")
           : t("warehouse.rate_auto_fill_fifo_oldest_batch")}
       </div>
+      <ChallanPhotoField pol={chPol} photos={chPhotos} setPhotos={setChPhotos}/>
       {batchPickerIdx!=null&&(
         <BatchPickerPanel data={batchData} onClose={closeBatchPicker} onApply={applyBatchSelection}
           requestedQty={Number(items[batchPickerIdx]?.qty)||0}
@@ -1642,10 +1702,13 @@ function AddStockModal({material,onClose,onSaved}){
 function QuickIssueModal({material,projects,users,onClose,onSaved}){
   const [f,setF]=useState({project_id:null,issued_to:null,qty:"",remarks:""});
   const [saving,setSaving]=useState(false);
+  const chPol=useChallanPol();
+  const [chPhotos,setChPhotos]=useState([]);
   const max=Number(material?.qty)||0;
   const overStock=Number(f.qty)>max;
   const submit=async()=>{
     if(!f.qty||Number(f.qty)<=0||overStock) return;
+    if(chPol.mode==="required"&&chPhotos.length===0){ alert(t("warehouse.challan_photo_required")); return; }
     setSaving(true);
     try{
       const res=await api.post("/warehouse/issues",{
@@ -1654,6 +1717,7 @@ function QuickIssueModal({material,projects,users,onClose,onSaved}){
         issued_to:f.issued_to||null,
         items:[{material_id:material.id,qty:Number(f.qty),rate:material.rate}],
         remarks:f.remarks||null,
+        photo_urls:chPhotos.length?chPhotos:null,
       });
       if(res.success){onSaved&&onSaved(res.data);onClose();}
       else alert(res.message||"Issue failed");
@@ -1696,6 +1760,7 @@ function QuickIssueModal({material,projects,users,onClose,onSaved}){
       <Field label={t("common.remarks")}>
         <Input value={f.remarks} onChange={e=>setF(p=>({...p,remarks:e.target.value}))} placeholder={t("warehouse.e_g_gf_slab_casting_2")}/>
       </Field>
+      <ChallanPhotoField pol={chPol} photos={chPhotos} setPhotos={setChPhotos}/>
     </ModalShell>
   );
 }
@@ -2732,6 +2797,18 @@ function IssueDetailDrawer({issue,onClose,canDelete,canReceive,onDeleted,onRecei
               <div style={{padding:"9px 12px",background:T.surfaceB,border:`1px solid ${T.b1}`,borderRadius:7,marginBottom:8}}>
                 <div style={{fontSize:9.5,color:T.t4,marginBottom:2,fontWeight:700,textTransform:"uppercase",letterSpacing:".4px"}}>{t("common.remarks")}</div>
                 <div style={{fontSize:12,color:T.t2,fontStyle:"italic"}}>"{detail.remarks}"</div>
+              </div>
+            )}
+            {Array.isArray(detail?.challan_photos)&&detail.challan_photos.length>0&&(
+              <div style={{padding:"9px 12px",background:T.surfaceB,border:`1px solid ${T.b1}`,borderRadius:7,marginBottom:8}}>
+                <div style={{fontSize:9.5,color:T.t4,marginBottom:6,fontWeight:700,textTransform:"uppercase",letterSpacing:".4px"}}>{t("warehouse.challan_photo")}</div>
+                <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                  {detail.challan_photos.map((u,i)=>(
+                    <a key={i} href={cld(u,"view")} target="_blank" rel="noopener noreferrer">
+                      <img src={cld(u,"thumb")} alt="" style={{width:64,height:64,objectFit:"cover",borderRadius:6,border:`1px solid ${T.b1}`,display:"block"}}/>
+                    </a>
+                  ))}
+                </div>
               </div>
             )}
           </div>
