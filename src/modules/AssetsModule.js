@@ -925,10 +925,24 @@ function DashboardTab({ dash: companyDash, warehouses, onOpenVoucher, onGo }) {
 // ══════════════════════════════════════════════════════════════════
 // REGISTER
 // ══════════════════════════════════════════════════════════════════
-function RegisterTab({ items, cats, warehouses, canSetup, canCreate, canExport, onOpenItem, onCats, onIncharge, onImport, onExport, exportErr, onAddAsset }) {
+function RegisterTab({ items, cats, warehouses, canSetup, canCreate, canExport, refreshKey, onOpenItem, onCats, onIncharge, onImport, onExport, exportErr, onAddAsset }) {
   const [q, setQ] = useState("");
   const [tracking, setTracking] = useState("");
   const [cat, setCat] = useState("");
+  // "Hataye hue" (soft delete, 9 Oct 2026) — register se hataye gaye asset,
+  // kisne / kab / kyon ke saath. Asset kholo to Delete tick wale ko "Wapas laao".
+  const [view, setView] = useState("live");
+  const [goneRows, setGoneRows] = useState(null);
+  useEffect(() => {
+    if (view !== "deleted") { setGoneRows(null); return; }
+    let alive = true;
+    setGoneRows(null);
+    api.get("/assets/items?deleted=1")
+      .then((r) => { if (alive) setGoneRows(r && r.success ? r.data || [] : []); })
+      .catch(() => { if (alive) setGoneRows([]); });
+    return () => { alive = false; };
+  }, [view, refreshKey]);
+  const deletedView = view === "deleted";
   // Ek store chuna to server se usi store wali list aati hai — aur qty bhi usi
   // store ki (here_good / here_damaged). Do godown wali company me "220 pada
   // hai" dekh kar aadmi ye maan leta tha ki 220 isi store me hai.
@@ -943,8 +957,8 @@ function RegisterTab({ items, cats, warehouses, canSetup, canCreate, canExport, 
       .catch(() => { if (alive) setWhRows([]); });
     return () => { alive = false; };
   }, [whId]);
-  const scoped = !!whId;
-  const base = scoped ? whRows : items;
+  const scoped = !!whId && !deletedView;
+  const base = deletedView ? goneRows : scoped ? whRows : items;
 
   const rows = useMemo(() => {
     const s = q.trim().toLowerCase();
@@ -957,7 +971,8 @@ function RegisterTab({ items, cats, warehouses, canSetup, canCreate, canExport, 
   // Store chuna ho to ek hi ankda "Is store me"; poori company ka jod sirf
   // "Sab store" view me, "Poori company me" naam se (3 Oct 2026). Wo jod ab
   // server holdings se banata hai (store + site + repair + raaste me).
-  const cols = scoped ? "100px 1.6fr 1fr 60px 84px 96px 110px" : "100px 1.6fr 1fr 60px 84px 96px 96px 64px 64px 64px";
+  const cols = deletedView ? "100px 1.5fr 1fr 60px 84px 150px 1.4fr 70px"
+    : scoped ? "100px 1.6fr 1fr 60px 84px 96px 110px" : "100px 1.6fr 1fr 60px 84px 96px 96px 64px 64px 64px";
   return (
     <Panel title={t("assets.register_title", { n: rows.length })}
       action={
@@ -969,13 +984,14 @@ function RegisterTab({ items, cats, warehouses, canSetup, canCreate, canExport, 
           {canExport && <Btn size="sm" ghost icon={IcSheet} onClick={onExport}>{t("assets.btn_export")}</Btn>}
         </div>}>
       <div style={{ display: "flex", gap: 8, padding: "10px 14px", borderBottom: `1px solid ${T.b1}`, flexWrap: "wrap", alignItems: "center" }}>
+        <Seg value={view} onChange={setView} options={[{ k: "live", l: t("assets.reg_view_live") }, { k: "deleted", l: t("assets.reg_view_deleted") }]} />
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("assets.search_ph")} style={{ ...inp, width: 240 }} />
         <Seg value={tracking} onChange={setTracking} options={[{ k: "", l: t("assets.all") }, { k: "serialized", l: t("assets.tracking_serialized") }, { k: "bulk", l: t("assets.tracking_bulk") }]} />
         <PickSelect value={cat} onChange={(e) => setCat(e.target.value)} style={{ ...inp, width: 180 }}>
           <option value="">{t("assets.all_categories")}</option>
           {(cats || []).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </PickSelect>
-        {(warehouses || []).length > 1 && (
+        {(warehouses || []).length > 1 && !deletedView && (
           <PickSelect value={whId} onChange={(e) => setWhId(e.target.value)} style={{ ...inp, width: 200 }}>
             <option value="">{t("assets.all_warehouses")}</option>
             {(warehouses || []).map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
@@ -984,15 +1000,42 @@ function RegisterTab({ items, cats, warehouses, canSetup, canCreate, canExport, 
         {scoped && <span style={{ fontSize: 11.5, color: T.t3 }}>{t("assets.reg_wh_hint")}</span>}
       </div>
       {exportErr && <div style={{ padding: "8px 14px" }}><Notice tone="warn">{exportErr}</Notice></div>}
-      {scoped && whRows == null && <Spinner />}
-      {rows.length === 0 && !(scoped && whRows == null) && (
+      {deletedView && <div style={{ padding: "10px 14px 0" }}><Notice>{t("assets.reg_deleted_hint")}</Notice></div>}
+      {((scoped && whRows == null) || (deletedView && goneRows == null)) && <Spinner />}
+      {deletedView && goneRows != null && rows.length === 0 && (
+        <Empty>{(goneRows || []).length === 0 ? t("assets.reg_deleted_empty") : t("assets.no_match")}</Empty>
+      )}
+      {deletedView && rows.length > 0 && (
+        <Scroll minWidth={900}>
+          <Row head cols={cols}>
+            <span>{t("assets.code")}</span><span>{t("assets.item")}</span><span>{t("assets.spec")}</span><span>{t("assets.unit")}</span>
+            <span>{t("assets.type")}</span><span>{t("assets.reg_col_deleted")}</span><span>{t("assets.reg_col_reason")}</span><span>{t("assets.in_store")}</span>
+          </Row>
+          {rows.map((i) => (
+            <Row key={i.id} cols={cols} onClick={() => onOpenItem(i)}>
+              <span style={{ fontSize: 11.5, color: T.t3, fontFamily: "monospace" }}>{i.code || "—"}</span>
+              <div><div style={{ fontWeight: 600, color: T.t1 }}>{i.name}</div><div style={{ fontSize: 10.5, color: T.t4 }}>{i.category || ""}</div></div>
+              <span style={{ color: T.t3 }}>{i.spec || "—"}</span>
+              <span style={{ color: T.t3 }}>{i.unit || "—"}</span>
+              <span><Pill label={trackLabel(i.tracking_mode)} c={i.tracking_mode === "serialized" ? T.ind : T.t3} bg={i.tracking_mode === "serialized" ? T.indL : T.sltL} /></span>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 11.5 }}>{i.deleted_at ? fmtD(i.deleted_at) : "—"}</div>
+                <div style={{ fontSize: 10.5, color: T.t4 }}>{i.deleted_by_name || ""}</div>
+              </div>
+              <span style={{ fontSize: 11.5, color: T.t3, minWidth: 0, wordBreak: "break-word" }}>{i.delete_reason || "—"}</span>
+              <span>{fmtN(i.in_store_qty)}</span>
+            </Row>
+          ))}
+        </Scroll>
+      )}
+      {!deletedView && rows.length === 0 && !(scoped && whRows == null) && (
         <Empty>
           {scoped ? t("assets.wh_items_empty")
             : (items || []).length === 0 ? t("assets.register_empty") : t("assets.no_match")}<br />
           {!scoped && (items || []).length === 0 && <span style={{ fontSize: 11.5 }}>{t("assets.register_empty_hint")}</span>}
         </Empty>
       )}
-      {rows.length > 0 && (
+      {!deletedView && rows.length > 0 && (
         <Scroll minWidth={900}>
           <Row head cols={cols}>
             <span>{t("assets.code")}</span><span>{t("assets.item")}</span><span>{t("assets.spec")}</span><span>{t("assets.unit")}</span>
@@ -1035,9 +1078,11 @@ function RegisterTab({ items, cats, warehouses, canSetup, canCreate, canExport, 
 const editFieldLabel = (f) => ({
   name: t("assets.item_name"), spec: t("assets.spec"), unit: t("assets.unit"), category: t("assets.category"),
   purchase_date: t("assets.purchase_date"), purchase_cost: t("assets.purchase_cost"), vendor_name: t("assets.vendor"),
-  notes: t("assets.notes"), photo_url: t("assets.photo"),
+  notes: t("assets.notes"), photo_url: t("assets.photo"), is_active: t("assets.edit_field_active"),
 })[f] || f;
-const editVal = (field, v) => (v == null || v === "" ? "—"
+// is_active = register se hataya / wapas laaya (soft delete, 9 Oct 2026).
+const editVal = (field, v) => (field === "is_active" ? t(Number(v) ? "assets.edit_val_active" : "assets.edit_val_deleted")
+  : v == null || v === "" ? "—"
   : field === "purchase_date" ? fmtD(v) : field === "purchase_cost" ? "₹" + fmtN(v) : String(v));
 const fmtDT = (raw) => {
   const d = new Date(raw);
@@ -1062,10 +1107,15 @@ const itemForm = (it) => ({
   vendor_name: it.vendor_name || "", notes: it.notes || "",
 });
 
-function ItemDrawer({ item, cats, canEdit, onClose, onChanged, onOpenVoucher }) {
+function ItemDrawer({ item, cats, canEdit, canDelete, onClose, onChanged, onOpenVoucher }) {
   const toast = useToast();
   const [tab, setTab] = useState("details");
   const [editing, setEditing] = useState(false);
+  // Hatana (soft delete, 9 Oct 2026): sirf Assets ke Delete tick wale ko, wajah
+  // ke saath. Server rokta hai agar saamaan store ke bahar ho / voucher pending
+  // ho / ginti khuli ho — wahi message yahan dikhta hai.
+  const [deleting, setDeleting] = useState(false);
+  const [delReason, setDelReason] = useState("");
   const [f, setF] = useState({});
   const [reason, setReason] = useState("");
   const [holdings, setHoldings] = useState(null);
@@ -1079,7 +1129,7 @@ function ItemDrawer({ item, cats, canEdit, onClose, onChanged, onOpenVoucher }) 
   // Tab aur edit sirf item badalne par reset ho — background refresh (voucher
   // accept ke baad list dobara aayi) par aadmi History se Details par na gire,
   // aur aadha bhara edit na mite.
-  useEffect(() => { setTab("details"); setEditing(false); }, [id]);
+  useEffect(() => { setTab("details"); setEditing(false); setDeleting(false); setDelReason(""); }, [id]);
   useEffect(() => {
     if (!item || editing) return;
     setError("");
@@ -1112,6 +1162,7 @@ function ItemDrawer({ item, cats, canEdit, onClose, onChanged, onOpenVoucher }) 
   }, [id]);
 
   if (!item) return null;
+  const removed = item.is_active != null && !Number(item.is_active);
   const upd = (k, v) => setF((p) => ({ ...p, [k]: v }));
   const startEdit = () => { setF(itemForm(item)); setReason(""); setError(""); setEditing(true); };
   const cancelEdit = () => { setF(itemForm(item)); setReason(""); setError(""); setEditing(false); };
@@ -1136,6 +1187,27 @@ function ItemDrawer({ item, cats, canEdit, onClose, onChanged, onOpenVoucher }) 
     } else setError((r && r.message) || t("assets.save_failed"));
   };
 
+  const startDelete = () => { setTab("details"); setEditing(false); setDelReason(""); setError(""); setDeleting(true); };
+  const doDelete = async () => {
+    setError("");
+    if (delReason.trim().length < 3) { setError(t("assets.item_del_reason_short")); return; }
+    setBusy(true);
+    const r = await api.del(`/assets/items/${id}`, { reason: delReason.trim() });
+    setBusy(false);
+    if (r && r.success) { toast.success(r.message || t("assets.saved")); setDeleting(false); onChanged(); onClose(); }
+    else setError((r && r.message) || t("assets.action_failed"));
+  };
+  const doRestore = async () => {
+    setError("");
+    const ask = window.confirmAsync || ((m) => Promise.resolve(window.confirm(m)));
+    if (!(await ask(t("assets.item_restore_confirm")))) return;
+    setBusy(true);
+    const r = await api.post(`/assets/items/${id}/restore`, {});
+    setBusy(false);
+    if (r && r.success) { toast.success(r.message || t("assets.saved")); onChanged(); onClose(); }
+    else setError((r && r.message) || t("assets.action_failed"));
+  };
+
   const TABS = [
     { id: "details", l: t("assets.item_tab_details") },
     { id: "where", l: t("assets.item_tab_where") },
@@ -1147,11 +1219,24 @@ function ItemDrawer({ item, cats, canEdit, onClose, onChanged, onOpenVoucher }) 
       title={[item.code, item.name].filter(Boolean).join(" · ")}
       sub={[item.spec, item.category, trackLabel(item.tracking_mode)].filter(Boolean).join(" · ")}
       head={item.tracking_mode === "serialized" ? <Pill label={itemStatusLabel(item.status)} c={T.ind} bg={T.indL} /> : null}
-      footer={tab === "details" && editing
+      footer={tab === "details" && deleting
+        ? <><Btn ghost onClick={() => { setDeleting(false); setError(""); }} disabled={busy}>{t("assets.cancel")}</Btn>
+            <Btn c={T.red} onClick={doDelete} disabled={busy}>{busy ? t("assets.saving") : t("assets.item_del_confirm")}</Btn></>
+        : tab === "details" && editing
         ? <><Btn ghost onClick={cancelEdit} disabled={busy}>{t("assets.cancel")}</Btn><Btn onClick={save} disabled={busy}>{busy ? t("assets.saving") : t("assets.save")}</Btn></>
-        : tab === "details" && canEdit
-          ? <><Btn ghost onClick={onClose}>{t("assets.close")}</Btn><Btn onClick={startEdit}>{t("assets.edit_item")}</Btn></>
+        : removed
+          ? <><Btn ghost onClick={onClose}>{t("assets.close")}</Btn>
+              {canDelete && <Btn onClick={doRestore} disabled={busy}>{busy ? t("assets.saving") : t("assets.item_restore_btn")}</Btn>}</>
+        : tab === "details" && (canEdit || canDelete)
+          ? <><Btn ghost onClick={onClose}>{t("assets.close")}</Btn>
+              {canDelete && <Btn ghost onClick={startDelete} style={{ color: T.red }}>{t("assets.item_del_btn")}</Btn>}
+              {canEdit && <Btn onClick={startEdit}>{t("assets.edit_item")}</Btn>}</>
           : <Btn ghost onClick={onClose}>{t("assets.close")}</Btn>}>
+      {removed && (
+        <Notice tone="warn">{t("assets.item_deleted_notice", {
+          by: item.deleted_by_name || "—", date: item.deleted_at ? fmtD(item.deleted_at) : "—", reason: item.delete_reason || "—" })}</Notice>
+      )}
+      {removed && error && <ErrBox>{error}</ErrBox>}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, padding: "10px 12px", background: T.surfaceB, border: `1px solid ${T.b1}`, borderRadius: 10, marginBottom: 14 }}>
         <KV k={t("assets.total")} v={fmtN(item.total_qty)} />
         <KV k={t("assets.in_store")} v={fmtN(item.in_store_qty)} />
@@ -1161,7 +1246,18 @@ function ItemDrawer({ item, cats, canEdit, onClose, onChanged, onOpenVoucher }) 
       </div>
       <SubTabs tabs={TABS} value={tab} onChange={setTab} />
 
-      {tab === "details" && !editing && (
+      {tab === "details" && deleting && (
+        <div>
+          <Notice tone="warn">{t("assets.item_del_notice")}</Notice>
+          <Field label={t("assets.item_del_reason")} hint={t("assets.item_del_reason_hint")}>
+            <textarea value={delReason} onChange={(e) => setDelReason(e.target.value)} maxLength={300}
+              style={{ ...inp, minHeight: 64, resize: "vertical" }} placeholder={t("assets.item_del_reason_ph")} />
+          </Field>
+          <ErrBox>{error}</ErrBox>
+        </div>
+      )}
+
+      {tab === "details" && !editing && !deleting && (
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
           <ViewBox label={t("assets.item_name")} v={item.name} span={2} />
           <ViewBox label={t("assets.spec")} v={item.spec} />
@@ -1177,7 +1273,7 @@ function ItemDrawer({ item, cats, canEdit, onClose, onChanged, onOpenVoucher }) 
               <a href={item.photo_url} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: T.ind, fontWeight: 700 }}>{t("assets.photo_view")}</a>
             </Field>
           )}
-          {!canEdit && <div style={{ gridColumn: "span 2", fontSize: 11, color: T.t4 }}>{t("assets.edit_no_access")}</div>}
+          {!canEdit && !removed && <div style={{ gridColumn: "span 2", fontSize: 11, color: T.t4 }}>{t("assets.edit_no_access")}</div>}
         </div>
       )}
 
@@ -1263,7 +1359,7 @@ function ItemDrawer({ item, cats, canEdit, onClose, onChanged, onOpenVoucher }) 
                     <b style={{ color: T.t1 }}>{editVal(c.field, c.new)}</b>
                   </div>
                 ))}
-                <div style={{ fontSize: 11.5, color: T.t3, marginTop: 4 }}>{t("assets.edit_reason_x", { reason: e.reason })}</div>
+                {e.reason && <div style={{ fontSize: 11.5, color: T.t3, marginTop: 4 }}>{t("assets.edit_reason_x", { reason: e.reason })}</div>}
               </div>
             ))}
           </Panel>
@@ -4925,10 +5021,14 @@ function AssetsModule({ deepLink, onDeepLinkDone }) {
   // har button milta tha aur server 403 deta tha).
   //   Create = opening / naya asset / import / kharid ki maang
   //   Entry  = voucher (GRN, issue, transfer, return, repair), ginti (transition me Create bhi)
+  //   Ginti = Entry / Create / Edit — 9 Oct 2026 se Edit wala bhi gin sakta hai (server ASSET_COUNT)
   //   category / incharge = Create (transition me Edit bhi)
   //   Edit = asset sudhaar · Approve = ginti manzoor · Export = poori list ki Excel
+  //   Delete = asset hatana / wapas laana (soft, strict — server jaisa) + kisi aur ka voucher cancel
   const canCreate = can("Assets", "create", me), canEdit = can("Assets", "edit", me), canApprove = can("Assets", "approve", me);
   const canEntryA = canEntry("Assets", me);
+  const canGinti = canEntryA || canEdit;
+  const canDelete = canAny("Assets", "delete", { strict: true }, me);
   const canSetup = canAny("Assets", "create", {}, me) || canEdit;
   const canExport = can("Assets", "export", me);
 
@@ -5072,7 +5172,7 @@ function AssetsModule({ deepLink, onDeepLinkDone }) {
 
         {tab === "dashboard" && <DashboardTab dash={dash} warehouses={(meta && meta.warehouses) || []} onOpenVoucher={setVoucherId} onGo={setTab} />}
         {tab === "register" && (
-          <RegisterTab items={items} cats={cats} warehouses={(meta && meta.warehouses) || []} canSetup={canSetup} canCreate={canCreate} canExport={canExport} onOpenItem={setOpenItem}
+          <RegisterTab items={items} cats={cats} warehouses={(meta && meta.warehouses) || []} canSetup={canSetup} canCreate={canCreate} canExport={canExport} refreshKey={refreshKey} onOpenItem={setOpenItem}
             onCats={() => setCatsOpen(true)} onIncharge={() => setInchOpen(true)} onImport={() => setImportOpen(true)} onAddAsset={() => setAddOpen(true)}
             onExport={doExport} exportErr={exportErr} />
         )}
@@ -5092,7 +5192,7 @@ function AssetsModule({ deepLink, onDeepLinkDone }) {
             onRepairOut={() => setRepairKind("out")} onRepairIn={() => setRepairKind("in")} onOpenVoucher={setVoucherId} />
         )}
         {tab === "verify" && (
-          <VerificationsTab refreshKey={refreshKey} meta={meta} pickers={pickers} canCreate={canEntryA}
+          <VerificationsTab refreshKey={refreshKey} meta={meta} pickers={pickers} canCreate={canGinti}
             onNew={() => setNewVerify(true)} onOpen={setVerifyId} onOpenVoucher={openVoucherInMovements} />
         )}
         {tab === "loss" && (
@@ -5131,7 +5231,7 @@ function AssetsModule({ deepLink, onDeepLinkDone }) {
       )}
       <NewRequestModal open={newRequest} meta={meta} pickers={pickers} items={items} me={me}
         onClose={() => setNewRequest(false)} onCreated={(d) => { refresh(); if (d && d.id) setRequestId(d.id); }} />
-      {itemFull && <ItemDrawer item={itemFull} cats={cats} canEdit={canEdit} onClose={() => setOpenItem(null)} onChanged={refresh} onOpenVoucher={setVoucherId} />}
+      {itemFull && <ItemDrawer item={itemFull} cats={cats} canEdit={canEdit} canDelete={canDelete} onClose={() => setOpenItem(null)} onChanged={refresh} onOpenVoucher={setVoucherId} />}
 
       <GrnForm open={grnOpen} meta={meta} pickers={pickers} cats={cats} canAll={isAdmin || canApprove} onClose={() => setGrnOpen(false)} onSaved={refresh} />
       <OrderReceiveModal order={recvOrder} onClose={() => setRecvOrder(null)} onSaved={refresh} />
