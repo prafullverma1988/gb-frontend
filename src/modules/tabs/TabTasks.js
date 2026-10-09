@@ -3344,9 +3344,10 @@ function TaskIssueDrawer({issues, loading, filter, setFilter, onClose, onStatusC
   const [fullPhoto,setFullPhoto]=useState(null);
   const [closingId,setClosingId]=useState(null);
 
-  // Group by task
+  // Group by task — bina task ka issue (9 Oct 2026, sirf project ka) apne
+  // "Bina task" group me.
   const byTask = filtered.reduce((acc,i)=>{
-    const key=(i.task_no||"")+" "+(i.task_name||"Unknown Task");
+    const key=i.task_id?(i.task_no||"")+" "+(i.task_name||"Unknown Task"):t("tasks.bina_task");
     if(!acc[key]) acc[key]=[];
     acc[key].push(i);
     return acc;

@@ -10092,6 +10092,7 @@ const dict = {
   "tasks.type_message_enter_to_send":                          "Type message... (Enter to send)",
   "tasks.typically_done_when_delay_hota_hai":                  "Typically done when there is a delay — current planned dates will be snapshotted, and future variance will be tracked.",
   "tasks.unknown_task":                                        "Unknown Task",
+  "tasks.bina_task":                                           "No task",
   "tasks.unlock_plan":                                         "Unlock Plan",
   "tasks.unlock_start":                                        "🔓 Unlock Start",
   "tasks.upar_wale_task_ki_qty":                               "Quantity of the above task (",

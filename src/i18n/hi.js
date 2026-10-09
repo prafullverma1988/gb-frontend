@@ -10091,6 +10091,7 @@ const dict = {
   "tasks.type_message_enter_to_send":                          "मैसेज टाइप करो... (भेजने के लिए एंटर)",
   "tasks.typically_done_when_delay_hota_hai":                  "टिपिकली तब होता है जब डिले होता है — करंट प्लान्ड डेट्स स्नैपशॉट हो जाएंगी और आगे की वेरियंस ट्रैक होगी।",
   "tasks.unknown_task":                                        "अनजान टास्क",
+  "tasks.bina_task":                                           "बिना टास्क",
   "tasks.unlock_plan":                                         "प्लान अनलॉक करो",
   "tasks.unlock_start":                                        "🔓 स्टार्ट अनलॉक करो",
   "tasks.upar_wale_task_ki_qty":                               "ऊपर वाले टास्क की क्वांटिटी (",
