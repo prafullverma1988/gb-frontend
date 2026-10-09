@@ -303,8 +303,10 @@ function BulkOrderModal({items,onSave,onClose,dbVendors=[],onWarehouseIssued}){
   const [contacts,setContacts]=useState([]);
   // Bulk order kai projects ki MR le sakta hai — team un sabki milti hai.
   const contactProjectIds=items.map(m=>m.project_id).filter(Boolean);
-  // Asset ki kharid ki MR me project nahi, store hota hai — uski team wahan se.
-  const contactWarehouseIds=items.map(m=>m.asset_warehouse_id).filter(Boolean);
+  // Asset ki kharid ki MR me project nahi, store hota hai — uske incharge wahan se.
+  // store_warehouse_id = asset ka store YA store ke apne restock MR ka store;
+  // sirf contacts ke liye (server ko asset_warehouse_id hi jaata hai).
+  const contactWarehouseIds=items.map(m=>m.store_warehouse_id||m.asset_warehouse_id).filter(Boolean);
   // RFQ medium — multiple vendors invited to quote + optional bid end date
   const [rfqVendors,setRfqVendors]=useState([]);
   const [rfqVendorPick,setRfqVendorPick]=useState("");
@@ -1306,6 +1308,7 @@ function CreatePOModal({onClose,onSave,prefillItems,prefillVendor,editPo,dbProje
           project_id: it.project_id||null, project_name: it.project_name||"",
           delivery_site: it.delivery_site||"", linked_mr_id: it.linked_mr_id||null,
           asset_warehouse_id: it.asset_warehouse_id||null,
+          store_warehouse_id: it.store_warehouse_id||null,   // sirf receiving contacts ke liye
         }))
       : prefillItems
         ?prefillItems.map(m=>solvePOLine({
@@ -1320,6 +1323,9 @@ function CreatePOModal({onClose,onSave,prefillItems,prefillVendor,editPo,dbProje
             delivery_site: m.delivery_site||m.project||"",
             linked_mr_id: m.id||null,
             asset_warehouse_id: m.asset_warehouse_id||null,
+            // Store ke apne restock MR ka store bhi — sirf receiving contacts
+            // ke liye; ise asset_warehouse_id mat banana (MR asset ban jaata).
+            store_warehouse_id: m.store_warehouse_id||null,
           }))
         :[{desc:"",hsn:"",qty:"",unit:"",rate:"",total:"",_t:[],_d:"total",project_id:null,project_name:"",delivery_site:"",linked_mr_id:null}]
   });
@@ -1530,7 +1536,7 @@ function CreatePOModal({onClose,onSave,prefillItems,prefillVendor,editPo,dbProje
             </div>
             <ReceivingContacts theme={T} value={contacts} onChange={setContacts}
               projectIds={[form.projectId,...form.items.map(it=>it.project_id)].filter(Boolean)}
-              warehouseIds={form.items.map(it=>it.asset_warehouse_id).filter(Boolean)}/>
+              warehouseIds={form.items.map(it=>it.store_warehouse_id||it.asset_warehouse_id).filter(Boolean)}/>
           </Fld>
         </div>
 
@@ -2219,9 +2225,10 @@ function ProcurementModule(){
     if(!rfq?.locked){alert(t("procurement.pehle_ek_vendor_ka_quote_lock"));return;}
     const winner=rfq.vendors.find(v=>v.name===rfq.locked);
     const prefill=rfq.items.map((it,i)=>{
-      // Asset ki kharid ki MR ka store — RFQ ki line par nahi hota, MR par hota
-      // hai. Iske bina RFQ se bane PO me Receiving Person ka dropdown khaali aata
-      // tha (asset MR ka project hi nahi hota, to project ki team bhi nahi).
+      // Asset ki kharid ki MR ka store (ya store ke restock MR ka store) — RFQ ki
+      // line par nahi hota, MR par hota hai. Iske bina RFQ se bane PO me
+      // Receiving Person ka dropdown khaali aata tha (asset MR ka project hi
+      // nahi hota, to project ki team bhi nahi).
       const src=it.linked_mr_id?mrs.find(m=>String(m.id)===String(it.linked_mr_id)):null;
       return {
         id:it.linked_mr_id||null,           // MR back-link (null for manual RFQ items)
@@ -2230,6 +2237,7 @@ function ProcurementModule(){
         project:(rfq.project&&rfq.project!=="—")?rfq.project:"",
         rate:winner?.rates?.[i]?.rate??null,
         asset_warehouse_id:src?.asset_warehouse_id||null,
+        store_warehouse_id:src?.store_warehouse_id||null,   // contacts ke liye (restock MR ka store bhi)
         ...(src?.asset_warehouse_id?{site:src.asset_warehouse_name||"",delivery_site:src.asset_warehouse_name||""}:{}),
       };
     });

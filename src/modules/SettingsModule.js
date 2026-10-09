@@ -547,7 +547,7 @@ function LocationsSettings() {
   ];
   // whId = wo stock-side godown jise jagah di ja rahi hai (uska geofence
   // abhi nahi hai). Isse save naya godown nahi banata, purane ko jodta hai.
-  const blank = { id: null, whId: null, kind: "office", label: "", address: "", lat: "", lng: "", radius: 100, incharge: "" };
+  const blank = { id: null, whId: null, kind: "office", label: "", address: "", lat: "", lng: "", radius: 100, incharges: [] };
   const [rows, setRows] = useState([]);
   // Location list sach me aayi ya nahi — na aayi ho to har store "bina
   // location" na dikhe (neeche orphanWhs).
@@ -636,7 +636,7 @@ function LocationsSettings() {
         await api.patch("/warehouse/warehouses/" + form.whId, {
           geofence_id: r.data?.id || form.id || null,
           name: form.label.trim(), address: form.address || null,
-          incharge_user_id: form.incharge ? Number(form.incharge) : null,
+          incharge_user_ids: form.incharges.map(Number),
         }).catch(()=>{});
       }
       // Warehouse hai to uska incharge bhi save karo. Naya warehouse abhi
@@ -644,14 +644,14 @@ function LocationsSettings() {
       // isliye pehle naam se bana/dhoondh kar incharge lagate hain.
       if (r.success && form.kind === "warehouse" && !form.whId) {
         const existing = form.id ? whFor({ id: form.id }) : null;
-        const inch = form.incharge ? Number(form.incharge) : null;
+        const inch = form.incharges.map(Number);
         if (existing) {
           await api.patch("/warehouse/warehouses/" + existing.id,
-            { name: form.label.trim(), address: form.address || null, incharge_user_id: inch }).catch(()=>{});
+            { name: form.label.trim(), address: form.address || null, incharge_user_ids: inch }).catch(()=>{});
         } else {
           await api.post("/warehouse/warehouses", {
             name: form.label.trim(), address: form.address || null,
-            geofence_id: r.data?.id || form.id || null, incharge_user_id: inch,
+            geofence_id: r.data?.id || form.id || null, incharge_user_ids: inch,
           }).catch(()=>{});
         }
       }
@@ -661,13 +661,20 @@ function LocationsSettings() {
     setBusy(false);
   };
 
+  // Store ke saare incharge — purana server array nahi bhejta to akela
+  // incharge_user_id hi uski list hai.
+  const inchargeIds = (w) => (Array.isArray(w?.incharge_user_ids) ? w.incharge_user_ids : (w?.incharge_user_id ? [w.incharge_user_id] : [])).map(String);
+  // Chip ka naam — staff list me na mile (jaise hataya hua user) to store ki
+  // apni incharges list se.
+  const inchargeName = (id) => staff.find(u => String(u.id) === String(id))?.name
+    || whs.flatMap(w => w.incharges || []).find(i => String(i.user_id) === String(id))?.name || "#" + id;
   const edit = (g) => setForm({ id: g.id, kind: g.kind || "office", label: g.label || "", address: g.address || "",
                                 lat: String(g.center_lat), lng: String(g.center_lng), radius: g.radius_m || 100,
-                                incharge: whFor(g)?.incharge_user_id ? String(whFor(g).incharge_user_id) : "" });
+                                incharges: inchargeIds(whFor(g)) });
   // Stock-side godown ko jagah dena — naam/incharge wahi rehta hai.
   const editWh = (w) => setForm({ id: null, whId: w.id, kind: "warehouse", label: w.name || "",
                                   address: w.address || "", lat: "", lng: "", radius: 100,
-                                  incharge: w.incharge_user_id ? String(w.incharge_user_id) : "" });
+                                  incharges: inchargeIds(w) });
 
   // Hataana nahi, band karna — jisme stock ka kaam pada ho use haath nahi lagate.
   // Server bhi yahi rokta hai (409, saath me kya pada hai).
@@ -765,13 +772,24 @@ function LocationsSettings() {
         <div style={{ marginBottom:10 }}><label style={L}>Address</label><input value={form.address} onChange={e=>setForm(f=>({...f,address:e.target.value}))} placeholder="Full address" style={I}/></div>
         {form.kind === "warehouse" && (
           <div style={{ marginBottom:10 }}>
-            <label style={L}>Warehouse Incharge</label>
-            <PickSelect value={form.incharge} onChange={e=>setForm(f=>({...f,incharge:e.target.value}))} style={{...I, cursor:"pointer"}}>
-              <option value="">— koi nahi —</option>
-              {staff.map(u => <option key={u.id} value={u.id}>{u.name}{u.role ? ` · ${u.role}` : ""}</option>)}
+            <label style={L}>{t("settings.wh_incharges_label")}</label>
+            {/* Ek store ke kai incharge — chune hue chips me, naya jodne ko niche picker. */}
+            <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginBottom:6 }}>
+              {form.incharges.length === 0 && <span style={{ fontSize:11.5, color:T.textLight }}>{t("settings.wh_incharge_none")}</span>}
+              {form.incharges.map(id => (
+                <span key={id} style={{ display:"inline-flex", alignItems:"center", gap:6, fontSize:12, fontWeight:600, color:T.text, background:"white", border:`1px solid ${T.border}`, borderRadius:12, padding:"3px 4px 3px 10px" }}>
+                  {inchargeName(id)}
+                  <button type="button" onClick={()=>setForm(f=>({...f,incharges:f.incharges.filter(x=>x!==id)}))} title={t("common.hatao")}
+                    style={{ border:"none", background:"transparent", color:T.textMid, fontSize:14, lineHeight:1, cursor:"pointer", padding:"0 5px" }}>×</button>
+                </span>
+              ))}
+            </div>
+            <PickSelect value="" onChange={e=>{ const v = String(e.target.value); if (v) setForm(f=>({...f,incharges:f.incharges.includes(v)?f.incharges:[...f.incharges,v]})); }} style={{...I, cursor:"pointer"}}>
+              <option value="">{t("settings.wh_incharge_add")}</option>
+              {staff.filter(u => !form.incharges.includes(String(u.id))).map(u => <option key={u.id} value={u.id}>{u.name}{u.role ? ` · ${u.role}` : ""}</option>)}
             </PickSelect>
             <div style={{ fontSize:10.5, color:T.textLight, marginTop:4 }}>
-              Incharge ko Warehouse module me yahi godown by default khulta hai. Baaki godown bhi dikhte hain, switch kar sakta hai.
+              {t("settings.wh_incharge_help")}
             </div>
           </div>
         )}
@@ -1358,9 +1376,11 @@ function RolesAccess() {
   const [userForm, setUserForm] = useState({ name: "", email: "", phone: "", role: "viewer", designation: "", password: "", projects: [], warehouses: [] });
   // Store: admin ko saare apne aap; incharge ko uska store hamesha (server
   // bhi yahi maanta hai — utils/warehouseAccess.js). Isliye ye tick badle nahi ja sakte.
+  // Store ke kai incharge ho sakte hain — purana server incharge_user_ids nahi bhejta to akela incharge_user_id.
+  const isStoreIncharge = (st, u) => !!u && (st.incharge_user_ids || [st.incharge_user_id]).map(Number).includes(Number(u.id));
   const activeStores = (allStores || []).filter(st => Number(st.is_active) !== 0);
   const isAdminUser = (u) => ["admin", "super_admin"].includes(String(u?.role || "").toLowerCase());
-  const storeLocked = (u, st) => isAdminUser(u) || (u && Number(st.incharge_user_id) === Number(u.id));
+  const storeLocked = (u, st) => isAdminUser(u) || isStoreIncharge(st, u);
   const storeLockTip = (u, st) => isAdminUser(u) ? "Admin ko saare store apne aap milte hain" : "Store incharge — is store ka access hamesha rehta hai";
   const hasStore = (u, st) => storeLocked(u, st) || (u.warehouses || []).includes(st.id);
   // Reverse-flow: search + link an existing unlinked staff-party.
@@ -2536,7 +2556,7 @@ function RolesAccess() {
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
                   {activeStores.map(st => {
-                    const incharge = editingUser && Number(st.incharge_user_id) === Number(editingUser.id);
+                    const incharge = isStoreIncharge(st, editingUser);
                     const sel = incharge || (userForm.warehouses || []).includes(st.id);
                     return (
                       <button key={st.id} onClick={() => { if (!incharge) toggleUserStore(st.id); }} title={incharge ? "Store incharge — is store ka access hamesha rehta hai" : undefined}
