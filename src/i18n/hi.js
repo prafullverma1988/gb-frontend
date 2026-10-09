@@ -9003,7 +9003,7 @@ const dict = {
   "settings.wh_hold_wh_docs":                                  "{n} गोदाम एंट्री पेंडिंग",
   "settings.wh_holds_now":                                     "अभी पड़ा है: {what}",
   "settings.wh_incharge_add":                                  "+ इंचार्ज जोड़ें",
-  "settings.wh_incharge_help":                                 "एक स्टोर में एक से ज़्यादा इंचार्ज हो सकते हैं। सबको यह स्टोर हमेशा खुलता है, ऑर्डर के Receiving person में यही आते हैं, और गिनती / ड्रम की खबर सबको जाती है।",
+  "settings.wh_incharge_help":                                 "एक स्टोर में एक से ज़्यादा इंचार्ज हो सकते हैं। सबको यह स्टोर हमेशा खुलता है, ऑर्डर के Receiving person में यही आते हैं, और डीज़ल ड्रम की खबर सबको जाती है।",
   "settings.wh_incharge_none":                                 "कोई इंचार्ज नहीं लगा",
   "settings.wh_incharges_label":                               "स्टोर इंचार्ज",
   "settings.wh_no_location":                                   "जगह नहीं लगी — punch-in यहाँ काम नहीं करेगा",

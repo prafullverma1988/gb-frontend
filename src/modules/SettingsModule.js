@@ -637,6 +637,8 @@ function LocationsSettings() {
           geofence_id: r.data?.id || form.id || null,
           name: form.label.trim(), address: form.address || null,
           incharge_user_ids: form.incharges.map(Number),
+          // Purana server sirf ek incharge_user_id samajhta hai — naya list ko hi maanta hai.
+          incharge_user_id: form.incharges.length ? Number(form.incharges[0]) : null,
         }).catch(()=>{});
       }
       // Warehouse hai to uska incharge bhi save karo. Naya warehouse abhi
@@ -647,11 +649,11 @@ function LocationsSettings() {
         const inch = form.incharges.map(Number);
         if (existing) {
           await api.patch("/warehouse/warehouses/" + existing.id,
-            { name: form.label.trim(), address: form.address || null, incharge_user_ids: inch }).catch(()=>{});
+            { name: form.label.trim(), address: form.address || null, incharge_user_ids: inch, incharge_user_id: inch[0] || null }).catch(()=>{});
         } else {
           await api.post("/warehouse/warehouses", {
             name: form.label.trim(), address: form.address || null,
-            geofence_id: r.data?.id || form.id || null, incharge_user_ids: inch,
+            geofence_id: r.data?.id || form.id || null, incharge_user_ids: inch, incharge_user_id: inch[0] || null,
           }).catch(()=>{});
         }
       }

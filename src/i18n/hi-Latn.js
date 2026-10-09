@@ -9006,7 +9006,7 @@ const dict = {
   "settings.wh_hold_wh_docs":                                  "{n} Store entry pending",
   "settings.wh_holds_now":                                     "Abhi pada hai: {what}",
   "settings.wh_incharge_add":                                  "+ Incharge add karo",
-  "settings.wh_incharge_help":                                 "Ek store me ek se zyada incharge ho sakte hain. Sabko ye store hamesha khulta hai, order ke Receiving person me yahi aate hain, aur ginti / drum ki khabar sabko jaati hai.",
+  "settings.wh_incharge_help":                                 "Ek store me ek se zyada incharge ho sakte hain. Sabko ye store hamesha khulta hai, order ke Receiving person me yahi aate hain, aur diesel drum ki khabar sabko jaati hai.",
   "settings.wh_incharge_none":                                 "Koi incharge nahi laga",
   "settings.wh_incharges_label":                               "Store Incharge",
   "settings.wh_no_location":                                   "Jagah nahi lagi — punch-in yahan kaam nahi karega",

@@ -9004,7 +9004,7 @@ const dict = {
   "settings.wh_hold_wh_docs":                                  "{n} pending Warehouse entries",
   "settings.wh_holds_now":                                     "Still holds: {what}",
   "settings.wh_incharge_add":                                  "+ Add in-charge",
-  "settings.wh_incharge_help":                                 "A store can have more than one in-charge. Each of them always has this store, they are the ones offered as Receiving person on orders, and count / drum alerts go to all of them.",
+  "settings.wh_incharge_help":                                 "A store can have more than one in-charge. Each of them always has this store, they are the ones offered as Receiving person on orders, and diesel drum alerts go to all of them.",
   "settings.wh_incharge_none":                                 "No in-charge set",
   "settings.wh_incharges_label":                               "Store In-charge",
   "settings.wh_no_location":                                   "No location set — punch-in will not work here",
