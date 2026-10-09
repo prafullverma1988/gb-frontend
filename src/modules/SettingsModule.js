@@ -920,7 +920,15 @@ function CompanySettings() {
 // sakta, aur phone par bhi nahi dikhta. Ye screen sirf sajati hai.
 // Jo cheez patti me nahi aati uska tile More/Hub me apne aap banta hai; admin
 // wo tile bhi chhupa de to neeche laal chetavni — "kahin nahi milega".
+//
+// 9 Oct 2026 (B2): app ke Home ke do hisse bhi yahin — upar ke dabbe (4 tak)
+// aur Quick Actions (8 tak). Wahi chunav/kram wala tareeka jo patti ka. Kuch
+// set nahi = aaj jaisa Home. Saath me switch: is role ke log app me apna Home
+// khud badal sakte hain ya nahi (default haan).
 const MLAY_LABEL_KEY = (surface, id) => {
+  if (surface === "home_quick") return "settings.mlay_q_" + id;
+  if (surface === "home_tiles") return "settings.mlay_t_" + id;
+  if (surface === "more" && id === "tasks") return "settings.mlay_i_my_tasks";
   if (surface === "more" && id === "rmc") return "settings.mlay_i_rmc_plant";
   if (surface === "top_tabs" && id === "attendance") return "settings.mlay_i_tab_attendance";
   if (id === "roadLevels") return "settings.mlay_i_road_levels";   // key me bada akshar nahi chalta
@@ -931,11 +939,13 @@ const mlayLabel = (surface, id) => {
   const v = t(k);
   return v === k ? id : v;
 };
-// Patti ke item ka tile kis list me hai.
-const MLAY_TILES_OF = { app_nav: "more", project_nav: "hub" };
+// Patti ke item ka tile kis list me hai. Home ke hisson ka bhi More me.
+const MLAY_TILES_OF = { app_nav: "more", project_nav: "hub", home_quick: "more", home_tiles: "more" };
 const MLAY_HIDE_KEY = { more: "hide_more", hub: "hide_hub" };
+// Purana server `slots` na bheje to.
+const MLAY_SLOTS_DEFAULT = { home_quick: 8, home_tiles: 4 };
 
-function MobileLayoutTab({ roleName, dbRole, perms, isAdmin, coModules }) {
+function MobileLayoutTab({ roleName, dbRole, perms, isAdmin, isViewer, coModules }) {
   const [data, setData] = useState(null);      // { catalog, nav_slots, layouts }
   const [loadErr, setLoadErr] = useState(false);
   const [draft, setDraft] = useState(null);
@@ -948,7 +958,7 @@ function MobileLayoutTab({ roleName, dbRole, perms, isAdmin, coModules }) {
     }).catch(() => setLoadErr(true));
   }, []);
 
-  const blank = { app_nav: [], project_nav: [], hide_hub: [], hide_more: [] };
+  const blank = { app_nav: [], project_nav: [], hide_hub: [], hide_more: [], home_quick: [], home_tiles: [] };
   const saved = (data && dbRole && data.layouts && data.layouts[dbRole.id]) || null;
   // Role badla ya data aaya — draft wahi jo server par hai.
   useEffect(() => {
@@ -961,47 +971,60 @@ function MobileLayoutTab({ roleName, dbRole, perms, isAdmin, coModules }) {
 
   const cat = data.catalog;
   const SLOTS = Number(data.nav_slots) || 3;
+  const slotsOf = (key) => Number(data.slots && data.slots[key]) || MLAY_SLOTS_DEFAULT[key] || SLOTS;
 
-  // Phone ka hi niyam: admin sab dekhta hai; row nahi = khula; row hai to view.
-  const permOk = (mod) => {
-    if (isAdmin || !mod) return true;
-    const row = perms ? perms[mod] : undefined;
-    if (row === undefined) return true;
-    return row.includes("view");
+  // Phone ka hi niyam (server utils/mobileLayout.js): admin sab dekhta hai.
+  // perm ek module ya list (koi ek chale). act na ho = view: row nahi = khula,
+  // row hai to view. act "entry" = Entry ya Create, "create" = Create — jin
+  // module ki row hai unme koi ek; ek bhi row nahi to khula (Viewer ko nahi).
+  const permOk = (item) => {
+    if (isAdmin || !item || !item.perm) return true;
+    const mods = Array.isArray(item.perm) ? item.perm : [item.perm];
+    const rowOf = (m) => (perms ? perms[m] : undefined);
+    const act = item.act || "view";
+    if (act === "view") return mods.some(m => { const row = rowOf(m); return row === undefined || row.includes("view"); });
+    const rows = mods.map(rowOf).filter(r => r !== undefined);
+    if (!rows.length) return !isViewer;
+    return rows.some(r => (act === "entry" ? (r.includes("entry") || r.includes("create")) : r.includes(act)));
   };
   // Kyun nahi dikhega — null = dikhega.
   const blockReason = (item) => {
     if (item.company_module && !(coModules && coModules[item.company_module] === true)) return t("settings.mlay_company_off");
     if (item.admin_only && !isAdmin) return t("settings.mlay_admin_only");
-    if (!permOk(item.perm)) return t("settings.mlay_perm_off");
+    if (!permOk(item)) return t("settings.mlay_perm_off");
     return null;
   };
   const allowed = (item) => !blockReason(item);
 
   // Patti: chuna hua (band wale chhod kar), kuchh na bache to apne aap.
+  // Apne aap me `extra` item nahi aate (Home ke naye Quick Actions) — taaki
+  // bina set kiye Home aaj jaisa hi rahe.
   const navOf = (key) => {
+    const n = slotsOf(key);
     const ok = (cat[key] || []).filter(allowed);
     const pick = draft[key] || [];
     if (pick.length) {
-      const out = pick.map(id => ok.find(x => x.id === id)).filter(Boolean).slice(0, SLOTS);
+      const out = pick.map(id => ok.find(x => x.id === id)).filter(Boolean).slice(0, n);
       if (out.length) return { items: out, auto: false };
     }
-    return { items: ok.slice(0, SLOTS), auto: true };
+    return { items: ok.filter(x => !x.extra).slice(0, n), auto: true };
   };
   const navIds = (key) => new Set(navOf(key).items.map(x => x.id));
 
   const tileState = (surface, item) => {
     const why = blockReason(item);
     if (why) return { show: false, locked: true, why };
-    if (item.overflow && navIds(item.overflow).has(item.id)) return { show: false, locked: true, why: t("settings.mlay_in_nav") };
+    const onHome = item.overflow === "home_quick" || item.overflow === "home_tiles";
+    if (item.overflow && navIds(item.overflow).has(item.id)) return { show: false, locked: true, why: t(onHome ? "settings.mlay_in_home" : "settings.mlay_in_nav") };
     const hidden = (draft[MLAY_HIDE_KEY[surface]] || []).includes(item.id);
-    return { show: !hidden, locked: false, why: item.overflow ? t("settings.mlay_overflow_hint") : null };
+    return { show: !hidden, locked: false, why: item.overflow ? t(onHome ? "settings.mlay_home_overflow_hint" : "settings.mlay_overflow_hint") : null };
   };
 
   const setSlot = (key, slot, id) => {
+    const n = slotsOf(key);
     const cur = navOf(key).items.map(x => x.id);          // abhi jo dikh raha hai, wahi aadhar
-    const next = cur.slice(0, SLOTS);
-    while (next.length < SLOTS) next.push("");
+    const next = cur.slice(0, n);
+    while (next.length < n) next.push("");
     const dup = next.indexOf(id);
     if (id && dup >= 0 && dup !== slot) next[dup] = next[slot];  // adla-badli
     next[slot] = id;
@@ -1015,16 +1038,22 @@ function MobileLayoutTab({ roleName, dbRole, perms, isAdmin, coModules }) {
     });
   };
 
-  // Jo cheez adhikar hote hue bhi na patti me hai na tile me.
+  // Jo cheez adhikar hote hue bhi na patti/Home me hai na tile me. Home ke
+  // hisson me sirf wo dekhte hain jinka More tile isi hisse ke liye hai
+  // (Wallet, ER, Kaanta, Approvals, Issues, My Tasks) — baaki ka darwaza
+  // kahin aur hai (MR patti/More me, Fuel ka tile, Issue raise → Issues…).
   const unreachable = [];
-  for (const key of ["app_nav", "project_nav"]) {
+  for (const key of ["app_nav", "project_nav", "home_quick", "home_tiles"]) {
+    if (!cat[key]) continue;
     const inNav = navIds(key);
     const surface = MLAY_TILES_OF[key];
-    for (const item of (cat[key] || []).filter(allowed)) {
+    for (const item of cat[key].filter(allowed)) {
       if (inNav.has(item.id)) continue;
       const tile = (cat[surface] || []).find(x => x.id === item.id);
+      if (key.startsWith("home_") && !(tile && tile.overflow === key)) continue;
       if (tile && tileState(surface, tile).show) continue;
-      if (!unreachable.includes(item.id)) unreachable.push(item.id);
+      const name = mlayLabel(key, item.id);
+      if (!unreachable.includes(name)) unreachable.push(name);
     }
   }
 
@@ -1051,6 +1080,7 @@ function MobileLayoutTab({ roleName, dbRole, perms, isAdmin, coModules }) {
   const fixedBtn = { flex: "0 0 auto", padding: "8px 10px", borderRadius: 8, background: T.borderLight, color: T.textMid, fontSize: 12, fontWeight: 600 };
 
   // Render ke andar component banane par har tap par naya mount hota — isliye saade function.
+  // first / last = patti ke pakke button (Home · More); Home ke hisson me nahi.
   const renderNav = (navKey, first, last) => {
     const nav = navOf(navKey);
     const shown = nav.items.map(x => x.id);
@@ -1058,8 +1088,8 @@ function MobileLayoutTab({ roleName, dbRole, perms, isAdmin, coModules }) {
     return (
       <div>
         <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-          <span style={fixedBtn}>{first}</span>
-          {Array.from({ length: SLOTS }).map((_, i) => (
+          {first && <span style={fixedBtn}>{first}</span>}
+          {Array.from({ length: slotsOf(navKey) }).map((_, i) => (
             <PickSelect key={i} value={shown[i] || ""} onChange={e => setSlot(navKey, i, e.target.value)}
               style={{ flex: "1 1 120px", minWidth: 110, padding: "7px 8px", borderRadius: 8, fontSize: 12.5, fontFamily: "inherit",
                 border: `1.5px solid ${nav.auto ? T.border : T.blue}`, color: nav.auto ? T.textMid : T.text, background: T.card }}>
@@ -1070,7 +1100,7 @@ function MobileLayoutTab({ roleName, dbRole, perms, isAdmin, coModules }) {
               })}
             </PickSelect>
           ))}
-          <span style={fixedBtn}>{last}</span>
+          {last && <span style={fixedBtn}>{last}</span>}
         </div>
         <div style={{ fontSize: 11.5, color: T.textLight, marginTop: 6, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
           <span>{nav.auto ? t("settings.mlay_auto_note") : t("settings.mlay_manual_note")}</span>
@@ -1119,12 +1149,34 @@ function MobileLayoutTab({ roleName, dbRole, perms, isAdmin, coModules }) {
         {renderNav("app_nav", t("settings.mlay_home"), t("settings.mlay_more"))}
       </div>
 
+      {cat.home_quick && cat.home_tiles && (
+        <div style={box}>
+          <div style={head}>{t("settings.mlay_home_title")}</div>
+          <div style={{ fontSize: 12, color: T.textMid, marginBottom: 6 }}>{t("settings.mlay_home_tiles")}</div>
+          {renderNav("home_tiles", null, null)}
+          <div style={{ fontSize: 12, color: T.textMid, margin: "14px 0 6px" }}>{t("settings.mlay_home_quick")}</div>
+          {renderNav("home_quick", null, null)}
+          <label style={{ display: "flex", alignItems: "flex-start", gap: 8, marginTop: 14, fontSize: 12.5, color: T.text, cursor: "pointer" }}>
+            <input type="checkbox" checked={draft.user_custom !== false} style={{ marginTop: 2 }}
+              onChange={e => setDraft(d => {
+                const next = { ...d };
+                if (e.target.checked) delete next.user_custom; else next.user_custom = false;
+                return next;
+              })} />
+            <span>
+              {t("settings.mlay_user_custom")}
+              <span style={{ display: "block", fontSize: 11.5, color: T.textLight, marginTop: 2 }}>{t("settings.mlay_user_custom_hint")}</span>
+            </span>
+          </label>
+        </div>
+      )}
+
       <div style={box}>
         <div style={head}>{t("settings.mlay_project")}</div>
         <div style={{ fontSize: 12, color: T.textMid, marginBottom: 6 }}>{t("settings.mlay_top_tabs")}</div>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 4 }}>
           {(cat.top_tabs || []).map(it => {
-            const on = permOk(it.perm);
+            const on = permOk(it);
             return (
               <span key={it.id} style={{ padding: "4px 10px", borderRadius: 999, fontSize: 12, fontWeight: 600,
                 background: on ? T.greenSoft : T.borderLight, color: on ? T.green : T.textLight,
@@ -1146,9 +1198,9 @@ function MobileLayoutTab({ roleName, dbRole, perms, isAdmin, coModules }) {
 
       {unreachable.length > 0 && (
         <div style={{ ...box, borderColor: T.red + "55", background: T.redSoft }}>
-          {unreachable.map(id => (
-            <div key={id} style={{ fontSize: 12.5, color: T.red, padding: "2px 0" }}>
-              ⚠ {t("settings.mlay_unreachable", { name: mlayLabel("app_nav", id) })}
+          {unreachable.map(name => (
+            <div key={name} style={{ fontSize: 12.5, color: T.red, padding: "2px 0" }}>
+              ⚠ {t("settings.mlay_unreachable", { name })}
             </div>
           ))}
         </div>
@@ -1946,7 +1998,7 @@ function RolesAccess() {
       {tab === "mobile" && !isAllUsers && (
         <MobileLayoutTab roleName={activeRole?.name} dbRole={dbRoleOf(selectedRole)}
           perms={permMatrix[selectedRole] || {}} coModules={coModules}
-          isAdmin={selectedRole === "admin" || selectedRole === "super_admin"} />
+          isAdmin={selectedRole === "admin" || selectedRole === "super_admin"} isViewer={selectedRole === "viewer"} />
       )}
 
       {/* ── TAB: Users ── */}
