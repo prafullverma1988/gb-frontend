@@ -5331,8 +5331,9 @@ function MapTab({tenderId, sites}) {
                   color: photosOn ? "#6D28D9" : T.t2, fontWeight: photosOn ? 700 : 400}}>{t("tenders.photos_photoson", { photosOn: photosOn ? "on" : "" })}</button>
               {/* Purani photos (WhatsApp wali bhi) apni jagah khud bataati
                   hain — aadmi se "kaunsi line?" poochhna bekaar hai. */}
-              {/* Photo locate/attach = Tenders "Entry" (transition me Create bhi) — server jaisa. */}
-              {canEntry("Tenders") && <button onClick={()=>setLocatePhoto(true)}
+              {/* Photo locate/attach = Tenders YA Mapping ka "Entry" (transition me Create bhi) —
+                  server jaisa (9 Oct 2026). Sirf Mapping wale ko server apni site ki lines hi deta hai. */}
+              {canEntry(["Tenders", "Mapping"]) && <button onClick={()=>setLocatePhoto(true)}
                 style={{fontSize:12, padding:"7px 12px", borderRadius:7, cursor:"pointer", fontFamily:"inherit",
                   border:`1px solid ${T.b1}`, background:T.surface, color:T.t2}}>
                {t("tenders.photo_se_jagah")}
