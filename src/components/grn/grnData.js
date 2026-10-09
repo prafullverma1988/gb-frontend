@@ -29,12 +29,25 @@ export async function loadPoLines(dest) {
 export async function loadOrderedLines(dest) {
   try {
     if (dest?.type === "warehouse") {
-      const [a, b] = await Promise.all([
-        api.get("/warehouse/mr?type=warehouse&status=Ordered"),
-        api.get("/warehouse/mr?type=warehouse&status=PartialReceived"),
+      // Store saaf bhejo — api.js wala "chalu godown" doosri screen se khula ho to galat ho sakta hai.
+      const wq = dest.warehouseId ? "&warehouse_id=" + encodeURIComponent(dest.warehouseId) : "";
+      const [a, b, inb] = await Promise.all([
+        api.get("/warehouse/mr?type=warehouse&status=Ordered" + wq),
+        api.get("/warehouse/mr?type=warehouse&status=PartialReceived" + wq),
+        api.get("/warehouse/inbound?" + wq.slice(1)).catch(() => null),
       ]);
       const mrs = dedupe([...(a?.success ? a.data || [] : []), ...(b?.success ? b.data || [] : [])]);
-      return mrs.flatMap((mr) => (mr.items || []).map((it) => {
+      // Store ke PO ki baaki lines (9 Oct 2026) — "PO-12" ke naam se, rate PO ka.
+      // Godown MR ki jo line ab store PO par hai (on_store_po) wo yahan PO ki line
+      // ban kar aati hai — dobara nahi dikhti.
+      const poLines = ((inb && inb.success && inb.data && inb.data.po) || []).map((l) => ({
+        key: "po:" + l.item_id, kind: "po", poId: l.po_id, poItemId: l.item_id,
+        label: l.po_number || "PO-" + l.po_id, material: l.material_name || "", unit: l.unit || "",
+        ordered: Number(l.ordered_qty) || 0, received: Number(l.received_qty) || 0,
+        pending: Math.max(0, Number(l.pending_qty) || 0), vendor: l.vendor_name || "",
+        partial: Number(l.received_qty) > 0, rate: Number(l.rate) || 0,
+      }));
+      return [...poLines, ...mrs.flatMap((mr) => (mr.items || []).filter((it) => !it.on_store_po).map((it) => {
         const ordered = Number(it.qty) || 0;
         const received = Number(it.received_qty) || 0;
         return {
@@ -44,7 +57,7 @@ export async function loadOrderedLines(dest) {
           vendor: mr.vendor || "", partial: mr.status === "PartialReceived",
           rate: Number(it.rate) || 0,
         };
-      }));
+      }))];
     }
     const pid = encodeURIComponent(dest?.projectId || "");
     const [a, b] = await Promise.all([

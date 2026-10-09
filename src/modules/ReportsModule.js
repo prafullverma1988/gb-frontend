@@ -589,7 +589,8 @@ function ChallanModule(){
         const isBilled = !!g.billed_at;
         const src = g.source || "Procurement";
         const projLower = (g.project_name || "").toLowerCase();
-        const isWarehouseDest = projLower === "warehouse" || projLower.includes("warehouse");
+        // Store ka GRN: warehouse_id se (9 Oct 2026 se store PO ke GRN par store ka asli naam aata hai).
+        const isWarehouseDest = !!g.warehouse_id || projLower === "warehouse" || projLower.includes("warehouse");
         let flowType;
         if (src === "WarehouseIssue") flowType = "warehouse_to_project";
         else if (src === "WarehouseTransfer") flowType = "warehouse_to_warehouse";

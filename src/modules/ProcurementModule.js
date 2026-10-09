@@ -1183,7 +1183,22 @@ function PunchQuoteModal({rfq,vendorIndex,onSave,onClose}){
 }
 
 // ── CREATE RFQ MODAL — standalone RFQ (without going via MRs) ──────────
-function CreateRFQModal({onClose,onSave,dbProjects,dbVendors=[]}){
+// PO / RFQ kis ke liye — project YA store (9 Oct 2026). Ek hi picker: key
+// project ki id, ya "wh:<id>" store ke liye. Server par store = warehouse_id
+// (project 0). Store ka maal Warehouse → Material In me receive hota hai.
+const destOptions=(dbProjects,dbStores)=>[
+  ...(dbProjects||[]).map(p=>({key:String(p.id),label:p.name})),
+  ...(dbStores||[]).map(w=>({key:"wh:"+w.id,label:t("procurement.store_option",{name:w.name})})),
+];
+const storeIdOf=(key)=>String(key||"").startsWith("wh:")?Number(String(key).slice(3))||null:null;
+const destPick=(key,dbProjects,dbStores)=>{
+  const sid=storeIdOf(key);
+  if(sid){ const w=(dbStores||[]).find(x=>Number(x.id)===sid); return {storeId:sid,name:w?.name||"",site:w?.address||w?.name||""}; }
+  const p=(dbProjects||[]).find(x=>String(x.id)===String(key));
+  return {storeId:null,name:p?.name||"",site:p?.name||""};
+};
+
+function CreateRFQModal({onClose,onSave,dbProjects,dbStores=[],dbVendors=[]}){
   const [form,setForm]=useState({projectId:"",project:"",bidEnd:"",items:[{desc:"",qty:"",unit:""}]});
   const [vendors,setVendors]=useState([]);
   const [vendorPick,setVendorPick]=useState("");
@@ -1209,11 +1224,11 @@ function CreateRFQModal({onClose,onSave,dbProjects,dbVendors=[]}){
       <MHead title={t("procurement.new_rfq")} sub={t("procurement.vendors_se_quotes_compare_karne_ke")} onClose={onClose}/>
       <MBody>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
-          <Fld label={t("common.project")}>
+          <Fld label={t("procurement.project_or_store")}>
             <SearchSelect value={form.projectId}
-              options={(dbProjects||[]).map(p=>({key:String(p.id),label:p.name}))}
-              onChange={v=>{const proj=(dbProjects||[]).find(p=>String(p.id)===String(v));setForm(p=>({...p,projectId:v,project:proj?.name||""}));}}
-              placeholder={t("common.select_project")}/>
+              options={destOptions(dbProjects,dbStores)}
+              onChange={v=>{const d=destPick(v,dbProjects,dbStores);setForm(p=>({...p,projectId:v,project:d.name}));}}
+              placeholder={t("procurement.select_project_or_store")}/>
           </Fld>
           <Fld label={t("procurement.bid_end_date")}>
             <Inp type="date" value={form.bidEnd} onChange={e=>setForm(p=>({...p,bidEnd:e.target.value}))}/>
@@ -1304,12 +1319,14 @@ const solvePOLine=(it)=>{
   return u;
 };
 
-function CreatePOModal({onClose,onSave,prefillItems,prefillVendor,editPo,dbProjects,dbVendors=[]}){
+function CreatePOModal({onClose,onSave,prefillItems,prefillVendor,editPo,dbProjects,dbStores=[],dbVendors=[]}){
   // Edit-mode prefill from existing PO
   const isEdit = !!editPo;
   // Auto-fill project from first MR item OR edit PO
   const firstMR = prefillItems?.[0];
-  const autoProjectId   = editPo?.project_id || firstMR?.project_id   || "";
+  // Store wala PO / godown ki MR (9 Oct 2026) → "wh:<id>"
+  const mrStore         = firstMR && !firstMR.project_id ? (firstMR.dest_warehouse_id||null) : null;
+  const autoProjectId   = editPo?.warehouse_id ? "wh:"+editPo.warehouse_id : (editPo?.project_id || (mrStore ? "wh:"+mrStore : firstMR?.project_id) || "");
   const autoProjectName = editPo?.project    || firstMR?.project       || "";
   const autoSite        = editPo?.deliverySite || firstMR?.site || firstMR?.project || "";
   const fromMR          = !!prefillItems && !!autoProjectName;
@@ -1475,13 +1492,14 @@ function CreatePOModal({onClose,onSave,prefillItems,prefillVendor,editPo,dbProje
 
   // Project picker handler (only used when no prefillItems)
   const handleProjectChange=(v)=>{
-    const proj=dbProjects.find(p=>String(p.id)===String(v));
+    const d=destPick(v,dbProjects,dbStores);
     upd("projectId",v);
-    upd("project",proj?.name||v);
-    if(!form.deliverySite||form.deliverySite===autoSite){
-      upd("deliverySite",proj?.name||"");
+    upd("project",d.name||v);
+    if(!form.deliverySite||form.deliverySite===autoSite||form.deliverySite===form.project){
+      upd("deliverySite",d.site||"");
     }
   };
+  const poStoreId=storeIdOf(form.projectId);
 
   return(
     <Modal onClose={onClose} width={680}>
@@ -1526,7 +1544,7 @@ function CreatePOModal({onClose,onSave,prefillItems,prefillVendor,editPo,dbProje
               placeholder={t("procurement.vendor_library_se_pick")}
               hideAddNew/>
           </Fld>
-          <Fld label={t("common.project_2")}>
+          <Fld label={t("procurement.project_or_store_req")}>
             {fromMR
               ? <div style={{padding:"8px 11px",borderRadius:7,border:`1.5px solid ${T.grnM}`,background:T.grnL,fontSize:12.5,color:T.grn,fontWeight:600,display:"flex",alignItems:"center",gap:6,height:36,boxSizing:"border-box"}}>
                   <span style={{fontSize:11,opacity:.7}}>🔒</span>
@@ -1534,8 +1552,8 @@ function CreatePOModal({onClose,onSave,prefillItems,prefillVendor,editPo,dbProje
                   <span style={{fontSize:10,fontWeight:500,color:T.grn,opacity:.7,marginLeft:"auto"}}>{t("procurement.from_mr")}</span>
                 </div>
               : <SearchSelect value={form.projectId}
-                  options={(dbProjects.length>0?dbProjects:[]).map(p=>({key:String(p.id),label:p.name}))}
-                  onChange={handleProjectChange} placeholder={t("common.select_project")}/>
+                  options={destOptions(dbProjects,dbStores)}
+                  onChange={handleProjectChange} placeholder={t("procurement.select_project_or_store")}/>
             }
           </Fld>
         </div>
@@ -1560,8 +1578,9 @@ function CreatePOModal({onClose,onSave,prefillItems,prefillVendor,editPo,dbProje
              {t("procurement.maal_site_par_aane_par_vendor")}
             </div>
             <ReceivingContacts theme={T} value={contacts} onChange={setContacts}
-              projectIds={[form.projectId,...form.items.map(it=>it.project_id)].filter(Boolean)}
-              warehouseIds={form.items.map(it=>it.store_warehouse_id||it.asset_warehouse_id).filter(Boolean)}/>
+              projectIds={[poStoreId?null:form.projectId,...form.items.map(it=>it.project_id)].filter(Boolean)}
+              warehouseIds={[poStoreId,...form.items.map(it=>it.store_warehouse_id||it.asset_warehouse_id)].filter(Boolean)}/>
+            {poStoreId&&<div style={{fontSize:10.5,color:T.blu,marginTop:6,lineHeight:1.45}}>{t("procurement.store_po_note")}</div>}
           </Fld>
         </div>
 
@@ -1705,7 +1724,8 @@ function CreatePOModal({onClose,onSave,prefillItems,prefillVendor,editPo,dbProje
             date:"Today",
             vendor:form.vendor,
             project:form.project,
-            projectId:form.projectId,
+            projectId:poStoreId?"":form.projectId,
+            storeId:poStoreId,
             deliverySite:form.deliverySite||form.project,
             poStatus:"Open",approval:"Draft",amount:total,
             items:form.items.filter(it=>it.desc).map(it=>({
@@ -2201,10 +2221,12 @@ function ProcurementModule(){
     // Asset ki kharid (Assets → "Kharid ki maang") kisi site ke liye nahi, STORE
     // ke liye hoti hai — project khaali rehta hai. "—" dikhta to lagta MR adhoori
     // hai; isliye store ka naam, aur PO me delivery bhi wahi store.
-    project:m.project_name||(m.asset_warehouse_id?t("procurement.asset_for_store",{name:m.asset_warehouse_name||""}):"—"),
-    site:m.project_name||m.asset_warehouse_name||"—",
+    // Godown ki apni MR (Send to procurement) — kis store ki (9 Oct 2026); pehle sirf "Warehouse (internal)".
+    project:(!m.project_id&&m.dest_warehouse_name&&!m.asset_warehouse_id)?t("procurement.store_option",{name:m.dest_warehouse_name})
+      :(m.project_name||(m.asset_warehouse_id?t("procurement.asset_for_store",{name:m.asset_warehouse_name||""}):"—")),
+    site:(!m.project_id&&m.dest_warehouse_name)?m.dest_warehouse_name:(m.project_name||m.asset_warehouse_name||"—"),
     isAsset: !!m.asset_warehouse_id,
-    ...(m.asset_warehouse_id ? { delivery_site: m.asset_warehouse_name || "" } : {}),
+    ...((m.asset_warehouse_id||(!m.project_id&&m.dest_warehouse_name)) ? { delivery_site: m.asset_warehouse_name || m.dest_warehouse_name || "" } : {}),
     project_id:m.project_id||null,
     item:m.item_name, qty:parseFloat(m.quantity)||0, approvedQty:parseFloat(m.quantity)||0,
     unit:m.unit, requestedBy:m.requested_by||"—",
@@ -2242,6 +2264,7 @@ function ProcurementModule(){
     date:fmtDate(p.created_at),
     vendor:p.vendor_name||"—", project:p.project_name||"—",
     project_id:p.project_id||null,
+    warehouse_id:p.warehouse_id||null,
     deliverySite:p.delivery_site||p.project_name||"—",
     poStatus:p.po_status, approval:p.approval_status,
     orderStatus:p.order_status||"NotOrdered",
@@ -2289,7 +2312,7 @@ function ProcurementModule(){
     return {
       id:r.id, rfqNum:r.rfq_number,
       date:r.created_at?new Date(r.created_at).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}):"—",
-      project:r.project_name||"—", project_id:r.project_id||null, status:r.status,
+      project:r.project_name||"—", project_id:r.project_id||null, warehouse_id:r.warehouse_id||null, status:r.status,
       bidEnd:r.bid_end_date?new Date(r.bid_end_date).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}):"—",
       locked:r.locked_vendor||null,
       items,
@@ -2406,11 +2429,14 @@ function ProcurementModule(){
   const pReceive=canEntry(["Procurement","Material"]);
   // Projects from API (for dropdowns)
   const [dbProjects, setDbProjects] = useState([]);
+  const [dbStores, setDbStores] = useState([]);
   const projLoaded = useRef(false);
   useEffect(()=>{
     if(!projLoaded.current){
       projLoaded.current=true;
       api.get("/projects").then(res=>{ if(res.success&&res.data) setDbProjects(res.data); }).catch(()=>{});
+      // Store bhi PO / RFQ ka destination (9 Oct 2026) — company ke chalu store.
+      api.get("/warehouse/warehouses?scope=all").then(res=>{ if(res.success&&Array.isArray(res.data)) setDbStores(res.data.filter(w=>Number(w.is_active)!==0)); }).catch(()=>{});
     }
   });
 
@@ -2582,8 +2608,9 @@ function ProcurementModule(){
       return {
         id:it.linked_mr_id||null,           // MR back-link (null for manual RFQ items)
         item:it.desc, qty:it.qty, approvedQty:it.qty, unit:it.unit,
-        project_id:rfq.project_id||null,
-        project:(rfq.project&&rfq.project!=="—")?rfq.project:"",
+        project_id:rfq.warehouse_id?null:(rfq.project_id||null),
+        dest_warehouse_id:rfq.warehouse_id||src?.dest_warehouse_id||null,
+        project:rfq.warehouse_id?t("procurement.store_option",{name:rfq.project}):((rfq.project&&rfq.project!=="—")?rfq.project:""),
         rate:winner?.rates?.[i]?.rate??null,
         asset_warehouse_id:src?.asset_warehouse_id||null,
         store_warehouse_id:src?.store_warehouse_id||null,   // contacts ke liye (restock MR ka store bhi)
@@ -3423,9 +3450,10 @@ function ProcurementModule(){
         }}/>}
       {selRFQ&&<RFQDetailDrawer rfq={selRFQ} onClose={()=>setSelRFQ(null)} onPunch={pCreate?(vi)=>{setPunchTarget(selRFQ);setPunchVendorIdx(vi);setSelRFQ(null);}:null} onLock={pEdit?(vName)=>{lockRFQ(selRFQ.id,vName);setSelRFQ(r=>r?{...r,locked:vName}:r);}:null} onPublish={pEdit?(id)=>{publishRFQ(id);setSelRFQ(r=>r?{...r,status:"Published",bidStart:"Today",bidEnd:"+5 days"}:r);}:null} onCreatePO={pCreate?(r)=>{setSelRFQ(null);createPOFromRFQ(r);}:null}/>}
       {punchTarget&&punchVendorIdx!=null&&<PunchQuoteModal rfq={punchTarget} vendorIndex={punchVendorIdx} onSave={(vi,rates)=>savePunch(punchTarget.id,vi,rates)} onClose={()=>{setPunchTarget(null);setPunchVendorIdx(null);}}/>}
-      {showCreateRFQ&&<CreateRFQModal dbProjects={dbProjects} dbVendors={dbVendors} onClose={()=>setShowCreateRFQ(false)} onSave={async(form,validItems,vendors)=>{
+      {showCreateRFQ&&<CreateRFQModal dbProjects={dbProjects} dbStores={dbStores} dbVendors={dbVendors} onClose={()=>setShowCreateRFQ(false)} onSave={async(form,validItems,vendors)=>{
         const res=await api.post("/procurement/rfqs",{
-          project_id:form.projectId||null,
+          project_id:storeIdOf(form.projectId)?0:(form.projectId||null),
+          warehouse_id:storeIdOf(form.projectId),
           project_name:form.project||null,
           bid_end_date:form.bidEnd||null,
           vendor_names:vendors,
@@ -3464,7 +3492,7 @@ function ProcurementModule(){
           const mRes = await api.get("/procurement/mrs");
           if (mRes.success) setMRs(mRes.data.map(mapMR));
         }}/>}
-      {showCreatePO&&<CreatePOModal dbProjects={dbProjects} dbVendors={dbVendors} editPo={editPo} prefillVendor={createPOVendor} onClose={()=>{setShowCreatePO(false);setCreatePOPrefill(null);setCreatePOVendor("");setEditPo(null);}} onSave={async(newPO)=>{
+      {showCreatePO&&<CreatePOModal dbProjects={dbProjects} dbStores={dbStores} dbVendors={dbVendors} editPo={editPo} prefillVendor={createPOVendor} onClose={()=>{setShowCreatePO(false);setCreatePOPrefill(null);setCreatePOVendor("");setEditPo(null);}} onSave={async(newPO)=>{
         // EDIT mode — PUT existing PO + flip back to Draft + create fresh approval entry
         // Sanitize date: only valid YYYY-MM-DD reaches backend (no "TBD" / empty / formatted strings)
         const validDate = (d) => d && /^\d{4}-\d{2}-\d{2}$/.test(String(d)) ? d : null;
@@ -3481,7 +3509,8 @@ function ProcurementModule(){
             vendor_party_id: vendorPartyId,
             // Bina project (godown restock MR) = 0, "koi project nahi" — pehle 1 jaata tha,
             // jo kisi aur company ka project bhi ho sakta hai; server ab use rokta hai (MAT-02).
-            project_id: newPO.projectId || 0,
+            project_id: newPO.storeId ? 0 : (newPO.projectId || 0),
+            warehouse_id: newPO.storeId || null,
             project_name: newPO.project,
             delivery_site: newPO.deliverySite,
             expected_delivery: validDate(newPO.delivery),
@@ -3512,7 +3541,7 @@ function ProcurementModule(){
                 ref_no: editPo?.poNum||"",
                 title: newPO.vendor + " - " + (newPO.items||[]).length + " items (revised)",
                 amount: res.data.total_amount || 0,
-                project_id: newPO.projectId || 1,
+                project_id: newPO.storeId ? null : (newPO.projectId || null),
                 project_name: newPO.project || "",
               });
             } catch(_){}
@@ -3528,7 +3557,8 @@ function ProcurementModule(){
           vendor_name: newPO.vendor,
           vendor_party_id: vendorPartyId,
           // Bina project (godown restock MR) = 0 — 1 nahi (MAT-02).
-          project_id: newPO.projectId || (createPOPrefill||[])[0]?.project_id || 0,
+          project_id: newPO.storeId ? 0 : (newPO.projectId || (createPOPrefill||[])[0]?.project_id || 0),
+          warehouse_id: newPO.storeId || null,
           project_name: newPO.project,
           delivery_site: newPO.deliverySite,
           expected_delivery: validDate(newPO.delivery),
@@ -3550,7 +3580,7 @@ function ProcurementModule(){
             ref_no: res.data.po_number || "",
             title: newPO.vendor + " - " + (newPO.items||[]).length + " items",
             amount: res.data.total_amount || newPO.items.reduce((s,it)=>(s+(it.qty||0)*(it.rate||0)),0),
-            project_id: newPO.projectId || (createPOPrefill||[])[0]?.project_id || 1,
+            project_id: newPO.storeId ? null : (newPO.projectId || (createPOPrefill||[])[0]?.project_id || null),
             project_name: newPO.project || "",
           }).catch(e => console.error("Approval submit:", e))
             .finally(reloadApprMy);   // is naye PO par kiska turn hai — ab pata chale

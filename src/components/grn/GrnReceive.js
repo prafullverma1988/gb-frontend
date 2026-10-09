@@ -203,7 +203,8 @@ const GrnReceive = forwardRef(function GrnReceive({
     });
     if (overNoReason) { alert(t("material.zyada_maal_tick_ya_qty_theek_karo", { item: overNoReason.material })); return; }
     // Unit card: order ki unit stock se alag aur pakka pul nahi → stock me kitna aaya, likhna zaroori.
-    const noStockQty = !isWh && target.find(l => {
+    const noStockQty = target.find(l => {
+      if (isWh && l.kind !== "po") return false;
       const row = grnRows[l.key] || {};
       return grnStockMissing(stockU[stockKey(l.material)], ucardOf(l.material), l.unit, row.received_qty, row.stockx);
     });
@@ -248,9 +249,39 @@ const GrnReceive = forwardRef(function GrnReceive({
         } catch (e) { fails.push(`${l.material}: ${e.message}`); }
       }
     } else {
+      // Store ka PO (9 Oct 2026): ek PO ki lines ek GRN me — rate PO ka, stock
+      // + FIFO batch + Finance ka GRN + PO line server par (POST /warehouse/po/:id/grn).
+      const byPo = {};
+      for (const l of target) if (l.kind === "po") (byPo[l.poId] ||= []).push(l);
+      for (const poId of Object.keys(byPo)) {
+        const ls = byPo[poId];
+        const issues = ls.flatMap(l => rowIssues[l.key] || []);
+        try {
+          const res = await api.post(`/warehouse/po/${poId}/grn`, {
+            warehouse_id: dest?.warehouseId || undefined,
+            challan_no: meta.challan.trim(), received_date: date,
+            received_by: receivedBy || null,
+            ...pb,
+            issues: issues.length ? issues : null,
+            unit_card: true,
+            items: ls.map(l => {
+              const row = grnRows[l.key] || {};
+              const hit = hitFor(l);
+              return { po_item_id: l.poItemId, received_qty: parseFloat(row.received_qty) || 0, ...altOf(row.dual),
+                weighment_line_id: hit ? hit.line.id : null,
+                ...grnStockPayload(stockU[stockKey(l.material)], ucardOf(l.material), l.unit, row.received_qty, row.stockx) };
+            }),
+          });
+          if (res.success) { ok += ls.length; setDone(p => [...p, ...ls.map(l => l.key)]); noteDup(res.weighment); }
+          else {
+            fails.push(`${ls[0].label}: ${res.message || "—"}`);
+            if (ph && ph.fail(res)) { photoMsg = res.message || ""; break; }
+          }
+        } catch (e) { fails.push(`${ls[0].label}: ${e.message}`); }
+      }
       // Godown: ek warehouse MR ke saare item ek GRN me.
       const byMr = {};
-      for (const l of target) (byMr[l.whMrId] ||= []).push(l);
+      for (const l of target) if (l.kind !== "po") (byMr[l.whMrId] ||= []).push(l);
       for (const mrId of Object.keys(byMr)) {
         const ls = byMr[mrId];
         const issues = ls.flatMap(l => rowIssues[l.key] || []);
@@ -507,7 +538,10 @@ const GrnReceive = forwardRef(function GrnReceive({
                         placeholder={String(l.pending)}
                         style={{ padding: "6px 8px", borderRadius: 5, border: "1.5px solid " + (over ? T.red : T.b1), fontSize: 11.5, textAlign: "right", fontFamily: "inherit", outline: "none", background: over ? T.redL : T.surface, color: over ? T.red : T.t1 }} />
                       <span title={t("unit.order_unit")} style={{ fontSize: 10.5, color: T.t4 }}>{l.unit}</span>
-                      {isWh && (
+                      {isWh && l.kind === "po" && (
+                        <span title={t("grn.rate_from_po")} style={{ fontSize: 11.5, textAlign: "right", color: T.t2, padding: "6px 8px" }}>₹{l.rate}</span>
+                      )}
+                      {isWh && l.kind !== "po" && (
                         <input type="number" value={row.rate !== undefined ? row.rate : (l.rate || "")} onChange={e => setRow({ rate: e.target.value })}
                           placeholder={t("common.rate")} title={t("grn.rate_fifo_hint")}
                           style={{ padding: "6px 8px", borderRadius: 5, border: "1px solid " + T.b1, fontSize: 11.5, textAlign: "right", fontFamily: "inherit", outline: "none" }} />
@@ -531,7 +565,7 @@ const GrnReceive = forwardRef(function GrnReceive({
                         <DualUnitToggle units={UNITS_MR} primaryUnit={l.unit} itemName={l.material} qty={row.received_qty}
                           value={row.dual} onChange={d => setRow({ dual: d })} />
                       )}
-                      {recv > 0 && !isWh && (
+                      {recv > 0 && (!isWh || l.kind === "po") && (
                         <GrnStockRow st={stockU[stockKey(l.material)]} card={ucardOf(l.material)} orderUnit={l.unit}
                           qty={row.received_qty} value={row.stockx} onChange={v => setRow({ stockx: v })}
                           netKg={hit && hit.line ? Number(hit.line.net_kg_share) || 0 : 0} />
