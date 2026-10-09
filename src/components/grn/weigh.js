@@ -23,6 +23,43 @@ export function challanUnits(orderUnit) {
   return out;
 }
 
+// ── Library → Units ki list (9 Oct 2026, C — plan D.1 ka web hissa) ──
+// GRN kit (components/grn) ki screens — abhi kaante ka bina order maal; D me
+// GrnReceive / DualUnitToggle bhi. Chhota roop (symbol) save hota hai, dikhta
+// "Kg — Kilogram". Case / ant ke "s" ka farak ek hi unit (kg/Kg, Bag/Bags) —
+// list me ek baar, Library wali spelling. Jo unit list me nahi (material ki
+// Library unit, purana data) wo sabse upar rehti hai — PickSelect me value na
+// mile to pehla option dikhta aur save kuch aur hota.
+export function unitKey(u) {
+  let k = String(u || "").trim().toLowerCase().replace(/\./g, "");
+  if (k.length > 3 && k.endsWith("s") && !k.endsWith("ss")) k = k.slice(0, -1);
+  return k;
+}
+let uomCache = null, uomInFlight = null;
+export function loadLibUnits() {
+  if (uomCache) return Promise.resolve(uomCache);
+  if (!uomInFlight) {
+    uomInFlight = api.get("/library/uom")
+      .then((r) => { if (r && r.success && Array.isArray(r.data)) uomCache = r.data; return uomCache || []; })
+      .catch(() => [])
+      .finally(() => { uomInFlight = null; });
+  }
+  return uomInFlight;
+}
+// uoms (Library) + extra (chuni hui unit, material ki Library unit — hamesha
+// rahein, isi spelling me, taaki select ki value list me mile) → [{ value, label }]
+export function unitOptions(uoms, extra) {
+  const out = [];
+  const has = (v) => out.some((o) => unitKey(o.value) === unitKey(v));
+  for (const e of extra || []) { const v = String(e || "").trim(); if (v && !has(v)) out.push({ value: v, label: v }); }
+  for (const u of uoms || []) {
+    const sym = String(u.symbol || u.name || "").trim();
+    const nm = String(u.name || "").trim();
+    if (sym && !has(sym)) out.push({ value: sym, label: nm && nm.toLowerCase() !== sym.toLowerCase() ? sym + " — " + nm : sym });
+  }
+  return out;
+}
+
 export const fmtKg = (n) =>
   n == null || n === "" || isNaN(Number(n)) ? "—" : Math.round(Number(n)).toLocaleString("en-IN") + " kg";
 

@@ -19,6 +19,11 @@
 // challan aur number "utarna baaki" list me khula rehta hai.
 // App me isi ka jodidaar: sanchalan-app src/components/WeighPanel.js
 // Backend: routes/weighments.js
+//
+// Bina order maal (9 Oct 2026, C — app ke saath barabari, chhota hissa): naam
+// Library se (id saath jaata hai), "Receive kis unit me" Library → Units se
+// (default material ki Library unit), challan par likhi qty APNI unit me. Web
+// par challan ki photo / AI abhi nahi.
 import React, { useEffect, useState } from "react";
 import PickSelect from "../PickSelect";
 import api from "../../config/api";
@@ -26,7 +31,7 @@ import uploadManager from "../../utils/uploadManager";
 import { loadPhotoPolicy, policyFor } from "../../utils/photoPolicy";
 import { T } from "../../modules/shared/tokens";
 import { t } from "../../i18n";
-import { challanUnits, destParam, fmtKg, kgIn, kgPerUnit, loadWeighments } from "./weigh";
+import { challanUnits, destParam, fmtKg, kgIn, kgPerUnit, loadWeighments, loadLibUnits, unitOptions, unitKey, WEIGH_UNITS } from "./weigh";
 import { loadOrderedLines, loadPoLines } from "./grnData";
 import { cld } from "../../utils/cloudinary";
 
@@ -50,9 +55,15 @@ const STALE_H = 12;
 // adding/pm/swapFor sirf picker ki UI ke liye: adder khula hai, kaunsa
 // material chuna ja raha hai ("__free__" = bina order ka), kis line ka order
 // badla ja raha hai.
-const blankPick = { picked: {}, free: [], freeName: "", freeQty: "", freeUnit: "Ton", adding: false, pm: null, swapFor: null };
+// freeUnit = receive unit (Library → Units), freeCUnit = challan par likhi qty ki unit (9 Oct 2026, C).
+const blankPick = { picked: {}, free: [], freeName: "", freeQty: "", freeUnit: "Ton", freeCUnit: "", adding: false, pm: null, swapFor: null };
 const nameKeyOf = (s) => String(s || "").trim().toLowerCase();
-const FREE_UNITS = ["Ton", "Kg", "MT", "CFT", "Brass", "Cu.m", "Bags", "Nos"];
+// Challan ki qty ki unit: [receive unit, Ton, kg, Quintal] — case dekhe bina ek baar.
+const challanUnitList = (recv) => {
+  const out = [];
+  for (const u of [recv, ...WEIGH_UNITS]) { const v = String(u || "").trim(); if (v && !out.some((x) => unitKey(x) === unitKey(v))) out.push(v); }
+  return out;
+};
 const blankNew = { ...blankPick, vendor: "", challan: "", vehicle: "", bridge: "", slipNo: "", kg: "", slipUrl: "", vehUrl: "", read: null, readMsg: "" };
 const blankSecond = { ...blankPick, kg: "", slipNo: "", slipUrl: "", vehUrl: "", vendor: "", challan: "", read: null, readMsg: "" };
 
@@ -176,10 +187,11 @@ export default function WeighbridgePanel({ dest, onChanged }) {
   const [lib, setLib] = useState([]);
   useEffect(() => { reload(); loadPhotoPolicy().then(setPol); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [dest?.type, dest?.projectId, dest?.warehouseId]);
   useEffect(() => { api.get("/library/materials").then(r => { if (r?.success) setLib(r.data || []); }).catch(() => {}); }, []);
-  const libUnit = (name) => {
-    const f = (lib || []).find(m => (m.name || "").trim().toLowerCase() === String(name || "").trim().toLowerCase());
-    return f && f.unit ? f.unit : null;
-  };
+  // Library → Units — bina order maal ki "Receive kis unit me" (9 Oct 2026, C).
+  const [uoms, setUoms] = useState([]);
+  useEffect(() => { loadLibUnits().then(setUoms); }, []);
+  const libOf = (name) => (lib || []).find(m => (m.name || "").trim().toLowerCase() === String(name || "").trim().toLowerCase()) || null;
+  const libUnit = (name) => { const f = libOf(name); return f && f.unit ? f.unit : null; };
 
   const photoMissing = (key, url) => policyFor(pol, key).mode === "required" && !url;
   // "Challan par likha" qty (2 Oct 2026, company setting): Band = khaana hi
@@ -206,7 +218,11 @@ export default function WeighbridgePanel({ dest, onChanged }) {
       challan_qty: cqOff ? null : (st.picked[l.key]?.challanQty || null),
       challan_unit: cqOff ? null : (st.picked[l.key]?.challanUnit || l.unit || null),
     })),
-    ...st.free.map(x => ({ material_name: x.name, order_unit: x.unit, challan_qty: cqOff ? null : (x.qty || null) })),
+    // Bina order: Library ka id (naam Library me ho to), receive unit, challan qty apni unit me (9 Oct 2026, C).
+    ...st.free.map(x => ({
+      material_name: x.name, material_id: (libOf(x.name) || {}).id || null, order_unit: x.unit,
+      challan_qty: cqOff ? null : (x.qty || null), challan_unit: cqOff ? null : (x.cunit || x.unit || null),
+    })),
   ];
   // Ek material + ek vendor ke order, kram me: jisme baaki hai wo pehle, phir
   // sabse purana (MR/godown MR pehle, phir PO). Pehla = apne aap juda hua order.
@@ -225,7 +241,8 @@ export default function WeighbridgePanel({ dest, onChanged }) {
       const p = st.picked[key]; const k = kgPerUnit(p.challanUnit); const q = Number(p.challanQty);
       if (k && q > 0) { sum += q * k; any = true; }
     }
-    for (const x of st.free) { const k = kgPerUnit(x.unit); const q = Number(x.qty); if (k && q > 0) { sum += q * k; any = true; } }
+    // Bina order line: challan ki apni unit (receive unit nahi) — 9 Oct 2026, C.
+    for (const x of st.free) { const k = kgPerUnit(x.cunit || x.unit); const q = Number(x.qty); if (k && q > 0) { sum += q * k; any = true; } }
     return any ? sum : null;
   };
   const challanWarn = (st, grossKg) => {
@@ -410,7 +427,7 @@ export default function WeighbridgePanel({ dest, onChanged }) {
     : f.type === "rec_vehicle_differs" ? t("weigh.flag_rec_vehicle_differs", { vehicle: f.vehicle_no || "—" })
     : null;
   // ai_edited ki har line: "Vehicle no.: CG04AB1234 → CG04AB1284"
-  const AI_FIELD = { vehicle_no: "weigh.flag_f_vehicle_no", slip_no: "weigh.flag_f_slip_no", challan_no: "weigh.flag_f_challan_no", challan_qty: "weigh.flag_f_challan_qty", rec_slip_no: "weigh.flag_f_rec_slip_no" };
+  const AI_FIELD = { vehicle_no: "weigh.flag_f_vehicle_no", slip_no: "weigh.flag_f_slip_no", challan_no: "weigh.flag_f_challan_no", challan_qty: "weigh.flag_f_challan_qty", rec_slip_no: "weigh.flag_f_rec_slip_no", vendor: "weigh.flag_f_vendor" };
   const aiItems = (f) => (Array.isArray(f.items) ? f.items : []).map(it => t("weigh.flag_ai_item", {
     what: AI_FIELD[it.field] ? t(AI_FIELD[it.field], { material: it.material || "—" }) : it.field,
     read: (it.read ?? "—") + (it.read_unit ? " " + it.read_unit : ""),
@@ -576,7 +593,9 @@ export default function WeighbridgePanel({ dest, onChanged }) {
         {st.free.map((x, i) => (
           <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, border: "1px solid " + T.ambM, background: T.ambL, borderRadius: 7, padding: "6px 10px", marginBottom: 6, fontSize: 11.5 }}>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <b>✓ {x.name}</b> <span style={{ color: T.t3 }}>· {t("weigh.free_material")}{cqOff ? "" : ` · ${t("weigh.challan_written")}: ${x.qty ? `${x.qty} ${x.unit}` : "—"}`}</span>
+              <b>✓ {x.name}</b> <span style={{ color: T.t3 }}>· {!cqOff && x.qty
+                ? t("weigh.sub_free_summary", { qty: x.qty, cunit: x.cunit || x.unit, unit: x.unit })
+                : t("weigh.sub_free_summary_noqty", { unit: x.unit })}</span>
             </div>
             <button type="button" onClick={() => upd({ free: st.free.filter((_, j) => j !== i) })}
               style={{ border: "none", background: "none", color: T.red, cursor: "pointer", fontSize: 15, lineHeight: 1, padding: 0 }}>×</button>
@@ -606,7 +625,7 @@ export default function WeighbridgePanel({ dest, onChanged }) {
                 )}
               </>
             ) : st.pm === "__free__" ? (
-              <div style={{ display: "grid", gridTemplateColumns: cqOff ? "1fr 80px auto auto" : "1fr 80px 80px auto auto", gap: 6, alignItems: "end" }}>
+              <div style={{ display: "grid", gridTemplateColumns: cqOff ? "1fr 110px auto auto" : "1fr 110px 80px 90px auto auto", gap: 6, alignItems: "end" }}>
                 {/* Naam material library se — unit uske saath apne aap. */}
                 <div>
                   <label style={lbl}>{t("weigh.free_material")}</label>
@@ -617,23 +636,32 @@ export default function WeighbridgePanel({ dest, onChanged }) {
                     {(lib || []).map(m => <option key={m.id || m.name} value={m.name} />)}
                   </datalist>
                 </div>
-                {/* Band me qty ka khaana nahi — unit wahi rehti hai, wo material ki apni unit hai. */}
+                {/* Receive kis unit me — Library → Units; default material ki Library unit (9 Oct 2026, C). */}
+                <div>
+                  <label style={lbl}>{t("weigh.recv_unit")}</label>
+                  <PickSelect value={st.freeUnit} onChange={e => upd({ freeUnit: e.target.value })} style={{ ...inp, cursor: "pointer" }}>
+                    {unitOptions(uoms, [st.freeUnit, libUnit(st.freeName)]).map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </PickSelect>
+                </div>
+                {/* Challan par likha — qty apni alag unit me. Band me ye khaana nahi. */}
                 {!cqOff && (
                   <div>
                     <label style={lbl}>{t("weigh.challan_written")}{cqReq ? " *" : ""}</label>
                     <input type="number" value={st.freeQty || ""} onChange={e => upd({ freeQty: e.target.value })} style={inp} />
                   </div>
                 )}
-                <div>
-                  <label style={lbl}>{t("common.unit")}</label>
-                  <PickSelect value={st.freeUnit} onChange={e => upd({ freeUnit: e.target.value })} style={{ ...inp, cursor: "pointer" }}>
-                    {[...new Set([...(libUnit(st.freeName) ? [libUnit(st.freeName)] : []), ...FREE_UNITS])].map(u => <option key={u}>{u}</option>)}
-                  </PickSelect>
-                </div>
+                {!cqOff && (
+                  <div>
+                    <label style={lbl}>{t("common.unit")}</label>
+                    <PickSelect value={st.freeCUnit || st.freeUnit} onChange={e => upd({ freeCUnit: e.target.value })} style={{ ...inp, cursor: "pointer" }}>
+                      {challanUnitList(st.freeCUnit || st.freeUnit).map(u => <option key={u} value={u}>{u}</option>)}
+                    </PickSelect>
+                  </div>
+                )}
                 <button type="button" onClick={() => upd({ pm: null })} style={{ ...btn(T.surface, T.t3, T.b1), height: 33 }}>{t("weigh.cancel_back")}</button>
                 {/* Zaroori me qty ke bina jodna hi nahi — jud jaane ke baad qty badalne ka khaana nahi hai. */}
                 <button type="button" disabled={!st.freeName.trim() || (cqReq && !(Number(st.freeQty) > 0))}
-                  onClick={() => upd({ free: [...st.free, { name: st.freeName.trim(), unit: st.freeUnit, qty: cqOff ? "" : (st.freeQty || "") }], freeName: "", freeQty: "", pm: null, adding: false })}
+                  onClick={() => upd({ free: [...st.free, { name: st.freeName.trim(), unit: st.freeUnit, qty: cqOff ? "" : (st.freeQty || ""), cunit: st.freeCUnit || st.freeUnit }], freeName: "", freeQty: "", freeCUnit: "", pm: null, adding: false })}
                   style={{ ...btn(T.blu, "#fff"), height: 33, opacity: st.freeName.trim() && !(cqReq && !(Number(st.freeQty) > 0)) ? 1 : 0.5 }}>{t("weigh.add_free")}</button>
               </div>
             ) : (
