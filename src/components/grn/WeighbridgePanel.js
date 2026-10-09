@@ -425,7 +425,19 @@ export default function WeighbridgePanel({ dest, onChanged }) {
     : f.type === "site_plate_differs" ? t("weigh.flag_site_plate_differs", { plate: f.plate || "—", vehicle: f.vehicle_no || "—" })
     : f.type === "rec_wrong_paper" ? t("weigh.flag_rec_wrong_paper", { paper: t(f.paper === "challan" ? "weigh.flag_paper_challan" : "weigh.flag_paper_kaanta"), no: f.no || "—" })
     : f.type === "rec_vehicle_differs" ? t("weigh.flag_rec_vehicle_differs", { vehicle: f.vehicle_no || "—" })
+    : f.type === "no_order" ? noOrderText(f)
     : null;
+  // Bina order gadi — sirf risky gadi par (9 Oct 2026, fix C): server ke noOrderText jaisa,
+  // jo hissa sach ho wahi: "Bina order gadi: Gitti 20mm · vendor … party list me nahi · …".
+  const noOrderText = (f) => {
+    const list = (v) => (Array.isArray(v) ? v.filter(Boolean).join(", ") : "");
+    const parts = [t("weigh.flag_no_order", { materials: list(f.materials) || "—" })];
+    if (f.vendor_new) parts.push(t("weigh.flag_no_order_vendor_new", { vendor: f.vendor_new }));
+    if (list(f.material_new)) parts.push(t("weigh.flag_no_order_material_new", { names: list(f.material_new) }));
+    if (list(f.order_here)) parts.push(t("weigh.flag_no_order_order_here", { label: list(f.order_here) }));
+    if (f.elsewhere) parts.push(t("weigh.flag_no_order_elsewhere", { name: f.elsewhere }));
+    return parts.join(" · ");
+  };
   // ai_edited ki har line: "Vehicle no.: CG04AB1234 → CG04AB1284"
   const AI_FIELD = { vehicle_no: "weigh.flag_f_vehicle_no", slip_no: "weigh.flag_f_slip_no", challan_no: "weigh.flag_f_challan_no", challan_qty: "weigh.flag_f_challan_qty", rec_slip_no: "weigh.flag_f_rec_slip_no", vendor: "weigh.flag_f_vendor" };
   const aiItems = (f) => (Array.isArray(f.items) ? f.items : []).map(it => t("weigh.flag_ai_item", {
