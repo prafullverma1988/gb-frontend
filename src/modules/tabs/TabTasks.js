@@ -104,9 +104,14 @@ const PT_OVERRIDE_REASONS={
 };
 const PT_OVERRIDE_MIN_NOTE=10;
 function ptIsOverridden(t){return t&&t.progress_override!==null&&t.progress_override!==undefined&&t.progress_override!=="";}
-// Roz ka kaam qty me (%) nahi — server ka faisla `qty_mode` (planning ka
-// progress_mode / company setting); purana backend na bheje to scope se.
-function ptIsQtyTask(t){if(!t) return false; if(t.qty_mode!==undefined&&t.qty_mode!==null) return Number(t.qty_mode)===1; return Number(t.scope_qty)>0;}
+// Roz ka kaam qty me (%) nahi — server ka faisla `qty_mode` (task ka
+// progress_mode / company setting); purana backend na bheje to yahin wahi
+// Auto niyam (gb-backend utils/taskProgressRule isQtyTask): scope ho to qty,
+// sirf "1 Nos / 1 LS / 1 Job" jaisa ginti ka ek kaam % (9 Oct 2026).
+const PT_COUNT_UNITS=["no","nos","number","numbers","each","pc","pcs","ls","lumpsum","job","jobs","lot","lots","set","sets"];
+function ptIsQtyTask(t){if(!t) return false; if(t.qty_mode!==undefined&&t.qty_mode!==null) return Number(t.qty_mode)===1;
+  if(!(Number(t.scope_qty)>0)) return false; if(t.progress_mode==="qty") return true; if(t.progress_mode==="percent") return false;
+  return !(Number(t.scope_qty)===1&&PT_COUNT_UNITS.includes(String(t.unit||"").toLowerCase().replace(/[^a-z]/g,"")));}
 // How far the pinned value has drifted from what the children now say. Past
 // 10 points the badge turns amber — the override has gone stale.
 function ptOverrideDrift(t){
@@ -1609,6 +1614,7 @@ function TabTasks({ projectId, isAdmin }) {
         depsMode={hasDeps} phaseCodeMap={phaseCodeMap} onDepsChanged={refetchTasks}
         onClose={()=>setEditTask(null)} onSave={async(id,u)=>{
         const orig = editTask;
+        const pmChanged = u.pmode !== undefined && (u.pmode || "") !== (orig.progress_mode === "qty" || orig.progress_mode === "percent" ? orig.progress_mode : "");
         const r = await api.put("/tasks/"+id, { name:u.name, category:u.category, tag:u.tag, status:u.status, progress:u.progress,
           // Khaali tareekh par "" bhejna = server par 500 (MySQL date me ""
           // ja hi nahi sakta). null = "is khaane ko haath mat lagao".
@@ -1621,7 +1627,9 @@ function TabTasks({ projectId, isAdmin }) {
           // (Ye pehle bheja hi nahi jaata tha, isliye chunav gum ho jaata tha.)
           assigned_to: u.assignedTo === "" || u.assignedTo == null ? "" : Number(u.assignedTo),
           // "" clears the link; undefined would leave it untouched.
-          boq_item_id: u.boqItemId ?? "", alignment_id: u.alignId ?? "" });
+          boq_item_id: u.boqItemId ?? "", alignment_id: u.alignId ?? "",
+          // Progress ka tareeka sirf badla ho tabhi — "" = Auto (null).
+          ...(pmChanged ? { progress_mode: u.pmode || null } : {}) });
         // Save fail hua to yahin ruko. Pehle hum aage badh kar list me naya
         // naam/assignee bitha dete the — screen par kaam hua dikhta tha aur
         // DB me kuchh gaya hi nahi hota tha. Ab: galti dikhao, list ko
@@ -1653,7 +1661,7 @@ function TabTasks({ projectId, isAdmin }) {
         }
         // Status badla to server ne % bhi badla ho sakta hai (Completed → 100,
         // Not Started → 0) — list server se hi.
-        else if (u.progress !== undefined || u.status !== orig.status || u.duration !== orig.duration || scopeChanged) await refetchTasks();
+        else if (u.progress !== undefined || u.status !== orig.status || u.duration !== orig.duration || scopeChanged || pmChanged) await refetchTasks();
         else {
           // Poori list dobara nahi aa rahi — to yahin naam bitha do, warna
           // "Assigned" khaane me user ki id dikhne lagti hai. Jo khaana form ne
@@ -4911,7 +4919,7 @@ function PTEditTask({task,allTasks,projectId,team,depsMode,phaseCodeMap,onDepsCh
   // dependency wale project me yahan exclusive ganit tha (end = start + din) aur
   // baaki me inclusive — ek hi task web par 1d, app par 2d dikhta (TSK-17).
   const DSPAN = 1;
-  const [form,setForm]=useState({name:task.name,category:task.category,tag:task.tag||"",assignedTo:task.assigned_to??"",status:task.status,progress:task.progress,unit:task.unit||"",scopeQty:task.scope_qty??"",baseStart:task.baseStart||"",baseEnd:task.baseEnd||"",actualStart:task.actualStart||"",actualEnd:task.actualEnd||"",duration:(task.baseStart&&task.baseEnd)?Math.round((new Date(task.baseEnd)-new Date(task.baseStart))/86400000)+DSPAN:(task.duration||0),delayReason:task.delay_reason||"",delayNote:task.delay_note||"",dependencies:[...(task.dependencies||[])],dhyanRakhen:task.dhyanRakhen||""});
+  const [form,setForm]=useState({name:task.name,category:task.category,tag:task.tag||"",assignedTo:task.assigned_to??"",status:task.status,progress:task.progress,unit:task.unit||"",scopeQty:task.scope_qty??"",baseStart:task.baseStart||"",baseEnd:task.baseEnd||"",actualStart:task.actualStart||"",actualEnd:task.actualEnd||"",duration:(task.baseStart&&task.baseEnd)?Math.round((new Date(task.baseEnd)-new Date(task.baseStart))/86400000)+DSPAN:(task.duration||0),delayReason:task.delay_reason||"",delayNote:task.delay_note||"",dependencies:[...(task.dependencies||[])],dhyanRakhen:task.dhyanRakhen||"",pmode:task.progress_mode==="qty"||task.progress_mode==="percent"?task.progress_mode:""});
   // Tender links. A task made by hand ("Pipe line laying") carries no BOQ item,
   // so its daily quantity has nowhere to go. Linking it once here is what puts
   // that work into the measurement book and on the map — after which the
@@ -4947,6 +4955,10 @@ function PTEditTask({task,allTasks,projectId,team,depsMode,phaseCodeMap,onDepsCh
   // Qty wala leaf: % roz ki qty se banta hai — yahan sirf dikhta hai, jaata
   // nahi. Status (Hold) jaata hai; server jo badla wahi maanta hai (TSK-15).
   const isQty=!isSummary&&ptIsQtyTask(task);
+  // Progress ka tareeka (Auto / Qty / %) — sirf jab tak task par kaam darj
+  // nahi. Server bhi rokta hai (koi roz ki entry ho to bhi, jo yahan nahi
+  // dikhti) — tab save par uska saaf message aata hai (9 Oct 2026).
+  const pmLocked=Number(task.progress)>0||Number(task.done_qty)>0;
   const TEAM_PT=teamOpts(team);
   return(<>
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:350,backdropFilter:"blur(1px)"}}/>
@@ -5011,6 +5023,20 @@ function PTEditTask({task,allTasks,projectId,team,depsMode,phaseCodeMap,onDepsCh
             <div><label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>{t("common.unit")}</label>
               <input value={form.unit} onChange={upd("unit")} placeholder="RMT"
                 style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/></div>
+          </div>
+        )}
+        {/* Progress ka tareeka — Auto (company ki setting) / Qty / %. Planning
+            me chuna ho to wahi aata hai; kaam darj hone ke baad band. */}
+        {!isSummary&&(
+          <div style={{marginBottom:10}}>
+            <label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>{t("tasks.pm_tareeka")}</label>
+            <PickSelect value={form.pmode} disabled={pmLocked} onChange={upd("pmode")}
+              style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:pmLocked?T.t4:T.t1,background:pmLocked?T.surfaceB:T.surface,outline:"none",fontFamily:"inherit",cursor:pmLocked?"not-allowed":"pointer"}}>
+              <option value="">{t("tasks.pm_auto")}</option>
+              <option value="qty">{t("tasks.pm_qty")}</option>
+              <option value="percent">{t("tasks.pm_pct")}</option>
+            </PickSelect>
+            <div style={{fontSize:10.5,color:T.t4,marginTop:4,lineHeight:1.5}}>{pmLocked?t("tasks.pm_locked"):t("tasks.pm_hint")}</div>
           </div>
         )}
         {/* Tender links — only for a site that belongs to a tender */}

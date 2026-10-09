@@ -222,6 +222,15 @@ export default function TenderAiPlan({ tenderId, onOpenProject, initialFile }) {
   const [err, setErr] = useState("");
   // "Levels se qty" — kaunse kaam ke liye khula hai, aur lagne ke baad server ke note
   const roadAccess = useRoadAccess();
+  // Company ki Settings → "Task progress kaise update ho" (auto/qty/percent)
+  // — review me qty/% ka dhundhla default isi se (autoPM, neeche).
+  const [coPM, setCoPM] = useState("auto");
+  useEffect(() => {
+    api.get("/settings/prefs").then((r) => {
+      const v = ((r?.success && Array.isArray(r.data) ? r.data : []).find((x) => x.key === "task_progress_mode") || {}).value;
+      if (v === "auto" || v === "qty" || v === "percent") setCoPM(v);
+    }).catch(() => {});
+  }, []);
   const [lvl, setLvl] = useState(null);             // { si, wi } | null
   const [lvlNotes, setLvlNotes] = useState({});     // "si:wi" → [text]
   const fileRef = useRef(null); const chatBoxRef = useRef(null); const prevMsgCount = useRef(0);
@@ -433,17 +442,22 @@ export default function TenderAiPlan({ tenderId, onOpenProject, initialFile }) {
     </label>
   );
 
-  // Roz ka kaam qty me likha jaye ya % me — ye hum data se hi nikal lete
-  // hain, PM ko har row par chunna nahi padta. Wo sirf wahan haath lagayega
-  // jahan use lage ki galat hai.
-  //   lambai wali unit (m/rm/km)  → qty   (aaj 120 m pada)
-  //   ginti 1 se zyada            → qty   (15 traffic light — 3 aaj, 7 kal)
-  //   baaki (qty 1, LS, khali)    → %     (ek UGR mahino me banta hai;
-  //                                        1 likhte hi "poora" ho jaata)
-  const RUN_U = /^(m|rm|rmt|mtr|metre|meter|km)$/i;
+  // Roz ka kaam qty me likha jaye ya % me — PM ko har row par chunna nahi
+  // padta. Na chune to task par kuchh nahi likha jaata aur company ki
+  // Settings → "Task progress kaise update ho" chalti hai (9 Oct 2026 —
+  // pehle execute yahi dhundhla andaza task par thap deta tha, aur wo
+  // setting ko hamesha ke liye dabaa deta). Isliye dhundhla default bhi
+  // wahi dikhata hai jo server karega (gb-backend utils/taskProgressRule):
+  //   qty nahi                 → %
+  //   setting '%' / 'qty'      → wahi
+  //   Auto                     → qty; sirf "1 Nos / 1 LS / 1 Job" jaisa
+  //                              ginti ka ek kaam % (1 likhte hi "poora")
+  const PM_COUNT_UNITS = ["no", "nos", "number", "numbers", "each", "pc", "pcs", "ls", "lumpsum", "job", "jobs", "lot", "lots", "set", "sets"];
   const autoPM = (row) => {
-    if (RUN_U.test(String(row.unit || "").trim())) return "qty";
-    return Number(row.qty) > 1 ? "qty" : "percent";
+    const q = Number(row.qty);
+    if (!(q > 0) || coPM === "percent") return "percent";
+    if (coPM === "qty") return "qty";
+    return q === 1 && PM_COUNT_UNITS.includes(String(row.unit || "").toLowerCase().replace(/[^a-z]/g, "")) ? "percent" : "qty";
   };
   const pmSel = (row, onPick) => (
     <PickSelect value={row.progress_mode || autoPM(row)} onChange={onPick} title={t("tender_ai_plan.pm_hint")}
