@@ -10,10 +10,12 @@
 // rukta nahi.
 //
 // Asset ki kharid kisi project ki nahi, STORE ki hoti hai (MR par project
-// khaali) — uske liye warehouseIds do: tab us store ka asset incharge /
-// storekeeper, aur jinhe store par access diya gaya hai wo aate hain, aur
-// store incharge pehle se chuna hua milta hai (badalna ho to ×). Pehle asset
-// ke order par ye list khaali aati thi (Prafull, 30 Sep 2026).
+// khaali) — uske liye warehouseIds do: tab SIRF us store ke incharge aate
+// hain (store incharge + asset incharge, ek store ke kai ho sakte hain), aur
+// wo pehle se chune hue milte hain (badalna ho to ×). Store ke order me
+// (store ka apna restock MR bhi) ab store-access wale log nahi aate — 9 Oct
+// 2026, Prafull; pehle wo bhi listed the. Pehle asset ke order par ye list
+// khaali aati thi (Prafull, 30 Sep 2026).
 //
 // Sirf control render hota hai, label nahi — har screen apne style ka label
 // upar laga leti hai (Fld / raw <label>).

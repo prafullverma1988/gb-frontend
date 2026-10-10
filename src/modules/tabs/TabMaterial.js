@@ -1037,6 +1037,19 @@ function TabMaterial({ project }) {
                                 </div>
                                 <div style={{fontSize:12.5,fontWeight:700,color:T.t1}}>{t("material.from_warehouse")}</div>
                                 <div style={{fontSize:11,color:T.t4,marginTop:2}}>{t("material.qty_totalqty_value_totalvalue_issued_to", { totalQty: totalQty.toFixed(2), totalValue: totalValue.toLocaleString("en-IN"), iss: iss.issued_to_name||"—", iss2: iss.issued_by_name||"—" })}</div>
+                                {iss.remarks&&<div style={{fontSize:11,color:T.t4,marginTop:2,fontStyle:"italic"}}>{iss.remarks}</div>}
+                                {Array.isArray(iss.challan_photos)&&iss.challan_photos.length>0&&(
+                                  <div style={{marginTop:6}}>
+                                    <div style={{fontSize:9.5,color:T.t4,fontWeight:700,textTransform:"uppercase",letterSpacing:".4px",marginBottom:4}}>{t("material.challan_photo")}</div>
+                                    <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                                      {iss.challan_photos.map((u,i)=>(
+                                        <a key={i} href={cld(u,"view")} target="_blank" rel="noopener noreferrer">
+                                          <img src={cld(u,"thumb")} alt="" style={{width:56,height:56,objectFit:"cover",borderRadius:6,border:"1px solid "+T.b1,display:"block"}}/>
+                                        </a>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
                               </div>
                               {isDone&&<span style={{fontSize:11,fontWeight:700,color:T.grn,background:T.grnL,padding:"3px 10px",borderRadius:20,border:"1px solid "+T.grnM}}>{t("common.received_2")}</span>}
                             </div>

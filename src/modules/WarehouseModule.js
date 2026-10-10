@@ -4,7 +4,9 @@ import api, { getWarehouseId, setWarehouseId } from "../config/api";
 import SearchSelect from "../components/SearchSelect";
 import GrnReceive from "../components/grn/GrnReceive";
 import WeighbridgePanel from "../components/grn/WeighbridgePanel";
-import { loadPhotoPolicy, policyFor } from "../utils/photoPolicy";
+import { loadPhotoPolicy, policyFor, fileInputProps } from "../utils/photoPolicy";
+import uploadManager from "../utils/uploadManager";
+import { cld } from "../utils/cloudinary";
 import { canApproveAction } from "../utils/approvalAuthority";
 import { t, Rich } from "../i18n";
 import { BackClose } from "../utils/backNav";
@@ -587,6 +589,64 @@ function NewGRNModal({stock,projects,users,library,warehouseId,warehouseName,onC
   );
 }
 
+// ── ISSUE CHALLAN PHOTO ───────────────────────────────────────────
+// Lene wale ke sign kiye challan ki photo (photo policy key `wh_issue_challan`,
+// Settings → Photo Settings). NewIssueModal aur QuickIssueModal dono me. Upload
+// + thumbnail wahi jo GRN photo box (components/grn/GrnPhotoBox.js) me hai:
+// uploadManager + fileInputProps. "off" = field chhupa hua, "required" = badge.
+function useChallanPol(){
+  const [d,setD]=useState(null);
+  useEffect(()=>{ loadPhotoPolicy().then(setD); },[]);
+  return policyFor(d,"wh_issue_challan");
+}
+// Challan photo abhi upload ho rahi ho to Save nahi (G review) — warna issue
+// bina photo ke ban jaata aur photo chup-chaap kho jaati.
+const CHALLAN_FOLDER="gb_buildcon/issue_challan";
+const challanUploading=()=>uploadManager.getQueue().some(q=>q.folder===CHALLAN_FOLDER&&(q.status==="queued"||q.status==="uploading"));
+function ChallanPhotoField({pol,photos,setPhotos}){
+  if(pol.mode==="off") return null;
+  const req=pol.mode==="required";
+  const cam=pol.source==="camera";
+  return (
+    <div style={{marginTop:13}}>
+      <div style={{fontSize:10.5,fontWeight:700,color:req&&photos.length===0?T.amb:T.t3,textTransform:"uppercase",letterSpacing:".4px",marginBottom:7,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+        {t("warehouse.challan_photo")}
+        <span style={{textTransform:"none",letterSpacing:0,color:T.t4,fontWeight:500}}>{t("warehouse.challan_photo_hint")}</span>
+        {req&&(
+          <span style={{textTransform:"none",letterSpacing:0,fontSize:9.5,fontWeight:700,color:photos.length===0?T.red:T.grn,background:photos.length===0?T.redL:T.grnL,padding:"2px 8px",borderRadius:10,border:`1px solid ${photos.length===0?T.redM:T.grnM}`}}>
+            {photos.length===0?t("material.required"):t("material.attached")}
+          </span>
+        )}
+      </div>
+      <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+        {photos.map((url,idx)=>(
+          <div key={idx} style={{position:"relative",width:64,height:64,borderRadius:7,overflow:"hidden",border:`1px solid ${T.b1}`}}>
+            <img src={cld(url,"thumb")} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
+            <button type="button" onClick={()=>setPhotos(p=>p.filter((_,i)=>i!==idx))}
+              style={{position:"absolute",top:3,right:3,width:18,height:18,borderRadius:"50%",background:"rgba(0,0,0,0.65)",color:"white",border:"none",fontSize:10,cursor:"pointer",lineHeight:1,padding:0,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
+          </div>
+        ))}
+        <label style={{width:64,height:64,borderRadius:7,border:`1.5px dashed ${T.b2}`,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexDirection:"column",gap:2}}>
+          <span style={{fontSize:18}}>📷</span>
+          <span style={{fontSize:10,color:T.t4,fontWeight:600}}>{t("common.add")}</span>
+          <input {...fileInputProps({source:cam?"camera":"both"},{multiple:true})} style={{display:"none"}}
+            onChange={e=>{
+              Array.from(e.target.files||[]).forEach(file=>{
+                uploadManager.add({
+                  file, folder:CHALLAN_FOLDER,
+                  label:t("warehouse.challan_photo_upload_label",{name:file.name}),
+                  onDone:(url)=>setPhotos(p=>[...p,url]),
+                });
+              });
+              e.target.value="";
+            }}/>
+        </label>
+      </div>
+      {cam&&<div style={{marginTop:5,fontSize:10,color:T.t4}}>{t("material.company_setting_sirf_live_camera_mobile")}</div>}
+    </div>
+  );
+}
+
 // ── NEW ISSUE MODAL ───────────────────────────────────────────────
 // NewIssueModal mirrors the Transfer modal:
 //   FROM = Warehouse (locked)
@@ -603,6 +663,8 @@ function NewIssueModal({stock,projects,users,onClose,onSaved,prefill,fromMR}){
     :[{material_id:null,name:"",unit:"Nos",qty:"",rate:"",selected_batches:null,_rateDirty:false}];
   const [items,setItems]=useState(initial);
   const [saving,setSaving]=useState(false);
+  const chPol=useChallanPol();
+  const [chPhotos,setChPhotos]=useState([]);
   // Batch picker — when user clicks "Choose batches" under rate field
   const [batchPickerIdx,setBatchPickerIdx]=useState(null);
   const [batchData,setBatchData]=useState(null); // {batches, fifo_rate, unit}
@@ -752,6 +814,8 @@ function NewIssueModal({stock,projects,users,onClose,onSaved,prefill,fromMR}){
   const toName=projects.find(p=>p.id===f.project_id)?.name;
 
   const submit=async()=>{
+    if(challanUploading()){ alert(t("warehouse.challan_photo_uploading")); return; }
+    if(chPol.mode==="required"&&chPhotos.length===0){ alert(t("warehouse.challan_photo_required")); return; }
     setSaving(true);
     try{
       const cleanItems=items.filter(it=>it.material_id&&Number(it.qty)>0).map(it=>({
@@ -764,7 +828,7 @@ function NewIssueModal({stock,projects,users,onClose,onSaved,prefill,fromMR}){
         selected_batches:Array.isArray(it.selected_batches)&&it.selected_batches.length>0?it.selected_batches:undefined,
       }));
       const url=fromMR?`/warehouse/mr/${fromMR}/issue`:"/warehouse/issues";
-      const res=await api.post(url,{...f,items:cleanItems});
+      const res=await api.post(url,{...f,items:cleanItems,photo_urls:chPhotos.length?chPhotos:null});
       if(res.success){onSaved&&onSaved(res.data);onClose();}
       else alert(res.message||"Issue failed");
     }catch(e){alert(e.message);}
@@ -895,6 +959,7 @@ function NewIssueModal({stock,projects,users,onClose,onSaved,prefill,fromMR}){
           ? t("warehouse.project_material_mr_me_decide_ho")
           : t("warehouse.rate_auto_fill_fifo_oldest_batch")}
       </div>
+      <ChallanPhotoField pol={chPol} photos={chPhotos} setPhotos={setChPhotos}/>
       {batchPickerIdx!=null&&(
         <BatchPickerPanel data={batchData} onClose={closeBatchPicker} onApply={applyBatchSelection}
           requestedQty={Number(items[batchPickerIdx]?.qty)||0}
@@ -1642,10 +1707,14 @@ function AddStockModal({material,onClose,onSaved}){
 function QuickIssueModal({material,projects,users,onClose,onSaved}){
   const [f,setF]=useState({project_id:null,issued_to:null,qty:"",remarks:""});
   const [saving,setSaving]=useState(false);
+  const chPol=useChallanPol();
+  const [chPhotos,setChPhotos]=useState([]);
   const max=Number(material?.qty)||0;
   const overStock=Number(f.qty)>max;
   const submit=async()=>{
     if(!f.qty||Number(f.qty)<=0||overStock) return;
+    if(challanUploading()){ alert(t("warehouse.challan_photo_uploading")); return; }
+    if(chPol.mode==="required"&&chPhotos.length===0){ alert(t("warehouse.challan_photo_required")); return; }
     setSaving(true);
     try{
       const res=await api.post("/warehouse/issues",{
@@ -1654,6 +1723,7 @@ function QuickIssueModal({material,projects,users,onClose,onSaved}){
         issued_to:f.issued_to||null,
         items:[{material_id:material.id,qty:Number(f.qty),rate:material.rate}],
         remarks:f.remarks||null,
+        photo_urls:chPhotos.length?chPhotos:null,
       });
       if(res.success){onSaved&&onSaved(res.data);onClose();}
       else alert(res.message||"Issue failed");
@@ -1696,6 +1766,7 @@ function QuickIssueModal({material,projects,users,onClose,onSaved}){
       <Field label={t("common.remarks")}>
         <Input value={f.remarks} onChange={e=>setF(p=>({...p,remarks:e.target.value}))} placeholder={t("warehouse.e_g_gf_slab_casting_2")}/>
       </Field>
+      <ChallanPhotoField pol={chPol} photos={chPhotos} setPhotos={setChPhotos}/>
     </ModalShell>
   );
 }
@@ -1756,7 +1827,7 @@ function MaterialDetailDrawer({material,onClose,onEdit,onDelete,onIssue,onAddSto
           {onIssue&&<Btn onClick={()=>onIssue(material)} c={T.amb} icon={IcOut} size="sm">{t("mom.issue")}</Btn>}
           {onAddStock&&<Btn onClick={()=>onAddStock(material)} c={T.grn} icon={IcIn} size="sm">{t("warehouse.add_stock")}</Btn>}
           {onEdit&&<GhostBtn onClick={()=>onEdit(material)} icon={IcEdit} c={T.blu}>{t("common.edit_2")}</GhostBtn>}
-          {onDelete&&<GhostBtn onClick={()=>onDelete(material)} icon={IcTrash} c={T.red}>{t("common.delete")}</GhostBtn>}
+          {onDelete&&<GhostBtn onClick={()=>onDelete(material)} icon={IcTrash} c={T.red}>{t("warehouse.hatao")}</GhostBtn>}
         </div>
 
         <div style={{flex:1,overflowY:"auto",padding:"12px 18px"}}>
@@ -1853,7 +1924,54 @@ function WarehousesTab({data,activeId,onOpen}){
   );
 }
 
-function StockTab({stock,grns,issues,onSelect,onAddMaterial,onAddStock,onIssue,onQuickRequest,onDispose}){
+// "Hataye hue" — qty 0 par hataye item (soft delete). Delete se history nahi jaati,
+// isliye yahin se item wapas laa sakte hain; warehouse_id api helper khud lagata hai.
+function HiddenMaterialsModal({canRestore,onClose,onRestored}){
+  const [rows,setRows]=useState([]);
+  const [loading,setLoading]=useState(true);
+  const [busyId,setBusyId]=useState(null);
+  const load=useCallback(async()=>{
+    setLoading(true);
+    try{
+      const r=await api.get("/warehouse/materials?archived=1");
+      setRows(r.success?(r.data||[]):[]);
+    }catch(e){setRows([]);}
+    setLoading(false);
+  },[]);
+  useEffect(()=>{load();},[load]);
+  const restore=async(m)=>{
+    setBusyId(m.id);
+    try{
+      const r=await api.post(`/warehouse/materials/${m.id}/restore`,{});
+      if(r.success){
+        if(r.message)alert(r.message);
+        onRestored&&onRestored();   // main stock list dobara
+        await load();               // hidden list se ye item hat jaaye
+      }else alert(r.message||t("common.something_went_wrong"));
+    }catch(e){alert(e.message);}
+    setBusyId(null);
+  };
+  return (
+    <ModalShell title={t("warehouse.hataye_hue")} sub={t("warehouse.hataye_hue_sub")} onClose={onClose} width={560}>
+      {loading&&<div style={{textAlign:"center",padding:"20px",color:T.t4,fontSize:12}}>{t("common.loading")}</div>}
+      {!loading&&rows.length===0&&<Empty label={t("warehouse.hataye_hue_khaali")}/>}
+      {!loading&&rows.map(m=>(
+        <div key={m.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 0",borderBottom:`1px solid ${T.b1}`}}>
+          <span style={{fontSize:20}}>{getCategoryEmoji(m.category)}</span>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontSize:13,fontWeight:700,color:T.t1}}>{m.name}</div>
+            <div style={{fontSize:10.5,color:T.t4,marginTop:2}}>
+              {[m.unit,m.category].filter(Boolean).join(" · ")} · {t("warehouse.hataya_kab",{date:fmtDate(m.archived_at)})}
+            </div>
+          </div>
+          {canRestore&&<Btn size="sm" c={T.grn} disabled={busyId===m.id} onClick={()=>restore(m)}>{t("warehouse.wapas_laao")}</Btn>}
+        </div>
+      ))}
+    </ModalShell>
+  );
+}
+
+function StockTab({stock,grns,issues,onSelect,onAddMaterial,onAddStock,onIssue,onQuickRequest,onDispose,onHidden}){
   const [search,setSearch]=useState("");
   const [cat,setCat]=useState("All");
   const [showLow,setShowLow]=useState(false);
@@ -1979,6 +2097,8 @@ function StockTab({stock,grns,issues,onSelect,onAddMaterial,onAddStock,onIssue,o
         {onDispose&&stock.some(m=>Number(m.qty_damaged)>0||Number(m.qty_scrap)>0||Number(m.qty_repair)>0)&&(
           <GhostBtn onClick={onDispose} c={T.amb}>{t("warehouse.gt_dispose_btn")}</GhostBtn>
         )}
+        {/* Hataye hue item ki list — sabko dikhti hai, "Wapas laao" sirf Delete tick wale ko */}
+        {onHidden&&<GhostBtn onClick={onHidden}>{t("warehouse.hataye_hue")}</GhostBtn>}
         {onAddMaterial&&<Btn onClick={onAddMaterial} c={T.blu} icon={IcAdd} size="sm">{t("warehouse.new_material")}</Btn>}
       </div>
 
@@ -2685,6 +2805,18 @@ function IssueDetailDrawer({issue,onClose,canDelete,canReceive,onDeleted,onRecei
                 <div style={{fontSize:12,color:T.t2,fontStyle:"italic"}}>"{detail.remarks}"</div>
               </div>
             )}
+            {Array.isArray(detail?.challan_photos)&&detail.challan_photos.length>0&&(
+              <div style={{padding:"9px 12px",background:T.surfaceB,border:`1px solid ${T.b1}`,borderRadius:7,marginBottom:8}}>
+                <div style={{fontSize:9.5,color:T.t4,marginBottom:6,fontWeight:700,textTransform:"uppercase",letterSpacing:".4px"}}>{t("warehouse.challan_photo")}</div>
+                <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                  {detail.challan_photos.map((u,i)=>(
+                    <a key={i} href={cld(u,"view")} target="_blank" rel="noopener noreferrer">
+                      <img src={cld(u,"thumb")} alt="" style={{width:64,height:64,objectFit:"cover",borderRadius:6,border:`1px solid ${T.b1}`,display:"block"}}/>
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -3351,6 +3483,7 @@ function WarehouseModule(){
   const [grnMR,setGrnMR]=useState(null);           // Tab 1: receive GRN modal target
   const [issueDetail,setIssueDetail]=useState(null);
   const [disposeOpen,setDisposeOpen]=useState(false);   // Kharab / Kabad nikalo
+  const [hiddenOpen,setHiddenOpen]=useState(false);     // "Hataye hue" item ki list
   const [dispSeq,setDispSeq]=useState(0);               // nikasi list dobara laao
   const [gintiPending,setGintiPending]=useState(0);     // approval baaki ginti — tab ka badge
 
@@ -3547,7 +3680,7 @@ function WarehouseModule(){
   const handleDeleteMaterial=async(m)=>{
     if(!await window.confirmAsync(t("warehouse.name_ko_delete_karein_movements_hue", { name: m.name }))) return;
     const res=await api.del(`/warehouse/materials/${m.id}`);
-    if(res.success){setMatDetail(null);loadAll();}
+    if(res.success){setMatDetail(null);loadAll();if(res.message)alert(res.message);} // soft delete — server batata hai "Hataye hue" se wapas aayega
     else alert(res.message||"Delete failed");
   };
 
@@ -3672,7 +3805,7 @@ function WarehouseModule(){
           godownsView={<WarehousesTab data={whOverview} activeId={whId} onOpen={switchWarehouse}/>}
           onGoto={id=>{switchWarehouse(id);setTab("stock");}}/>}
         {tab==="stock"&&<StockTab stock={stock} grns={grns} issues={issues} onSelect={m=>setMatDetail(m)} onAddMaterial={whCreate?()=>setMatModalOpen({}):undefined} onAddStock={whCreate?m=>setAddStockTarget(m):undefined} onIssue={whEntry?m=>setIssueTarget(m):undefined} onQuickRequest={whEntry?m=>{setMrPrefill({name:m.name,unit:m.unit});setMrNewOpen(true);}:undefined}
-          onDispose={canGintiCreate?()=>setDisposeOpen(true):null}/>}
+          onDispose={canGintiCreate?()=>setDisposeOpen(true):null} onHidden={()=>setHiddenOpen(true)}/>}
         {/* Kharab / Kabad nikasi ki list (approve yahin) + "Repair me" — key=whId: store badla to dobara */}
         {tab==="stock"&&<DisposalsPanel key={whId} refreshKey={dispSeq} canApprove={canGintiApprove} meId={meUser?.id}
           isAdmin={["admin","super_admin"].includes((meUser?.role||"").toLowerCase())} onChanged={()=>loadAll()}/>}
@@ -3756,6 +3889,9 @@ function WarehouseModule(){
       {disposeOpen&&(
         <DisposalModal stock={stock} onClose={()=>setDisposeOpen(false)}
           onSaved={(m)=>{setDispSeq(n=>n+1);if(m)alert(m);}}/>
+      )}
+      {hiddenOpen&&(
+        <HiddenMaterialsModal key={whId} canRestore={whDelete} onClose={()=>setHiddenOpen(false)} onRestored={()=>loadAll()}/>
       )}
       {addStockTarget&&(
         <AddStockModal material={addStockTarget} onClose={()=>setAddStockTarget(null)} onSaved={()=>loadAll()}/>

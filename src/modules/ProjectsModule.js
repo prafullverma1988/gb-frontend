@@ -1549,7 +1549,7 @@ function MRFlowCard({mr, stage, onApprove, onReject, acting, rejectId, setReject
                  {t("projects.maal_site_par_aane_par_vendor")}
                 </div>
                 <ReceivingContacts theme={T} compact projectIds={[mr.project_id]}
-                  warehouseIds={mr.asset_warehouse_id?[mr.asset_warehouse_id]:[]}
+                  warehouseIds={[mr.store_warehouse_id||mr.asset_warehouse_id].filter(Boolean)}
                   value={contacts} onChange={setContacts}/>
               </div>
               <div style={{display:"flex",gap:5}}>
@@ -4147,7 +4147,7 @@ function IssuesDrawer({issues, loading, filter, setFilter, onClose, onIssueClose
                 <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth={2}><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>
                 <span style={{fontSize:11,color:"#475569",fontWeight:600}}>{issue.project_name}</span>
                 <span style={{fontSize:10,color:"#94A3B8"}}>·</span>
-                <span style={{fontSize:11,color:"#64748B"}}>{issue.task_name}</span>
+                <span style={{fontSize:11,color:"#64748B"}}>{issue.task_id?issue.task_name:t("tasks.bina_task")}</span>
                 {issue.city&&<span style={{fontSize:10,color:"#94A3B8",marginLeft:2}}>· {issue.city}</span>}
               </div>
               {/* Photo + Assigned + Category + Chat + Date */}
