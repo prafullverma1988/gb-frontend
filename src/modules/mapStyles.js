@@ -137,6 +137,16 @@ export function propsRows(kind, code, props, hide) {
     .filter((r) => r[1] != null);
 }
 
+// Export / register ke liye: [key, kachchi value, label, dikhne wali] — GIS
+// ka column key (har bhasha me ek jaisa), padhne ke liye label.
+export function detailPairs(kind, code, props) {
+  const p = props || {};
+  const out = formOf(kind, code).filter((f) => !blank(p[f.key]))
+    .map((f) => [f.key, String(p[f.key]), f.label || f.key, fieldValue(f, p[f.key])]);
+  if (Array.isArray(p.poles)) out.push(["poles", String(p.poles.length), t("map_form.pole_ginti"), String(p.poles.length)]);
+  return out;
+}
+
 // Form — type chunte hi uske field. Chhoti list chips me (dobara dabao to
 // khaali), lambi list picker me. hide: jo field is jagah alag se poochhe
 // jaate hain (jaise tender me "Chaudai").

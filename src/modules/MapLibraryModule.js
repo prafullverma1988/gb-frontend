@@ -26,7 +26,7 @@ import { useBackClose } from "../utils/backNav";
 import { can, canEntry } from "../utils/perms";
 import SiteMarkingEditor from "./SiteMarkingEditor";
 import { useMapLibrary, styleOf, lineOpts, markerIcon, MapLibraryDialog, typeName, typesFor, StyleSwatch,
-  formOf, propsRows, missingOf, cleanProps, TypeDetailFields, drainPaths, drainLineOpts, polePoints, poleIcon } from "./mapStyles";
+  formOf, propsRows, missingOf, cleanProps, detailPairs, TypeDetailFields, drainPaths, drainLineOpts, polePoints, poleIcon } from "./mapStyles";
 
 // ── ICONS ─────────────────────────────────────────────────────────
 const Ic = ({ d, size = 16, color = "currentColor", sw = 1.8, fill = "none" }) => (
@@ -192,8 +192,14 @@ function kmlPlacemark(it, folderName) {
     Number(it.dia_mm) > 0 ? `Dia: ${it.dia_mm} mm` : "",
     it.by ? `By: ${it.by}` : "",
     partsOfLine(pts, it.gaps).length > 1 ? `Parts: ${partsOfLine(pts, it.gaps).length} (broken line)` : "",
+    // Type ka detail (L4) — "Label: value"; ExtendedData me key (GIS column).
+    ...detailPairs(it.kind, it.atype || "other", it.props).map(([, , l, v]) => `${l}: ${v}`),
   ].filter(Boolean).join(" | ");
-  return `<Placemark><name>${xmlEsc(it.name)}</name><description>${xmlEsc(desc)}</description>${geom}</Placemark>`;
+  const det = detailPairs(it.kind, it.atype || "other", it.props);
+  const ext = det.length
+    ? `<ExtendedData>${det.map(([k, v]) => `<Data name="${xmlEsc(k)}"><value>${xmlEsc(v)}</value></Data>`).join("")}</ExtendedData>`
+    : "";
+  return `<Placemark><name>${xmlEsc(it.name)}</name><description>${xmlEsc(desc)}</description>${ext}${geom}</Placemark>`;
 }
 
 // groups: [{ name, items }] — folder export me har file ek KML <Folder>, file export me seedhi list.
@@ -231,6 +237,8 @@ function buildGeoJson(items, folderName) {
           name: it.name || "", kind: it.kind || "line",
           length_m: round2(it.lenM), area_sqm: round2(it.areaSqm),
           folder: folderName || null, file: it.file || null, by: it.by || null,
+          type: it.atype || "other",
+          ...Object.fromEntries(detailPairs(it.kind, it.atype || "other", it.props).map(([k, v]) => [k, v])),
         },
         geometry,
       };
@@ -243,9 +251,11 @@ function buildCsv(items, folderName) {
     const s = String(v == null ? "" : v);
     return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
-  const head = ["folder", "file", "name", "kind", "length_m", "area_sqm", "start_chainage_m", "parts", "points", "by", "created_at"];
+  const head = ["folder", "file", "name", "kind", "type", "detail", "detail_missing", "length_m", "area_sqm", "start_chainage_m", "parts", "points", "by", "created_at"];
   const rows = items.map((it) => [
-    folderName || "", it.file || "", it.name || "", it.kind || "line",
+    folderName || "", it.file || "", it.name || "", it.kind || "line", it.atype || "other",
+    detailPairs(it.kind, it.atype || "other", it.props).map(([, , l, v]) => `${l}: ${v}`).join("; "),
+    missingIn(it).join("; "),
     round2(it.lenM) ?? "", round2(it.areaSqm) ?? "", round2(it.startCh) ?? "",
     // Tooti line: har tukda " | " se alag, taaki GIS wala saaf dekh sake
     // ki beech me jagah chhodi gayi thi.
@@ -871,6 +881,76 @@ const deletedMeta = (row, isFolder) => {
   return [by ? t("map_library.hatane_wala", { by }) : null, at].filter(Boolean).join(" · ");
 };
 
+// ── REGISTER (L4, 10 Oct 2026) — line / marking ka register ─────
+// Type chuno to har field ka apna column (sadak: chaudai, surface, side
+// nali…; pipe: material, dia…; electrical: HT / LT, volt, pole…). "Sab type"
+// me ek "Detail" column. Neeche ginti aur kul lambai; CSV wahi table.
+function RegisterView({ items, folders, canExport }) {
+  const [pick, setPick] = useState("");               // "kind:code" ya "" (sab)
+  const fname = useMemo(() => new Map(folders.map((f) => [String(f.id), f.name])), [folders]);
+  const types = useMemo(() => {
+    const m = new Map();
+    items.forEach((it) => { const k = `${it.kind}:${it.atype || "other"}`; m.set(k, (m.get(k) || 0) + 1); });
+    return [...m.entries()].map(([k, n]) => { const [kind, code] = k.split(":"); return { k, kind, code, n }; })
+      .sort((a, b) => typeName(a.kind, a.code).localeCompare(typeName(b.kind, b.code)));
+  }, [items]);
+  useEffect(() => { if (pick && !types.some((x) => x.k === pick)) setPick(""); }, [pick, types]);
+  const [pKind, pCode] = pick ? pick.split(":") : [null, null];
+  const rows = pick ? items.filter((it) => it.kind === pKind && (it.atype || "other") === pCode) : items;
+  const fields = pick ? formOf(pKind, pCode) : [];
+  const where = (it) => [it.folder_id == null ? t("map_library.bina_folder") : (fname.get(String(it.folder_id)) || "—"), it.file || ""].filter(Boolean).join(" › ");
+  const size = (it) => (it.kind === "area" ? fmtArea(it.areaSqm) : it.kind === "point" ? "" : fmtLen(it.lenM)) || "";
+  const valOf = (it, f) => { const d = detailPairs(it.kind, it.atype || "other", it.props).find((x) => x[0] === f.key); return d ? d[3] : ""; };
+  const poleCol = pick && pKind === "line" && rows.some((it) => polesIn(it) > 0);
+  const head = [t("map_form.reg_naam"), ...(pick ? [] : [t("map_form.reg_type")]), t("map_form.reg_jagah"), t("map_form.reg_size"),
+    ...(pick ? fields.map((f) => f.label + (f.unit ? ` (${f.unit})` : "")) : [t("map_form.detail")]),
+    ...(poleCol ? [t("map_form.pole_ginti")] : []), t("map_form.detail_adhoori")];
+  const cells = (it) => [it.name || "", ...(pick ? [] : [typeName(it.kind, it.atype || "other")]), where(it), size(it),
+    ...(pick ? fields.map((f) => valOf(it, f)) : [detailPairs(it.kind, it.atype || "other", it.props).map(([, , l, v]) => `${l}: ${v}`).join(" · ")]),
+    ...(poleCol ? [polesIn(it) ? String(polesIn(it)) : ""] : []), missingIn(it).join(", ")];
+  const lenSum = rows.reduce((m, it) => m + (it.kind === "line" ? Number(it.lenM) || 0 : 0), 0);
+  const csv = () => {
+    const q = (v) => { const x = String(v == null ? "" : v); return /[",\r\n]/.test(x) ? `"${x.replace(/"/g, '""')}"` : x; };
+    const text = "﻿" + [head, ...rows.map(cells)].map((r) => r.map(q).join(",")).join("\r\n") + "\r\n";
+    saveText(text, `${safeFileName(pick ? typeName(pKind, pCode) : t("map_form.reg_title"))}-register.csv`, "text/csv;charset=utf-8");
+  };
+  const th = { textAlign: "left", padding: "8px 10px", fontSize: 11, color: T.t3, fontWeight: 700, borderBottom: `1px solid ${T.b1}`, whiteSpace: "nowrap", background: T.surfaceB };
+  const td = { padding: "7px 10px", fontSize: 12, color: T.t1, borderBottom: `1px solid ${T.b1}`, verticalAlign: "top" };
+  return (
+    <div style={{ background: T.surface, border: `1px solid ${T.b1}`, borderRadius: 10, overflow: "hidden" }}>
+      <div style={{ padding: "11px 14px", borderBottom: `1px solid ${T.b1}`, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: T.t1 }}>{t("map_form.reg_title")}</div>
+        <PickSelect value={pick} onChange={(e) => setPick(e.target.value)} style={{ ...inp, width: "auto", minWidth: 200 }}>
+          <option value="">{t("map_form.reg_sab_type", { n: items.length })}</option>
+          {types.map((x) => <option key={x.k} value={x.k}>{`${typeName(x.kind, x.code)} · ${kindLabel(x.kind)} (${x.n})`}</option>)}
+        </PickSelect>
+        <span style={{ flex: 1 }} />
+        <span style={{ fontSize: 12, color: T.t3 }}>{t("map_form.reg_total", { n: rows.length, len: fmtLen(lenSum) || "0 m" })}</span>
+        {canExport && rows.length > 0 && <Btn icon={IcDown} onClick={csv}>{t("map_form.reg_csv")}</Btn>}
+      </div>
+      {rows.length === 0 ? (
+        <div style={{ padding: 16, fontSize: 12.5, color: T.t4 }}>{t("map_form.reg_khaali")}</div>
+      ) : (
+        <div style={{ overflowX: "auto", maxHeight: "calc(100vh - 220px)" }}>
+          <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 640 }}>
+            <thead><tr>{head.map((h, i) => <th key={i} style={{ ...th, position: "sticky", top: 0 }}>{h}</th>)}</tr></thead>
+            <tbody>
+              {rows.map((it) => (
+                <tr key={it.id}>
+                  {cells(it).map((c, i) => (
+                    <td key={i} style={{ ...td, color: i === cells(it).length - 1 ? T.amb : T.t1, fontWeight: i === 0 ? 600 : 400,
+                      fontVariantNumeric: "tabular-nums" }}>{c || (i === cells(it).length - 1 ? "" : "—")}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function DeletedView({ state, onRetry, onRestore, busyKey }) {
   if (state.status === "error") {
     return (
@@ -1321,9 +1401,10 @@ function MapLibraryModule() {
 
   // ── Render ─────────────────────────────────────────────────────
   const delCount = del.status === "ok" ? del.data.folders.length + del.data.items.length : null;
-  const tabs = lib.status === "ok" && perms.delete ? [
+  const tabs = lib.status === "ok" ? [
     { id: "library", label: t("map_library.tab_library") },
-    { id: "deleted", label: delCount == null ? t("map_library.tab_deleted") : t("map_library.tab_deleted_n", { n: delCount }) },
+    { id: "register", label: t("map_form.reg_tab") },
+    ...(perms.delete ? [{ id: "deleted", label: delCount == null ? t("map_library.tab_deleted") : t("map_library.tab_deleted_n", { n: delCount }) }] : []),
   ] : EMPTY;
   const folderCount = tree.filter((g) => g.fk !== NONE).length;
   const fileCount = tree.reduce((a, g) => a + g.files.filter((f) => f.file).length, 0);
@@ -1337,6 +1418,8 @@ function MapLibraryModule() {
       <StateBox icon={IcAlert} tone="error" title={t("map_library.load_nahi_hui")} sub={lib.error}
         action={<Btn icon={IcRefresh} onClick={retry}>{t("map_library.dobara_try_karo")}</Btn>} />
     );
+  } else if (view === "register") {
+    body = <RegisterView items={allData.items} folders={allData.folders} canExport={perms.export} />;
   } else if (view === "deleted") {
     body = <DeletedView state={del} onRetry={loadDeleted} onRestore={restore} busyKey={restoring} />;
   } else if (!data.folders.length && !data.items.length) {
