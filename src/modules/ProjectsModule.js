@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import PickSelect from "../components/PickSelect";
 import api from "../config/api";
 import apiCache from "../utils/apiCache";
@@ -14,6 +14,7 @@ import { t, Rich } from "../i18n";
 import { isoDate } from "../utils/today";
 import { BackClose } from "../utils/backNav";
 import { cld } from "../utils/cloudinary";
+import { GrnPhotoTiles, grnPhotosOff, GRN_NO_PHOTO_BODY } from "../components/grn/GrnPhotoBox";
 import { itemName, specOf, photoLinks } from "../utils/vendorShare";
 
 const Ic=({d,size=18,color="currentColor",sw=1.8,fill="none"})=>(
@@ -1835,6 +1836,34 @@ function TransferCard({tr}){
   );
 }
 
+// ── Ek-click "Mark as Delivered / Received" ki photo (10 Oct 2026, E) ──
+// mark-received GRN banata hai; naye tenant par "Vendor challan" Zaroori hai,
+// aur pehle yahan photo lagane ki jagah hi nahi thi (400). Teeno tile Photo
+// Settings me Off hon to ye sheet khulta hi nahi — pehle jaisa ek click.
+function MarkReceivedPhotoSheet({mr,busy,onClose,onConfirm}){
+  const phRef=useRef(null);
+  return(<>
+    <BackClose onClose={onClose}/>
+    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:410}}/>
+    <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:"min(560px,94vw)",maxHeight:"88vh",display:"flex",flexDirection:"column",background:T.surface,borderRadius:12,boxShadow:"0 20px 60px rgba(0,0,0,.25)",zIndex:411,overflow:"hidden",fontFamily:"'Segoe UI',sans-serif"}}>
+      <div style={{padding:"13px 18px",borderBottom:"1px solid "+T.b1}}>
+        <div style={{fontSize:14,fontWeight:700,color:T.t1}}>{t("grn.receive_label")}</div>
+        <div style={{fontSize:11.5,color:T.t3,marginTop:2}}>{[mr.item_name,mr.quantity!=null?`${mr.quantity} ${mr.unit||""}`.trim():"",mr.project_name].filter(Boolean).join(" · ")}</div>
+      </div>
+      <div style={{padding:"4px 18px 14px",overflowY:"auto"}}>
+        <GrnPhotoTiles ref={phRef} dest={{projectId:mr.project_id}} vendor={mr.po_vendor_name||mr.linked_vendor||""}/>
+      </div>
+      <div style={{padding:"11px 18px",borderTop:"1px solid "+T.b1,display:"flex",gap:8,justifyContent:"flex-end",background:T.surfaceB}}>
+        <button onClick={onClose} style={{padding:"8px 14px",borderRadius:7,border:"1px solid "+T.b1,background:T.surface,color:T.t2,fontSize:12,fontWeight:600,cursor:"pointer"}}>{t("common.cancel")}</button>
+        <button onClick={()=>onConfirm(phRef.current)} disabled={busy}
+          style={{padding:"8px 16px",borderRadius:7,border:"none",background:busy?T.b2:"#7C3AED",color:"white",fontSize:12,fontWeight:700,cursor:busy?"not-allowed":"pointer"}}>
+          {busy?t("projects.marking"):t("projects.mark_as_delivered_received")}
+        </button>
+      </div>
+    </div>
+  </>);
+}
+
 function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync}){
   // mode: "approvals" → Design/Finance/Payment tabs
   //       "materials" → MR / PO / Warehouse tabs
@@ -1866,6 +1895,8 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
   const [vendorList,setVendorList]=useState([]);
   const [loading,setLoading]=useState(true);
   const [acting,setActing]=useState({});
+  // "Mark as Delivered / Received" ka photo sheet — kis MR ke liye khula hai (E)
+  const [recvMr,setRecvMr]=useState(null);
   const [walletAsked,setWalletAsked]=useState({}); // txn_id → counter; bumps to re-fetch clarification thread after Ask info
   const [rejectId,setRejectId]=useState(null);
   const [rejectNote,setRejectNote]=useState("");
@@ -3003,11 +3034,29 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
     {id:"po",        label:t("projects.po_approval"),       color:T.amb, count:pendingPOsScoped.length},
     {id:"warehouse", label:t("common.warehouse"),         color:T.grn, count:whPendingMRs.length},
   ];
+  // Qty nahi bhejte — server MR ka BAAKI maal leta hai. Jawab padh kar hi
+  // screen badalti hai: pehle error par bhi card "Received" ho jaata tha (MAT-08).
+  // ph = photo sheet ki tiles (null = teeno Off, naye khaane khaali). true = ho gaya.
+  const markReceived=async(id,ph)=>{
+    setActing(p=>({...p,[id]:"receiving"}));
+    // Rec slip ka upload poora hone tak ruko; challan / gadi ki photo peeche chadh sakti hai.
+    if(ph&&!(await ph.ready())){ setActing(p=>({...p,[id]:null})); return false; }
+    const res=await api.patch("/procurement/mrs/"+id+"/mark-received",ph?ph.body():GRN_NO_PHOTO_BODY).catch(e=>({success:false,message:e?.message}));
+    if(res?.success===false){ if(ph) ph.fail(res); alert(res.message||t("common.something_went_wrong")); setActing(p=>({...p,[id]:null})); return false; }
+    const dupMsg=ph?ph.done(res.grn_id,{dup:res.weighment?.rec_slip_dup,receivingIssue:res.weighment?.receiving_issue}):"";
+    if(dupMsg) alert(dupMsg);
+    const matStatus=res?.mat_status||"Received";
+    setData(p=>({...p,mrs:p.mrs.map(m=>m.id===id?{...m,stage:"Received",mat_status:matStatus}:m)}));
+    setActing(p=>({...p,[id]:null}));
+    return true;
+  };
   const tabs=mode==="approvals"?APPROVAL_TABS:MATERIAL_TABS;
   const drawerTitle=mode==="approvals"?"Pending Approvals":"Material Approvals";
   const headerAccent=mode==="approvals"?T.amb:T.blu;
 
   return(<>
+    {recvMr&&<MarkReceivedPhotoSheet mr={recvMr} busy={acting[recvMr.id]==="receiving"} onClose={()=>setRecvMr(null)}
+      onConfirm={async(ph)=>{ if(await markReceived(recvMr.id,ph)) setRecvMr(null); }}/>}
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.38)",zIndex:300,backdropFilter:"blur(2px)"}}/>
     <div style={{position:"fixed",right:0,top:0,bottom:0,width:440,background:T.bg,zIndex:301,boxShadow:"-4px 0 28px rgba(0,0,0,0.18)",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif"}}>
 
@@ -3178,14 +3227,9 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
                   vendorList={vendorList}
                   onVendorAdded={(v)=>setVendorList(prev=>[...prev, v].sort((a,b)=>(a.name||"").localeCompare(b.name||"")))}
                   onMarkReceived={async(id)=>{
-                    setActing(p=>({...p,[id]:"receiving"}));
-                    // Qty nahi bhejte — server MR ka BAAKI maal leta hai. Jawab padh kar hi
-                    // screen badalti hai: pehle error par bhi card "Received" ho jaata tha (MAT-08).
-                    const res=await api.patch("/procurement/mrs/"+id+"/mark-received",{}).catch(e=>({success:false,message:e?.message}));
-                    if(res?.success===false){ alert(res.message||t("common.something_went_wrong")); setActing(p=>({...p,[id]:null})); return; }
-                    const matStatus=res?.mat_status||"Received";
-                    setData(p=>({...p,mrs:p.mrs.map(m=>m.id===id?{...m,stage:"Received",mat_status:matStatus}:m)}));
-                    setActing(p=>({...p,[id]:null}));
+                    // Teeno photo tile Off → pehle jaisa ek click; warna photo sheet (E).
+                    if(await grnPhotosOff()){ await markReceived(id,null); return; }
+                    setRecvMr(data.mrs.find(m=>m.id===id)||{id});
                   }}
                 />)
             }

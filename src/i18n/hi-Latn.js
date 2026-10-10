@@ -3978,6 +3978,7 @@ const dict = {
   "grn_issue.photo_optional_par_damage_quality_me":            "Photo optional, par damage/quality me proof kaam aata hai",
   "grn_issue.sab_theek_hai_to_kuch_mat":                       "Sab OK hai to kuch mat karo — issue GRN ke saath hi log ho jayega aur baad me material ke andar dikhega.",
   "grn_issue.type_weighbridge":                                "Weighbridge",
+  "grn_issue.type_receiving":                                 "Receiving",
 
   // ── kal_ka_plan ─────────────────────────────────────────────
   "import_fix.apply_same":                                     "Yahi galti {n} aur rows me hai — sab me \"{value}\" lagao",
@@ -12534,6 +12535,20 @@ const dict = {
   "grn.direct_banner_wh":                                      "Bina MR ke store me aaya material — ek vendor ke multiple items ek hi GRN me receive karo",
   "grn.col_material":                                          "Material",
   "grn.col_qty":                                               "Qty",
+  // ── GRN ki teen photo tile (10 Oct 2026, E) ──
+  "grn_ph.vendor_challan":                                    "Vendor challan",
+  "grn_ph.vendor_challan_hint":                               "Vendor ka challan ya bill · max 6",
+  "grn_ph.rec_slip":                                          "Rec slip",
+  "grn_ph.rec_slip_hint":                                     "Site book ki receiving slip · 1 photo",
+  "grn_ph.rec_slip_no":                                       "Rec slip no.",
+  "grn_ph.rec_slip_no_ph":                                    "Slip par likha number",
+  "grn_ph.site":                                              "Gadi / material",
+  "grn_ph.site_hint":                                         "Site par gadi ya utra hua material · max 3",
+  "grn_ph.material":                                          "Material",
+  "grn_ph.material_hint":                                     "Site par utra hua material · max 3",
+  "grn_ph.uploading":                                         "{n} photo upload ho rahi hai",
+  "grn_ph.rec_slip_dup":                                      "Rec slip {no} pehle {grn} par aa chuki",
+  "grn_ph.receiving_issue":                                   "GRN par \"Receiving\" issue bana — Finance ko bill par dikhega",
   "weigh.add_more":                                           "+ Aur material isi gadi me",
   "weigh.ago_h":                                              "{h} ghante pehle",
   "weigh.ago_m":                                              "{m} min pehle",

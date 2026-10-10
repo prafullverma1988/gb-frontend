@@ -1367,7 +1367,8 @@ function txnMatchesSearch(raw, { texts = [], amount = null, ds = null }) {
 // GRN issue ka type — wire value English hi rehti hai. "Weighbridge" (9 Oct
 // 2026) server khud banata hai: kaante / site ke nishaan (plate nahi dikhi, AI
 // ka padha badla, gadi no. badla …) bill se pehle dikhein — iska naam bhasha me.
-const issueTypeLabel=(ty)=>ty==="Weighbridge"?t("grn_issue.type_weighbridge"):ty;
+// "Receiving" (10 Oct 2026, E) — bina gadi wali GRN par dohra rec slip, server ka.
+const issueTypeLabel=(ty)=>ty==="Weighbridge"?t("grn_issue.type_weighbridge"):ty==="Receiving"?t("grn_issue.type_receiving"):ty;
 const LEDGER_TYPE_LABELS={"material_purchase":"Material Purchase","payment":"Payment Made","party_payment":"Payment Made","receipt":"Payment Received","subcon_expense":"Sub-Con Bill","site_expense":"Site Expense","sales_invoice":"Sales Invoice","ra_bill":"RA Bill","emd_forfeit":"EMD Forfeit","bank_transfer":"Bank Transfer","advance_payment":"Advance","petty_cash":"Petty Cash","settle_in":"Settlement","settle_out":"Settlement"};
 // Subcon ko diya diesel (fuel ki katauti) — type material_return, par "Material
 // Return" padhna galat lagta; server display_type="fuel_given" bhejta hai.

@@ -3975,6 +3975,7 @@ const dict = {
   "grn_issue.photo_optional_par_damage_quality_me":            "फोटो ऑप्शनल, पर डैमेज/क्वालिटी में प्रूफ काम आता है",
   "grn_issue.sab_theek_hai_to_kuch_mat":                       "सब ओके है तो कुछ मत करो — इश्यू जीआरएन के साथ ही लॉग हो जाएगा और बाद में मटेरियल के अंदर दिखेगा।",
   "grn_issue.type_weighbridge":                                "धर्म काँटा",
+  "grn_issue.type_receiving":                                 "रिसीविंग",
 
   // ── kal_ka_plan ─────────────────────────────────────────────
   "import_fix.apply_same":                                     "यही गलती {n} और rows में है — सब में \"{value}\" लगाएँ",
@@ -12531,6 +12532,20 @@ const dict = {
   "grn.direct_banner_wh":                                      "बिना MR के गोदाम में आया मटेरियल — एक वेंडर के कई आइटम एक ही GRN में रिसीव करो",
   "grn.col_material":                                          "मटेरियल",
   "grn.col_qty":                                               "Qty",
+  // ── GRN ki teen photo tile (10 Oct 2026, E) ──
+  "grn_ph.vendor_challan":                                    "वेंडर चालान",
+  "grn_ph.vendor_challan_hint":                               "वेंडर का चालान या बिल · अधिकतम 6",
+  "grn_ph.rec_slip":                                          "Rec slip",
+  "grn_ph.rec_slip_hint":                                     "साइट बुक की रिसीविंग स्लिप · 1 फ़ोटो",
+  "grn_ph.rec_slip_no":                                       "Rec slip नं.",
+  "grn_ph.rec_slip_no_ph":                                    "स्लिप पर लिखा नंबर",
+  "grn_ph.site":                                              "गाड़ी / मटेरियल",
+  "grn_ph.site_hint":                                         "साइट पर गाड़ी या उतरा हुआ मटेरियल · अधिकतम 3",
+  "grn_ph.material":                                          "मटेरियल",
+  "grn_ph.material_hint":                                     "साइट पर उतरा हुआ मटेरियल · अधिकतम 3",
+  "grn_ph.uploading":                                         "{n} फ़ोटो अपलोड हो रही है",
+  "grn_ph.rec_slip_dup":                                      "Rec slip {no} पहले {grn} पर आ चुकी",
+  "grn_ph.receiving_issue":                                   "GRN पर \"Receiving\" इश्यू बना — फ़ाइनेंस को बिल पर दिखेगा",
   "weigh.add_more":                                           "+ और मटेरियल इसी गाड़ी में",
   "weigh.ago_h":                                              "{h} घंटे पहले",
   "weigh.ago_m":                                              "{m} मिनट पहले",

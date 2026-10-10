@@ -19,14 +19,18 @@
 // hai, uski row par ⚖️ chip aata hai aur GRN ke saath tolai jud jaati hai.
 //
 // Parent footer ka "Submit GRN" ref se submitDirect() bulata hai.
+//
+// Photo (10 Oct 2026, E): teen tile — Vendor challan · Rec slip (+ no.) ·
+// Gadi / material — GrnPhotoTiles (./GrnPhotoBox) khud rakhta hai, har tile
+// ki apni Photo Settings. Pehle parent ek photos list deta tha.
 // ════════════════════════════════════════════════════════════════
-import React, { forwardRef, useEffect, useImperativeHandle, useMemo, useState } from "react";
+import React, { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import PickSelect from "../PickSelect";
 import api from "../../config/api";
 import LibrarySelect from "../LibrarySelect";
 import GrnIssueBlock from "../GrnIssueBlock";
 import DualUnitToggle from "./DualUnitToggle";
-import GrnPhotoBox from "./GrnPhotoBox";
+import { GrnPhotoTiles } from "./GrnPhotoBox";
 import WeighChip from "./WeighChip";
 import { loadOrderedLines } from "./grnData";
 import { loadWeighments, indexOpenLines, suggestedQty, fmtKg, loadLibUnits, unitOptions, loadStockUnits, stockConv, stockKey } from "./weigh";
@@ -44,10 +48,11 @@ const altOf = (d) => ({
 });
 
 const GrnReceive = forwardRef(function GrnReceive({
-  dest, mode, photos, setPhotos, photoRequired, photoBadgeRequired, photoCameraOnly, meUser,
+  dest, mode, meUser,
   hasOtherPending, onReceived, onSavingChange, onDoneCount, onOrderedCount,
 }, ref) {
   const isWh = dest?.type === "warehouse";
+  const phRef = useRef(null);   // teen photo tile (10 Oct 2026, E)
   const [lines, setLines] = useState([]);
   const [weigh, setWeigh] = useState({ byMr: {}, byWhItem: {}, byName: {}, trucks: [] });
   // Gadi-wise GRN (28 Sep 2026): jo gadi kaante par tul chuki par yahan utri
@@ -158,13 +163,6 @@ const GrnReceive = forwardRef(function GrnReceive({
     );
   };
   const libFind = (name) => lib.find(m => (m.name || "").trim().toLowerCase() === String(name || "").trim().toLowerCase());
-  const photoMissing = () => {
-    if (photoRequired && !(photos || []).length) {
-      alert(t("material.company_setting_label_ke_saath_kam", { label: t("grn.receive_label") }));
-      return true;
-    }
-    return false;
-  };
   const afterSave = (info) => { reloadLines(); reloadWeigh(); onReceived && onReceived(info); };
 
   // ── ORDERED: vendor ke hisaab se ek delivery ─────────────────────
@@ -184,7 +182,6 @@ const GrnReceive = forwardRef(function GrnReceive({
   const receiveVendor = async (vendor) => {
     const meta = vendorMeta[vendor] || {};
     if (!meta.challan || !meta.challan.trim()) { alert(t("common.challan_number_required")); return; }
-    if (photoMissing()) return;
     const target = (groups[vendor] || []).filter(l => Number((grnRows[l.key] || {}).received_qty || 0) > 0);
     if (!target.length) { alert(t("material.kam_se_kam_ek_material_ka")); return; }
     // Site: pending se zyada qty sirf "Zyada maal aaya" tick + wajah ke saath —
@@ -197,7 +194,13 @@ const GrnReceive = forwardRef(function GrnReceive({
     const receivedBy = meta.received_by !== undefined ? meta.received_by : (meUser?.name || "");
     const date = meta.date || today();
     setBusy(true);
-    let ok = 0; const fails = [];
+    // Ek photo kai GRN par jaati hai (har MR / store MR ka apna GRN) — isliye
+    // teeno tile ka upload poora hone ka intezaar, peeche chadhna nahi (E).
+    const ph = phRef.current;
+    if (ph && !(await ph.ready({ wait: true }))) { setBusy(false); return; }
+    const pb = ph ? ph.body() : {};
+    let ok = 0; const fails = []; let dup = null; let recvIssue = false; let photoMsg = "";
+    const noteDup = (w) => { if (w && w.rec_slip_dup && !dup) dup = w.rec_slip_dup; if (w && w.receiving_issue) recvIssue = true; };
     if (!isWh) {
       // Site: har MR ka apna GRN (mark-received) — pehle jaisa hi.
       for (const l of target) {
@@ -212,13 +215,17 @@ const GrnReceive = forwardRef(function GrnReceive({
             excess_reason: isOver ? String(row.excessReason || "").trim() : undefined,
             received_date: date,
             received_by: receivedBy || undefined,
-            photo_urls: (photos || []).length ? photos : null,
+            ...pb,
             ...altOf(row.dual),
             issues: (rowIssues[l.key] || []).length ? rowIssues[l.key] : null,
             weighment_line_id: hit ? hit.line.id : null,
           });
-          if (res.success) { ok++; setDone(p => [...p, l.key]); }
-          else fails.push(`${l.material}: ${res.message || "—"}`);
+          if (res.success) { ok++; setDone(p => [...p, l.key]); noteDup(res.weighment); }
+          else {
+            fails.push(`${l.material}: ${res.message || "—"}`);
+            // Photo ki rok har MR par wahi — aage bhejna bekaar, wahi tile laal.
+            if (ph && ph.fail(res)) { photoMsg = res.message || ""; break; }
+          }
         } catch (e) { fails.push(`${l.material}: ${e.message}`); }
       }
     } else {
@@ -232,7 +239,7 @@ const GrnReceive = forwardRef(function GrnReceive({
           const res = await api.post(`/warehouse/mr/${mrId}/grn`, {
             challan: meta.challan.trim(), vendor: ls[0].vendor || null, date,
             received_by: receivedBy || null,
-            photo_urls: (photos || []).length ? photos : null,
+            ...pb,
             issues: issues.length ? issues : null,
             items: ls.map(l => {
               const row = grnRows[l.key] || {};
@@ -246,16 +253,22 @@ const GrnReceive = forwardRef(function GrnReceive({
               };
             }),
           });
-          if (res.success) { ok += ls.length; setDone(p => [...p, ...ls.map(l => l.key)]); }
-          else fails.push(`${ls[0].label}: ${res.message || "—"}`);
+          if (res.success) { ok += ls.length; setDone(p => [...p, ...ls.map(l => l.key)]); noteDup(res.data && res.data.weighment); }
+          else {
+            fails.push(`${ls[0].label}: ${res.message || "—"}`);
+            if (ph && ph.fail(res)) { photoMsg = res.message || ""; break; }
+          }
         } catch (e) { fails.push(`${ls[0].label}: ${e.message}`); }
       }
     }
     setRowIssues(p => { const n = { ...p }; target.forEach(l => { delete n[l.key]; }); return n; });
     if (ok > 0) await shortIssuesForTruck();
+    // Is delivery ki photo ho gayi — agli delivery apni photo legi. Dohra rec
+    // slip ho to peela hint tile ke neeche rehta hai.
+    if (ok > 0 && ph) ph.done(null, { dup, receivingIssue: recvIssue });
     setBusy(false);
     afterSave({ mode: "ordered", ok });
-    if (fails.length) alert(t("grn.partial_errors", { ok, total: target.length, errors: fails.join("\n") }));
+    if (fails.length) alert(photoMsg && ok === 0 ? photoMsg : t("grn.partial_errors", { ok, total: target.length, errors: fails.join("\n") }));
   };
 
   // ── DIRECT: bina order ke, ek vendor, ek challan ─────────────────
@@ -273,10 +286,14 @@ const GrnReceive = forwardRef(function GrnReceive({
       alert(t("unit.need_factor", { unit: needRow.unit, stock: convOf(needRow).stock }));
       return;
     }
-    if (photoMissing()) return;
     const receivedBy = dGlobal.received_by || meUser?.name || null;
     const weighFor = (r) => weigh.byName[String(r.item_name || "").trim().toLowerCase()] || null;
     setBusy(true);
+    // Rec slip ka upload poora hone tak ruko; challan / gadi ki photo peeche
+    // chadh sakti hai — GRN banne ke baad usi par judti hai (E).
+    const ph = phRef.current;
+    if (ph && !(await ph.ready())) { setBusy(false); return false; }
+    const pb = ph ? ph.body() : {};
     let res;
     try {
       if (!isWh) {
@@ -285,7 +302,7 @@ const GrnReceive = forwardRef(function GrnReceive({
           project_id: dest.projectId, project_name: dest.projectName,
           challan_no: dGlobal.challan, received_by: receivedBy,
           received_date: dGlobal.date || today(),
-          photo_urls: (photos || []).length ? photos : null,
+          ...pb,
           issues: dIssues.length ? dIssues : null,
           items: valid.map(r => {
             const lm = libFind(r.item_name);
@@ -305,7 +322,7 @@ const GrnReceive = forwardRef(function GrnReceive({
         res = await api.post("/warehouse/grn-direct", {
           date: dGlobal.date || today(), vendor: dGlobal.vendor, challan: dGlobal.challan,
           received_by: receivedBy,
-          photo_urls: (photos || []).length ? photos : null,
+          ...pb,
           issues: dIssues.length ? dIssues : null,
           items: valid.map(r => {
             const lm = libFind(r.item_name);
@@ -329,19 +346,33 @@ const GrnReceive = forwardRef(function GrnReceive({
         if (res.data.stock_unit) setStockU(m => ({ ...m, [k]: { ...(m[k] || {}), unit: res.data.stock_unit } }));
         setDRows(rs => rs.map(x => (stockKey(x.item_name) === k ? { ...x, _factorErr: true } : x)));
       }
+      if (ph) ph.fail(res);
       alert(res?.message || t("grn.save_failed"));
       return false;
     }
     reloadStockU();
     setDRows([blankRow()]); setDGlobal({ vendor: "", challan: "", date: today(), received_by: "" });
-    setDIssues([]); setPhotos && setPhotos([]);
+    setDIssues([]);
+    // Peeche chadhti photo isi GRN par: site = grn_id, store = finance_grn_id
+    // (data.grn_id wahan store ka wh_grn hai).
+    const w = isWh ? res.data?.weighment : res.weighment;
+    const dupText = ph ? ph.done(isWh ? res.data?.finance_grn_id : res.grn_id, { dup: w?.rec_slip_dup, receivingIssue: w?.receiving_issue }) : "";
     const no = res.grn_number || res.data?.finance_grn_no || res.data?.grn_no || "";
-    alert(t("grn.created", { no }));
+    alert(t("grn.created", { no }) + (dupText ? "\n\n" + dupText : ""));
     afterSave({ mode: "direct", grn: no });
     return true;
   };
 
   useImperativeHandle(ref, () => ({ submitDirect, saving }), [submitDirect, saving]);
+
+  // Teen photo tile — ordered aur direct dono ke neeche. key isliye ki tab
+  // badalne par wahi component rahe aur lagi hui photo na mite (pehle photos
+  // parent ke state me thi).
+  const tiles = (
+    <GrnPhotoTiles key="grn-ph" ref={phRef}
+      dest={isWh ? { warehouseId: dest?.warehouseId } : { projectId: dest?.projectId }}
+      vendor={mode === "direct" ? dGlobal.vendor : ""} challan={mode === "direct" ? dGlobal.challan : ""} />
+  );
 
   // Godown ka rate: pichhli kharid se (pehle bhi Material In me yahi hota tha).
   const fetchLastRate = (rowId, name) => {
@@ -508,7 +539,7 @@ const GrnReceive = forwardRef(function GrnReceive({
             <span>{t("material.donemrs_materialdonemrs2_received_this_session_donemrs3", { doneMRs: doneLines.length, doneMRs2: doneLines.length > 1 ? "s" : "", doneMRs3: doneLines.map(l => l.material).join(", ") })}</span>
           </div>
         )}
-        <GrnPhotoBox photos={photos} setPhotos={setPhotos} required={photoBadgeRequired ?? photoRequired} cameraOnly={photoCameraOnly} />
+        {tiles}
       </div>
     );
   }
@@ -617,7 +648,7 @@ const GrnReceive = forwardRef(function GrnReceive({
       <div style={{ marginTop: 12 }}>
         <GrnIssueBlock value={dIssues} onChange={setDIssues} />
       </div>
-      <GrnPhotoBox photos={photos} setPhotos={setPhotos} required={photoBadgeRequired ?? photoRequired} cameraOnly={photoCameraOnly} />
+      {tiles}
     </div>
   );
 });
