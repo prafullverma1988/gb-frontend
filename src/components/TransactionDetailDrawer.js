@@ -29,6 +29,23 @@ import { can, canAny } from "../utils/perms";
 // 2026) server khud banata hai: kaante / site ke nishaan (plate nahi dikhi, AI
 // ka padha badla, gadi no. badla …) bill se pehle dikhein — iska naam bhasha me.
 const issueTypeLabel = (ty) => (ty === "Weighbridge" ? t("grn_issue.type_weighbridge") : ty);
+
+// Bill ki bina-GRN line ki unit — Library → Units ki list (10 Oct 2026, D.6).
+// Pehle khula text tha. Ek baar laakar sab drawer me. Line par likhi unit list
+// me na ho to bhi sabse upar (PickSelect value na mile to pehla dikhata).
+let uomP = null;
+const loadUoms = () => {
+  if (!uomP) uomP = api.get("/library/uom").then(r => (r?.success && Array.isArray(r.data) ? r.data : [])).catch(() => { uomP = null; return []; });
+  return uomP;
+};
+const uomOpts = (uoms, v) => {
+  const opts = uoms.map(u => {
+    const sym = String(u.symbol || u.name || "").trim(), nm = String(u.name || "").trim();
+    return sym ? { value: sym, label: nm && nm.toLowerCase() !== sym.toLowerCase() ? sym + " — " + nm : sym } : null;
+  }).filter(Boolean);
+  const s = v == null ? "" : String(v);
+  return !s.trim() || opts.some(o => o.value === s) ? opts : [{ value: s, label: s }, ...opts.filter(o => o.value.toLowerCase() !== s.trim().toLowerCase())];
+};
 const T = {
   surface: "#FFFFFF", surfaceB: "#F8F9FB",
   t1: "#111827", t2: "#374151", t3: "#6B7280", t4: "#9CA3AF",
@@ -186,6 +203,8 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
   const [deleting, setDeleting] = useState(false);
   const [err, setErr] = useState("");
   const [editItems, setEditItems] = useState([]);
+  const [uoms, setUoms] = useState([]);
+  useEffect(() => { if (!editing) return; let alive = true; loadUoms().then(l => { if (alive) setUoms(l); }); return () => { alive = false; }; }, [editing]);
   // Roles & Access (5 Oct 2026) — wahi tick jo server maangta hai:
   // badalna = Finance EDIT, hatana = Finance DELETE (strict — row na ho to band).
   const canEditTxn = can("Finance", "edit");
@@ -399,9 +418,17 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
             amount: lineAmt(it),
             head: it.head || "", description: it.description || "",
             fromGRN: !!it._fromGRN,
+            // Server ne stock ki unit par roka tha aur "1 {unit} = kitne {stock}" bhara (D.4)
+            ...(!it._fromGRN && it._stock && parseFloat(it.stock_factor) > 0 ? { stock_factor: parseFloat(it.stock_factor) } : {}),
           }));
       }
       const res = await api.put("/finance/transactions/" + txn.id, payload);
+      // Bina-GRN line ki unit site ke stock se alag — usi line ke neeche
+      // "1 {unit} = kitne {stock}?" kholo; message server ka (10 Oct 2026, D.4).
+      if (res?.success === false && res.code === "UNIT_NOT_STOCK_UNIT" && res.data?.stock_unit) {
+        const k = String(res.data.material || "").trim().toLowerCase();
+        setEditItems(p => p.map(it => (!it._fromGRN && String(it.item || "").trim().toLowerCase() === k ? { ...it, _stock: res.data.stock_unit } : it)));
+      }
       if (res?.success === false) {
         // Ghost row (deleted in another tab/session) — refresh + close
         if (/not found/i.test(res.message || "")) {
@@ -589,24 +616,46 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
                   <div>
                     <label style={lblStyle}>{t("transaction_detail.line_items")} {txn.grn_locked && <span style={{ fontWeight: 600, color: T.t4 }}>{t("transaction_detail.grn_rows_locked_rate_editable")}</span>}</label>
                     <div style={{ border: `1px solid ${T.b1}`, borderRadius: 8, overflow: "hidden" }}>
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 54px 46px 66px 24px", gap: 5, padding: "6px 8px", background: T.surfaceB, borderBottom: `1px solid ${T.b1}` }}>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 54px 64px 66px 24px", gap: 5, padding: "6px 8px", background: T.surfaceB, borderBottom: `1px solid ${T.b1}` }}>
                         {["Material", "Qty", "UOM", "Rate", ""].map((h, i) => (
                           <span key={i} style={{ fontSize: 8.5, fontWeight: 700, color: T.t4, textTransform: "uppercase", textAlign: (i >= 1 && i <= 3) ? "right" : "left" }}>{h}</span>
                         ))}
                       </div>
                       {editItems.map((it, i) => (
-                        <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 54px 46px 66px 24px", gap: 5, padding: "5px 8px", borderBottom: `1px solid ${T.b1}`, alignItems: "center" }}>
+                        <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 54px 64px 66px 24px", gap: 5, padding: "5px 8px", borderBottom: `1px solid ${T.b1}`, alignItems: "center" }}>
                           {it._locked
                             ? <span title={t("transaction_detail.grn_se_locked")} style={{ fontSize: 11.5, color: T.t1, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>🔒 {it.item || "—"}</span>
                             : <input value={it.item} onChange={e => updItem(i, "item", e.target.value)} placeholder={t("common.material")} style={miniInp()}/>}
                           {it._locked
                             ? <span style={{ fontSize: 11.5, color: T.t2, textAlign: "right" }}>{it.qty || 0}</span>
                             : <input type="number" value={it.qty} onChange={e => updItem(i, "qty", e.target.value)} placeholder="0" style={miniInp("right")}/>}
-                          <input value={it.unit} onChange={e => updItem(i, "unit", e.target.value)} placeholder="—" disabled={it._locked} style={{ ...miniInp("center"), background: it._locked ? T.surfaceB : "#fff", color: it._locked ? T.t3 : T.t1 }}/>
+                          {/* GRN wali line band; baaki Library → Units ki list (D.6) */}
+                          {it._locked
+                            ? <input value={it.unit} placeholder="—" disabled style={{ ...miniInp("center"), background: T.surfaceB, color: T.t3 }}/>
+                            : <PickSelect value={it.unit || ""} onChange={e => updItem(i, "unit", e.target.value)} style={{ ...miniInp("center"), width: "100%", cursor: "pointer" }}>
+                                <option value="">—</option>
+                                {uomOpts(uoms, it.unit).map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                              </PickSelect>}
                           <input type="number" value={it.rate} onChange={e => updItem(i, "rate", e.target.value)} placeholder="0" style={miniInp("right")}/>
                           {it._locked
                             ? <span style={{ color: T.b2, textAlign: "center", fontSize: 11 }}>🔒</span>
                             : <button onClick={() => delItem(i)} title={t("common.remove")} style={{ background: "none", border: "none", color: T.red, cursor: "pointer", fontSize: 15, padding: 0, lineHeight: 1 }}>×</button>}
+                          {!it._locked && it._stock && String(it.unit || "").trim().toLowerCase() !== String(it._stock).trim().toLowerCase() && (
+                            <div style={{ gridColumn: "1 / -1", padding: "6px 8px", borderRadius: 5, background: T.ambL, border: `1px solid ${T.ambM}` }}>
+                              <div style={{ fontSize: 11, color: T.amb, fontWeight: 600, marginBottom: 4 }}>{t("unit.stock_differs", { material: it.item, stock: it._stock, unit: it.unit })}</div>
+                              <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                                <input type="number" min="0" step="any" value={it.stock_factor || ""} onChange={e => updItem(i, "stock_factor", e.target.value)} style={{ ...miniInp("right"), width: 80 }}/>
+                                <span style={{ fontSize: 11, color: T.t2 }}>{it._stock}</span>
+                                <button type="button" onClick={() => setEditItems(p => p.map((x, j) => (j === i ? { ...x, unit: x._stock, stock_factor: "" } : x)))}
+                                  style={{ padding: "2px 9px", borderRadius: 12, border: `1px solid ${T.ambM}`, background: "#fff", color: T.amb, fontSize: 10.5, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
+                                  {t("unit.keep_stock", { stock: it._stock })}
+                                </button>
+                              </div>
+                              {parseFloat(it.stock_factor) > 0 && (
+                                <div style={{ fontSize: 10.5, color: T.t3, marginTop: 3 }}>{t("unit.stock_preview", { qty: Math.round((parseFloat(it.qty) || 0) * parseFloat(it.stock_factor) * 1000) / 1000, stock: it._stock })}</div>
+                              )}
+                            </div>
+                          )}
                         </div>
                       ))}
                       {Math.abs(headerExtra) > 0.005 && (

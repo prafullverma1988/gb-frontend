@@ -29,10 +29,11 @@ import DualUnitToggle from "./DualUnitToggle";
 import GrnPhotoBox from "./GrnPhotoBox";
 import WeighChip from "./WeighChip";
 import { loadOrderedLines } from "./grnData";
-import { loadWeighments, indexOpenLines, suggestedQty, fmtKg } from "./weigh";
+import { loadWeighments, indexOpenLines, suggestedQty, fmtKg, loadLibUnits, unitOptions, loadStockUnits, stockConv, stockKey } from "./weigh";
 import { T } from "../../modules/shared/tokens";
 import { t, Rich } from "../../i18n";
 
+// Purani likhi list — sirf tab jab Library → Units khaali ho / na aaye (D.1).
 export const UNITS_MR = ["Bags", "MT", "Nos", "Loads", "Sqft", "Mtrs", "Kg", "Sheets", "Ltrs", "Cu.m", "Ton", "RFT", "Brass"];
 const today = () => new Date().toLocaleDateString("en-CA");
 const inpS = { width: "100%", padding: "6px 9px", borderRadius: 6, border: "1.5px solid " + T.b1, fontSize: 12, outline: "none", boxSizing: "border-box", fontFamily: "inherit" };
@@ -57,6 +58,9 @@ const GrnReceive = forwardRef(function GrnReceive({
   const [truckFor, setTruckFor] = useState(null);     // grn_weighments.id
   const [shortTick, setShortTick] = useState({});     // { [weighment line id]: true }
   const [lib, setLib] = useState([]);
+  // Library → Units, aur is jagah ka stock kis unit me hai (10 Oct 2026, D).
+  const [uoms, setUoms] = useState([]);
+  const [stockU, setStockU] = useState({});
   const [grnRows, setGrnRows] = useState({});         // { lineKey: { received_qty, rate, dual } }
   const [vendorMeta, setVendorMeta] = useState({});   // { vendor: { challan, date, received_by } }
   const [rowIssues, setRowIssues] = useState({});     // { lineKey: [...] }
@@ -80,8 +84,17 @@ const GrnReceive = forwardRef(function GrnReceive({
   useEffect(() => {
     reloadLines(); reloadWeigh();
     api.get("/library/materials").then(r => { if (r?.success) setLib(r.data || []); }).catch(() => {});
+    loadLibUnits().then(setUoms);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [destKey]);
+  // Direct ke liye stock ki unit — sheet khulte hi ek baar, save ke baad dobara
+  // (pehli receipt hi naye material ki stock unit banati hai).
+  const reloadStockU = () => loadStockUnits(dest).then(setStockU);
+  useEffect(() => {
+    if (mode === "direct") reloadStockU();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [destKey, mode]);
+  const convOf = (r) => stockConv(stockU[stockKey(r.item_name)], r.unit, r.qty, r.factor);
   useEffect(() => { onDoneCount && onDoneCount(done.length); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [done.length]);
 
   const trucks = weigh.trucks || [];
@@ -252,6 +265,14 @@ const GrnReceive = forwardRef(function GrnReceive({
     if (!dGlobal.challan) { alert(t("material.challan_number_daalo")); return; }
     const valid = dRows.filter(r => r.item_name && Number(r.qty) > 0);
     if (!valid.length) { alert(t("material.kam_se_kam_ek_material_qty")); return; }
+    // Unit stock wali se alag (wazan nahi) aur "1 {unit} = kitne {stock}" khaali →
+    // yahin rok, row par laal (10 Oct 2026, D.4). Server bhi yahi rokta hai.
+    const needRow = valid.find(r => (convOf(r) || {}).need);
+    if (needRow) {
+      setDRows(rs => rs.map(x => (x.item_name && Number(x.qty) > 0 && (convOf(x) || {}).need ? { ...x, _factorErr: true } : x)));
+      alert(t("unit.need_factor", { unit: needRow.unit, stock: convOf(needRow).stock }));
+      return;
+    }
     if (photoMissing()) return;
     const receivedBy = dGlobal.received_by || meUser?.name || null;
     const weighFor = (r) => weigh.byName[String(r.item_name || "").trim().toLowerCase()] || null;
@@ -269,10 +290,13 @@ const GrnReceive = forwardRef(function GrnReceive({
           items: valid.map(r => {
             const lm = libFind(r.item_name);
             const hit = weighFor(r);
+            const cv = convOf(r);
             return {
               po_item_id: null, description: r.item_name,
               ordered_qty: parseFloat(r.qty), received_qty: parseFloat(r.qty),
-              unit: lm?.unit || r.unit || "Bags", ...altOf(r.dual),
+              // Jo screen par chuni wahi unit (pehle Library wali pehle jaati thi).
+              unit: r.unit || lm?.unit || "Bags", ...altOf(r.dual),
+              ...(cv && cv.factor ? { stock_factor: cv.factor } : {}),
               weighment_line_id: hit ? hit.line.id : null,
             };
           }),
@@ -286,9 +310,11 @@ const GrnReceive = forwardRef(function GrnReceive({
           items: valid.map(r => {
             const lm = libFind(r.item_name);
             const hit = weighFor(r);
+            const cv = convOf(r);
             return {
-              name: r.item_name.trim(), unit: lm?.unit || r.unit || "Nos",
+              name: r.item_name.trim(), unit: r.unit || lm?.unit || "Nos",
               qty: Number(r.qty), rate: Number(r.rate) || 0, ...altOf(r.dual),
+              ...(cv && cv.factor ? { stock_factor: cv.factor } : {}),
               weighment_line_id: hit ? hit.line.id : null,
             };
           }),
@@ -296,7 +322,17 @@ const GrnReceive = forwardRef(function GrnReceive({
       }
     } catch (e) { res = { success: false, message: e.message }; }
     setBusy(false);
-    if (!res?.success) { alert(res?.message || t("grn.save_failed")); return false; }
+    if (!res?.success) {
+      // Server ne stock ki unit par roka — usi row ka "1 {unit} = kitne {stock}" kholo.
+      if (res?.code === "UNIT_NOT_STOCK_UNIT" && res.data?.material) {
+        const k = stockKey(res.data.material);
+        if (res.data.stock_unit) setStockU(m => ({ ...m, [k]: { ...(m[k] || {}), unit: res.data.stock_unit } }));
+        setDRows(rs => rs.map(x => (stockKey(x.item_name) === k ? { ...x, _factorErr: true } : x)));
+      }
+      alert(res?.message || t("grn.save_failed"));
+      return false;
+    }
+    reloadStockU();
     setDRows([blankRow()]); setDGlobal({ vendor: "", challan: "", date: today(), received_by: "" });
     setDIssues([]); setPhotos && setPhotos([]);
     const no = res.grn_number || res.data?.finance_grn_no || res.data?.grn_no || "";
@@ -420,7 +456,7 @@ const GrnReceive = forwardRef(function GrnReceive({
                       <input type="number" value={row.received_qty || ""} onChange={e => setRow({ received_qty: e.target.value })}
                         placeholder={String(l.pending)}
                         style={{ padding: "6px 8px", borderRadius: 5, border: "1.5px solid " + (over ? T.red : T.b1), fontSize: 11.5, textAlign: "right", fontFamily: "inherit", outline: "none", background: over ? T.redL : T.surface, color: over ? T.red : T.t1 }} />
-                      <span style={{ fontSize: 10.5, color: T.t4 }}>{l.unit}</span>
+                      <span title={t("unit.order_unit")} style={{ fontSize: 10.5, color: T.t4 }}>{l.unit}</span>
                       {isWh && (
                         <input type="number" value={row.rate !== undefined ? row.rate : (l.rate || "")} onChange={e => setRow({ rate: e.target.value })}
                           placeholder={t("common.rate")} title={t("grn.rate_fifo_hint")}
@@ -519,28 +555,24 @@ const GrnReceive = forwardRef(function GrnReceive({
       </div>
       {dRows.map((row, i) => {
         const lm = libFind(row.item_name);
-        const locked = !!lm;
-        const unit = lm?.unit || row.unit || "Bags";
+        // Unit hamesha Library → Units ki list se; default material ki Library
+        // unit (naam likhte hi). Pehle Library wale naam par 🔒 lagta tha (10 Oct 2026, D).
+        const unit = row.unit || lm?.unit || "Bags";
         const hit = weigh.byName[String(row.item_name || "").trim().toLowerCase()] || null;
+        const cv = row.item_name ? convOf(row) : null;
         return (
           <div key={row.id} style={{ display: "grid", gridTemplateColumns: dCols, gap: 7, padding: "6px 8px", alignItems: "center", borderBottom: i < dRows.length - 1 ? "1px dashed " + T.b1 : "none" }}>
             <div>
               <input value={row.item_name}
-                onChange={e => { const v = e.target.value; const m = libFind(v); setDRow(row.id, { item_name: v, unit: m?.unit || row.unit }); }}
+                onChange={e => { const v = e.target.value; const m = libFind(v); setDRow(row.id, { item_name: v, unit: m?.unit || row.unit, _factorErr: false }); }}
                 onBlur={e => fetchLastRate(row.id, e.target.value.trim())}
                 placeholder={t("material.e_g_cement_opc_53")} list={"grn_lib_" + i} style={{ ...inpS, fontSize: 12.5, padding: "7px 9px" }} />
               <datalist id={"grn_lib_" + i}>{lib.map(m => <option key={m.id || m.name} value={m.name} />)}</datalist>
             </div>
             <input type="number" value={row.qty} onChange={e => setDRow(row.id, { qty: e.target.value })} placeholder="0" style={{ ...inpS, fontSize: 12.5, padding: "7px 9px" }} />
-            {locked ? (
-              <div title={t("material.library_me_change_karein")} style={{ padding: "7px 9px", borderRadius: 6, border: "1.5px solid " + T.b1, fontSize: 12.5, color: T.t2, background: T.surfaceB, fontWeight: 600, display: "flex", alignItems: "center", gap: 5, height: 33, boxSizing: "border-box", justifyContent: "center" }}>
-                <span style={{ fontSize: 9 }}>🔒</span>{unit}
-              </div>
-            ) : (
-              <PickSelect value={row.unit} onChange={e => setDRow(row.id, { unit: e.target.value })} style={{ ...inpS, fontSize: 12.5, padding: "7px 9px", cursor: "pointer" }}>
-                {UNITS_MR.map(u => <option key={u}>{u}</option>)}
-              </PickSelect>
-            )}
+            <PickSelect value={unit} onChange={e => setDRow(row.id, { unit: e.target.value, _factorErr: false })} style={{ ...inpS, fontSize: 12.5, padding: "7px 9px", cursor: "pointer" }}>
+              {unitOptions(uoms.length ? uoms : UNITS_MR.map(u => ({ symbol: u })), [unit, lm?.unit]).map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </PickSelect>
             {isWh && (
               <input type="number" value={row.rate} onChange={e => setDRow(row.id, { rate: e.target.value })}
                 placeholder={t("common.rate")} title={t("grn.rate_fifo_hint")} style={{ ...inpS, fontSize: 12.5, padding: "7px 9px" }} />
@@ -552,6 +584,27 @@ const GrnReceive = forwardRef(function GrnReceive({
               </button>
             ) : <span />}
             {hit && <WeighChip hit={hit} unit={unit} onUseNet={(q) => setDRow(row.id, { qty: String(q) })} />}
+            {/* Stock ki unit se alag — wazan ho to sirf preview, warna "1 {unit} = kitne {stock}?" (D.4) */}
+            {cv && (cv.weight ? (
+              <div style={{ gridColumn: "1 / -1", fontSize: 10.5, color: T.t3 }}>{t("unit.stock_preview", { qty: cv.qty, stock: cv.stock })}</div>
+            ) : (
+              <div style={{ gridColumn: "1 / -1", padding: "7px 9px", borderRadius: 6, background: T.ambL, border: "1px solid " + (row._factorErr && cv.need ? T.red : T.ambM) }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                  <span style={{ fontSize: 11.5, color: T.amb, fontWeight: 600, flex: "1 1 220px" }}>
+                    {t(isWh ? "unit.stock_differs_store" : "unit.stock_differs", { material: row.item_name.trim(), stock: cv.stock, unit })}
+                  </span>
+                  <input type="number" min="0" step="any" value={row.factor || ""} onChange={e => setDRow(row.id, { factor: e.target.value, _factorErr: false })}
+                    style={{ ...inpS, width: 90, background: T.surface, borderColor: row._factorErr && cv.need ? T.red : T.ambM }} />
+                  <span style={{ fontSize: 11.5, color: T.t2 }}>{cv.stock}</span>
+                  <button type="button" onClick={() => setDRow(row.id, { unit: cv.stock, factor: "", _factorErr: false })}
+                    style={{ padding: "4px 10px", borderRadius: 14, border: "1px solid " + T.ambM, background: T.surface, color: T.amb, fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
+                    {t("unit.keep_stock", { stock: cv.stock })}
+                  </button>
+                </div>
+                {cv.factor ? <div style={{ fontSize: 10.5, color: T.t3, marginTop: 4 }}>{t("unit.stock_preview", { qty: cv.qty, stock: cv.stock })}</div> : null}
+                {row._factorErr && cv.need ? <div style={{ fontSize: 10.5, color: T.red, fontWeight: 600, marginTop: 4 }}>{t("unit.need_factor", { unit, stock: cv.stock })}</div> : null}
+              </div>
+            ))}
             <DualUnitToggle units={UNITS_MR} primaryUnit={unit} itemName={row.item_name} qty={row.qty}
               value={row.dual} onChange={d => setDRow(row.id, { dual: d })} />
           </div>

@@ -99,7 +99,10 @@ function useLibUnits(){
   },[uoms]);
 }
 // Purani PO/RFQ ki unit library me na ho to bhi option bane — warna khaali dikhe.
-const withUnit=(opts,v)=>v&&!opts.some(o=>o.value.toLowerCase()===String(v).trim().toLowerCase())?[...opts,{value:v,label:v}]:opts;
+// ISI spelling me na ho to sabse upar (10 Oct 2026, D.1): Kg = kg ek hi unit,
+// list me ek baar — jo line par likhi hai wahi.
+const unitKeyD=(u)=>{ let k=String(u||"").trim().toLowerCase().replace(/\./g,""); if(k.length>3&&k.endsWith("s")&&!k.endsWith("ss")) k=k.slice(0,-1); return k; };
+const withUnit=(opts,v)=>{ const s=v==null?"":String(v); return !s.trim()||opts.some(o=>o.value===s)?opts:[{value:s,label:s},...opts.filter(o=>unitKeyD(o.value)!==unitKeyD(s))]; };
 
 const MR_DATA=[];
 
@@ -1421,7 +1424,8 @@ function CreatePOModal({onClose,onSave,prefillItems,prefillVendor,editPo,dbProje
     if(k==="desc"){
       const m=matLib.find(x=>(x.name||"").trim().toLowerCase()===String(v||"").trim().toLowerCase());
       if(m){
-        if(m.unit) its[i].unit=m.unit;
+        // MR se bani line ki unit MR wali hi rehti hai (D) — Library wali nahi.
+        if(m.unit && !its[i].linked_mr_id) its[i].unit=m.unit;
         if(m.hsn_code && !its[i].hsn) its[i].hsn=m.hsn_code;
       }
     }
@@ -1545,7 +1549,7 @@ function CreatePOModal({onClose,onSave,prefillItems,prefillVendor,editPo,dbProje
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:9}}>
             <div>
               <div style={{fontSize:11,fontWeight:700,color:T.t2,textTransform:"uppercase",letterSpacing:".5px"}}>{t("common.items")}</div>
-              <div style={{fontSize:10.5,color:T.t4,marginTop:1}}>{t("procurement.material_library_se_pick_karein_unit")}</div>
+              <div style={{fontSize:10.5,color:T.t4,marginTop:1}}>{t("unit.lib_default_hint")}</div>
             </div>
             <button onClick={()=>{ setShowAddMat(s=>!s); if(!showAddMat) setNewMat({name:"",unit:"",hsn:""}); }}
               style={{display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:7,background:showAddMat?T.purL:T.purL,border:`1.5px solid ${T.purM}`,color:T.pur,fontSize:11.5,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}
@@ -1587,9 +1591,12 @@ function CreatePOModal({onClose,onSave,prefillItems,prefillVendor,editPo,dbProje
 
           {/* Rows */}
           {form.items.map((it,i)=>{
-            const lib = matLib.find(m=>(m.name||"").trim().toLowerCase()===(it.desc||"").trim().toLowerCase());
-            const isLocked = !!it.desc;
-            const u = lib?.unit || it.unit || "—";
+            // Bug 1 (10 Oct 2026, D): pehle naam bharte hi 🔒 Library ki unit
+            // dikhti thi par save line ki unit hoti thi — MR "Bags" ki, screen
+            // "🔒 MT", PO "Bags". Ab: MR se bani line ki unit MR wali hi (band,
+            // "MR ki unit" — server bhi alag unit par PO_UNIT_NE_MR deta hai);
+            // baaki line par Library → Units ki list, default Library unit.
+            const fromMrLine = !!it.linked_mr_id;
             return (
               <div key={i} style={{display:"grid",gridTemplateColumns:"2.2fr 80px 70px 80px 80px 90px 28px",gap:7,padding:"6px 8px",alignItems:"center",borderBottom:i<form.items.length-1?`1px dashed ${T.b1}`:"none"}}>
                 <LibrarySelect type="material" value={it.desc}
@@ -1604,10 +1611,10 @@ function CreatePOModal({onClose,onSave,prefillItems,prefillVendor,editPo,dbProje
                   title={it._d==="qty"?t("finance.auto_total_rate_type_karke_fix"):(it._pick==="qty"?t("finance.selected_total_adjust_karoge_to_qty"):undefined)}
                   style={{padding:"7px 9px",borderRadius:6,border:`1.5px ${it._d==="qty"?"dashed":"solid"} ${T.b1}`,fontSize:12,color:it._d==="qty"?T.t2:T.t1,background:it._d==="qty"?T.surfaceB:(it._pick==="qty"?T.ambL:T.surface),boxShadow:it._pick==="qty"&&it._d!=="qty"?`inset 0 0 0 1.5px ${T.amb}`:"none",outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}
                   onFocus={e=>{e.target.style.borderColor=T.blu;pickItem(i,"qty");}} onBlur={e=>e.target.style.borderColor=T.b1}/>
-                {isLocked
-                  ? <div title={t("procurement.unit_material_library_se_aata_hai")}
+                {fromMrLine
+                  ? <div title={t("unit.mr_unit")}
                       style={{padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surfaceB,fontFamily:"inherit",fontWeight:700,display:"flex",alignItems:"center",gap:5,justifyContent:"center",cursor:"not-allowed",boxSizing:"border-box"}}>
-                      <span style={{fontSize:9,opacity:.55}}>🔒</span>{u}
+                      <span style={{fontSize:9,opacity:.55}}>🔒</span>{it.unit||"—"}
                     </div>
                   : <SearchSelect value={it.unit} options={withUnit(unitOpts,it.unit)} compact onChange={v=>updItem(i,"unit",v)} placeholder={t("common.unit")}/>
                 }
@@ -1686,7 +1693,14 @@ function CreatePOModal({onClose,onSave,prefillItems,prefillVendor,editPo,dbProje
               rate:Number(it.rate)||0,
               // Solver total is authoritative — qty×rounded-rate can drift
               // by paise when rate was derived from a fixed total.
-              amount:Number(it.total)||((Number(it.qty)||0)*(Number(it.rate)||0))
+              amount:Number(it.total)||((Number(it.qty)||0)*(Number(it.rate)||0)),
+              // Line ki MR aur project (10 Oct 2026, D) — pehle yahan gir jaate
+              // the, to save me linked_mr_id hamesha null jaata aur server naam
+              // milaa kar MR dhoondhta tha.
+              linked_mr_id:it.linked_mr_id||null,
+              project_id:it.project_id||null,
+              project_name:it.project_name||"",
+              delivery_site:it.delivery_site||"",
             })),
             linkedMR:"—",delivery:form.delivery||"TBD",
             notes:form.notes||"",
@@ -3126,7 +3140,8 @@ function ProcurementModule(){
           // naam milaa kar MR dhoondhta tha; line ka naam badla to jod toot jaata
           // (asset ki kharid me tab store incharge ko "order ho chuka" dikhta hi
           // nahi). Edit wala raasta ye pehle se bhejta hai.
-          items: newPO.items.map(it=>({description:it.desc,hsn_code:it.hsn,quantity:it.qty,unit:it.unit,rate:it.rate,linked_mr_id:it.linked_mr_id||null})),
+          items: newPO.items.map(it=>({description:it.desc,hsn_code:it.hsn,quantity:it.qty,unit:it.unit,rate:it.rate,linked_mr_id:it.linked_mr_id||null,
+            project_id:it.project_id||null,project_name:it.project_name||null,delivery_site:it.delivery_site||null})),
           notes: newPO.notes||"",
           receiving_contacts: newPO.receivingContacts||[],
         });

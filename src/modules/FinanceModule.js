@@ -908,6 +908,28 @@ const loadLibraryUoms=()=>{
   return _uomPromise;
 };
 
+// ── Bill ki bina-GRN row: unit aur site ka stock (10 Oct 2026, D — A12) ──
+// Ye row project par auto-GRN banati hai, aur site ka stock NAAM se judta hai,
+// unit dekhe bina (100 Bag ke baad "500 Kg" = "Cement 600"). Isliye unit site
+// ke stock se alag ho to "1 {unit} = kitne {stock}?" (stock_factor). "Same
+// unit" server (utils/unitNorm.js) jaisa; wazan se wazan server khud badalta.
+const FIN_UNIT_ALIAS={kg:["kg","kgs","kilo","kilos","kilogram","kilograms"],ton:["t","ton","tons","tonne","tonnes","mt","mts","metricton","metrictonne","metrictons"],
+  qtl:["q","qtl","qtls","quintal","quintals"],nos:["no","nos","number","numbers"],cum:["cum","cumt","cumtr","m3","cbm","cubicmeter","cubicmetre","cubicmeters","cubicmetres"],
+  cft:["cft","cuft","ft3","cubicfeet","cubicfoot"],sqft:["sqft","sft","ft2","squarefeet","squarefoot"],sqm:["sqm","sqmt","sqmtr","m2","squaremeter","squaremetre","squaremeters","squaremetres"],
+  ltr:["l","lt","ltr","ltrs","litre","litres","liter","liters"],box:["box","boxes"]};
+const FIN_ALIAS_OF={}; for(const [c,l] of Object.entries(FIN_UNIT_ALIAS)) for(const a of l) FIN_ALIAS_OF[a]=c;
+const finCanonUnit=(u)=>{ const k=String(u||"").trim().toLowerCase().replace(/\./g,"").replace(/\s+/g,""); if(!k) return ""; if(FIN_ALIAS_OF[k]) return FIN_ALIAS_OF[k]; return k.length>3&&k.endsWith("s")&&!k.endsWith("ss")?k.slice(0,-1):k; };
+const finKgPerUnit=(u)=>{ const k=finCanonUnit(u); return k==="kg"?1:k==="ton"?1000:k==="qtl"?100:null; };
+// null = koi sawaal nahi; {weight} apne aap; {factor} bhara hua; {need} factor chahiye.
+function finStockConv(st,unit,qty,factor){
+  const stock=String((st&&st.unit)||"").trim(), u=String(unit||"").trim();
+  if(!stock||!u||(finCanonUnit(u)&&finCanonUnit(u)===finCanonUnit(stock))) return null;
+  const q=Number(qty)||0, ka=finKgPerUnit(u), kb=finKgPerUnit(stock), r3=(n)=>Math.round(n*1000)/1000;
+  if(ka&&kb) return {stock,weight:true,qty:r3(q*ka/kb)};
+  const f=parseFloat(factor);
+  return f>0?{stock,factor:f,qty:r3(q*f)}:{stock,need:true};
+}
+
 function DualBillStrip({ row, onFields }){
   const [learned,setLearned]=useState(null);      // {alt_unit, ratio, source: bill|grn}
   const [uoms,setUoms]=useState([]);              // Library → Units
@@ -1809,6 +1831,29 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
   // Material library — used to auto-lock unit when material is picked
   const [matLib,setMatLib]=useState([]);
   useEffect(()=>{ api.get("/library/materials").then(r=>{ if(r.success) setMatLib(r.data||[]); }).catch(()=>{}); },[]);
+  // Bina-GRN row ki unit: Library → Units (10 Oct 2026, D — A12). Line par
+  // likhi unit list me na ho to bhi sabse upar.
+  const [libUoms,setLibUoms]=useState([]);
+  useEffect(()=>{ let alive=true; loadLibraryUoms().then(l=>{ if(alive) setLibUoms(l); }); return ()=>{alive=false;}; },[]);
+  const libUnitOpts=useMemo(()=>{
+    const lib=libUoms.map(u=>{ const sym=String(u.symbol||u.name||"").trim(), nm=String(u.name||"").trim();
+      return sym?{value:sym,label:nm&&nm.toLowerCase()!==sym.toLowerCase()?`${sym} — ${nm}`:sym}:null; }).filter(Boolean);
+    return lib.length?lib:UNITS.map(u=>({value:u,label:u}));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[libUoms]);
+  const unitOptsFor=(v)=>{ const s=v==null?"":String(v); return !s.trim()||libUnitOpts.some(o=>o.value===s)?libUnitOpts:[{value:s,label:s},...libUnitOpts.filter(o=>finCanonUnit(o.value)!==finCanonUnit(s))]; };
+  // Site ke stock ki unit (D.4) — project badle tab ek baar.
+  const stockProjId=isMaterial?(projectId||(projectIdByName||{})[String(project||"").trim().toLowerCase()]||null):null;
+  const [stockU,setStockU]=useState({});
+  useEffect(()=>{
+    if(!stockProjId){ setStockU({}); return; }
+    let alive=true;
+    api.get("/tasks/project/"+stockProjId+"/stock-units").then(r=>{ if(alive&&r?.success&&r.data&&typeof r.data==="object") setStockU(r.data); }).catch(()=>{});
+    return ()=>{alive=false;};
+  },[stockProjId]);
+  // Server wahi qty/unit dekhta hai jo line par jaati hai — dual-unit ON ho to billing wali.
+  const rowBill=(r)=>(r.altOn&&Number(r.alt_qty)>0&&r.alt_unit)?{qty:r.alt_qty,unit:r.alt_unit}:{qty:r.qty,unit:r.unit};
+  const convOf=(r)=>{ if(r.fromGRN||!r.material) return null; const b=rowBill(r); return finStockConv(stockU[String(r.material).trim().toLowerCase()],b.unit,b.qty,r.stock_factor); };
   // Line math lives in solveLine (module scope): the last two touched
   // fields are fixed, the third is derived. Rate is per billing unit
   // (alt_qty basis when the dual-unit switch is on).
@@ -1820,7 +1865,7 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
       if(k!=="altOn") u._t=_touch(u._t,k==="alt_qty"?"qty":k);
       u=solveLine(u);
     }
-    // Auto-lock unit from material library when material is picked
+    // Material chunte hi unit Library wali (default — badal sakte ho, D)
     if(k==="material" && v){
       const m=matLib.find(x=>(x.name||"").trim().toLowerCase()===String(v||"").trim().toLowerCase());
       if(m?.unit) u.unit=m.unit;
@@ -1978,6 +2023,17 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
     // City ya Central chunna zaroori. Apne aap "Central" maan lete to sab
     // aalas me wahi chhod dete aur city ka hisaab phir khaali reh jaata.
     if(showCity&&!cityChoice){ setCityErr(true); setSaveErr(t("finance.city_ya_central_zaroori")); return; }
+    // Bina-GRN row ki unit site ke stock se alag (wazan nahi) aur factor khaali →
+    // yahin rok, row par laal (10 Oct 2026, D.4). Server bhi yahi rokta hai.
+    if(isMaterial){
+      const live=(r)=>r.material&&r.qty&&r.rate;
+      const bad=rows.find(r=>live(r)&&(convOf(r)||{}).need);
+      if(bad){
+        setRows(p=>p.map(r=>live(r)&&(convOf(r)||{}).need?{...r,_factorErr:true}:r));
+        setSaveErr(t("unit.need_factor",{unit:rowBill(bad).unit,stock:convOf(bad).stock}));
+        return;
+      }
+    }
     setSaveErr("");
     savingRef.current=true; setSavingTxn(true);    // ← lock immediately
     try{
@@ -2128,6 +2184,7 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
           const useAlt=r.altOn&&Number(r.alt_qty)>0&&!!r.alt_unit;
           const billQty=useAlt?parseFloat(r.alt_qty):primaryQty;
           const billUnit=useAlt?r.alt_unit:(r.unit||"");
+          const cv=convOf(r);
           return {
             item:r.material,           // row field is 'material' not 'item'
             description:r.desc||"",
@@ -2142,6 +2199,8 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
             fromGRN: !!r.fromGRN,       // marker so backend can route new rows to inventory
             grn_id: r.grn_id || null,   // per-row source GRN — used by backend
                                         // validator when bill spans multi-GRNs
+            // Auto-GRN site ke stock ki unit me: "1 {unit} = kitne {stock}" (D.4)
+            ...(cv&&cv.factor?{stock_factor:cv.factor}:{}),
             ...(useAlt?{
               primary_qty:primaryQty,
               primary_unit:r.unit||"",
@@ -2219,6 +2278,11 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
           errMsg=`⚠ Item GRN me match nahi hua\n\n${res.message}`;
         } else if(res.code==="GRN_NOT_FOUND"){
           errMsg=`⚠ GRN nahi mila\n\n${res.message}`;
+        } else if(res.code==="UNIT_NOT_STOCK_UNIT"&&res.data?.material){
+          // Usi row ka "1 {unit} = kitne {stock}" kholo (D.4) — message server ka.
+          const k=String(res.data.material).trim().toLowerCase();
+          if(res.data.stock_unit) setStockU(m=>({...m,[k]:{...(m[k]||{}),unit:res.data.stock_unit}}));
+          setRows(p=>p.map(r=>!r.fromGRN&&String(r.material||"").trim().toLowerCase()===k?{...r,_factorErr:true}:r));
         }
         console.error("[FinanceModule] Server error:", res.code||"NO_CODE", errMsg, res);
         setSaveErr(errMsg);
@@ -2876,15 +2940,14 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
                   }
                   {(()=>{
                     const lib=matLib.find(m=>(m.name||"").trim().toLowerCase()===(row.material||"").trim().toLowerCase());
-                    const isLocked=row.fromGRN||!!row.material;
-                    // GRN se aayi line: qty GRN ki unit me hai, to wahi dikhe.
-                    // Pehle Library ki unit pehle aati thi — GSB 2 Nos aaya aur
-                    // "2 Kg" dikhta tha (Library me GSB = Kg). Save pehle bhi
-                    // row.unit (GRN) hi bhejta tha; galti sirf dikhne me thi.
-                    const u=row.fromGRN?(row.unit||lib?.unit||"—"):(lib?.unit||row.unit||"—");
-                    return isLocked
-                      ?<div title={row.fromGRN?t("finance.locked_from_grn"):t("finance.locked_from_library_change_in_library")} style={{padding:"5px 8px",borderRadius:5,background:T.surfaceB,border:"1px solid "+T.b1,fontSize:11.5,color:T.t2,fontWeight:600,height:30,display:"flex",alignItems:"center",justifyContent:"center",gap:3}}><LockIc size={10}/>{u}</div>
-                      :<SearchSelect options={UNITS} value={row.unit} onChange={v=>updRow(row.id,"unit",v)} compact={true}/>;
+                    // GRN se aayi line: qty GRN ki unit me hai, to wahi dikhe —
+                    // band (GRN me hi badlo). Baaki row: Library → Units ki list,
+                    // default material ki Library unit; jo dikhe wahi save (D, A12).
+                    // Pehle material bharte hi Library ki unit par taala tha.
+                    const u=row.unit||lib?.unit||"—";
+                    return row.fromGRN
+                      ?<div title={t("finance.locked_from_grn")} style={{padding:"5px 8px",borderRadius:5,background:T.surfaceB,border:"1px solid "+T.b1,fontSize:11.5,color:T.t2,fontWeight:600,height:30,display:"flex",alignItems:"center",justifyContent:"center",gap:3}}><LockIc size={10}/>{u}</div>
+                      :<SearchSelect options={unitOptsFor(row.unit)} value={row.unit} onChange={v=>updRow(row.id,"unit",v)} compact={true}/>;
                   })()}
                   <input type="number" value={row.rate} onChange={e=>updRow(row.id,"rate",e.target.value)} placeholder="0"
                     title={row._d==="rate"?(lineApprox(row)?t("finance.auto_total_qty_approx_bill_amount"):t("finance.auto_total_qty")):(row._pick==="rate"?t("finance.selected_total_adjust_karoge_to_rate"):undefined)}
@@ -2904,6 +2967,32 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
                     <IcX size={12} color="currentColor"/>
                   </button>
                 </div>
+                {(()=>{
+                  // Site ke stock ki unit se alag — wazan ho to sirf preview, warna "1 {unit} = kitne {stock}?" (D.4)
+                  const cv=convOf(row); if(!cv) return null;
+                  const bu=rowBill(row).unit;
+                  if(cv.weight) return <div style={{padding:"0 12px 6px 47px",fontSize:10.5,color:T.t3}}>{t("unit.stock_preview",{qty:cv.qty,stock:cv.stock})}</div>;
+                  const err=row._factorErr&&cv.need;
+                  return (
+                    <div style={{margin:"0 12px 7px 47px",padding:"6px 10px",borderRadius:6,background:T.ambL,border:"1px solid "+(err?T.red:T.ambM)}}>
+                      <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                        <span style={{fontSize:11.5,color:T.amb,fontWeight:600,flex:"1 1 240px"}}>{t("unit.stock_differs",{material:String(row.material).trim(),stock:cv.stock,unit:bu})}</span>
+                        <input type="number" min="0" step="any" value={row.stock_factor||""} onChange={e=>setRows(p=>p.map(r=>r.id===row.id?{...r,stock_factor:e.target.value,_factorErr:false}:r))}
+                          style={inp({width:90,borderColor:err?T.red:T.ambM})}/>
+                        <span style={{fontSize:11.5,color:T.t2}}>{cv.stock}</span>
+                        {/* Dual-unit ON ho to billing unit DualBillStrip me badlo — yahan sirf received unit. */}
+                        {!(row.altOn&&Number(row.alt_qty)>0&&row.alt_unit)&&(
+                          <button type="button" onClick={()=>setRows(p=>p.map(r=>r.id===row.id?{...r,unit:cv.stock,stock_factor:"",_factorErr:false}:r))}
+                            style={{padding:"3px 10px",borderRadius:14,border:"1px solid "+T.ambM,background:T.surface,color:T.amb,fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
+                            {t("unit.keep_stock",{stock:cv.stock})}
+                          </button>
+                        )}
+                      </div>
+                      {cv.factor?<div style={{fontSize:10.5,color:T.t3,marginTop:3}}>{t("unit.stock_preview",{qty:cv.qty,stock:cv.stock})}</div>:null}
+                      {err?<div style={{fontSize:10.5,color:T.red,fontWeight:600,marginTop:3}}>{t("unit.need_factor",{unit:bu,stock:cv.stock})}</div>:null}
+                    </div>
+                  );
+                })()}
                 {(row.grnHadAlt||row.material)&&<DualBillStrip row={row} onFields={(obj,touchField)=>updRowFields(row.id,obj,touchField)}/>}
                 </div>
               ))}

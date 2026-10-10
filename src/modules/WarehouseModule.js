@@ -4,6 +4,7 @@ import api, { getWarehouseId, setWarehouseId } from "../config/api";
 import SearchSelect from "../components/SearchSelect";
 import GrnReceive from "../components/grn/GrnReceive";
 import WeighbridgePanel from "../components/grn/WeighbridgePanel";
+import DualUnitToggle from "../components/grn/DualUnitToggle";
 import { loadPhotoPolicy, policyFor, fileInputProps } from "../utils/photoPolicy";
 import uploadManager from "../utils/uploadManager";
 import { cld } from "../utils/cloudinary";
@@ -63,14 +64,58 @@ const getCategoryEmoji=(cat)=>{
   return map[cat]||"📦";
 };
 
+// ── LIBRARY → UNITS (10 Oct 2026, D.1) ────────────────────────────
+// Unit ki list company ki Library → Units (uom_master) se — pehle upar wali
+// likhi UNITS thi, jisme Library ki unit ("Cum", "GD") hoti hi nahi thi.
+// Symbol save hota hai, "Kg — Kilogram" dikhta hai. Ek baar laakar sab
+// jagah; Library khaali / na aaye to purani UNITS. (ProcurementModule ka
+// useLibUnits jaisa — module apne me poora, isliye yahan apni copy.)
+let _uomP=null;
+const loadUoms=()=>{
+  if(!_uomP) _uomP=api.get("/library/uom").then(r=>(r?.success&&Array.isArray(r.data))?r.data:[]).catch(()=>{ _uomP=null; return []; });
+  return _uomP;
+};
+function useLibUnits(){
+  const [uoms,setUoms]=useState([]);
+  useEffect(()=>{ let alive=true; loadUoms().then(l=>{ if(alive) setUoms(l); }); return ()=>{ alive=false; }; },[]);
+  return useMemo(()=>{
+    const lib=uoms.map(u=>{
+      const sym=String(u.symbol||u.name||"").trim(), nm=String(u.name||"").trim();
+      return sym?{value:sym,label:nm&&nm.toLowerCase()!==sym.toLowerCase()?`${sym} — ${nm}`:sym}:null;
+    }).filter(Boolean);
+    return lib.length?lib:UNITS.map(u=>({value:u,label:u}));
+  },[uoms]);
+}
+// Case / ant ka "s" dekhe bina ek hi unit (Kg = kg, Bag = Bags).
+const unitKeyD=(u)=>{ let k=String(u||"").trim().toLowerCase().replace(/\./g,""); if(k.length>3&&k.endsWith("s")&&!k.endsWith("ss")) k=k.slice(0,-1); return k; };
+// Stock ke liye "same unit" — server (utils/unitNorm.js) jaise pakke hamnaam bhi
+// (No = Nos, M3 = Cum, MT = Ton), warna hint bina wajah dikhta.
+const UNIT_SAME={kgs:"kg",kilo:"kg",kilogram:"kg",t:"ton",tons:"ton",tonne:"ton",mt:"ton",mts:"ton",q:"qtl",quintal:"qtl",no:"nos",number:"nos",
+  m3:"cum",cbm:"cum",cumt:"cum",cuft:"cft",sft:"sqft",m2:"sqm",sqmt:"sqm",l:"ltr",lt:"ltr",ltrs:"ltr",litre:"ltr",liter:"ltr",boxe:"box"};
+const sameStockU=(a,b)=>{ const c=(u)=>{ const k=unitKeyD(u).replace(/\s+/g,""); return UNIT_SAME[k]||k; }; return !!c(a)&&c(a)===c(b); };
+// Chuni hui unit (aur material ki Library unit) list me ISI spelling me na ho
+// to sabse upar — PickSelect me value na mile to pehla option dikhta aur save
+// kuch aur hota ("screen par X, save Y" ki jad yahi thi).
+const withUnit=(opts,...vals)=>{
+  let out=opts;
+  for(const v of vals.slice().reverse()){
+    const s=v==null?"":String(v);
+    if(!s.trim()||out.some(o=>o.value===s)) continue;
+    out=[{value:s,label:s},...out.filter(o=>unitKeyD(o.value)!==unitKeyD(s))];
+  }
+  return out;
+};
+
 // ── UNIT LOCK ─────────────────────────────────────────────────────
-// Unit is locked (read-only chip) when material comes from library/master.
-// Unit name CLEARLY visible — only change is disabled. Only Material Library
-// can change a material's unit (same material has only one unit, prevents hazzy).
-const UnitLock=({unit,locked,onChange,fallbackUnits=UNITS,compact})=>{
+// locked = read-only chip (unit saaf dikhe, badal na sake) — stock movement
+// (Issue / Transfer / Return) me stock ki unit, Order / Receive me MR ki unit,
+// aur stock row edit par. Baaki jagah Library → Units ki list (10 Oct 2026, D).
+// title = chip par kis wajah se band hai (default "Stock ki unit").
+const UnitLock=({unit,locked,onChange,compact,title})=>{
+  const opts=useLibUnits();
   if(locked){
     return (
-      <div title={t("procurement.unit_material_library_se_aata_hai")}
+      <div title={title||t("unit.stock_unit")}
         style={{height:compact?32:38,padding:"0 8px",borderRadius:6,border:`1.5px solid ${T.b1}`,background:T.surfaceB,display:"flex",alignItems:"center",justifyContent:"center",gap:5,fontSize:12.5,fontWeight:700,color:T.t1,fontFamily:"inherit",cursor:"not-allowed",boxSizing:"border-box"}}>
         <span style={{fontSize:9,opacity:.55}}>🔒</span>
         <span>{unit||"—"}</span>
@@ -80,7 +125,7 @@ const UnitLock=({unit,locked,onChange,fallbackUnits=UNITS,compact})=>{
   return (
     <PickSelect value={unit||"Nos"} onChange={e=>onChange(e.target.value)}
       style={{height:compact?32:38,padding:"0 6px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:11.5,background:T.surface,fontFamily:"inherit",outline:"none"}}>
-      {fallbackUnits.map(u=><option key={u}>{u}</option>)}
+      {withUnit(opts,unit||"Nos").map(o=><option key={o.value} value={o.value}>{o.label}</option>)}
     </PickSelect>
   );
 };
@@ -184,8 +229,10 @@ const ModalShell=({title,sub,onClose,children,width=520,footer})=>(
 );
 
 // ── ADD / EDIT MATERIAL MODAL ─────────────────────────────────────
-// Naya material → Library se pick karke add karein (unit auto-locked).
-// Edit → unit locked (Library me change karein).
+// Naya material → Library se pick karo; unit Library → Units ki list se,
+// default material ki Library unit (10 Oct 2026, D — pehle lock thi).
+// Edit → unit locked ("Stock ki unit"): stock isi unit me gina gaya hai;
+// server bhi stock / entry wali row ki unit badalne nahi deta (STOCK_UNIT_LOCKED).
 function MaterialFormModal({material,library=[],onClose,onSaved}){
   const editing=!!material?.id;
   const [f,setF]=useState({
@@ -251,10 +298,12 @@ function MaterialFormModal({material,library=[],onClose,onSaved}){
 
   const libOpts=effectiveLib.map(m=>({id:m.id,name:`${m.name} · ${m.unit||"Nos"}`}));
   const fromLibrary=editing||!!libPick;
+  // Chuni hui unit Library wali se alag ho to halka sa yaad dilao.
+  const libUnitOf=!editing&&libPick?(effectiveLib.find(l=>String(l.id)===String(libPick))||{}).unit:null;
 
   return(
     <ModalShell title={editing?t("master_library.edit_material"):t("warehouse.new_material")}
-      sub={editing?material.id||material.name:t("warehouse.library_se_pick_karein_unit_auto")}
+      sub={editing?material.id||material.name:t("unit.lib_default_hint")}
       onClose={onClose} width={500}
       footer={<>
         <GhostBtn onClick={onClose}>{t("common.cancel")}</GhostBtn>
@@ -268,7 +317,7 @@ function MaterialFormModal({material,library=[],onClose,onSaved}){
             <div style={{marginTop:6,padding:"6px 10px",background:T.grnL,border:`1px solid ${T.grnM}`,borderRadius:6,fontSize:11.5,color:T.grn,display:"flex",alignItems:"center",gap:5}}>
               <span style={{fontSize:11}}>🔒</span>
               <span style={{fontWeight:700}}>{f.name}</span>
-              <span style={{color:T.t4,fontWeight:500,marginLeft:"auto"}}>{t("warehouse.name_unit_locked_from_library")}</span>
+              <span style={{color:T.t4,fontWeight:500,marginLeft:"auto"}}>{t("warehouse.name_locked_from_library")}</span>
             </div>
           )}
         </Field>
@@ -288,8 +337,11 @@ function MaterialFormModal({material,library=[],onClose,onSaved}){
             {fromLibrary&&!CATEGORIES.includes(f.category)&&<option>{f.category}</option>}
           </PickSelect>
         </Field>
-        <Field label={<span>{t("common.unit")} {fromLibrary?<span style={{textTransform:"none",letterSpacing:0,color:T.t4,fontWeight:500}}>{t("warehouse.locked_from_library")}</span>:""}</span>}>
-          <UnitLock unit={f.unit} locked={fromLibrary} onChange={u=>upd("unit",u)}/>
+        <Field label={<span>{t("common.unit")} {editing?<span style={{textTransform:"none",letterSpacing:0,color:T.t4,fontWeight:500}}>· {t("unit.stock_unit")}</span>:""}</span>}>
+          <UnitLock unit={f.unit} locked={editing} onChange={u=>upd("unit",u)}/>
+          {libUnitOf&&unitKeyD(libUnitOf)!==unitKeyD(f.unit)&&(
+            <div style={{fontSize:10.5,color:T.t4,marginTop:3}}>{t("unit.lib_hint",{material:f.name,unit:libUnitOf})}</div>
+          )}
         </Field>
       </div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:11,marginBottom:11}}>
@@ -326,7 +378,10 @@ function LineItemRow({row,idx,stock,onChange,onRemove,mode,canRemove,lockMateria
     const matId = m && Object.prototype.hasOwnProperty.call(m,'material_id')
       ? m.material_id
       : (typeof m?.id === 'number' ? m.id : null);
-    onChange(idx,{material_id:matId,name:m?.name||v,unit:m?.unit||row.unit||"Nos",rate:m?.rate||row.rate||0});
+    // _fromStock: row stock se chuni gayi — unit wahi stock wali, band. Pehle
+    // lock material_id par tha; project se aayi rows (material_id null) ki unit
+    // badal jaati thi aur server ko doosri unit me issue/transfer jaata (10 Oct 2026, D).
+    onChange(idx,{material_id:matId,name:m?.name||v,unit:m?.unit||row.unit||"Nos",rate:m?.rate||row.rate||0,_fromStock:!!m});
   };
 
   // Column templates per mode
@@ -356,7 +411,7 @@ function LineItemRow({row,idx,stock,onChange,onRemove,mode,canRemove,lockMateria
           onChange={onPickMaterial} placeholder={t("warehouse.material_name_pick_or_type")}/>
       )}
       <UnitLock unit={row.unit||"Nos"} compact
-        locked={!!(row.material_id || row._unitLocked)}
+        locked={!!(row._fromStock || row.material_id || row._unitLocked || lockMaterial)}
         onChange={u=>onChange(idx,{unit:u})}/>
       {mode==="grn"&&(
         <input type="number" value={row.ordered_qty||""} onChange={e=>onChange(idx,{ordered_qty:e.target.value})} placeholder={t("warehouse.ord")}
@@ -1093,14 +1148,20 @@ function BatchPickerPanel({data,onClose,onApply,requestedQty,materialName}){
 // Warehouse → Material Request: warehouse apne liye material maangta hai
 // Project = "Warehouse" (locked, not selectable)
 // Material picker = Material Library only
-// Unit = library se aata hai, locked (sirf Library me change ho sakta hai)
-function NewMRModal({library,onClose,onSaved,prefill,warehouse}){
+// Unit = Library → Units ki list, default material ki Library unit; user badal
+// sakta hai (10 Oct 2026, D — pehle lock thi). Jo chuni wahi save hoti hai.
+function NewMRModal({library,onClose,onSaved,prefill,warehouse,stock=[]}){
+  const unitOpts=useLibUnits();
+  // Is store me ye material pehle se kis unit me pada hai — order doosri unit me
+  // hua to receive par stock alag judega, isliye peela hint (D.4).
+  const stockUnitOf=(name)=>{ const k=String(name||"").trim().toLowerCase(); return k?(stock.find(m=>String(m.name||"").trim().toLowerCase()===k)||{}).unit||null:null; };
   const [f,setF]=useState({date:today(),priority:"Medium"});
   // When opened from a stock row, pre-select that material by matching the library on name.
   const [items,setItems]=useState(()=>{
     if(prefill?.name){
       const lib=library.find(l=>String(l.name||"").trim().toLowerCase()===String(prefill.name).trim().toLowerCase());
-      return [{lib_id:lib?.id||null,name:lib?.name||prefill.name,unit:lib?.unit||prefill.unit||"",qty:"",note:""}];
+      // Stock row se khula → wahi unit jisme stock pada hai (receive par stock usi me jude).
+      return [{lib_id:lib?.id||null,name:lib?.name||prefill.name,unit:prefill.unit||lib?.unit||"",qty:"",note:""}];
     }
     return [{lib_id:null,name:"",unit:"",qty:"",note:""}];
   });
@@ -1154,7 +1215,8 @@ function NewMRModal({library,onClose,onSaved,prefill,warehouse}){
         const lib=findLib(it.lib_id);
         return {
           name:lib?.name||it.name||"Item",
-          unit:lib?.unit||it.unit||"Nos",
+          // Jo screen par chuni wahi — pehle Library wali pehle jaati thi (D, A5).
+          unit:it.unit||lib?.unit||"Nos",
           qty:Number(it.qty),
           note:it.note||null,
         };
@@ -1221,7 +1283,10 @@ function NewMRModal({library,onClose,onSaved,prefill,warehouse}){
                   checkPipeline(i,m?.name||"");
                 }}
                 placeholder={t("warehouse.library_se_material_pick_karein")}/>
-              <UnitLock unit={lib?.unit||row.unit||"—"} locked={true} compact/>
+              <PickSelect value={row.unit||lib?.unit||"Nos"} onChange={e=>updItem(i,{unit:e.target.value})}
+                style={{height:32,padding:"0 6px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:11.5,background:T.surface,fontFamily:"inherit",outline:"none",width:"100%"}}>
+                {withUnit(unitOpts,row.unit||lib?.unit||"Nos",lib?.unit).map(o=><option key={o.value} value={o.value}>{o.label}</option>)}
+              </PickSelect>
               <input type="number" value={row.qty||""} onChange={e=>updItem(i,{qty:e.target.value})} placeholder={t("common.qty")}
                 style={{height:32,padding:"0 8px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:11.5,outline:"none",fontFamily:"inherit"}}/>
               <input value={row.note||""} onChange={e=>updItem(i,{note:e.target.value})} placeholder={t("warehouse.optional_remark")}
@@ -1233,6 +1298,12 @@ function NewMRModal({library,onClose,onSaved,prefill,warehouse}){
                 </button>
               ):<span/>}
             </div>
+            {lib?.unit&&row.unit&&unitKeyD(row.unit)!==unitKeyD(lib.unit)&&(
+              <div style={{marginTop:3,fontSize:10.5,color:T.t4}}>{t("unit.lib_hint",{material:lib.name,unit:lib.unit})}</div>
+            )}
+            {(()=>{ const su=stockUnitOf(lib?.name||row.name); return su&&row.unit&&!sameStockU(su,row.unit)?(
+              <div style={{marginTop:4,padding:"5px 10px",borderRadius:6,background:T.ambL,border:`1px solid ${T.ambM}`,fontSize:11,color:T.amb}}>{t("unit.order_stock_hint_store",{material:lib?.name||row.name,stock:su,unit:row.unit})}</div>
+            ):null; })()}
             {pipe&&pipe.in_pipeline&&(
               <div style={{marginTop:5,padding:"7px 11px",borderRadius:6,background:T.ambL,border:`1.5px solid ${T.ambM}`,fontSize:11.5,color:T.amb,lineHeight:1.5}}>
                 <div style={{fontWeight:700,marginBottom:3,display:"flex",alignItems:"center",gap:5}}>
@@ -1262,7 +1333,7 @@ function NewMRModal({library,onClose,onSaved,prefill,warehouse}){
         <IcAdd size={11}/> {t("procurement.add_row")}
       </button>
       <div style={{marginTop:8,fontSize:10.5,color:T.t4,fontStyle:"italic"}}>
-       {t("warehouse.unit_material_library_se_aata_hai")}
+       {t("unit.lib_default_hint")}
       </div>
     </ModalShell>
   );
@@ -1312,12 +1383,12 @@ function OrderModal({mr,onClose,onSaved}){
       </div>
       <div style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".4px",marginBottom:7}}>{t("warehouse.item_rates")}</div>
       <div style={{display:"grid",gridTemplateColumns:"2fr 60px 80px 100px 100px",gap:6,marginBottom:5,fontSize:9,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".3px",padding:"0 4px"}}>
-        <span>{t("common.material")}</span><span>{t("common.unit")}</span><span style={{textAlign:"right"}}>{t("common.qty")}</span><span style={{textAlign:"right"}}>{t("warehouse.rate_u")}</span><span style={{textAlign:"right"}}>{t("fuel.value")}</span>
+        <span>{t("common.material")}</span><span>{t("unit.mr_unit")}</span><span style={{textAlign:"right"}}>{t("common.qty")}</span><span style={{textAlign:"right"}}>{t("warehouse.rate_u")}</span><span style={{textAlign:"right"}}>{t("fuel.value")}</span>
       </div>
       {items.map((it,i)=>(
         <div key={i} style={{display:"grid",gridTemplateColumns:"2fr 60px 80px 100px 100px",gap:6,alignItems:"center",marginBottom:6}}>
           <span style={{fontSize:12,fontWeight:600,color:T.t1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{it.name}</span>
-          <UnitLock unit={it.unit} locked={true} compact/>
+          <UnitLock unit={it.unit} locked={true} compact title={t("unit.mr_unit")}/>
           <span style={{fontSize:12,fontWeight:600,color:T.t2,textAlign:"right"}}>{fmtN(it.qty)}</span>
           <input type="number" value={it.rate} onChange={e=>setItems(p=>p.map((x,j)=>j===i?{...x,rate:e.target.value}:x))}
             style={{height:32,padding:"0 8px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:11.5,outline:"none",fontFamily:"inherit",textAlign:"right"}}/>
@@ -1347,7 +1418,13 @@ function ReceiveGRNModal({mr,onClose,onSaved}){
     const res=await api.post(`/warehouse/mr/${mr.dbId}/grn`,{
       challan:challan.trim(),
       vendor:vendor.trim()||null,
-      items:items.map(it=>({id:it.id,received_qty:Number(it.received_qty)||0,rate:Number(it.rate)||0,name:it.name,unit:it.unit})),
+      // Qty MR ki unit me hi (pending isi par); doosri unit me bill ke liye
+      // "Billing unit alag?" → alt_qty / alt_unit (10 Oct 2026, D — A7).
+      items:items.map(it=>{
+        const d=it.dual, altOk=d?.altOn&&Number(d.alt_qty)>0&&d.alt_unit;
+        return {id:it.id,received_qty:Number(it.received_qty)||0,rate:Number(it.rate)||0,name:it.name,unit:it.unit,
+          alt_qty:altOk?parseFloat(d.alt_qty):null,alt_unit:altOk?d.alt_unit:null};
+      }),
     });
     setSaving(false);
     if(res.success){onSaved&&onSaved(res.data);onClose();}
@@ -1394,7 +1471,7 @@ function ReceiveGRNModal({mr,onClose,onSaved}){
         return(
           <div key={i} style={{display:"grid",gridTemplateColumns:"2fr 60px 70px 70px 90px 90px 100px",gap:6,alignItems:"center",marginBottom:6}}>
             <span style={{fontSize:12,fontWeight:600,color:T.t1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{it.name}</span>
-            <UnitLock unit={it.unit} locked={true} compact/>
+            <UnitLock unit={it.unit} locked={true} compact title={t("unit.order_unit")}/>
             <span style={{fontSize:11,color:T.t3,textAlign:"right"}}>{fmtN(it.qty)}</span>
             <span style={{fontSize:11,color:it.already>0?T.blu:T.t4,textAlign:"right",fontWeight:it.already>0?700:400}}>{fmtN(it.already)}</span>
             <input type="number" value={it.received_qty} max={it.pending}
@@ -1403,6 +1480,10 @@ function ReceiveGRNModal({mr,onClose,onSaved}){
             <input type="number" value={it.rate} onChange={e=>setItems(p=>p.map((x,j)=>j===i?{...x,rate:e.target.value}:x))}
               style={{height:32,padding:"0 8px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:11.5,outline:"none",fontFamily:"inherit",textAlign:"right"}}/>
             <span style={{fontSize:12,fontWeight:700,color:T.grn,textAlign:"right"}}>₹{fmt(Number(it.received_qty||0)*Number(it.rate||0))}</span>
+            {Number(it.received_qty)>0&&(
+              <DualUnitToggle primaryUnit={it.unit} itemName={it.name} qty={it.received_qty}
+                value={it.dual} onChange={d=>setItems(p=>p.map((x,j)=>j===i?{...x,dual:d}:x))}/>
+            )}
           </div>
         );
       })}
@@ -3912,7 +3993,7 @@ function WarehouseModule(){
           onClose={()=>setIssueNewOpen(false)} onSaved={()=>loadAll()}/>
       )}
       {mrNewOpen&&(
-        <NewMRModal library={library} prefill={mrPrefill} warehouse={activeWh}
+        <NewMRModal library={library} prefill={mrPrefill} warehouse={activeWh} stock={stock}
           onClose={()=>{setMrNewOpen(false);setMrPrefill(null);}} onSaved={()=>loadAll()}/>
       )}
       {transferNewOpen&&(

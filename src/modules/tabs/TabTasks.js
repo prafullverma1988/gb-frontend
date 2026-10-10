@@ -130,6 +130,67 @@ function ptOverrideTitle(t){
 // P3: execution delay vs the planned finish. Prefer the FROZEN original
 // baseline (so cascade/rebaseline doesn't hide slippage); fall back to the
 // current plan (base_end). kind: late | early | ontime | running | none
+// ── Material ki unit (10 Oct 2026, D) ─────────────────────────────
+// List company ki Library → Units se (pehle har modal me likhi hui UNITS thi —
+// Library ki "Cum" usme thi hi nahi, to select "Bag" dikhata aur "Cum" save
+// hota). Library khaali / na aaye to purani list. ProcurementModule ke
+// useLibUnits jaisa — module apne me poora, isliye yahan apni copy.
+const PT_UNITS=["Bag","Kg","CFT","Sq.Ft","Piece","Meter","Litre","MT","Running Ft","Nos","Cu.M","Sq.M"];
+let ptUomP=null;
+const ptLoadUoms=()=>{ if(!ptUomP) ptUomP=api.get("/library/uom").then(r=>(r?.success&&Array.isArray(r.data))?r.data:[]).catch(()=>{ ptUomP=null; return []; }); return ptUomP; };
+function usePtLibUnits(){
+  const [uoms,setUoms]=useState([]);
+  useEffect(()=>{ let alive=true; ptLoadUoms().then(l=>{ if(alive) setUoms(l); }); return ()=>{ alive=false; }; },[]);
+  const lib=uoms.map(u=>{ const sym=String(u.symbol||u.name||"").trim(), nm=String(u.name||"").trim();
+    return sym?{value:sym,label:nm&&nm.toLowerCase()!==sym.toLowerCase()?`${sym} — ${nm}`:sym}:null; }).filter(Boolean);
+  return lib.length?lib:PT_UNITS.map(u=>({value:u,label:u}));
+}
+// Case / ant ka "s" dekhe bina ek hi unit (Kg = kg, Bag = Bags).
+const ptUnitKey=(u)=>{ let k=String(u||"").trim().toLowerCase().replace(/\./g,""); if(k.length>3&&k.endsWith("s")&&!k.endsWith("ss")) k=k.slice(0,-1); return k; };
+// Chuni hui unit (aur Library wali) list me ISI spelling me na ho to sabse upar —
+// PickSelect value na mile to pehla option dikhata aur save kuch aur hota.
+const ptWithUnit=(opts,...vals)=>{
+  let out=opts;
+  for(const v of vals.slice().reverse()){
+    const s=v==null?"":String(v);
+    if(!s.trim()||out.some(o=>o.value===s)) continue;
+    out=[{value:s,label:s},...out.filter(o=>ptUnitKey(o.value)!==ptUnitKey(s))];
+  }
+  return out;
+};
+// Site ka stock kis unit me (D.4) — GET /tasks/project/:id/stock-units, sheet
+// khulte hi ek baar: { "<naam lowercase>": { unit, units } }. Stock NAAM se
+// judta hai, unit dekhe bina; isliye bina order receipt doosri unit me ho to
+// "1 {unit} = kitne {stock}?" poochhte hain, aur used-log stock ki unit me hi.
+function usePtStockUnits(projectId){
+  const [map,setMap]=useState({});
+  const load=useCallback(()=>{
+    if(!projectId) return;
+    api.get("/tasks/project/"+projectId+"/stock-units").then(r=>{ if(r?.success&&r.data&&typeof r.data==="object") setMap(r.data); }).catch(()=>{});
+  },[projectId]);
+  useEffect(()=>{ load(); },[load]);
+  return [map,setMap,load];
+}
+const ptStockKey=(n)=>String(n||"").trim().toLowerCase();
+// "Same unit" server (utils/unitNorm.js) jaisa: aakhri "s" aur pakke hamnaam.
+const PT_UNIT_ALIAS={kg:["kg","kgs","kilo","kilos","kilogram","kilograms"],ton:["t","ton","tons","tonne","tonnes","mt","mts","metricton","metrictonne","metrictons"],
+  qtl:["q","qtl","qtls","quintal","quintals"],nos:["no","nos","number","numbers"],cum:["cum","cumt","cumtr","m3","cbm","cubicmeter","cubicmetre","cubicmeters","cubicmetres"],
+  cft:["cft","cuft","ft3","cubicfeet","cubicfoot"],sqft:["sqft","sft","ft2","squarefeet","squarefoot"],sqm:["sqm","sqmt","sqmtr","m2","squaremeter","squaremetre","squaremeters","squaremetres"],
+  ltr:["l","lt","ltr","ltrs","litre","litres","liter","liters"],box:["box","boxes"]};
+const PT_ALIAS_OF={}; for(const [c,l] of Object.entries(PT_UNIT_ALIAS)) for(const a of l) PT_ALIAS_OF[a]=c;
+const ptCanonUnit=(u)=>{ const k=String(u||"").trim().toLowerCase().replace(/\./g,"").replace(/\s+/g,""); if(!k) return ""; if(PT_ALIAS_OF[k]) return PT_ALIAS_OF[k]; return k.length>3&&k.endsWith("s")&&!k.endsWith("ss")?k.slice(0,-1):k; };
+const ptSameStockUnit=(a,b)=>{ const x=ptCanonUnit(a); return !!x&&x===ptCanonUnit(b); };
+const ptKgPerUnit=(u)=>{ const k=ptCanonUnit(u); return k==="kg"?1:k==="ton"?1000:k==="qtl"?100:null; };
+// null = koi sawaal nahi; {weight} apne aap; {factor} bhara hua; {need} factor chahiye.
+function ptStockConv(st,unit,qty,factor){
+  const stock=String((st&&st.unit)||"").trim(), u=String(unit||"").trim();
+  if(!stock||!u||ptSameStockUnit(u,stock)) return null;
+  const q=Number(qty)||0, ka=ptKgPerUnit(u), kb=ptKgPerUnit(stock), r3=(n)=>Math.round(n*1000)/1000;
+  if(ka&&kb) return {stock,weight:true,qty:r3(q*ka/kb)};
+  const f=parseFloat(factor);
+  return f>0?{stock,factor:f,qty:r3(q*f)}:{stock,need:true};
+}
+
 function ptPlannedEnd(t){ return t.originalEnd || t.baseEnd || null; }
 function ptFinishVar(t){
   const pe = ptPlannedEnd(t);
@@ -2955,16 +3016,23 @@ function TaskMRModal({task, prefill, projectId, onClose, onSaved}){
   const [newMatName,setNewMatName]=useState("");
   const [newMatUnit,setNewMatUnit]=useState("Nos");
   const [newMatSaving,setNewMatSaving]=useState(false);
-  const UNITS=["Bag","Kg","CFT","Sq.Ft","Piece","Meter","Litre","MT","Running Ft","Nos","Cu.M","Sq.M"];
+  const unitOpts=usePtLibUnits();
+  const [stockU]=usePtStockUnits(projectId);
 
   useEffect(()=>{
     // Fetch material library
     if(projectId){
       api.get("/library/materials").then(r=>{
-        if(r.success) setMatLib(r.data||[]);
+        if(r.success){
+          const lib=r.data||[];
+          setMatLib(lib);
+          // Prefill ki apni unit na ho to Library wali (10 Oct 2026, D — pehle
+          // chip Library ki dikhata tha aur save prefill/"Bag" hota tha).
+          if(!prefill?.unit) setForm(p=>{ const m=lib.find(x=>ptStockKey(x.name)===ptStockKey(p.item_name)); return m?.unit?{...p,unit:m.unit}:p; });
+        }
       }).catch(()=>{});
     }
-    // Fallback static list always available
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   },[projectId]);
 
   return(<>
@@ -3009,23 +3077,17 @@ function TaskMRModal({task, prefill, projectId, onClose, onSaved}){
           </div>
           <div>
             {(() => {
-              const libMatch = matLib.find(m => (m.name||"").trim().toLowerCase() === (form.item_name||"").trim().toLowerCase());
-              const isLocked = !!form.item_name;
-              const displayUnit = libMatch?.unit || form.unit || "Nos";
+              // Unit khuli — default Library wali, user badal sakta hai (10 Oct 2026, D).
+              const libUnit = (matLib.find(m => ptStockKey(m.name) === ptStockKey(form.item_name)) || {}).unit || "";
               return (
                 <>
-                  <label style={{fontSize:9.5,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>
-                    {t("common.unit")}{isLocked && <span style={{marginLeft:5,fontSize:9,color:"#9CA3AF",textTransform:"none",fontWeight:500}}>{t("tasks.from_library")}</span>}
-                  </label>
-                  {isLocked ? (
-                    <div style={{width:"100%",padding:"9px 11px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:13,color:"#374151",background:"#F8F9FB",fontFamily:"inherit",fontWeight:600,display:"flex",alignItems:"center",gap:6,height:39,boxSizing:"border-box"}}>
-                      <span>🔒</span>{displayUnit}
-                    </div>
-                  ) : (
-                    <PickSelect value={form.unit} onChange={e=>setForm(p=>({...p,unit:e.target.value}))}
-                      style={{width:"100%",padding:"9px 11px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",fontFamily:"inherit",background:"white"}}>
-                      {UNITS.map(u=><option key={u}>{u}</option>)}
-                    </PickSelect>
+                  <label style={{fontSize:9.5,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>{t("common.unit")}</label>
+                  <PickSelect value={form.unit} onChange={e=>setForm(p=>({...p,unit:e.target.value}))}
+                    style={{width:"100%",padding:"9px 11px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",fontFamily:"inherit",background:"white"}}>
+                    {ptWithUnit(unitOpts,form.unit,libUnit).map(o=><option key={o.value} value={o.value}>{o.label}</option>)}
+                  </PickSelect>
+                  {libUnit && form.unit && ptUnitKey(libUnit)!==ptUnitKey(form.unit) && (
+                    <div style={{fontSize:10.5,color:"#94A3B8",marginTop:3}}>{t("unit.lib_hint",{material:form.item_name,unit:libUnit})}</div>
                   )}
                 </>
               );
@@ -3042,6 +3104,9 @@ function TaskMRModal({task, prefill, projectId, onClose, onSaved}){
               style={{width:"100%",padding:"9px 11px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
           </div>
         </div>
+        {(()=>{ const su=(stockU[ptStockKey(form.item_name)]||{}).unit; return su&&form.unit&&!ptSameStockUnit(su,form.unit)?(
+          <div style={{marginBottom:10,padding:"6px 10px",borderRadius:6,background:"#FFFBEB",border:"1px solid #FDE68A",fontSize:11,color:"#92400E"}}>{t("unit.order_stock_hint",{material:form.item_name,stock:su,unit:form.unit})}</div>
+        ):null; })()}
         <div style={{marginBottom:14}}>
           <label style={{fontSize:9.5,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>{t("common.notes")}</label>
           <textarea value={form.notes} onChange={e=>setForm(p=>({...p,notes:e.target.value}))} rows={2} placeholder={t("tasks.special_requirements")}
@@ -3110,12 +3175,22 @@ function TaskGRNModal({task, prefill, projectId, onClose, onSaved}){
   });
   const [saving,setSaving]=useState(false);
   const [grnMatLib,setGrnMatLib]=useState([]);
-  const UNITS=["Bag","Kg","CFT","Sq.Ft","Piece","Meter","Litre","MT","Running Ft","Nos","Cu.M","Sq.M"];
+  const unitOpts=usePtLibUnits();
+  // Site ka stock kis unit me — Direct ki unit alag ho to "1 {unit} = kitne {stock}?" (D.4)
+  const [stockU,setStockU,reloadStockU]=usePtStockUnits(projectId);
+  const [factor,setFactor]=useState("");
+  const [factorErr,setFactorErr]=useState(false);
 
   // Load ordered MRs + material library
   useEffect(()=>{
     if(!projectId) return;
-    api.get("/library/materials").then(r=>{if(r.success)setGrnMatLib(r.data||[]);}).catch(()=>{});
+    api.get("/library/materials").then(r=>{
+      if(!r.success) return;
+      const lib=r.data||[];
+      setGrnMatLib(lib);
+      // Prefill ki apni unit na ho to Library wali (10 Oct 2026, D).
+      if(!prefill?.unit) setForm(p=>{ const m=lib.find(x=>ptStockKey(x.name)===ptStockKey(p.material_name)); return m?.unit?{...p,unit:m.unit}:p; });
+    }).catch(()=>{});
     api.get("/procurement/mrs?project_id="+projectId+"&mr_status=Approved&mat_status=Ordered").then(r=>{
       if(r.success){
         const mrs=(r.data||[]).filter(m=>m.mat_status==="Ordered"||m.mat_status==="Pending");
@@ -3125,6 +3200,7 @@ function TaskGRNModal({task, prefill, projectId, onClose, onSaved}){
         setGrnRows(rows);
       }
     }).catch(()=>{});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   },[projectId]);
 
   const handleOrderedReceive=async(mr)=>{
@@ -3145,8 +3221,11 @@ function TaskGRNModal({task, prefill, projectId, onClose, onSaved}){
     setGrnSaving(false);
   };
 
+  const conv=form.material_name.trim()?ptStockConv(stockU[ptStockKey(form.material_name)],form.unit,form.received_qty,factor):null;
   const handleDirectSave=async()=>{
     if(!form.material_name.trim()||!form.received_qty) return alert(t("tasks.material_name_and_received_qty_required"));
+    // Unit stock wali se alag (wazan nahi) aur factor khaali → yahin rok (D.4).
+    if(conv&&conv.need){ setFactorErr(true); return alert(t("unit.need_factor",{unit:form.unit,stock:conv.stock})); }
     setSaving(true);
     const res=await api.post("/procurement/grns",{
       project_id: projectId,
@@ -3162,11 +3241,18 @@ function TaskGRNModal({task, prefill, projectId, onClose, onSaved}){
         received_qty: Number(form.received_qty),
         unit: form.unit,
         ordered_qty: Number(form.received_qty),
+        ...(conv&&conv.factor?{stock_factor:conv.factor}:{}),
       }]
     });
     setSaving(false);
-    if(res.success) onSaved();
-    else alert(res.message||"Failed");
+    if(res.success){ reloadStockU(); onSaved(); return; }
+    // Server ne stock ki unit par roka — factor ka khaana kholo, message dikhao.
+    if(res.code==="UNIT_NOT_STOCK_UNIT"&&res.data?.stock_unit){
+      const k=ptStockKey(res.data.material||form.material_name);
+      setStockU(m=>({...m,[k]:{...(m[k]||{}),unit:res.data.stock_unit}}));
+      setFactorErr(true);
+    }
+    alert(res.message||"Failed");
   };
 
   return(<>
@@ -3256,7 +3342,11 @@ function TaskGRNModal({task, prefill, projectId, onClose, onSaved}){
             </div>
             <div style={{marginBottom:10}}>
               <label style={{fontSize:9.5,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>{t("tasks.material_name")}</label>
-              <input value={form.material_name} onChange={e=>setForm(p=>({...p,material_name:e.target.value}))}
+              <input value={form.material_name} onChange={e=>{
+                  // Naam Library se mile to unit wahi (pehle naam badalne par unit wahi purani "Bag" rehti thi — Bug 2, D).
+                  const v=e.target.value; const m=grnMatLib.find(x=>ptStockKey(x.name)===ptStockKey(v));
+                  setForm(p=>({...p,material_name:v,unit:m?.unit||p.unit})); setFactorErr(false);
+                }}
                 placeholder={t("master_library.e_g_opc_cement_53_grade")} list="grn-mat-list"
                 style={{width:"100%",padding:"9px 11px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}
                 onFocus={e=>e.target.style.borderColor="#16A34A"} onBlur={e=>e.target.style.borderColor="#E2E8F0"}/>
@@ -3271,30 +3361,31 @@ function TaskGRNModal({task, prefill, projectId, onClose, onSaved}){
                   style={{width:"100%",padding:"9px 11px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
               </div>
               <div>
-                {(() => {
-                  const matName = form.material_name || form.item_name || "";
-                  const libMatch = grnMatLib.find(m => (m.name||"").trim().toLowerCase() === matName.trim().toLowerCase());
-                  const isLocked = !!matName;
-                  const displayUnit = libMatch?.unit || form.unit || "Nos";
-                  return (
-                    <>
-                      <label style={{fontSize:9.5,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>
-                        {t("common.unit")}{isLocked && <span style={{marginLeft:5,fontSize:9,color:"#9CA3AF",textTransform:"none",fontWeight:500}}>{t("tasks.from_library")}</span>}
-                      </label>
-                      {isLocked ? (
-                        <div title={t("material.library_me_change_karein")} style={{width:"100%",padding:"9px 11px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:13,color:"#374151",background:"#F8F9FB",fontFamily:"inherit",fontWeight:600,display:"flex",alignItems:"center",gap:6,height:39,boxSizing:"border-box"}}>
-                          <span>🔒</span>{displayUnit}
-                        </div>
-                      ) : (
-                        <PickSelect value={form.unit} onChange={e=>setForm(p=>({...p,unit:e.target.value}))}
-                          style={{width:"100%",padding:"9px 11px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",fontFamily:"inherit",background:"white"}}>
-                          {UNITS.map(u=><option key={u}>{u}</option>)}
-                        </PickSelect>
-                      )}
-                    </>
-                  );
-                })()}
+                {/* Unit: Library → Units, default material ki Library unit; jo dikhe wahi save (Bug 2 — pehle 🔒 Library ki dikhti, save "Bag" hota). */}
+                <label style={{fontSize:9.5,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>{t("common.unit")}</label>
+                <PickSelect value={form.unit} onChange={e=>{ setForm(p=>({...p,unit:e.target.value})); setFactorErr(false); }}
+                  style={{width:"100%",padding:"9px 11px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",fontFamily:"inherit",background:"white"}}>
+                  {ptWithUnit(unitOpts,form.unit,(grnMatLib.find(m=>ptStockKey(m.name)===ptStockKey(form.material_name))||{}).unit).map(o=><option key={o.value} value={o.value}>{o.label}</option>)}
+                </PickSelect>
               </div>
+              {conv&&(conv.weight?(
+                <div style={{gridColumn:"1 / -1",fontSize:11,color:"#64748B",marginTop:-4}}>{t("unit.stock_preview",{qty:conv.qty,stock:conv.stock})}</div>
+              ):(
+                <div style={{gridColumn:"1 / -1",padding:"8px 10px",borderRadius:7,background:"#FFFBEB",border:"1px solid "+(factorErr&&conv.need?"#DC2626":"#FDE68A")}}>
+                  <div style={{fontSize:11.5,color:"#92400E",fontWeight:600,marginBottom:6}}>{t("unit.stock_differs",{material:form.material_name.trim(),stock:conv.stock,unit:form.unit})}</div>
+                  <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                    <input type="number" min="0" step="any" value={factor} onChange={e=>{ setFactor(e.target.value); setFactorErr(false); }}
+                      style={{width:100,padding:"7px 9px",borderRadius:6,border:"1.5px solid "+(factorErr&&conv.need?"#DC2626":"#FDE68A"),fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"inherit",background:"white"}}/>
+                    <span style={{fontSize:12,color:"#374151"}}>{conv.stock}</span>
+                    <button type="button" onClick={()=>{ setForm(p=>({...p,unit:conv.stock})); setFactor(""); setFactorErr(false); }}
+                      style={{padding:"5px 11px",borderRadius:14,border:"1px solid #FDE68A",background:"white",color:"#92400E",fontSize:11.5,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
+                      {t("unit.keep_stock",{stock:conv.stock})}
+                    </button>
+                  </div>
+                  {conv.factor?<div style={{fontSize:11,color:"#64748B",marginTop:5}}>{t("unit.stock_preview",{qty:conv.qty,stock:conv.stock})}</div>:null}
+                  {factorErr&&conv.need?<div style={{fontSize:11,color:"#DC2626",fontWeight:600,marginTop:5}}>{t("unit.need_factor",{unit:form.unit,stock:conv.stock})}</div>:null}
+                </div>
+              ))}
               <div>
                 <label style={{fontSize:9.5,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>{t("tasks.vendor_name")}</label>
                 <input value={form.vendor_name} onChange={e=>setForm(p=>({...p,vendor_name:e.target.value}))} placeholder={t("common.supplier_name")}
@@ -3886,7 +3977,20 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
   const sm=ss[autoStatus(prog)]||ss["Not Started"];
   const delay=ptDelayDays(task);
 
-  const UNITS=["Bag","Kg","CFT","Sq.Ft","Piece","Meter","Litre","MT","Running Ft","Nos","Cu.M","Sq.M"];
+  // Used-log ki unit (Bug 3, 10 Oct 2026, D): material site ke stock me ho to
+  // wahi stock wali unit, band ("Stock ki unit"); stock me nahi tabhi Library
+  // → Units ki list. Pehle naam ke pehle akshar par hi Library ki unit par
+  // taala lag jaata tha, aur Library ke bahar ke naam "Nos" par atak jaate.
+  const unitOpts=usePtLibUnits();
+  const [stockU]=usePtStockUnits(projectId);
+  // Is naam ki stock wali unit(s): stock-units ki (pehli GRN wali pehle) + inventory ki.
+  const stockUnitsOf=(n)=>{ const k=ptStockKey(n); if(!k) return [];
+    const st=stockU[k]||{}; const inv=inventory.find(i=>ptStockKey(i.material_name)===k);
+    return [...(st.units||(st.unit?[st.unit]:[])),...(inv&&inv.unit?[inv.unit]:[])]; };
+  const stockOfName=(n)=>stockUnitsOf(n)[0]||null;
+  // Save hone wali unit: stock me ho to chuni hui tabhi jab wo stock ki units me
+  // ho (purana mila-jula data), warna stock wali; stock me nahi to jo chuni.
+  const usedUnitOf=(f)=>{ const ok=stockUnitsOf(f.material_name); if(!ok.length) return f.unit; return ok.some(u=>ptSameStockUnit(u,f.unit))?f.unit:ok[0]; };
   const PRIORITIES=["Low","Medium","High","Critical"];
   const ISSUE_STATUS=["Open","In Progress","Resolved","Closed"];
   const priC={"Low":{c:"#64748B",bg:"#F1F5F9"},"Medium":{c:"#D97706",bg:"#FEF3C7"},"High":{c:"#DC2626",bg:"#FEE2E2"},"Critical":{c:"#7C3AED",bg:"#EDE9FE"}};
@@ -4252,7 +4356,7 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
                   <input value={usedLogForm.material_name} onChange={e=>{
                       const v=e.target.value;
                       const m=matLib.find(x=>(x.name||"").trim().toLowerCase()===v.trim().toLowerCase());
-                      setUsedLogForm(f=>({...f,material_name:v,unit:m?.unit||f.unit}));
+                      setUsedLogForm(f=>({...f,material_name:v,unit:stockOfName(v)||m?.unit||f.unit}));
                     }} placeholder={t("tasks.e_g_cement")} list="usedlog-matlib"
                     style={{width:"100%",padding:"9px 10px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
                   <datalist id="usedlog-matlib">{matLib.map(m=><option key={m.id} value={m.name}/>)}</datalist>
@@ -4267,22 +4371,21 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
                 <div>
                   {(() => {
                     const matName = usedLogForm.material_name || "";
-                    const libMatch = matLib.find(m => (m.name||"").trim().toLowerCase() === matName.trim().toLowerCase());
-                    const isLocked = !!matName;
-                    const displayUnit = libMatch?.unit || usedLogForm.unit || "Nos";
+                    const inStock = !!stockOfName(matName);
+                    const libUnit = (matLib.find(m => ptStockKey(m.name) === ptStockKey(matName)) || {}).unit;
                     return (
                       <>
                         <label style={{fontSize:10,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>
-                          {t("common.unit")}{isLocked && <span style={{marginLeft:5,fontSize:9,color:"#9CA3AF",textTransform:"none",fontWeight:500}}>{t("tasks.from_library")}</span>}
+                          {t("common.unit")}{inStock && <span style={{marginLeft:5,fontSize:9,color:"#9CA3AF",textTransform:"none",fontWeight:500}}>· {t("unit.stock_unit")}</span>}
                         </label>
-                        {isLocked ? (
-                          <div title={t("material.library_me_change_karein")} style={{width:"100%",padding:"9px 10px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:13,color:"#374151",background:"#F8F9FB",fontFamily:"inherit",fontWeight:600,display:"flex",alignItems:"center",gap:6,height:39,boxSizing:"border-box"}}>
-                            <span>🔒</span>{displayUnit}
+                        {inStock ? (
+                          <div title={t("unit.stock_unit")} style={{width:"100%",padding:"9px 10px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:13,color:"#374151",background:"#F8F9FB",fontFamily:"inherit",fontWeight:600,display:"flex",alignItems:"center",gap:6,height:39,boxSizing:"border-box"}}>
+                            <span>🔒</span>{usedUnitOf(usedLogForm)}
                           </div>
                         ) : (
                           <PickSelect value={usedLogForm.unit} onChange={e=>setUsedLogForm(f=>({...f,unit:e.target.value}))}
                             style={{width:"100%",padding:"9px 10px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",fontFamily:"inherit"}}>
-                            {UNITS.map(u=><option key={u}>{u}</option>)}
+                            {ptWithUnit(unitOpts,usedLogForm.unit,libUnit).map(o=><option key={o.value} value={o.value}>{o.label}</option>)}
                           </PickSelect>
                         )}
                       </>
@@ -4300,7 +4403,7 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
               <button disabled={usedLogSaving||!usedLogForm.material_name||!usedLogForm.used_qty} onClick={async()=>{
                 if(!usedLogForm.material_name||!usedLogForm.used_qty) return;
                 setUsedLogSaving(true);
-                const res=await api.post("/tasks/"+task.id+"/used-log",usedLogForm);
+                const res=await api.post("/tasks/"+task.id+"/used-log",{...usedLogForm,unit:usedUnitOf(usedLogForm)});
                 if(res.success){
                   setUsedLog(p=>[res.data,...p]);
                   setUsedLogForm({material_name:"",used_qty:"",unit:"Nos",remark:"",used_date:todayISO()});

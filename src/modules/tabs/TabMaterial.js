@@ -233,8 +233,35 @@ function TabMaterial({ project }) {
     }).filter(Boolean);
     return lib.length ? lib : UNITS_MR.map(u => ({ value: u, label: u }));
   })();
-  const unitOptsWith = (v) => v && !unitOptsMR.some(o => o.value.toLowerCase() === String(v).trim().toLowerCase())
-    ? [...unitOptsMR, { value: v, label: v }] : unitOptsMR;
+  // Chuni hui unit (aur material ki Library unit) list me ISI spelling me na ho
+  // to sabse upar — PickSelect me value na mile to pehla option dikhta aur
+  // save kuch aur hota (10 Oct 2026, D.1). Kg = kg, Bag = Bags ek hi.
+  const unitKeyD = (u) => { let k = String(u || "").trim().toLowerCase().replace(/\./g, ""); if (k.length > 3 && k.endsWith("s") && !k.endsWith("ss")) k = k.slice(0, -1); return k; };
+  // Stock ke liye "same unit" — server (utils/unitNorm.js) jaise pakke hamnaam bhi
+  // (No = Nos, M3 = Cum, MT = Ton), warna hint bina wajah dikhta.
+  const UNIT_SAME = { kgs: "kg", kilo: "kg", kilogram: "kg", t: "ton", tons: "ton", tonne: "ton", mt: "ton", mts: "ton", q: "qtl", quintal: "qtl", no: "nos", number: "nos",
+    m3: "cum", cbm: "cum", cumt: "cum", cuft: "cft", sft: "sqft", m2: "sqm", sqmt: "sqm", l: "ltr", lt: "ltr", ltrs: "ltr", litre: "ltr", liter: "ltr", boxe: "box" };
+  const sameStockU = (a, b) => { const c = (u) => { const k = unitKeyD(u).replace(/\s+/g, ""); return UNIT_SAME[k] || k; }; return !!c(a) && c(a) === c(b); };
+  const unitOptsWith = (...vals) => {
+    let out = unitOptsMR;
+    for (const v of vals.slice().reverse()) {
+      const s = v == null ? "" : String(v);
+      if (!s.trim() || out.some(o => o.value === s)) continue;
+      out = [{ value: s, label: s }, ...out.filter(o => unitKeyD(o.value) !== unitKeyD(s))];
+    }
+    return out;
+  };
+  // Is site par kaun sa material kis unit me chal raha hai — MR doosri unit me
+  // bani to receive par stock alag judega, isliye peela hint (D.4). MR form
+  // khulte hi ek baar.
+  const [stockUnits, setStockUnits] = useState({});
+  useEffect(() => {
+    if (!showModal || !project?.id) return;
+    let alive = true;
+    api.get("/tasks/project/" + project.id + "/stock-units")
+      .then(r => { if (alive && r?.success && r.data && typeof r.data === "object") setStockUnits(r.data); }).catch(() => {});
+    return () => { alive = false; };
+  }, [showModal, project?.id]);
   const [matLibReal, setMatLibReal] = useState([]);
 
   // ── Ledger tab state ────────────────────────────────────────
@@ -667,7 +694,7 @@ function TabMaterial({ project }) {
                 <div style={{background:"#0D1B2A",padding:"10px 14px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
                   <div style={{display:"flex",alignItems:"center",gap:10}}>
                     <span style={{fontSize:12,fontWeight:700,color:"white"}}>{t("common.items")}</span>
-                    <span style={{fontSize:10,color:"rgba(255,255,255,0.38)"}}>{t("material.library_se_pick_karein_unit_auto")}</span>
+                    <span style={{fontSize:10,color:"rgba(255,255,255,0.38)"}}>{t("unit.lib_default_hint")}</span>
                   </div>
                   <span style={{fontSize:10,color:"rgba(255,255,255,0.3)",fontWeight:600,flexShrink:0}}>
                     {form.items.filter(it=>it.item_name?.trim()).length}/{form.items.length} filled
@@ -682,8 +709,9 @@ function TabMaterial({ project }) {
                 {/* Item rows */}
                 {form.items.map((it,idx)=>{
                   const libMatch = matLibReal.find(m => (m.name||"").trim().toLowerCase() === (it.item_name||"").trim().toLowerCase());
-                  const isLocked = !!it.item_name;
-                  const displayUnit = libMatch?.unit || it.unit || "—";
+                  // Unit ab khuli hai — default Library wali, user badal sakta hai (10 Oct 2026, D).
+                  const libUnit = libMatch?.unit || "";
+                  const stockU = it.item_name ? (stockUnits[(it.item_name||"").trim().toLowerCase()] || {}).unit : null;
                   const pipe = mrPipelineByIdx[idx];
                   return (
                     <React.Fragment key={idx}>
@@ -708,17 +736,10 @@ function TabMaterial({ project }) {
                           placeholder="0"
                           style={{padding:"7px 8px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",textAlign:"right",width:"100%"}}
                           onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
-                        {isLocked ? (
-                          <div title={t("material.unit_material_library_se_aata_hai")}
-                            style={{padding:"7px 8px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t2,background:"#F5F7FA",fontFamily:"inherit",fontWeight:600,display:"flex",alignItems:"center",gap:4,justifyContent:"center",cursor:"not-allowed",boxSizing:"border-box"}}>
-                            <span style={{fontSize:9,opacity:.5}}>🔒</span>{displayUnit}
-                          </div>
-                        ) : (
-                          <PickSelect value={it.unit} onChange={e=>updItem(idx,{unit:e.target.value})}
-                            style={{padding:"7px 8px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",cursor:"pointer",width:"100%"}}>
-                            {unitOptsWith(it.unit).map(o=><option key={o.value} value={o.value}>{o.label}</option>)}
-                          </PickSelect>
-                        )}
+                        <PickSelect value={it.unit} onChange={e=>updItem(idx,{unit:e.target.value})}
+                          style={{padding:"7px 8px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",cursor:"pointer",width:"100%"}}>
+                          {unitOptsWith(it.unit, libUnit).map(o=><option key={o.value} value={o.value}>{o.label}</option>)}
+                        </PickSelect>
                         <input type="number" value={it.approx_amount} onChange={e=>updItem(idx,{approx_amount:e.target.value})} placeholder="0"
                           style={{padding:"7px 8px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",width:"100%"}}
                           onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
@@ -727,6 +748,12 @@ function TabMaterial({ project }) {
                           <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke={T.red} strokeWidth={2.4} strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
                         </button>
                       </div>
+                      {libUnit && it.unit && unitKeyD(libUnit) !== unitKeyD(it.unit) && (
+                        <div style={{margin:"2px 14px 4px",fontSize:10.5,color:T.t4}}>{t("unit.lib_hint", { material: it.item_name, unit: libUnit })}</div>
+                      )}
+                      {stockU && it.unit && !sameStockU(stockU, it.unit) && (
+                        <div style={{margin:"2px 14px 6px",padding:"5px 10px",borderRadius:6,background:"#FFFBEB",border:"1px solid #FDE68A",fontSize:11,color:"#92400E"}}>{t("unit.order_stock_hint", { material: it.item_name, stock: stockU, unit: it.unit })}</div>
+                      )}
                       {pipe && pipe.in_pipeline && (
                         <div style={{margin:"2px 14px 8px",padding:"7px 11px",borderRadius:6,background:"#FFFBEB",border:`1.5px solid #FDE68A`,fontSize:11,color:"#92400E",lineHeight:1.5}}>
                           <div style={{fontWeight:700,marginBottom:3}}>{t("material.already_in_pipeline_pending")} <b>{pipe.total_pending_qty} {pipe.unit||""}</b></div>

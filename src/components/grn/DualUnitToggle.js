@@ -13,9 +13,13 @@ import PickSelect from "../PickSelect";
 import api from "../../config/api";
 import { T } from "../../modules/shared/tokens";
 import { t } from "../../i18n";
+import { loadLibUnits, unitKey, unitOptions } from "./weigh";
 
+// units = purani likhi list — sirf tab jab Library → Units khaali ho / na aaye.
 export default function DualUnitToggle({ units, primaryUnit, itemName, qty, value, onChange }) {
   const [learned, setLearned] = React.useState(null);   // {unit, alt_unit, ratio}
+  const [uoms, setUoms] = React.useState([]);           // Library → Units (10 Oct 2026, D)
+  React.useEffect(() => { let alive = true; loadLibUnits().then(l => { if (alive) setUoms(l); }); return () => { alive = false; }; }, []);
   const on = !!value?.altOn;
   const nameKey = (itemName || "").trim();
   const sameUnit = (a, b) => String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase();
@@ -30,7 +34,12 @@ export default function DualUnitToggle({ units, primaryUnit, itemName, qty, valu
     return () => { alive = false; };
   }, [nameKey, primaryUnit]);
 
-  const altUnitOptions = units.filter(u => u !== primaryUnit);
+  // Billing unit Library → Units se (pehle likhi hui UNITS_MR list thi). Chuni
+  // hui / pichhli baar wali unit list me na ho to bhi sabse upar — PickSelect
+  // value na mile to pehla option dikhata aur save kuch aur hota (D.1).
+  const altOpts = unitOptions(uoms.length ? uoms : (units || []).map(u => ({ symbol: u })),
+    [value?.alt_unit, learned?.alt_unit]).filter(o => unitKey(o.value) !== unitKey(primaryUnit));
+  const altUnitOptions = altOpts.map(o => o.value);
   // Pichhli line alag unit ki ho (Bundle→Kg) ya billing unit hi aaj ki unit ho
   // (Kg→Kg) to ratio ka koi matlab nahi — 5 Kg par "506 Kg" bhar deta tha (MAT-28).
   const learnedOk = !!learned && sameUnit(learned.unit, primaryUnit) && !sameUnit(learned.alt_unit, primaryUnit);
@@ -43,7 +52,7 @@ export default function DualUnitToggle({ units, primaryUnit, itemName, qty, valu
     if (on) { onChange({ altOn: false, alt_unit: "", alt_qty: "", ratio: null }); return; }
     // Turning ON: default the billing unit to the learned one (else kg), carry
     // the learned ratio so the qty box can prefill, but leave alt_qty editable.
-    const defUnit = (learnedOk && learned.alt_unit) || (altUnitOptions.includes("Kg") ? "Kg" : altUnitOptions[0]);
+    const defUnit = (learnedOk && learned.alt_unit) || altUnitOptions.find(u => unitKey(u) === "kg") || altUnitOptions[0];
     onChange({
       altOn: true,
       alt_unit: value?.alt_unit || defUnit,
@@ -75,7 +84,7 @@ export default function DualUnitToggle({ units, primaryUnit, itemName, qty, valu
           <PickSelect value={value?.alt_unit || ""}
             onChange={e => onChange({ ...value, altOn: true, alt_unit: e.target.value })}
             style={{ padding: "6px 9px", borderRadius: 6, border: "1.5px solid " + T.bluM, fontSize: 12.5, outline: "none", fontFamily: "inherit", cursor: "pointer", background: T.surface }}>
-            {altUnitOptions.map(u => <option key={u}>{u}</option>)}
+            {altOpts.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
           </PickSelect>
           {suggestQty != null && !value?.alt_qty && (
             <span style={{ fontSize: 10.5, color: T.t4 }}>{t("material.suggestqty_alt_unit_suggested_ratio", { suggestQty, alt_unit: value?.alt_unit, ratio })}</span>
