@@ -1851,9 +1851,10 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
     api.get("/tasks/project/"+stockProjId+"/stock-units").then(r=>{ if(alive&&r?.success&&r.data&&typeof r.data==="object") setStockU(r.data); }).catch(()=>{});
     return ()=>{alive=false;};
   },[stockProjId]);
-  // Server wahi qty/unit dekhta hai jo line par jaati hai — dual-unit ON ho to billing wali.
-  const rowBill=(r)=>(r.altOn&&Number(r.alt_qty)>0&&r.alt_unit)?{qty:r.alt_qty,unit:r.alt_unit}:{qty:r.qty,unit:r.unit};
-  const convOf=(r)=>{ if(r.fromGRN||!r.material) return null; const b=rowBill(r); return finStockConv(stockU[String(r.material).trim().toLowerCase()],b.unit,b.qty,r.stock_factor); };
+  // Stock me AAYA hua maap jaata hai (row ka qty/unit) — "Billing unit alag?" ON
+  // ho tab bhi; billing wala auto-GRN ke alt me (server finance.js recvOf).
+  const rowRecv=(r)=>({qty:r.qty,unit:r.unit});
+  const convOf=(r)=>{ if(r.fromGRN||!r.material) return null; const b=rowRecv(r); return finStockConv(stockU[String(r.material).trim().toLowerCase()],b.unit,b.qty,r.stock_factor); };
   // Line math lives in solveLine (module scope): the last two touched
   // fields are fixed, the third is derived. Rate is per billing unit
   // (alt_qty basis when the dual-unit switch is on).
@@ -2030,7 +2031,7 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
       const bad=rows.find(r=>live(r)&&(convOf(r)||{}).need);
       if(bad){
         setRows(p=>p.map(r=>live(r)&&(convOf(r)||{}).need?{...r,_factorErr:true}:r));
-        setSaveErr(t("unit.need_factor",{unit:rowBill(bad).unit,stock:convOf(bad).stock}));
+        setSaveErr(t("unit.need_factor",{unit:rowRecv(bad).unit,stock:convOf(bad).stock}));
         return;
       }
     }
@@ -2970,7 +2971,7 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
                 {(()=>{
                   // Site ke stock ki unit se alag — wazan ho to sirf preview, warna "1 {unit} = kitne {stock}?" (D.4)
                   const cv=convOf(row); if(!cv) return null;
-                  const bu=rowBill(row).unit;
+                  const bu=rowRecv(row).unit;
                   if(cv.weight) return <div style={{padding:"0 12px 6px 47px",fontSize:10.5,color:T.t3}}>{t("unit.stock_preview",{qty:cv.qty,stock:cv.stock})}</div>;
                   const err=row._factorErr&&cv.need;
                   return (
@@ -2980,13 +2981,10 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
                         <input type="number" min="0" step="any" value={row.stock_factor||""} onChange={e=>setRows(p=>p.map(r=>r.id===row.id?{...r,stock_factor:e.target.value,_factorErr:false}:r))}
                           style={inp({width:90,borderColor:err?T.red:T.ambM})}/>
                         <span style={{fontSize:11.5,color:T.t2}}>{cv.stock}</span>
-                        {/* Dual-unit ON ho to billing unit DualBillStrip me badlo — yahan sirf received unit. */}
-                        {!(row.altOn&&Number(row.alt_qty)>0&&row.alt_unit)&&(
-                          <button type="button" onClick={()=>setRows(p=>p.map(r=>r.id===row.id?{...r,unit:cv.stock,stock_factor:"",_factorErr:false}:r))}
-                            style={{padding:"3px 10px",borderRadius:14,border:"1px solid "+T.ambM,background:T.surface,color:T.amb,fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
-                            {t("unit.keep_stock",{stock:cv.stock})}
-                          </button>
-                        )}
+                        <button type="button" onClick={()=>setRows(p=>p.map(r=>r.id===row.id?{...r,unit:cv.stock,stock_factor:"",_factorErr:false}:r))}
+                          style={{padding:"3px 10px",borderRadius:14,border:"1px solid "+T.ambM,background:T.surface,color:T.amb,fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
+                          {t("unit.keep_stock",{stock:cv.stock})}
+                        </button>
                       </div>
                       {cv.factor?<div style={{fontSize:10.5,color:T.t3,marginTop:3}}>{t("unit.stock_preview",{qty:cv.qty,stock:cv.stock})}</div>:null}
                       {err?<div style={{fontSize:10.5,color:T.red,fontWeight:600,marginTop:3}}>{t("unit.need_factor",{unit:bu,stock:cv.stock})}</div>:null}
