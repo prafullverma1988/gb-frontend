@@ -5,6 +5,7 @@ import SearchSelect from "../components/SearchSelect";
 import GrnReceive from "../components/grn/GrnReceive";
 import WeighbridgePanel from "../components/grn/WeighbridgePanel";
 import DualUnitToggle from "../components/grn/DualUnitToggle";
+import { GrnPhotoTiles } from "../components/grn/GrnPhotoBox";
 import { loadPhotoPolicy, policyFor, fileInputProps } from "../utils/photoPolicy";
 import uploadManager from "../utils/uploadManager";
 import { cld } from "../utils/cloudinary";
@@ -456,11 +457,8 @@ function NewGRNModal({stock,projects,users,library,warehouseId,warehouseName,onC
   const dest={type:"warehouse",warehouseId,warehouseName};
   const meUser=(()=>{ try { return JSON.parse(localStorage.getItem("gb_user"))||{}; } catch { return {}; } })();
   const [orderedCount,setOrderedCount]=useState(0);
-  const [grnPhotos,setGrnPhotos]=useState([]);
   const [grnSaving,setGrnSaving]=useState(false);
-  const [photoPol,setPhotoPol]=useState(null);
-  useEffect(()=>{ loadPhotoPolicy().then(setPhotoPol); },[]);
-  const grnPol=policyFor(photoPol,"grn");
+  // Photo ki teen tile ab GrnReceive khud rakhta hai (10 Oct 2026, E).
 
   // Tab 2: return from project state
   const [retF,setRetF]=useState({date:today(),from_project_id:null,remark:""});
@@ -576,8 +574,6 @@ function NewGRNModal({stock,projects,users,library,warehouseId,warehouseName,onC
           Ek hi jagah render taaki tab badalne par bhara hua na mite. */}
       {(tab==="procurement"||tab==="direct")&&(
         <GrnReceive ref={grnRef} mode={tab==="procurement"?"ordered":"direct"} dest={dest}
-          photos={grnPhotos} setPhotos={setGrnPhotos}
-          photoRequired={grnPol.mode==="required"} photoCameraOnly={grnPol.source==="camera"}
           meUser={meUser}
           onReceived={(info)=>{ onSaved&&onSaved(info); }}
           onSavingChange={setGrnSaving}
@@ -1412,12 +1408,19 @@ function ReceiveGRNModal({mr,onClose,onSaved}){
   const [saving,setSaving]=useState(false);
   const total=items.reduce((s,it)=>s+Number(it.received_qty||0)*Number(it.rate||0),0);
   const valid=challan.trim()&&items.some(it=>Number(it.received_qty)>0);
+  // Teen photo tile (10 Oct 2026, E) — pehle is modal me photo thi hi nahi, aur
+  // naye tenant par "Vendor challan" Zaroori hai, to GRN 400 kha jaata.
+  const phRef=useRef(null);
 
   const submit=async()=>{
     setSaving(true);
+    const ph=phRef.current;
+    // Rec slip ka upload poora hone tak ruko; challan / gadi ki photo peeche chadh sakti hai.
+    if(ph&&!(await ph.ready())){ setSaving(false); return; }
     const res=await api.post(`/warehouse/mr/${mr.dbId}/grn`,{
       challan:challan.trim(),
       vendor:vendor.trim()||null,
+      ...(ph?ph.body():{}),
       // Qty MR ki unit me hi (pending isi par); doosri unit me bill ke liye
       // "Billing unit alag?" → alt_qty / alt_unit (10 Oct 2026, D — A7).
       items:items.map(it=>{
@@ -1427,8 +1430,14 @@ function ReceiveGRNModal({mr,onClose,onSaved}){
       }),
     });
     setSaving(false);
-    if(res.success){onSaved&&onSaved(res.data);onClose();}
-    else alert(res.message||"Failed");
+    if(res.success){
+      // Peeche chadhti photo store GRN ki finance wali GRN par (data.grn_id = wh_grn).
+      const w=res.data?.weighment;
+      const msg=ph?ph.done(res.data?.finance_grn_id,{dup:w?.rec_slip_dup,receivingIssue:w?.receiving_issue}):"";
+      if(msg) alert(msg);
+      onSaved&&onSaved(res.data);onClose();
+    }
+    else { if(ph) ph.fail(res); alert(res.message||t("grn.save_failed")); }
   };
 
   return (
@@ -1487,6 +1496,7 @@ function ReceiveGRNModal({mr,onClose,onSaved}){
           </div>
         );
       })}
+      <GrnPhotoTiles ref={phRef} dest={{warehouseId:mr?.warehouse_id||getWarehouseId()}} vendor={vendor} challan={challan}/>
       <div style={{marginTop:10,padding:"9px 11px",background:T.bluL,border:`1px solid ${T.bluM}`,borderRadius:7,fontSize:11,color:T.blu}}>
        {t("warehouse.grn_record_karne_par_warehouse_stock")}
       </div>

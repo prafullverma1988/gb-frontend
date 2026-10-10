@@ -3976,6 +3976,7 @@ const dict = {
   "grn_issue.photo_optional_par_damage_quality_me":            "Photo is optional, but proof is useful for damage/quality.",
   "grn_issue.sab_theek_hai_to_kuch_mat":                       "If all is OK, do nothing — it will be logged with the GRN issue and will appear under material later.",
   "grn_issue.type_weighbridge":                                "Weighbridge",
+  "grn_issue.type_receiving":                                 "Receiving",
 
   // ── kal_ka_plan ─────────────────────────────────────────────
   "import_fix.apply_same":                                     "Same problem in {n} more rows — use \"{value}\" in all",
@@ -12501,6 +12502,20 @@ const dict = {
   "grn.direct_banner_wh":                                      "Material received at the warehouse without an MR — receive multiple items from one vendor in a single GRN",
   "grn.col_material":                                          "Material",
   "grn.col_qty":                                               "Qty",
+  // ── GRN ki teen photo tile (10 Oct 2026, E) ──
+  "grn_ph.vendor_challan":                                    "Vendor challan",
+  "grn_ph.vendor_challan_hint":                               "Vendor's challan or bill · up to 6",
+  "grn_ph.rec_slip":                                          "Rec slip",
+  "grn_ph.rec_slip_hint":                                     "Receiving slip from the site book · 1 photo",
+  "grn_ph.rec_slip_no":                                       "Rec slip no.",
+  "grn_ph.rec_slip_no_ph":                                    "Number written on the slip",
+  "grn_ph.site":                                              "Truck / material",
+  "grn_ph.site_hint":                                         "Truck or unloaded material at site · up to 3",
+  "grn_ph.material":                                          "Material",
+  "grn_ph.material_hint":                                     "Material unloaded at site · up to 3",
+  "grn_ph.uploading":                                         "{n} photo(s) uploading",
+  "grn_ph.rec_slip_dup":                                      "Rec slip {no} already used on {grn}",
+  "grn_ph.receiving_issue":                                   "A \"Receiving\" issue was raised on the GRN — Finance will see it on the bill",
   "weigh.add_more":                                           "+ More material in this truck",
   "weigh.ago_h":                                              "{h} h ago",
   "weigh.ago_m":                                              "{m} min ago",

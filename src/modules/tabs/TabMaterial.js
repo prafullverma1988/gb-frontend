@@ -10,7 +10,7 @@ import MaterialTransferTab from "../../components/MaterialTransferTab";
 import MaterialLedgerDrawer from "../../components/MaterialLedgerDrawer";
 import GrnReceive from "../../components/grn/GrnReceive";
 import WeighbridgePanel from "../../components/grn/WeighbridgePanel";
-import { loadPhotoPolicy, policyFor } from "../../utils/photoPolicy";
+import { GrnPhotoTiles } from "../../components/grn/GrnPhotoBox";
 import { T, fmtN, STAGES, STAGE_S } from "../shared/tokens";
 import { Pill, Panel, THead } from "../shared/ui";
 import { t } from "../../i18n";
@@ -178,31 +178,12 @@ function TabMaterial({ project }) {
   const grnRef = useRef(null);
   const [orderedCount, setOrderedCount] = useState(0);
   const [grnDoneCount, setGrnDoneCount] = useState(0);
-  const [grnPhotos, setGrnPhotos] = useState([]);
-  // Company ki photo policy (Settings → Photo Settings). Is tab me teen
-  // alag jagah photo lagti hai aur teeno ki apni setting hai:
-  //   grn               — vendor se maal receive
-  //   material_issue    — warehouse se aaya maal receive
-  //   material_transfer — doosri site se aaya maal receive
-  const [photoPol, setPhotoPol] = useState(null);
-  useEffect(() => { loadPhotoPolicy().then(setPhotoPol); }, []);
-  const polFor = (key) => policyFor(photoPol, key);
-  // Photo ka box GRN/issue/transfer teeno ke liye ek hi hai, isliye uska
-  // "required" nishaan sabse sakht setting par chalta hai — jo bhi flow
-  // abhi khula ho, user ko pehle hi pata chal jaata hai ki photo maangi
-  // jaayegi, submit par 400 khaane ke baad nahi.
-  const grnPhotoRequired = ["grn", "material_issue", "material_transfer"]
-    .some(k => polFor(k).mode === "required");
-  const grnPhotoCameraOnly = ["grn", "material_issue", "material_transfer"]
-    .some(k => polFor(k).source === "camera");
-  // Submit se pehle ki rok. true = ruk jao. Server par bhi wahi check hai
-  // (utils/photoPolicy.js) — yahan sirf isliye ki user ko form bharne ke
-  // baad 400 na mile.
-  const photoBlocked = (key, label) => {
-    if (polFor(key).mode !== "required" || grnPhotos.length > 0) return false;
-    alert(t("material.company_setting_label_ke_saath_kam", { label }));
-    return true;
-  };
+  // Photo (10 Oct 2026, E): pehle GRN / issue / transfer teeno ka EK box tha.
+  // Ab vendor wale GRN ki teen tile GrnReceive khud rakhta hai; "Aa raha hai"
+  // ke har card (store issue / transfer receive) par apni do tile — Rec slip
+  // + Material (purani key material_issue / material_transfer). Har card ka
+  // ref yahan: { "i12": GrnPhotoTiles, "t7": … }.
+  const inPhRefs = useRef({});
   // (Add-new-vendor flow now handled inside <LibrarySelect type="supplier"/>)
   const [grnSaving, setGrnSaving] = useState(false);
   const [directGrns, setDirectGrns] = useState([]); // Direct GRNs without MR
@@ -453,43 +434,55 @@ function TabMaterial({ project }) {
     setIssueReceiveQty({});
   }, [showGRN, projectId, loadPendingTransfers, loadPendingIssues]);
 
+  // Receive ke baad card band ho jaata hai — dohra rec slip ka hint alert me (E).
+  const inboundDone = (ph, res) => {
+    const msg = ph ? ph.done(res.data?.grn_id, { dup: res.data?.rec_slip_dup, receivingIssue: res.data?.receiving_issue }) : "";
+    if (msg) alert(msg);
+  };
   const handleReceiveTransfer = async (tr) => {
-    if (photoBlocked("material_transfer", "Stock transfer receive")) return;
+    const ph = inPhRefs.current["t" + tr.id];
     setTrReceiving(true);
+    // Rec slip ka upload poora hone tak ruko; material ki photo peeche chadh sakti hai.
+    if (ph && !(await ph.ready())) { setTrReceiving(false); return; }
     try {
       const items = (tr.items || []).map(it => ({
         id: it.id,
         received_qty: Number(trReceiveQty[`${tr.id}_${it.id}`] ?? it.qty) || 0,
       }));
-      const res = await api.post(`/warehouse/transfers/${tr.id}/receive`, { items, photo_urls: grnPhotos.length ? grnPhotos : null });
+      const res = await api.post(`/warehouse/transfers/${tr.id}/receive`, { items, ...(ph ? ph.body() : {}) });
       if (res.success) {
+        inboundDone(ph, res);
         setTrReceiveDone(p => [...p, tr.id]);
         api.get("/tasks/project/" + projectId + "/material-ledger").then(r => {
           if (r.success) { setLedger(r.data || []); setLedgerLoaded(true); }
         }).catch(()=>{});
       } else {
-        alert(res.message || "Receive failed");
+        if (ph) ph.fail(res);
+        alert(res.message || t("grn.save_failed"));
       }
     } catch (e) { alert(e.message); }
     setTrReceiving(false);
   };
 
   const handleReceiveIssue = async (iss) => {
-    if (photoBlocked("material_issue", "Material issue receive")) return;
+    const ph = inPhRefs.current["i" + iss.id];
     setIssueReceiving(true);
+    if (ph && !(await ph.ready())) { setIssueReceiving(false); return; }
     try {
       const items = (iss.items || []).map(it => ({
         id: it.id,
         received_qty: Number(issueReceiveQty[`${iss.id}_${it.id}`] ?? issueLeftQty(it)) || 0,
       }));
-      const res = await api.post(`/warehouse/issues/${iss.id}/receive`, { items, photo_urls: grnPhotos.length ? grnPhotos : null });
+      const res = await api.post(`/warehouse/issues/${iss.id}/receive`, { items, ...(ph ? ph.body() : {}) });
       if (res.success) {
+        inboundDone(ph, res);
         setIssueReceiveDone(p => [...p, iss.id]);
         api.get("/tasks/project/" + projectId + "/material-ledger").then(r => {
           if (r.success) { setLedger(r.data || []); setLedgerLoaded(true); }
         }).catch(()=>{});
       } else {
-        alert(res.message || "Receive failed");
+        if (ph) ph.fail(res);
+        alert(res.message || t("grn.save_failed"));
       }
     } catch (e) { alert(e.message); }
     setIssueReceiving(false);
@@ -1108,7 +1101,8 @@ function TabMaterial({ project }) {
                                     );
                                   })}
                                 </div>
-                                <div style={{display:"flex",justifyContent:"flex-end"}}>
+                                {canRecvWh&&<GrnPhotoTiles ref={el=>{ inPhRefs.current["i"+iss.id]=el; }} inbound="material_issue" dest={{projectId}}/>}
+                                <div style={{display:"flex",justifyContent:"flex-end",marginTop:canRecvWh?10:0}}>
                                   {canRecvWh&&<button onClick={()=>handleReceiveIssue(iss)} disabled={issueReceiving}
                                     style={{padding:"7px 16px",borderRadius:6,background:T.grn,border:"none",color:"white",fontSize:12,fontWeight:700,cursor:issueReceiving?"not-allowed":"pointer",display:"flex",alignItems:"center",gap:5}}>
                                     {issueReceiving?"...":t("material.receive_grn_bana_do")}
@@ -1172,7 +1166,8 @@ function TabMaterial({ project }) {
                                     );
                                   })}
                                 </div>
-                                <div style={{display:"flex",justifyContent:"flex-end"}}>
+                                {canRecvWh&&<GrnPhotoTiles ref={el=>{ inPhRefs.current["t"+tr.id]=el; }} inbound="material_transfer" dest={{projectId}}/>}
+                                <div style={{display:"flex",justifyContent:"flex-end",marginTop:canRecvWh?10:0}}>
                                   {canRecvWh&&<button onClick={()=>handleReceiveTransfer(tr)} disabled={trReceiving}
                                     style={{padding:"7px 16px",borderRadius:6,background:T.grn,border:"none",color:"white",fontSize:12,fontWeight:700,cursor:trReceiving?"not-allowed":"pointer",display:"flex",alignItems:"center",gap:5}}>
                                     {trReceiving?"...":t("material.receive_grn_bana_do")}
@@ -1193,10 +1188,6 @@ function TabMaterial({ project }) {
               {(grnTab==="ordered"||grnTab==="direct")&&(
                 <GrnReceive ref={grnRef} mode={grnTab}
                   dest={{ type: "project", projectId, projectName }}
-                  photos={grnPhotos} setPhotos={setGrnPhotos}
-                  photoRequired={polFor("grn").mode==="required"}
-                  photoBadgeRequired={grnTab==="ordered" ? grnPhotoRequired : polFor("grn").mode==="required"}
-                  photoCameraOnly={grnPhotoCameraOnly}
                   meUser={meUser}
                   hasOtherPending={pendingTransfers.length+pendingIssues.length>0}
                   onReceived={handleGrnReceived}

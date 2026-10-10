@@ -28,7 +28,8 @@ import { can, canAny } from "../utils/perms";
 // GRN issue ka type — wire value English hi rehti hai. "Weighbridge" (9 Oct
 // 2026) server khud banata hai: kaante / site ke nishaan (plate nahi dikhi, AI
 // ka padha badla, gadi no. badla …) bill se pehle dikhein — iska naam bhasha me.
-const issueTypeLabel = (ty) => (ty === "Weighbridge" ? t("grn_issue.type_weighbridge") : ty);
+// "Receiving" (10 Oct 2026, E) — bina gadi wali GRN par dohra rec slip, server ka.
+const issueTypeLabel = (ty) => (ty === "Weighbridge" ? t("grn_issue.type_weighbridge") : ty === "Receiving" ? t("grn_issue.type_receiving") : ty);
 
 // Bill ki bina-GRN line ki unit — Library → Units ki list (10 Oct 2026, D.6).
 // Pehle khula text tha. Ek baar laakar sab drawer me. Line par likhi unit list

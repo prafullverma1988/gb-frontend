@@ -7,6 +7,7 @@ import MRDetailDrawer from "../components/MRDetailDrawer";
 import CompanyTransfersTab from "../components/CompanyTransfersTab";
 import GrnIssueBlock from "../components/GrnIssueBlock";
 import WeighChip from "../components/grn/WeighChip";
+import { GrnPhotoTiles } from "../components/grn/GrnPhotoBox";
 import { indexOpenLines, kgIn, kgPerUnit, loadWeighmentsForPo } from "../components/grn/weigh";
 import ReceivingContacts, { hasReceivingContact } from "../components/ReceivingContacts";
 import { canApproveAction, approverRolesFor, useApprovalAuthority } from "../utils/approvalAuthority";
@@ -647,8 +648,12 @@ function MarkReceivedModal({mr,onSave,onClose}){
   const [excessReason,setExcessReason]=useState("");
   const isPartial=parseFloat(rQty)<(mr.approvedQty||mr.qty);
   const isOver=parseFloat(rQty)>pendingQty+0.0005;
+  // Teen photo tile (10 Oct 2026, E) — mark-received bhi GRN banata hai; naye
+  // tenant par "Vendor challan" Zaroori hai, bina photo box ke 400 aata.
+  const phRef=useRef(null);
+  const [busy,setBusy]=useState(false);
   return(
-    <Modal onClose={onClose} width={400}>
+    <Modal onClose={onClose} width={520}>
       <MHead title={t("procurement.mark_as_received")} sub={`${mr.id} · ${mr.item}`} onClose={onClose}/>
       <MBody>
         <div style={{background:T.grnL,border:`1px solid ${T.grnM}`,borderRadius:7,padding:"9px 12px",marginBottom:14}}>
@@ -674,10 +679,11 @@ function MarkReceivedModal({mr,onSave,onClose}){
             <Inp value={challan} onChange={e=>setChallan(e.target.value)} placeholder={t("procurement.supplier_delivery_challan_number")}/>
           </Fld>
         </div>
+        <GrnPhotoTiles ref={phRef} dest={{projectId:mr.project_id}} vendor={mr.vendor||""} challan={challan}/>
       </MBody>
       <MFoot>
         <Btn onClick={onClose} outline color={T.slt} full>{t("common.cancel")}</Btn>
-        <Btn onClick={()=>onSave(mr.id,parseFloat(rQty),challan,isOver?{allow_excess:true,excess_reason:excessReason.trim()}:null)} disabled={!rQty||!challan||(isOver&&!(excess&&excessReason.trim()))} color={T.grn} full icon={<IcChk size={14} color="white"/>}>
+        <Btn onClick={async()=>{ setBusy(true); await onSave(mr.id,parseFloat(rQty),challan,isOver?{allow_excess:true,excess_reason:excessReason.trim()}:null,phRef.current); setBusy(false); }} disabled={busy||!rQty||!challan||(isOver&&!(excess&&excessReason.trim()))} color={T.grn} full icon={<IcChk size={14} color="white"/>}>
           {isPartial?t("procurement.mark_partial_received"):t("procurement.mark_fully_received")}
         </Btn>
       </MFoot>
@@ -729,6 +735,9 @@ function GRNModal({po,onClose,onSave}){
   const isPartial=rows.some((r,i)=>parseFloat(r.qty)<pendingOf(po.items[i]));
   const effectiveVendor = (po.vendor && String(po.vendor).trim()) || vendorOverride.trim();
   const canSubmit = !!challan.trim() && !!effectiveVendor;
+  // Teen photo tile (10 Oct 2026, E) — pehle is GRN me photo thi hi nahi.
+  const phRef=useRef(null);
+  const [busy,setBusy]=useState(false);
   return(
     <Modal onClose={onClose} width={500}>
       <MHead title={t("procurement.goods_receipt_note")} sub={`${po.id} · ${po.vendor||"— vendor missing —"}`} onClose={onClose}/>
@@ -775,10 +784,11 @@ function GRNModal({po,onClose,onSave}){
           <span style={{fontSize:11.5,color:T.amb,fontWeight:500}}>{t("procurement.partial_grn_po_stays_open_for")}</span>
         </div>}
         <GrnIssueBlock value={issues} onChange={setIssues}/>
+        <GrnPhotoTiles ref={phRef} dest={{projectId:po.project_id||po._raw?.project_id}} vendor={effectiveVendor} challan={challan}/>
       </MBody>
       <MFoot>
         <Btn onClick={onClose} outline color={T.slt} full>{t("common.cancel")}</Btn>
-        <Btn onClick={()=>onSave(po.id,challan,rows.map((r,i)=>({...r,weighLineId:(hitOf(po.items[i])||{line:{}}).line.id||null})),effectiveVendor,issues)} disabled={!canSubmit} color={T.grn} full icon={<IcGRN size={14} color="white"/>}>
+        <Btn onClick={async()=>{ setBusy(true); await onSave(po.id,challan,rows.map((r,i)=>({...r,weighLineId:(hitOf(po.items[i])||{line:{}}).line.id||null})),effectiveVendor,issues,phRef.current); setBusy(false); }} disabled={busy||!canSubmit} color={T.grn} full icon={<IcGRN size={14} color="white"/>}>
           {isPartial?t("procurement.confirm_partial_grn"):t("procurement.confirm_full_grn")}
         </Btn>
       </MFoot>
@@ -2319,10 +2329,15 @@ function ProcurementModule(){
     setMRs(p=>p.map(m=>m.id===id?{...m,mrStatus:"Rejected",rejectedReason:reason}:m));
     setRejectTgt(null);
   };
-  const saveMarkReceived=async(id,rQty,challan,excess)=>{
-    const res=await api.patch("/procurement/mrs/"+id+"/mark-received",{challan_no:challan,received_qty:rQty,...(excess||{})})
+  const saveMarkReceived=async(id,rQty,challan,excess,ph)=>{
+    // Rec slip ka upload poora hone tak ruko; challan / gadi ki photo peeche chadh sakti hai (E).
+    if(ph&&!(await ph.ready())) return;
+    const res=await api.patch("/procurement/mrs/"+id+"/mark-received",{challan_no:challan,received_qty:rQty,...(excess||{}),...(ph?ph.body():{})})
       .catch(e=>({success:false,message:e?.message||"Receive fail"}));
+    if(res&&res.success===false&&ph) ph.fail(res);
     if(_apiFail(res,"Received mark nahi hua")) return;
+    const dupMsg=ph?ph.done(res.grn_id,{dup:res.weighment?.rec_slip_dup,receivingIssue:res.weighment?.receiving_issue}):"";
+    if(dupMsg) window.alert(dupMsg);
     const newStatus=res.is_partial?"PartialReceived":"Received";
     setMRs(p=>p.map(m=>m.id===id?{...m,matStatus:newStatus,receivedQty:rQty,challan}:m));
     setMarkRecvTgt(null);
@@ -2362,10 +2377,12 @@ function ProcurementModule(){
         balance_closed_qty:d.closed_qty!=null?d.closed_qty:left, balance_closed_reason:reason.trim()}:x));
     }catch(e){ window.alert(e?.message||"Network error"); }
   };
-  const saveGRN=async(poId,challan,rows,vendorOverride,issues)=>{
+  const saveGRN=async(poId,challan,rows,vendorOverride,issues,ph)=>{
     const po=pos.find(p=>p.id===poId);
     const vendor = (vendorOverride && vendorOverride.trim()) || po?.vendor || "";
     if(!vendor){alert(t("procurement.vendor_name_compulsory_hai"));return;}
+    // Rec slip ka upload poora hone tak ruko; challan / gadi ki photo peeche chadh sakti hai (E).
+    if(ph&&!(await ph.ready())) return;
     try{
       const grnPayload={
         po_id:       poId,
@@ -2385,12 +2402,15 @@ function ProcurementModule(){
           weighment_line_id: r.weighLineId || null,
         })).filter(it=>it.received_qty>0),
         issues: (issues||[]).length ? issues : null,
+        ...(ph ? ph.body() : {}),
       };
       const res = await api.post("/procurement/grns", grnPayload);
-      if(!res.success) { alert("GRN save failed: "+(res.message||"Unknown error")); return; }
+      if(!res.success) { if(ph) ph.fail(res); alert(res.message||t("grn.save_failed")); return; }
+      const dupMsg = ph ? ph.done(res.grn_id, { dup: res.weighment?.rec_slip_dup, receivingIssue: res.weighment?.receiving_issue }) : "";
+      if(dupMsg) alert(dupMsg);
       const isPartial=rows.some((r,i)=>parseFloat(r.qty)<Math.max(0,(po?.items?.[i]?.qty||0)-(po?.items?.[i]?.receivedQty||0)));
       if(!isPartial) setPOs(p=>p.map(x=>x.id===poId?{...x,poStatus:"Closed"}:x));
-    }catch(e){ alert("GRN error: "+e.message); return; }
+    }catch(e){ alert(e?.message||t("grn.save_failed")); return; }
     setGrnTarget(null);
   };
   const saveBulkOrder=async(medium,vendor,delivery,items,contacts=[])=>{

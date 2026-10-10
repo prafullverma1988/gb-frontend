@@ -47,7 +47,9 @@ const T = {
 // GRN issue ka type — wire value English hi rehti hai. "Weighbridge" (9 Oct
 // 2026) server khud banata hai: kaante / site ke nishaan (plate nahi dikhi, AI
 // ka padha badla, gadi no. badla …) bill se pehle dikhein — iska naam bhasha me.
-const issueTypeLabel = (ty) => (ty === "Weighbridge" ? t("grn_issue.type_weighbridge") : ty);
+// "Receiving" (10 Oct 2026, E) bhi server ka — bina gadi wali GRN par wahi rec
+// slip pehle kisi aur GRN par aa chuki ho. "+ Issue" ke chips me nahi aata.
+const issueTypeLabel = (ty) => (ty === "Weighbridge" ? t("grn_issue.type_weighbridge") : ty === "Receiving" ? t("grn_issue.type_receiving") : ty);
 const fmtDate = (d) => {
   if (!d) return "—";
   try { return new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }); } catch { return d; }
@@ -217,7 +219,17 @@ export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin 
     try { const v = JSON.parse(raw); return Array.isArray(v) ? v : []; } catch { return []; }
   };
   const mrPhotos  = parsePhotos(mr?.photo_urls);
-  const grnPhotos = parsePhotos(grn?.photo_urls);
+  // GRN ki teen photo alag naam se (10 Oct 2026, E): vendor challan (photo_urls),
+  // rec slip (rec_slip_url + no.), gadi / material (site_photo_urls). Andar ke
+  // material (store issue / transfer) ki purani receipt me photo photo_urls me hi hai.
+  const inboundGrn = grn && (grn.source === "WarehouseIssue" || grn.source === "WarehouseTransfer");
+  const grnPhotoGroups = grn ? [
+    { label: inboundGrn ? t("grn_ph.material") : t("grn_ph.vendor_challan"), photos: parsePhotos(grn.photo_urls) },
+    { label: t("grn_ph.rec_slip"), photos: grn.rec_slip_url ? [grn.rec_slip_url] : [],
+      note: grn.rec_slip_no ? t("grn_ph.rec_slip_no") + " " + grn.rec_slip_no : "" },
+    { label: inboundGrn ? t("grn_ph.material") : t("grn_ph.site"), photos: parsePhotos(grn.site_photo_urls) },
+  ] : [];
+  const grnPending = Number(grn?.photos_pending) || 0;
 
   // Build chronological events — combines all sources into a single timeline.
   const events = [];
@@ -483,7 +495,8 @@ export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin 
                       }),
                       ...(grn.remark ? [["Note", grn.remark]] : []),
                     ]}
-                    photos={grnPhotos}
+                    photoGroups={grnPhotoGroups}
+                    pendingNote={grnPending > 0 ? t("grn_ph.uploading", { n: grnPending }) : ""}
                   />
                 )}
                 {grn && grnEditing && (
@@ -732,16 +745,23 @@ function Cell({ label, value, c }) {
   );
 }
 
-function Section({ color, bg, icon, title, rows = [], empty = false, emptyText = "—", photos = [] }) {
+function Section({ color, bg, icon, title, rows = [], empty = false, emptyText = "—", photos = [], photoGroups = [], pendingNote = "" }) {
   const [zoom, setZoom] = useState(null);
+  const groups = photoGroups.filter(g => g.photos.length || g.note);
+  const nPhotos = photos.length + groups.reduce((n, g) => n + g.photos.length, 0);
+  const thumb = (url, i) => (
+    <img key={i} src={cld(url, "thumb")} alt="" onClick={() => setZoom(url)}
+      onError={e => { e.target.style.display = "none"; }}
+      style={{ width: 60, height: 60, objectFit: "cover", borderRadius: 6, border: `1px solid ${T.b1}`, cursor: "zoom-in" }}/>
+  );
   return (
     <div style={{ background: T.surface, border: `1px solid ${T.b1}`, borderLeft: `3px solid ${color}`, borderRadius: 8, padding: "10px 13px" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: empty ? 4 : 8 }}>
         <span style={{ width: 22, height: 22, borderRadius: "50%", background: bg, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 12 }}>{icon}</span>
         <span style={{ fontSize: 12, fontWeight: 700, color: color }}>{title}</span>
-        {photos.length > 0 && (
+        {nPhotos > 0 && (
           <span style={{ marginLeft: 6, fontSize: 9.5, fontWeight: 700, color: color, background: bg, padding: "1px 6px", borderRadius: 8 }}>
-            📷 {photos.length}
+            📷 {nPhotos}
           </span>
         )}
       </div>
@@ -759,13 +779,19 @@ function Section({ color, bg, icon, title, rows = [], empty = false, emptyText =
       )}
       {photos.length > 0 && (
         <div style={{ paddingLeft: 29, marginTop: 8, display: "flex", gap: 6, flexWrap: "wrap" }}>
-          {photos.map((url, i) => (
-            <img key={i} src={cld(url, "thumb")} alt="" onClick={() => setZoom(url)}
-              onError={e => { e.target.style.display = "none"; }}
-              style={{ width: 60, height: 60, objectFit: "cover", borderRadius: 6, border: `1px solid ${T.b1}`, cursor: "zoom-in" }}/>
-          ))}
+          {photos.map(thumb)}
         </div>
       )}
+      {groups.map((g, gi) => (
+        <div key={gi} style={{ paddingLeft: 29, marginTop: 8 }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: T.t3, textTransform: "uppercase", letterSpacing: ".4px", marginBottom: 4 }}>
+            {g.label}
+            {g.note ? <span style={{ textTransform: "none", letterSpacing: 0, fontWeight: 600, color: T.t2 }}> · {g.note}</span> : null}
+          </div>
+          {g.photos.length > 0 && <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>{g.photos.map(thumb)}</div>}
+        </div>
+      ))}
+      {pendingNote && <div style={{ paddingLeft: 29, marginTop: 6, fontSize: 10.5, color: T.amb }}>{pendingNote}</div>}
       {zoom && (
         <div 
           style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 2000, display: "flex", alignItems: "center", justifyContent: "center", cursor: "zoom-out" }}>

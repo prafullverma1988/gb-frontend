@@ -13,6 +13,7 @@ import { T } from "../shared/tokens";
 import { t, Rich } from "../../i18n";
 import { isoDate, todayISO } from "../../utils/today";
 import { cld } from "../../utils/cloudinary";
+import { GrnPhotoTiles } from "../../components/grn/GrnPhotoBox";
 import { can, canAny, canEntry, currentUser, can as canPerm, canEntry as canPermEntry } from "../../utils/perms";
 
 // Tasks ka CSV/Excel import — common sudhaar screen (components/ImportFileModal),
@@ -3189,6 +3190,9 @@ function TaskGRNModal({task, prefill, projectId, onClose, onSaved}){
   const [stockU,setStockU,reloadStockU]=usePtStockUnits(projectId);
   const [factor,setFactor]=useState("");
   const [factorErr,setFactorErr]=useState(false);
+  // Teen photo tile (10 Oct 2026, E) — dono tab ke neeche ek hi set; pehle is
+  // modal me photo thi hi nahi aur naye tenant par "Vendor challan" Zaroori hai.
+  const phRef=useRef(null);
 
   // Load ordered MRs + material library
   useEffect(()=>{
@@ -3216,16 +3220,22 @@ function TaskGRNModal({task, prefill, projectId, onClose, onSaved}){
     const row=grnRows[mr.id]||{};
     if(!row.challan) return alert(t("common.challan_number_required"));
     setGrnSaving(true);
+    // Rec slip ka upload poora hone tak ruko; challan / gadi ki photo peeche chadh sakti hai (E).
+    const ph=phRef.current;
+    if(ph&&!(await ph.ready())){ setGrnSaving(false); return; }
     try{
       // Use mark-received which properly updates MR mat_status to Received
       const res=await api.patch("/procurement/mrs/"+mr.id+"/mark-received",{
         challan_no: row.challan,
         received_qty: Number(row.received_qty||mr.quantity),
+        ...(ph?ph.body():{}),
       });
       if(res.success){
+        const msg=ph?ph.done(res.grn_id,{dup:res.weighment?.rec_slip_dup,receivingIssue:res.weighment?.receiving_issue}):"";
+        if(msg) alert(msg);
         setGrnDone(p=>[...p,mr.id]);
         onSaved();
-      } else alert(res.message||"Failed");
+      } else { if(ph) ph.fail(res); alert(res.message||t("grn.save_failed")); }
     }catch(e){alert(e.message);}
     setGrnSaving(false);
   };
@@ -3236,6 +3246,8 @@ function TaskGRNModal({task, prefill, projectId, onClose, onSaved}){
     // Unit stock wali se alag (wazan nahi) aur factor khaali → yahin rok (D.4).
     if(conv&&conv.need){ setFactorErr(true); return alert(t("unit.need_factor",{unit:form.unit,stock:conv.stock})); }
     setSaving(true);
+    const ph=phRef.current;
+    if(ph&&!(await ph.ready())){ setSaving(false); return; }
     const res=await api.post("/procurement/grns",{
       project_id: projectId,
       vendor_name: form.vendor_name||"Direct",
@@ -3251,17 +3263,23 @@ function TaskGRNModal({task, prefill, projectId, onClose, onSaved}){
         unit: form.unit,
         ordered_qty: Number(form.received_qty),
         ...(conv&&conv.factor?{stock_factor:conv.factor}:{}),
-      }]
+      }],
+      ...(ph?ph.body():{}),
     });
     setSaving(false);
-    if(res.success){ reloadStockU(); onSaved(); return; }
+    if(res.success){
+      const msg=ph?ph.done(res.grn_id,{dup:res.weighment?.rec_slip_dup,receivingIssue:res.weighment?.receiving_issue}):"";
+      if(msg) alert(msg);
+      reloadStockU(); onSaved(); return;
+    }
+    if(ph) ph.fail(res);
     // Server ne stock ki unit par roka — factor ka khaana kholo, message dikhao.
     if(res.code==="UNIT_NOT_STOCK_UNIT"&&res.data?.stock_unit){
       const k=ptStockKey(res.data.material||form.material_name);
       setStockU(m=>({...m,[k]:{...(m[k]||{}),unit:res.data.stock_unit}}));
       setFactorErr(true);
     }
-    alert(res.message||"Failed");
+    alert(res.message||t("grn.save_failed"));
   };
 
   return(<>
@@ -3425,6 +3443,12 @@ function TaskGRNModal({task, prefill, projectId, onClose, onSaved}){
             </div>
           </div>
         )}
+        {/* Dono tab ki photo — ek hi set, tab badalne par lagi photo nahi mitti (E).
+            Ordered me receive karne ko kuch na ho to sirf chhupao, hatao nahi. */}
+        <div style={{display:grnTab==="ordered"&&!orderedMRs.some(m=>!grnDone.includes(m.id))?"none":"block"}}>
+          <GrnPhotoTiles ref={phRef} dest={{projectId}}
+            vendor={grnTab==="direct"?form.vendor_name:""} challan={grnTab==="direct"?form.challan_no:""}/>
+        </div>
       </div>
 
       {/* Footer */}
