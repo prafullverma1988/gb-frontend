@@ -25,7 +25,8 @@ import { t } from "../i18n";
 import { useBackClose } from "../utils/backNav";
 import { can, canEntry } from "../utils/perms";
 import SiteMarkingEditor from "./SiteMarkingEditor";
-import { useMapLibrary, styleOf, lineOpts, markerIcon, MapLibraryDialog, typeName, typesFor, StyleSwatch } from "./mapStyles";
+import { useMapLibrary, styleOf, lineOpts, markerIcon, MapLibraryDialog, typeName, typesFor, StyleSwatch,
+  formOf, propsRows, missingOf, cleanProps, TypeDetailFields, drainPaths, drainLineOpts, polePoints, poleIcon } from "./mapStyles";
 
 // ── ICONS ─────────────────────────────────────────────────────────
 const Ic = ({ d, size = 16, color = "currentColor", sw = 1.8, fill = "none" }) => (
@@ -57,6 +58,7 @@ const T = {
   ind: "#4B45C4", indL: "#EEF2FF", indM: "#C7D2FE",
   red: "#DC2626", redL: "#FEF2F2", redM: "#FECACA",
   grn: "#059669",
+  amb: "#B45309", ambL: "#FFFBEB", ambM: "#FDE68A",
 };
 
 // ── FORMAT ────────────────────────────────────────────────────────
@@ -142,6 +144,11 @@ const ATYPE = {
   building: () => t("map_library.atype_building"),
 };
 const atypeLabel = (a) => (a ? (ATYPE[a] ? ATYPE[a]() : String(a)) : null);
+// Type ka detail (L, 10 Oct 2026): jo zaroori field khaali hain unke naam,
+// aur pipe ka dia form me hai ya nahi (hai to alag "Dia" nahi dikhate).
+const missingIn = (it) => missingOf(formOf(it.kind, it.atype || "other"), it.props);
+const formHasDia = (it) => formOf(it.kind, it.atype || "other").some((f) => f.key === "dia_mm");
+const polesIn = (it) => (it.kind === "line" ? polePoints(it.atype || "other", it.props, cleanPts(it)).length : 0);
 
 const KindIcon = ({ kind, size = 14, color }) => {
   if (kind === "area") return <IcArea size={size} color={color} />;
@@ -431,7 +438,10 @@ function cardOf(it, where, pi) {
   }
   const parts = partsOfLine(cleanPts(it), it.gaps).length;
   if (it.kind === "line" && parts > 1) rows.push([t("map_library.hv_tukde"), String(parts)]);
-  if (Number(it.dia_mm) > 0) rows.push([t("map_library.dia"), `${it.dia_mm} mm`]);
+  if (Number(it.dia_mm) > 0 && !formHasDia(it)) rows.push([t("map_library.dia"), `${it.dia_mm} mm`]);
+  propsRows(it.kind, it.atype || "other", it.props).forEach((r) => rows.push(r));
+  if (polesIn(it)) rows.push([t("map_form.pole_ginti"), String(polesIn(it))]);
+  if (missingIn(it).length) rows.push([t("map_form.detail_adhoori"), missingIn(it).join(", ")]);
   if (where) rows.push([t("map_library.hv_kahan"), where]);
   const made = [it.by, fmtDT(it.at)].filter(Boolean).join(" · ");
   if (made) rows.push([t("map_library.banayi"), made]);
@@ -503,11 +513,20 @@ function MapPreview({ items, onPick, whereOf, height = 380 }) {
       } else {
         // Tooti hui line: har tukde ki apni lakeer, click sab par ek jaisa (wahi
         // marking khulti hai), hover par card me usi tukde ki lambai.
+        const lst = styleOf("line", it.atype || "other");
         partsOfLine(pts, it.gaps).forEach((part, pi) => {
-          const ln = new g.maps.Polyline({ map, path: part, ...lineOpts(g, styleOf("line", it.atype || "other")) });
+          const ln = new g.maps.Polyline({ map, path: part, ...lineOpts(g, lst) });
           ln.addListener("click", () => { if (pickRef.current) pickRef.current(it.id); });
           hoverOn(ln, it, pi);
           layersRef.current.push(ln);
+          // Sadak ki side nali — bagal me patli dashed (sirf dikhawa).
+          drainPaths(it.atype || "other", it.props, part).forEach((dp) => {
+            layersRef.current.push(new g.maps.Polyline({ map, path: dp, ...drainLineOpts(g) }));
+          });
+        });
+        // Electrical line ke pole — har point par chhota gol nishaan.
+        polePoints(it.atype || "other", it.props, pts).forEach((pp) => {
+          layersRef.current.push(new g.maps.Marker({ map, position: pp, clickable: false, zIndex: 2, icon: poleIcon(g, lst.colour) }));
         });
         return;
       }
@@ -674,6 +693,12 @@ function LibraryTree({ tree, sel, open, onToggle, onSelect, canSeeAll }) {
                         <span style={{ width: 18, flexShrink: 0 }} />
                         <KindIcon kind={it.kind} size={14} color={active ? T.ind : T.t3} />
                         <span style={nameStyle(500)}>{it.name}</span>
+                        {missingIn(it).length > 0 && (
+                          <span title={t("map_form.detail_adhoori") + ": " + missingIn(it).join(", ")}
+                            style={{ fontSize: 10, fontWeight: 700, color: T.amb, border: `1px solid ${T.ambM}`, background: T.ambL, borderRadius: 4, padding: "0 5px", flexShrink: 0 }}>
+                            {t("map_form.adhoori")}
+                          </span>
+                        )}
                         <span style={meta}>{[size, canSeeAll ? it.by : null].filter(Boolean).join(" · ")}</span>
                       </div>
                     );
@@ -759,20 +784,29 @@ function MoveDialog({ item, currentTitle, targets, onClose, onSave }) {
 
 // Type aur dia badlo — rang type se aata hai (Map library), marking ka apna
 // rang nahi. Purani sab marking "Anya" thi; yahin se sahi type milta hai.
+// Type ka detail form bhi yahin (L, 10 Oct 2026) — "baad me edit" yahi hai.
+// Type badla to detail khaali (purana type wapas chuno to purana detail).
 function TypeDialog({ item, onClose, onSave }) {
   const kind = item.kind === "point" || item.kind === "area" ? item.kind : "line";
-  const [code, setCode] = useState(item.atype || "other");
+  const orig = item.atype || "other";
+  const [code, setCode] = useState(orig);
+  const [detail, setDetail] = useState(() => ({ ...(item.props || {}) }));
   const [dia, setDia] = useState(item.dia_mm == null ? "" : String(item.dia_mm));
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  const fields = formOf(kind, code);
+  // Purana alag "Dia" — sirf us type par jiske form me dia nahi, aur pehle se bhara ho.
+  const oldDia = kind === "line" && !fields.some((f) => f.key === "dia_mm") && item.dia_mm != null;
+  const miss = missingOf(fields, detail);
+  const pickCode = (v) => { setCode(v); setDetail(v === orig ? { ...(item.props || {}) } : {}); };
   const submit = async () => {
     if (busy) return;
     setBusy(true); setErr("");
-    const msg = await onSave(code, kind === "line" ? dia : "");
+    const msg = await onSave(code, cleanProps(detail) || {}, oldDia ? dia : undefined);
     if (msg) { setErr(msg); setBusy(false); }
   };
   return (
-    <Modal title={t("map_library.type_badlo")} onClose={busy ? () => {} : onClose}
+    <Modal title={t("map_library.type_detail_badlo")} onClose={busy ? () => {} : onClose}
       footer={<>
         <Btn onClick={onClose} disabled={busy}>{t("common.cancel")}</Btn>
         <Btn tone="primary" onClick={submit} disabled={busy}>{t("common.save")}</Btn>
@@ -781,11 +815,18 @@ function TypeDialog({ item, onClose, onSave }) {
       <label style={lbl} htmlFor="mlib-type">{t("map_library.type")}</label>
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
         <StyleSwatch kind={kind} code={code} size={18} />
-        <PickSelect id="mlib-type" value={code} onChange={(e) => setCode(e.target.value)} style={inp}>
+        <PickSelect id="mlib-type" value={code} onChange={(e) => pickCode(e.target.value)} style={inp}>
           {typesFor(kind).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
         </PickSelect>
       </div>
-      {kind === "line" && (
+      {fields.length > 0 && (
+        <div style={{ marginTop: 14 }}>
+          <div style={{ ...lbl, marginBottom: 8 }}>{t("map_form.detail")}</div>
+          <TypeDetailFields fields={fields} value={detail} onChange={setDetail} idPrefix="mlib-f" />
+          {miss.length > 0 && <div style={{ marginTop: 8, fontSize: 11.5, color: T.amb, lineHeight: 1.5 }}>{t("map_form.adhoori_note", { list: miss.join(", ") })}</div>}
+        </div>
+      )}
+      {oldDia && (
         <>
           <label style={{ ...lbl, marginTop: 12 }} htmlFor="mlib-dia">{t("map_library.dia_mm")}</label>
           <input id="mlib-dia" value={dia} inputMode="decimal" placeholder="—" style={inp}
@@ -926,7 +967,8 @@ function MapLibraryModule() {
   const [toast, setToast] = useState(null);
   const [drawing, setDrawing] = useState(false);   // nayi marking ka editor khula hai
   const [libOpen, setLibOpen] = useState(false);   // Map library (rang/shape)
-  useMapLibrary();                                  // type ke naam/rang ke liye
+  const { lib: mapLib } = useMapLibrary();         // type ke naam/rang/form ke liye
+  const [adhooriOnly, setAdhooriOnly] = useState(false);   // sirf "Detail adhoori" wali marking
   const toastTimer = useRef(null);
   const libRef = useRef(lib);
   libRef.current = lib;
@@ -964,7 +1006,17 @@ function MapLibraryModule() {
   useEffect(() => { loadLib("first"); }, [loadLib]);
   useEffect(() => { if (view === "deleted") loadDeleted(); }, [view, loadDeleted]);
 
-  const data = lib.data;
+  const allData = lib.data;
+  // "Detail adhoori" — zaroori field khaali wali marking (form library se aata
+  // hai, isliye mapLib bhi deps me). Filter chalu ho to ped me sirf wahi.
+  const adhooriCount = useMemo(() => (allData && mapLib ? allData.items.filter((it) => missingIn(it).length).length : 0), [allData, mapLib]);
+  const data = useMemo(() => {
+    if (!allData || !adhooriOnly) return allData;
+    const items = allData.items.filter((it) => missingIn(it).length);
+    const fids = new Set(items.map((it) => String(it.folder_id)));
+    return { ...allData, items, folders: allData.folders.filter((f) => fids.has(String(f.id))) };
+  }, [allData, adhooriOnly, mapLib]);
+  useEffect(() => { if (adhooriOnly && !adhooriCount) setAdhooriOnly(false); }, [adhooriOnly, adhooriCount]);
   const tree = useMemo(() => (data ? buildTree(data) : EMPTY), [data]);
   const canSeeAll = !!(data && data.canSeeAll);
   const perms = (data && data.perms) || { export: false, delete: false };
@@ -1037,8 +1089,10 @@ function MapLibraryModule() {
     flash(t("map_library.naam_badal_gaya"));
     return null;
   };
-  const retypeItem = async (it, atype, dia) => {
-    const r = await api.patch(`/map-library/${it.id}`, { atype, dia_mm: dia === "" ? null : Number(dia) }).catch(() => null);
+  const retypeItem = async (it, atype, props, dia) => {
+    const body = { atype, props };
+    if (dia !== undefined) body.dia_mm = dia === "" ? null : Number(dia);
+    const r = await api.patch(`/map-library/${it.id}`, body).catch(() => null);
     if (!r || !r.success) return failMsg(r, t("map_library.save_nahi_hua"));
     setDialog(null);
     await loadLib("refresh");
@@ -1168,7 +1222,12 @@ function MapLibraryModule() {
           <StyleSwatch kind={it.kind} code={it.atype || "other"} />
           {[kindLabel(it.kind), typeName(it.kind, it.atype || "other")].filter(Boolean).join(" · ")}
         </span>)]);
-      if (Number(it.dia_mm) > 0) facts.push([t("map_library.dia"), `${it.dia_mm} mm`]);
+      if (Number(it.dia_mm) > 0 && !formHasDia(it)) facts.push([t("map_library.dia"), `${it.dia_mm} mm`]);
+      propsRows(it.kind, it.atype || "other", it.props).forEach((r) => facts.push(r));
+      if (polesIn(it)) facts.push([t("map_form.pole_ginti"), String(polesIn(it))]);
+      if (missingIn(it).length) {
+        facts.push([t("map_form.detail_adhoori"), <span style={{ color: T.amb, fontWeight: 600 }}>{missingIn(it).join(", ")}</span>]);
+      }
       if (it.kind === "area") facts.push([t("map_library.rakba"), fmtArea(it.areaSqm) || "—"]);
       else if (it.kind !== "point") facts.push([t("map_library.lambai"), fmtLen(it.lenM) || "—"]);
       // Tooti line: har tukde ki apni lambai — "120 m + 180 m"
@@ -1229,7 +1288,7 @@ function MapLibraryModule() {
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               {itemEdit && <Btn onClick={() => setDialog({ kind: "rename-item", item: it })}>{t("map_library.naam_badlo")}</Btn>}
               {itemEdit && <Btn onClick={() => setDialog({ kind: "move-item", item: it })}>{t("map_library.folder_badlo")}</Btn>}
-              {itemEdit && <Btn onClick={() => setDialog({ kind: "type-item", item: it })}>{t("map_library.type_badlo")}</Btn>}
+              {itemEdit && <Btn onClick={() => setDialog({ kind: "type-item", item: it })}>{t("map_library.type_detail_badlo")}</Btn>}
               {folderEdit && <Btn onClick={() => setDialog({ kind: "rename-folder", group: g })}>{t("map_library.naam_badlo")}</Btn>}
             </div>
           </div>
@@ -1291,6 +1350,13 @@ function MapLibraryModule() {
               {t("map_library.summary", { folders: folderCount, files: fileCount, n: data.items.length })}
             </div>
             {canSeeAll && <div style={{ fontSize: 11.5, color: T.t3, marginTop: 2 }}>{t("map_library.poori_company_ki_library")}</div>}
+            {(adhooriCount > 0 || adhooriOnly) && (
+              <button type="button" onClick={() => { setAdhooriOnly((v) => !v); setSel(null); }} aria-pressed={adhooriOnly}
+                style={{ marginTop: 8, padding: "3px 10px", borderRadius: 20, fontSize: 11.5, fontFamily: "inherit", cursor: "pointer",
+                  border: `1px solid ${adhooriOnly ? T.amb : T.ambM}`, background: adhooriOnly ? T.ambL : T.surface, color: T.amb, fontWeight: adhooriOnly ? 700 : 600 }}>
+                {t("map_form.adhoori_filter", { n: adhooriCount })}
+              </button>
+            )}
           </div>
           <div className="mlib-tree">
             <LibraryTree tree={tree} sel={sel} open={open} onToggle={toggle} onSelect={select} canSeeAll={canSeeAll} />
@@ -1351,7 +1417,7 @@ function MapLibraryModule() {
           onClose={() => setDialog(null)} onSave={(name) => renameItem(dItem, name)} />
       )}
       {dialog && dialog.kind === "type-item" && (
-        <TypeDialog item={dItem} onClose={() => setDialog(null)} onSave={(atype, dia) => retypeItem(dItem, atype, dia)} />
+        <TypeDialog item={dItem} onClose={() => setDialog(null)} onSave={(atype, props, dia) => retypeItem(dItem, atype, props, dia)} />
       )}
       {libOpen && <MapLibraryDialog onClose={() => setLibOpen(false)} />}
       {dialog && dialog.kind === "move-item" && (
@@ -1378,7 +1444,7 @@ function MapLibraryModule() {
           onClose={() => setDialog(null)} onConfirm={() => deleteFolder(dGroup)} />
       )}
       {drawing && data && (
-        <SiteMarkingEditor lib={data} loadMaps={loadGmaps}
+        <SiteMarkingEditor lib={allData} loadMaps={loadGmaps}
           onClose={() => { setDrawing(false); loadLib("refresh"); }}
           onSaved={(id) => {
             // Nayi marking library me turant dikhe — editor band hone par wahi chuni hui milegi.

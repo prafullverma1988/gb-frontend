@@ -18,7 +18,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import PickSelect from "../components/PickSelect";
 import api, { API_BASE, getToken } from "../config/api";
 import { t } from "../i18n";
-import { useMapLibrary, styleOf, typesFor, StyleSwatch } from "./mapStyles";
+import { useMapLibrary, styleOf, typesFor, StyleSwatch, formOf, templateOf, missingOf, cleanProps, TypeDetailFields } from "./mapStyles";
 import { can, canAny, canEntry } from "../utils/perms";
 
 // ── THEME (MapLibraryModule jaisa) ────────────────────────────────
@@ -726,7 +726,11 @@ export default function SiteMarkingEditor({ lib, loadMaps, onClose, onSaved }) {
   const [folderSel, setFolderSel] = useState("");  // "" = bina folder, "new", ya folder id
   const [newFolder, setNewFolder] = useState("");
   const [fileName, setFileName] = useState("");
-  const [diaMm, setDiaMm] = useState("");          // freelance pipe ka diameter (mm)
+  // Type ka detail form (L, 10 Oct 2026) — sadak ki chaudai / surface, pipe ka
+  // material / dia, electrical HT / LT… Type badla to khaali (doosre type ke
+  // field is par nahi chalte).
+  const [detail, setDetail] = useState({});
+  useEffect(() => { setDetail({}); }, [kind, atype]);
 
   // Point aur tod
   const [pts, setPtsS] = useState([]);
@@ -1053,7 +1057,8 @@ export default function SiteMarkingEditor({ lib, loadMaps, onClose, onSaved }) {
     const kept = ptsRef.current;
     const body = {
       client_key: keyFor(), name: nm, kind, atype: atype || "other",
-      dia_mm: kind === "line" && Number(diaMm) > 0 ? Number(diaMm) : undefined,
+      // Pipe ka dia bhi isi me — server purane dia_mm column me bhi likhta hai.
+      props: cleanProps(detail),
       pts: kept.map((p) => ({ lat: p.lat, lng: p.lng })),
       lenM: kind === "point" ? 0 : lenM,
       areaSqm: kind === "area" ? Math.round(areaSqm * 100) / 100 : undefined,
@@ -1148,7 +1153,11 @@ export default function SiteMarkingEditor({ lib, loadMaps, onClose, onSaved }) {
       task_id: selTask ? selTask.id : undefined,
       drain_side: atype === "road" && drainSide ? drainSide : undefined,
       drain_offset_m: atype === "road" && drainSide && drainOff !== "" && Number(drainOff) >= 0 ? Number(drainOff) : undefined,
-      props: atype === "road" && drainSide && Number(drainW) > 0 ? { drain_width_m: Number(drainW) } : undefined,
+      props: (() => {
+        const fp = cleanProps(detail) || {};
+        if (atype === "road" && drainSide && Number(drainW) > 0) fp.drain_width_m = Number(drainW);
+        return Object.keys(fp).length ? fp : undefined;
+      })(),
       source: "draw",
       capture_meta: { points_tapped: kept.length, user_qty_m: Number(userQty) > 0 ? Number(userQty) : undefined, via: "web" },
       // Wahi line dobara bheji (jawab raaste me gum hua) = wahi chaabi → server wahi row lautata hai.
@@ -1452,13 +1461,6 @@ export default function SiteMarkingEditor({ lib, loadMaps, onClose, onSaved }) {
               {typeOptions.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
             </PickSelect>
           </div>
-          {!isTask && kind === "line" && (
-            <>
-              <div style={lbl}>{t("map_draw.dia_mm")}</div>
-              <input value={diaMm} inputMode="decimal" placeholder="—" style={{ ...inp, marginBottom: 10 }}
-                onChange={(e) => setDiaMm(e.target.value.replace(/[^\d.]/g, ""))} />
-            </>
-          )}
         </>
       )}
     </>
@@ -1680,9 +1682,26 @@ export default function SiteMarkingEditor({ lib, loadMaps, onClose, onSaved }) {
     </>
   );
 
+  // Type ka detail — save kabhi nahi rukta; zaroori khaali ho to sirf yaad
+  // dilate hain ki baad me bhar lo (Prafull: "nahi rokna, baad me edit").
+  // hide: kaam wale mode me sadak ki chaudai / naali upar alag se poochhi jaati hai.
+  const detailCard = (hide) => {
+    const fields = formOf(kind, atype || "other");
+    if (!fields.filter((f) => !(hide || []).includes(f.key)).length) return null;
+    const miss = missingOf(fields.filter((f) => !(hide || []).includes(f.key)), detail);
+    return (
+      <div style={card}>
+        <div style={{ ...lbl, marginBottom: 8 }}>{t("map_form.detail")}</div>
+        <TypeDetailFields fields={fields} value={detail} onChange={setDetail} hide={hide} idPrefix="smk-f" />
+        {miss.length > 0 && <div style={{ ...noteS, color: T.amb }}>{t("map_form.adhoori_note", { list: miss.join(", ") })}</div>}
+      </div>
+    );
+  };
+
   const saveFreePanel = (
     <>
       {summary}
+      {detailCard()}
       <div style={card}>
         <label style={lbl} htmlFor="smk-name">{t("map_draw.naam")}</label>
         <input id="smk-name" autoFocus value={name} maxLength={200} onChange={(e) => setName(e.target.value)} placeholder={t("map_draw.naam_ph")} style={{ ...inp, marginBottom: 10 }} />
@@ -1782,6 +1801,7 @@ export default function SiteMarkingEditor({ lib, loadMaps, onClose, onSaved }) {
               )}
               {kind === "area" && <div style={noteS}>{t("map_draw.beech_me_pin_note")}</div>}
             </div>
+            {detailCard(templateOf(kind, atype) === "road" ? ["width_m", "drain_side", "drain_width_m", "drain_kind"] : null)}
             {kind === "line" && (
               <div style={card}>
                 <div style={lbl}>{t("map_draw.chaudai_optional")}</div>

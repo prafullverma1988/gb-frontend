@@ -5,15 +5,23 @@
 // 2026-09-24) — ek type = ek rang, naksha ek nazar me padha jaaye.
 //
 // Server: GET /tenders/alignments/feature-types (built-in + apne type, har
-// ek ka style), PUT …/feature-types/style (Tenders ya Mapping ka Edit),
-// POST …/feature-types (naya type — Tenders ka Create).
+// ek ka style aur detail form), PUT …/feature-types/style (Tenders ya
+// Mapping ka Edit), POST …/feature-types (naya type — Tenders ya Mapping ka
+// Create).
+//
+// DETAIL FORM (L, 10 Oct 2026): har type ka apna form — sadak ki chaudai,
+// damar / PCC, side nali; pipe ka material, dia, inlet / outlet; electrical
+// HT / LT, volt, pole… Template (parivaar) se aata hai, admin badal / jod
+// sakta hai. Value ki asli jaanch server karta hai; save kabhi nahi rukta —
+// "zaroori" khaali ho to sirf "Detail adhoori".
 // ══════════════════════════════════════════════════════════════════════
 import { useEffect, useState, useCallback } from "react";
 import api from "../config/api";
 import { t } from "../i18n";
+import PickSelect from "../components/PickSelect";
 
 // ── Library ka ek hi cache — poore page par ek fetch ──────────────
-let _lib = null;           // { list, canEdit, canCreate }
+let _lib = null;           // { list, canEdit, canCreate, templates }
 let _p = null;
 const _subs = new Set();
 const notify = () => _subs.forEach((fn) => fn(_lib));
@@ -21,7 +29,8 @@ export function loadMapLibrary(force) {
   if (_p && !force) return _p;
   _p = api.get("/tenders/alignments/feature-types").then((r) => {
     if (r && r.success) {
-      _lib = { list: Array.isArray(r.data) ? r.data : [], canEdit: !!r.can_edit, canCreate: !!r.can_create };
+      _lib = { list: Array.isArray(r.data) ? r.data : [], canEdit: !!r.can_edit, canCreate: !!r.can_create,
+        templates: Array.isArray(r.templates) ? r.templates : [] };
       notify();
     }
     return _lib;
@@ -66,6 +75,175 @@ export function typesFor(kind) {
   if (list && list.length) return list.map((x) => [x.code, typeName(kind, x.code)]);
   const base = kind === "point" ? Object.keys(POINT_DEF) : kind === "area" ? Object.keys(AREA_DEF) : Object.keys(LINE_DEF);
   return base.map((c) => [c, typeName(kind, c)]);
+}
+
+// ── Type ka detail form ──────────────────────────────────────────
+export function typeRow(kind, code) {
+  const k = kind === "point" || kind === "area" ? kind : "line";
+  return (_lib && _lib.list.find((x) => x.kind === k && x.code === code)) || null;
+}
+export function formOf(kind, code) {
+  const r = typeRow(kind, code);
+  return r && Array.isArray(r.fields) ? r.fields : [];
+}
+export function templateOf(kind, code) {
+  const r = typeRow(kind, code);
+  return (r && r.template) || null;
+}
+export function templatesFor(kind) {
+  return ((_lib && _lib.templates) || []).filter((x) => (x.kinds || []).includes(kind));
+}
+const tplLabel = (key) => {
+  const hit = ((_lib && _lib.templates) || []).find((x) => x.key === key);
+  return hit ? hit.label : key;
+};
+const blank = (v) => v === undefined || v === null || v === "";
+// Zaroori field jo khaali hain — unke naam.
+export function missingOf(fields, props) {
+  const p = props || {};
+  return (fields || []).filter((f) => f.required && blank(p[f.key])).map((f) => f.label || f.key);
+}
+// Form me number TYPED STRING rehta hai (".6" likhte waqt NaN na bane) —
+// bhejte waqt yahin number banta hai; khaali khaana bheja hi nahi jaata.
+export function cleanProps(props) {
+  if (!props) return undefined;
+  const out = {};
+  for (const [k, v] of Object.entries(props)) {
+    if (blank(v)) continue;
+    if (typeof v === "string") {
+      const s2 = v.trim();
+      if (!s2) continue;
+      out[k] = /^-?\d*\.?\d+$/.test(s2) ? Number(s2) : s2;
+    } else out[k] = v;
+  }
+  return Object.keys(out).length ? out : undefined;
+}
+export function fieldValue(f, v) {
+  if (blank(v)) return null;
+  if (f.type === "bool") return v === true || v === "true" || v === 1 ? t("map_form.haan") : t("map_form.nahi");
+  if (f.type === "select") {
+    const o = (f.options || []).find((x) => String(x.v) === String(v));
+    return o ? o.l : String(v);
+  }
+  if (f.type === "number" && f.unit) return `${v} ${f.unit}`;
+  return String(v);
+}
+// [naam, value] — sirf bhare hue, form ke kram me (card / detail ke liye).
+export function propsRows(kind, code, props, hide) {
+  const p = props || {};
+  return formOf(kind, code)
+    .filter((f) => !(hide || []).includes(f.key))
+    .map((f) => [f.label || f.key, fieldValue(f, p[f.key])])
+    .filter((r) => r[1] != null);
+}
+
+// Form — type chunte hi uske field. Chhoti list chips me (dobara dabao to
+// khaali), lambi list picker me. hide: jo field is jagah alag se poochhe
+// jaate hain (jaise tender me "Chaudai").
+export function TypeDetailFields({ fields, value, onChange, hide, idPrefix = "tdf" }) {
+  const list = (fields || []).filter((f) => !(hide || []).includes(f.key));
+  if (!list.length) return null;
+  const v = value || {};
+  const set = (k, x) => onChange({ ...v, [k]: x });
+  const inpS = { width: "100%", boxSizing: "border-box", padding: "7px 9px", borderRadius: 7, border: `1.5px solid ${C.b1}`, fontSize: 12.5, fontFamily: "inherit", background: C.surface, color: C.t1 };
+  const chipS = (on) => ({ padding: "4px 10px", borderRadius: 20, fontSize: 11.5, fontFamily: "inherit", cursor: "pointer",
+    border: `1px solid ${on ? C.ind : C.b1}`, background: on ? C.indL : C.surface, color: on ? C.ind : C.t2, fontWeight: on ? 700 : 500 });
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(150px,1fr))", gap: "10px 12px" }}>
+      {list.map((f) => {
+        const id = `${idPrefix}-${f.key}`;
+        const miss = f.required && blank(v[f.key]);
+        const opts = f.type === "bool" ? [[true, t("map_form.haan")], [false, t("map_form.nahi")]]
+          : f.type === "select" ? (f.options || []).map((o) => [o.v, o.l]) : null;
+        const asChips = opts && opts.length <= 6;
+        const label = (
+          <label htmlFor={asChips ? undefined : id} style={{ display: "block", fontSize: 11, color: C.t3, fontWeight: 600, marginBottom: 4 }}>
+            {f.label}{f.unit ? ` (${f.unit})` : ""}
+            {f.required && <span style={{ color: miss ? C.amb : C.t4 }}>{" *"}</span>}
+          </label>
+        );
+        if (asChips) {
+          return (
+            <div key={f.key} style={{ gridColumn: "1 / -1" }}>
+              {label}
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                {opts.map(([ov, ol]) => {
+                  const on = f.type === "bool" ? (v[f.key] === ov || String(v[f.key]) === String(ov)) : String(v[f.key]) === String(ov);
+                  return <button key={String(ov)} type="button" onClick={() => set(f.key, on ? "" : ov)} style={chipS(on)}>{ol}</button>;
+                })}
+              </div>
+            </div>
+          );
+        }
+        return (
+          <div key={f.key}>
+            {label}
+            {opts ? (
+              <PickSelect id={id} value={blank(v[f.key]) ? "" : String(v[f.key])} onChange={(e) => set(f.key, e.target.value)} style={inpS}>
+                <option value="">—</option>
+                {opts.map(([ov, ol]) => <option key={String(ov)} value={String(ov)}>{ol}</option>)}
+              </PickSelect>
+            ) : f.type === "number" ? (
+              <input id={id} value={blank(v[f.key]) ? "" : String(v[f.key])} inputMode="decimal" placeholder="—" style={inpS}
+                onChange={(e) => set(f.key, e.target.value.replace(/[^\d.]/g, ""))} />
+            ) : (
+              <input id={id} value={blank(v[f.key]) ? "" : String(v[f.key])} maxLength={200} placeholder="—" style={inpS}
+                onChange={(e) => set(f.key, e.target.value)} />
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── Sadak ki side nali — naksha par sadak ke bagal me patli dashed line ──
+// Sirf dikhawa, alag marking nahi (Prafull ka 4th faisla, 10 Oct 2026).
+// Sadak ke beech se (aadhi chaudai + aadhi nali) hat kar; chaudai na bhari
+// ho to aam 7 m maan kar.
+const EARTH_R = 6378137;
+function offsetPath(pts, d) {
+  const lat0 = (pts[0].lat * Math.PI) / 180;
+  const xy = pts.map((p) => [((p.lng * Math.PI) / 180) * EARTH_R * Math.cos(lat0), ((p.lat * Math.PI) / 180) * EARTH_R]);
+  const nrm = (a, b) => { const dx = b[0] - a[0], dy = b[1] - a[1]; const L = Math.hypot(dx, dy) || 1; return [-dy / L, dx / L]; };
+  return xy.map((q, i) => {
+    let nx = 0, ny = 0;
+    if (i > 0) { const n = nrm(xy[i - 1], q); nx += n[0]; ny += n[1]; }
+    if (i < xy.length - 1) { const n = nrm(q, xy[i + 1]); nx += n[0]; ny += n[1]; }
+    const L = Math.hypot(nx, ny) || 1;
+    // mod par doori wahi rahe (miter), par tikhe mod par 3x se zyada nahi
+    let k = 1;
+    if (i > 0 && i < xy.length - 1) { const n1 = nrm(xy[i - 1], q); k = Math.min(3, 1 / Math.max(0.34, (nx / L) * n1[0] + (ny / L) * n1[1])); }
+    const x = q[0] + (nx / L) * d * k, y = q[1] + (ny / L) * d * k;
+    return { lat: ((y / EARTH_R) * 180) / Math.PI, lng: ((x / (EARTH_R * Math.cos(lat0))) * 180) / Math.PI };
+  });
+}
+// pts = ek tukda; widthM = sadak ki chaudai (tender me alag column, library me props).
+export function drainPaths(code, props, pts, widthM) {
+  const p = props || {};
+  if (templateOf("line", code) !== "road" || !["left", "right", "both"].includes(p.drain_side)) return [];
+  if (!Array.isArray(pts) || pts.length < 2) return [];
+  const w = Number(widthM) > 0 ? Number(widthM) : Number(p.width_m) > 0 ? Number(p.width_m) : 7;
+  const dw = Number(p.drain_width_m) > 0 ? Number(p.drain_width_m) : 0.6;
+  const d = w / 2 + dw / 2;
+  const out = [];
+  if (p.drain_side !== "right") out.push(offsetPath(pts, d));
+  if (p.drain_side !== "left") out.push(offsetPath(pts, -d));
+  return out;
+}
+export function drainLineOpts(g) {
+  const st = styleOf("line", "drain");
+  return lineOpts(g, { colour: st.colour, width: 2, dash: "dashed" }, { clickable: false, zIndex: 1 });
+}
+// ── Electrical line ke pole — line ka har point ek pole (site par har pole
+// par tap hota hai). Pole "none" chuna ho to nahi.
+export function polePoints(code, props, pts) {
+  if (templateOf("line", code) !== "electrical" || !Array.isArray(pts) || pts.length < 2) return [];
+  if ((props || {}).pole === "none") return [];
+  return pts;
+}
+export function poleIcon(g, colour) {
+  return { path: g.maps.SymbolPath.CIRCLE, scale: 3.6, fillColor: "#FFFFFF", fillOpacity: 1, strokeColor: colour, strokeWeight: 2 };
 }
 
 // ── Taiyar shapes — 24×24 box, beech (12,12) par ─────────────────
@@ -139,8 +317,14 @@ export function StyleSwatch({ kind, code, size = 16 }) {
 // ══════════════════════════════════════════════════════════════════
 const C = {
   surface: "#FFFFFF", surfaceB: "#F8F9FB", t1: "#111827", t2: "#374151", t3: "#6B7280", t4: "#9CA3AF",
-  b1: "#E5E7EB", ind: "#4B45C4", indL: "#EEF2FF", red: "#DC2626", redL: "#FEF2F2",
+  b1: "#E5E7EB", ind: "#4B45C4", indL: "#EEF2FF", red: "#DC2626", redL: "#FEF2F2", amb: "#B45309",
 };
+const FIELD_TYPES = [["number", "map_form.ft_number"], ["select", "map_form.ft_select"], ["bool", "map_form.ft_bool"], ["text", "map_form.ft_text"]];
+const fieldTypeText = (f) => (f.type === "select"
+  ? `${t("map_form.ft_select")}: ${(f.options || []).slice(0, 4).map((o) => o.l).join(", ")}${(f.options || []).length > 4 ? "…" : ""}`
+  : t((FIELD_TYPES.find((x) => x[0] === f.type) || FIELD_TYPES[3])[1]));
+// Admin ke naye field ki chaabi — naam se; Hindi naam ho to apni chaabi.
+const slug = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 24);
 const WIDTHS = [[2, "map_style.width_patli"], [4, "map_style.width_beech"], [6, "map_style.width_moti"], [9, "map_style.width_bahut_moti"]];
 const DASHES = [["solid", "map_style.dash_solid"], ["dashed", "map_style.dash_dashed"], ["dotted", "map_style.dash_dotted"]];
 const FILLS = [[0.12, "map_style.fill_halka"], [0.22, "map_style.fill_beech"], [0.4, "map_style.fill_gehra"]];
@@ -151,7 +335,9 @@ export function MapLibraryDialog({ onClose }) {
   const [busy, setBusy] = useState("");
   const [err, setErr] = useState("");
   const [open, setOpen] = useState(null);          // khula row: kind:code
-  const [add, setAdd] = useState(null);            // { label, colour, shape }
+  const [add, setAdd] = useState(null);            // { label, colour, shape, template }
+  const [draft, setDraft] = useState(null);        // { key, fields } — form badla, abhi save nahi
+  const [nf, setNf] = useState(null);              // naya field: { label, type, unit, options, required }
   const canEdit = !!(lib && lib.canEdit);
   const canCreate = !!(lib && lib.canCreate);
 
@@ -169,11 +355,38 @@ export function MapLibraryDialog({ onClose }) {
     if (!r || !r.success) { setErr((r && r.message) || t("map_style.save_nahi_hua")); return; }
     await reload();
   };
+  // Form (fields / template) — rang chhede bina. fields null = template wala form wapas.
+  const saveForm = async (row, body) => {
+    setBusy(`${row.kind}:${row.code}`); setErr("");
+    const r = await api.put("/tenders/alignments/feature-types/style", { kind: row.kind, code: row.code, ...body }).catch(() => null);
+    setBusy("");
+    if (!r || !r.success) { setErr((r && r.message) || t("map_style.save_nahi_hua")); return; }
+    setDraft(null); setNf(null);
+    await reload();
+  };
+  const addField = (row, fields) => {
+    const label = String(nf.label || "").trim();
+    if (!label) { setErr(t("map_form.field_naam_likho")); return; }
+    let base = slug(label);
+    if (!/^[a-z]/.test(base)) base = `f_${base || Date.now().toString(36)}`.slice(0, 26);
+    const used = new Set(fields.map((f) => f.key));
+    let key = base, n = 2;
+    while (used.has(key)) key = `${base}_${n++}`;
+    const f = { key, label, type: nf.type, required: !!nf.required };
+    if (nf.type === "number" && String(nf.unit || "").trim()) f.unit = String(nf.unit).trim();
+    if (nf.type === "select") {
+      const opts = String(nf.options || "").split(",").map((x) => x.trim()).filter(Boolean);
+      if (!opts.length) { setErr(t("map_form.options_likho")); return; }
+      f.options = opts.map((l, i) => ({ v: slug(l) || `o${i + 1}`, l }));
+    }
+    setErr(""); setNf(null);
+    setDraft({ key: `${row.kind}:${row.code}`, fields: [...fields, f] });
+  };
   const create = async () => {
     const label = String(add.label || "").trim();
     if (!label) { setErr(t("map_style.naam_daalo")); return; }
     setBusy("new"); setErr("");
-    const r = await api.post("/tenders/alignments/feature-types", { label, kind: tab, colour: add.colour, shape: add.shape }).catch(() => null);
+    const r = await api.post("/tenders/alignments/feature-types", { label, kind: tab, colour: add.colour, shape: add.shape, template: add.template || undefined }).catch(() => null);
     setBusy("");
     if (!r || !r.success) { setErr((r && r.message) || t("map_style.save_nahi_hua")); return; }
     setAdd(null); await reload();
@@ -226,8 +439,105 @@ export function MapLibraryDialog({ onClose }) {
           </div>
         </div>
       )}
+      {formEditor(row)}
     </div>
   );
+  const smallBtn = (primary) => ({ padding: "6px 12px", borderRadius: 7, fontSize: 12, fontFamily: "inherit", cursor: "pointer", fontWeight: primary ? 700 : 500,
+    border: primary ? "none" : `1px solid ${C.b1}`, background: primary ? C.ind : C.surface, color: primary ? "#fff" : C.t2 });
+  const inpS = { padding: "6px 9px", borderRadius: 7, border: `1.5px solid ${C.b1}`, fontSize: 12.5, fontFamily: "inherit", boxSizing: "border-box", background: C.surface };
+  // Detail form — template ka, ya badla hua. Badlav pehle draft me, "Form save
+  // karo" par ek saath (field jodna / hatana / zaroori kai kadam ka kaam hai).
+  const formEditor = (row) => {
+    const key = `${row.kind}:${row.code}`;
+    const dirty = !!(draft && draft.key === key);
+    const fields = dirty ? draft.fields : (Array.isArray(row.fields) ? row.fields : []);
+    const edit = (next) => setDraft({ key, fields: next });
+    const tpls = templatesFor(row.kind);
+    return (
+      <div style={{ borderTop: `1px solid ${C.b1}`, paddingTop: 10, display: "flex", flexDirection: "column", gap: 8 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 11, color: C.t3, width: 70 }}>{t("map_form.detail_form")}</span>
+          {row.builtin || !canEdit ? (
+            <span style={{ fontSize: 12, color: C.t2 }}>{row.template ? tplLabel(row.template) : t("map_form.koi_template_nahi")}</span>
+          ) : (
+            <PickSelect value={row.template || ""} onChange={(e) => saveForm(row, { template: e.target.value || null })} disabled={!!busy}
+              style={{ ...inpS, minWidth: 200 }}>
+              <option value="" disabled>{t("map_form.template_chuno")}</option>
+              {tpls.map((x) => <option key={x.key} value={x.key}>{x.label}</option>)}
+            </PickSelect>
+          )}
+          {row.fields_custom && <span style={{ fontSize: 10.5, color: C.t4 }}>{t("map_form.form_badla_hua")}</span>}
+        </div>
+        {fields.length === 0 && <div style={{ fontSize: 11.5, color: C.t4, paddingLeft: 80 }}>{t("map_form.koi_field_nahi")}</div>}
+        {fields.length > 0 && (
+          <div style={{ border: `1px solid ${C.b1}`, borderRadius: 7, background: C.surface }}>
+            {fields.map((f, i) => (
+              <div key={f.key} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 10px", borderTop: i ? `1px solid ${C.b1}` : "none" }}>
+                <span style={{ flex: 1, minWidth: 0, fontSize: 12, color: C.t1, fontWeight: 600 }}>
+                  {f.label}{f.unit ? <span style={{ color: C.t4, fontWeight: 400 }}>{` (${f.unit})`}</span> : null}
+                  <span style={{ display: "block", fontSize: 10.5, color: C.t4, fontWeight: 400, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{fieldTypeText(f)}</span>
+                </span>
+                <label style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, color: C.t3, cursor: canEdit ? "pointer" : "default" }}>
+                  <input type="checkbox" checked={!!f.required} disabled={!canEdit || !!busy}
+                    onChange={(e) => edit(fields.map((x) => (x.key === f.key ? { ...x, required: e.target.checked } : x)))} />
+                  {t("map_form.zaroori")}
+                </label>
+                {canEdit && (
+                  <button type="button" title={t("map_form.field_hatao")} aria-label={t("map_form.field_hatao")} disabled={!!busy}
+                    onClick={() => edit(fields.filter((x) => x.key !== f.key))}
+                    style={{ background: "none", border: "none", cursor: "pointer", color: C.t4, fontSize: 15, lineHeight: 1, padding: "0 2px" }}>×</button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+        {canEdit && !nf && (
+          <div>
+            <button type="button" onClick={() => setNf({ label: "", type: "number", unit: "", options: "", required: false })} disabled={!!busy}
+              style={{ padding: "5px 10px", borderRadius: 7, border: `1px dashed ${C.ind}`, background: C.surface, color: C.ind, fontSize: 11.5, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
+              + {t("map_form.field_jodo")}
+            </button>
+          </div>
+        )}
+        {canEdit && nf && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: 10, border: `1px dashed ${C.b1}`, borderRadius: 7, background: C.surface }}>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <input autoFocus value={nf.label} maxLength={60} placeholder={t("map_form.field_naam_ph")}
+                onChange={(e) => setNf({ ...nf, label: e.target.value })} style={{ ...inpS, flex: "2 1 160px" }} />
+              <PickSelect value={nf.type} onChange={(e) => setNf({ ...nf, type: e.target.value })} style={{ ...inpS, flex: "1 1 130px" }}>
+                {FIELD_TYPES.map(([v, k]) => <option key={v} value={v}>{t(k)}</option>)}
+              </PickSelect>
+              {nf.type === "number" && (
+                <input value={nf.unit} maxLength={12} placeholder={t("map_form.unit_ph")}
+                  onChange={(e) => setNf({ ...nf, unit: e.target.value })} style={{ ...inpS, flex: "0 1 100px" }} />
+              )}
+            </div>
+            {nf.type === "select" && (
+              <input value={nf.options} maxLength={600} placeholder={t("map_form.options_ph")}
+                onChange={(e) => setNf({ ...nf, options: e.target.value })} style={inpS} />
+            )}
+            <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11.5, color: C.t2, cursor: "pointer" }}>
+              <input type="checkbox" checked={!!nf.required} onChange={(e) => setNf({ ...nf, required: e.target.checked })} />
+              {t("map_form.zaroori_note")}
+            </label>
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <button type="button" onClick={() => setNf(null)} style={smallBtn(false)}>{t("common.cancel")}</button>
+              <button type="button" onClick={() => addField(row, fields)} style={smallBtn(true)}>{t("map_style.jodo")}</button>
+            </div>
+          </div>
+        )}
+        {canEdit && (dirty || (row.fields_custom && row.template)) && (
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {dirty && <button type="button" disabled={!!busy} onClick={() => saveForm(row, { fields: draft.fields })} style={smallBtn(true)}>{t("map_form.form_save")}</button>}
+            {dirty && <button type="button" disabled={!!busy} onClick={() => { setDraft(null); setNf(null); }} style={smallBtn(false)}>{t("common.cancel")}</button>}
+            {!dirty && row.fields_custom && row.template && (
+              <button type="button" disabled={!!busy} onClick={() => saveForm(row, { fields: null })} style={smallBtn(false)}>{t("map_form.template_wapas")}</button>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 9995, background: "rgba(15,23,42,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
@@ -242,7 +552,7 @@ export function MapLibraryDialog({ onClose }) {
         </div>
         <div style={{ display: "flex", gap: 4, padding: "10px 18px 0" }}>
           {[["line", "map_style.tab_line"], ["point", "map_style.tab_point"], ["area", "map_style.tab_area"]].map(([k, l]) => (
-            <button key={k} type="button" onClick={() => { setTab(k); setOpen(null); setAdd(null); }}
+            <button key={k} type="button" onClick={() => { setTab(k); setOpen(null); setAdd(null); setDraft(null); setNf(null); }}
               style={{ padding: "7px 14px", border: "none", borderBottom: `2px solid ${tab === k ? C.ind : "transparent"}`, background: "none", cursor: "pointer",
                 fontFamily: "inherit", fontSize: 12.5, fontWeight: tab === k ? 700 : 500, color: tab === k ? C.ind : C.t3 }}>{t(l)}</button>
           ))}
@@ -259,7 +569,7 @@ export function MapLibraryDialog({ onClose }) {
               const isOpen = open === key;
               return (
                 <div key={key} style={{ borderTop: i ? `1px solid ${C.b1}` : "none" }}>
-                  <div role="button" tabIndex={0} onClick={() => setOpen(isOpen ? null : key)} onKeyDown={(e) => { if (e.key === "Enter") setOpen(isOpen ? null : key); }}
+                  <div role="button" tabIndex={0} onClick={() => { setOpen(isOpen ? null : key); setNf(null); }} onKeyDown={(e) => { if (e.key === "Enter") { setOpen(isOpen ? null : key); setNf(null); } }}
                     style={{ display: "flex", alignItems: "center", gap: 12, padding: "9px 14px", cursor: "pointer", background: isOpen ? C.indL : C.surface }}>
                     <span style={{ width: 26, display: "flex", justifyContent: "center" }}>
                       {row.kind === "point" ? <ShapeIcon shape={row.shape} colour={row.colour} size={20} />
@@ -292,6 +602,23 @@ export function MapLibraryDialog({ onClose }) {
                 <input type="color" value={add.colour} onChange={(e) => setAdd({ ...add, colour: e.target.value })}
                   style={{ width: 40, height: 26, border: `1px solid ${C.b1}`, borderRadius: 6, padding: 0, background: "none" }} />
               </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                <span style={{ fontSize: 11, color: C.t3, width: 70 }}>{t("map_form.detail_form")}</span>
+                <PickSelect value={add.template || ""} onChange={(e) => setAdd({ ...add, template: e.target.value })}
+                  style={{ padding: "6px 9px", borderRadius: 7, border: `1.5px solid ${C.b1}`, fontSize: 12.5, fontFamily: "inherit", minWidth: 200 }}>
+                  <option value="" disabled>{t("map_form.template_chuno")}</option>
+                  {templatesFor(tab).map((x) => <option key={x.key} value={x.key}>{x.label}</option>)}
+                </PickSelect>
+              </div>
+              {(() => {
+                const tp = templatesFor(tab).find((x) => x.key === add.template);
+                const names = tp ? (tp.fields || []).map((f) => f.label).join(", ") : "";
+                return (
+                  <div style={{ fontSize: 11, color: C.t4, lineHeight: 1.5 }}>
+                    {names ? t("map_form.template_ke_field", { list: names }) : t("map_form.template_note")}
+                  </div>
+                );
+              })()}
               {tab === "point" && (
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                   {SHAPE_KEYS.map((s) => (

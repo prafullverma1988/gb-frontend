@@ -26,7 +26,8 @@ import { CreateTransactionModal } from "./FinanceModule";
 import { t, Rich } from "../i18n";
 import { BackClose } from "../utils/backNav";
 import { can, canAny, canEntry } from "../utils/perms";
-import { useMapLibrary, styleOf, lineOpts, markerIcon, MapLibraryDialog } from "./mapStyles";
+import { useMapLibrary, styleOf, lineOpts, markerIcon, MapLibraryDialog,
+  formOf, propsRows, missingOf, TypeDetailFields, drainPaths, drainLineOpts, polePoints, poleIcon } from "./mapStyles";
 // xlsx (~400 KB) sirf BOQ file kholte waqt chahiye — Tenders khulte hi nahi (PERF-05).
 // loadFile() pehle loadXlsx() await karta hai; baaki helper (sheetToAoa,
 // scoreBoqSheets) sirf uske baad bane workbook par chalte hain.
@@ -4271,12 +4272,13 @@ function MapTab({tenderId, sites}) {
     } else if (it.kind === "area" && Number(it.area_sqm) > 0) {
       rows.push([t("tenders.hv_rakba"), fmtArea(it.area_sqm)]);
     }
-    const P = it.props || {};
-    if (P.material) rows.push([t("tenders.material"), String(P.material).toUpperCase()]);
-    if (P.dia_mm) rows.push([t("tenders.vyas_dia_mm"), String(P.dia_mm)]);
-    if (P.surface) rows.push([t("tenders.surface"), String(P.surface).toUpperCase()]);
-    if (P.shape) rows.push([t("tenders.naali_ki_shakl"), String(P.shape)]);
-    if (P.depth_m) rows.push([t("tenders.gehrai_m"), String(P.depth_m)]);
+    // Type ka detail — Map library ke form ke label se (L, 10 Oct 2026).
+    // Chaudai upar alag column se aati hai, isliye form wali yahan nahi.
+    propsRows(it.kind, it.atype, it.props, ["width_m"]).forEach((r) => rows.push(r));
+    const poles = it.kind === "line" ? polePoints(it.atype, it.props, it.geometry || []).length : 0;
+    if (poles) rows.push([t("map_form.pole_ginti"), String(poles)]);
+    const miss = missingOf(formOf(it.kind, it.atype), it.props);
+    if (miss.length) rows.push([t("map_form.detail_adhoori"), miss.join(", ")]);
     if (it.source) rows.push([t("tenders.hv_source"), it.source]);
     return {
       title: it.name || alignLabel(it.kind, it.atype),
@@ -4285,7 +4287,7 @@ function MapTab({tenderId, sites}) {
       rows, attrs: Array.isArray(it.attrs) ? it.attrs : [], notes: it.notes || "",
       hint: t("tenders.hv_click_dashboard"),
     };
-  }, [progress]);
+  }, [progress, mapLib]);
   // Kisi bhi shape par hover = card; mouse ke saath chalta hai; hatte hi gayab.
   const hoverOn = useCallback((shape, card) => {
     const pos = (e) => (e && e.domEvent ? { x: e.domEvent.clientX, y: e.domEvent.clientY } : null);
@@ -4613,6 +4615,15 @@ function MapTab({tenderId, sites}) {
           // Hover = usi tukde ki lambai (tooti line par), baaki card wahi.
           hoverOn(pl, ()=>cardFor(it, pi));
           shapesRef.current.push(pl);
+          // Sadak ki side nali (detail me bhari ho) — bagal me patli dashed, sirf dikhawa.
+          drainPaths(it.atype, it.props, part, it.width_m).forEach((dp) => {
+            shapesRef.current.push(new g.maps.Polyline({ path: dp, ...drainLineOpts(g), map: mapRef.current }));
+          });
+        });
+        // Electrical line ke pole — har point par chhota gol nishaan.
+        polePoints(it.atype, it.props, coords).forEach((pp) => {
+          shapesRef.current.push(new g.maps.Marker({ map: mapRef.current, position: pp, clickable: false, zIndex: 3,
+            icon: poleIcon(g, styleOf("line", it.atype).colour) }));
         });
         // Chainage ke nishaan — sirf un lines par jinka shuruaati chainage
         // pata hai. Step lambai ke hisaab se, warna 20 km ki line par
@@ -6008,18 +6019,10 @@ function MapTab({tenderId, sites}) {
     )}
 
     {pending && !pendingHidden && (()=>{
-      const fam = familyOf(pending.atype);
       const P = pending.props || {};
       const setP = (k, v) => setPending(p=>({...p, props:{...(p.props||{}), [k]: v}}));
       const areaM2 = pending.kind === "area"
         ? (pending.edit ? Number(pending.area_sqm || 0) : polyAreaM2(pending.coords)) : 0;
-      const pick = (val, cur, on, label) => (
-        <button key={String(val)} onClick={on}
-          style={{fontSize:11.5, padding:"4px 11px", borderRadius:20, cursor:"pointer", fontFamily:"inherit",
-            border:`1px solid ${cur===val ? T.ind : T.b1}`,
-            background: cur===val ? T.indL : T.surface,
-            color: cur===val ? T.ind : T.t3, fontWeight: cur===val ? 700 : 400}}>{label}</button>
-      );
       return (
       <Modal title={pending.edit
                   ? t("tenders.badlav_type", { type: typeLabel(pending.atype) })
@@ -6077,37 +6080,29 @@ function MapTab({tenderId, sites}) {
               )}
             </Field>
           )}
-          {/* Sadak: PCC hai ya bitumen — BOQ ka item isi se tay hota hai. */}
-          {fam==="road" && (
-            <Field label={t("tenders.surface")} full>
-              <div style={{display:"flex", gap:6, flexWrap:"wrap"}}>
-                {[["pcc",t("tenders.surface_pcc")],["bitumen",t("tenders.surface_bitumen")],["wbm",t("tenders.surface_wbm")],["gsb",t("tenders.surface_gsb")],["other",t("tenders.aur_koi")]]
-                  .map(([v,l])=>pick(v, P.surface, ()=>setP("surface", v), l))}
+          {/* Type ka detail form — Map library se (L, 10 Oct 2026): sadak ka
+              surface / lane, pipe ka material / dia / inlet-outlet, naali ki
+              shakl / gehrai, electrical HT / LT… Keys wahi purani, isliye
+              purana data bhi dikhta hai. Chaudai upar alag hai; sadak ki naali
+              yahan "Naali saath me" se asli line banti hai — isliye form ki
+              naali wali khaane yahan nahi. Zaroori khaali ho to save nahi
+              rukta, sirf yaad dilate hain. */}
+          {(()=> {
+            const fields = formOf(pending.kind, pending.atype);
+            const hide = ["width_m", "drain_side", "drain_width_m", "drain_kind"];
+            if (!fields.filter(f=>!hide.includes(f.key)).length) return null;
+            const miss = missingOf(fields.filter(f=>!hide.includes(f.key)), P);
+            return (
+              <div style={{gridColumn:"1 / -1"}}>
+                <div style={{fontSize:11, fontWeight:700, color:T.t3, marginBottom:8}}>{t("map_form.detail")}</div>
+                <TypeDetailFields fields={fields} value={P} hide={hide} idPrefix="tnd-f"
+                  onChange={(next)=>setPending(p=>({...p, props: next}))}/>
+                {miss.length > 0 && (
+                  <div style={{fontSize:11.5, color:T.amb, marginTop:8}}>{t("map_form.adhoori_note", { list: miss.join(", ") })}</div>
+                )}
               </div>
-            </Field>
-          )}
-          {fam==="drain" && (<>
-            <Field label={t("tenders.naali_ki_shakl")}>
-              <div style={{display:"flex", gap:6, flexWrap:"wrap"}}>
-                {[["open",t("tenders.drain_khuli")],["covered",t("tenders.drain_dhaki")],["pipe",t("tenders.drain_pipe")]]
-                  .map(([v,l])=>pick(v, P.shape, ()=>setP("shape", v), l))}
-              </div>
-            </Field>
-            <Field label={t("tenders.gehrai_m")}>
-              <TxtIn value={P.depth_m ?? ""} onChange={v=>setP("depth_m", v)} ph="e.g. 1.2"/>
-            </Field>
-          </>)}
-          {fam==="pipe" && (<>
-            <Field label={t("tenders.material")}>
-              <div style={{display:"flex", gap:6, flexWrap:"wrap"}}>
-                {[["di","DI"],["pvc","PVC"],["hdpe","HDPE"],["rcc","RCC"],["ms","MS"],["other",t("tenders.aur_koi")]]
-                  .map(([v,l])=>pick(v, P.material, ()=>setP("material", v), l))}
-              </div>
-            </Field>
-            <Field label={t("tenders.vyas_dia_mm")}>
-              <TxtIn value={P.dia_mm ?? ""} onChange={v=>setP("dia_mm", v)} ph="e.g. 300"/>
-            </Field>
-          </>)}
+            );
+          })()}
         </div>
 
         {/* Rakba — naapa hua, likha hua nahi. Wahi ankda server bhi nikalta
@@ -6306,14 +6301,8 @@ function MapTab({tenderId, sites}) {
                   {/* Type ke apne field — jo bhara hai wahi dikhta hai. PCC
                       hai ya bitumen, DI hai ya HDPE: ye list se hi pata chale. */}
                   {(()=> {
-                    const p = it.props || {};
-                    const bits = [
-                      p.surface && String(p.surface).toUpperCase(),
-                      p.material && String(p.material).toUpperCase(),
-                      p.dia_mm && `${p.dia_mm} mm`,
-                      p.shape && ({open:"khuli", covered:"dhaki", pipe:"pipe"}[p.shape] || p.shape),
-                      p.depth_m && `gehrai ${p.depth_m} m`,
-                    ].filter(Boolean);
+                    // Form ke label wale value (Map library se) — pehle 4.
+                    const bits = propsRows(it.kind, it.atype, it.props, ["width_m"]).map(r => r[1]).slice(0, 4);
                     return bits.length ? ` · ${bits.join(" · ")}` : "";
                   })()}
                   {it.source==="kml" && it.source_file ? ` · ${it.source_file}` : ""}
