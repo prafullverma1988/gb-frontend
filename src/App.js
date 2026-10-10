@@ -1085,7 +1085,28 @@ function ProfileMenu({user,onNav,onLogout,close}){
   );
 }
 
-function TopBar({title,sub,collapsed,setCollapsed,alertCount,user,onLogout,onNav,onSearch,onCheatsheet,onNotificationNav,isMobile}){
+// ↻ "Refresh" (10 Oct 2026, S — Prafull: web ki har screen par). Sirf andar ka
+// module dobara banta hai (App ka refreshKey) — page reload nahi, login /
+// sidebar / khula store wahi. Ghoomna thodi der, tab tak dobara nahi dabta.
+function RefreshNow({onRefresh,isMobile}){
+  const [spin,setSpin]=useState(false);
+  const go=()=>{ if(spin) return; setSpin(true); onRefresh(); setTimeout(()=>setSpin(false),700); };
+  const sz=isMobile?34:32;
+  return(
+    <button onClick={go} disabled={spin} title={t("common.refresh")} aria-label={t("common.refresh")}
+      style={{width:sz,height:sz,borderRadius:8,border:`1px solid ${T.b1}`,background:T.bg,cursor:spin?"default":"pointer",color:T.t3,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,opacity:spin?0.7:1}}
+      onMouseEnter={e=>{if(!spin)e.currentTarget.style.background=T.sltL;}}
+      onMouseLeave={e=>e.currentTarget.style.background=T.bg}>
+      <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round"
+        style={{animation:spin?"rfnow-spin .7s linear infinite":"none"}}>
+        <path d="M21 12a9 9 0 1 1-6.2-8.5M21 3v6h-6"/>
+      </svg>
+      {spin&&<style>{`@keyframes rfnow-spin{to{transform:rotate(360deg)}}`}</style>}
+    </button>
+  );
+}
+
+function TopBar({title,sub,collapsed,setCollapsed,alertCount,user,onLogout,onNav,onSearch,onCheatsheet,onNotificationNav,onRefresh,isMobile}){
   const [showProfile,setShowProfile]=useState(false);
   const profileRef=useRef(null);
   // Bahar kahin bhi click karo to menu band ho jaye — warna wo khula reh
@@ -1116,6 +1137,7 @@ function TopBar({title,sub,collapsed,setCollapsed,alertCount,user,onLogout,onNav
         style={{width:32,height:32,borderRadius:8,border:`1px solid ${T.b1}`,background:T.bg,cursor:"pointer",color:T.t3,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:700,transition:"all 0.15s"}}
         onMouseEnter={e=>e.currentTarget.style.background=T.sltL}
         onMouseLeave={e=>e.currentTarget.style.background=T.bg}>?</button>}
+      {onRefresh&&<RefreshNow onRefresh={onRefresh} isMobile={isMobile}/>}
       <NotificationBell onNavigate={onNotificationNav}/>
       <div ref={profileRef} style={{position:"relative"}}>
 
@@ -1902,6 +1924,8 @@ function App(){
   const [companies,setCompanies]=useState(()=>getCompanies());
   const [switching,setSwitching]=useState(false);
   const [nav,setNav]=useState("projects");
+  // TopBar ka ↻ — badalne par chalu module dobara banta hai (apna data naya mangta hai).
+  const [refreshKey,setRefreshKey]=useState(0);
   // Module badalna = ek kadam; browser Back pichhle module par le aata hai.
   // Back se aaya badlav khud naya kadam na bane, isliye navByBack.
   const prevNavRef=useRef(nav);
@@ -2320,7 +2344,7 @@ function App(){
       </div>}
       {!hideAppShell && !isMobile && <Sidebar active={nav} setActive={setNav} collapsed={collapsed} setCollapsed={setCollapsed} user={user} onLogout={handleLogout} enabledModules={enabledModules} isMobile={isMobile} companies={companies} onSwitchCompany={handleSwitchCompany} ticketCount={ticketCount} sahayakNotifCount={sahayakNotifCount}/>}
       <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
-        {!hideAppShell && <TopBar title={page.title} sub={page.sub} onNav={setNav} collapsed={collapsed} setCollapsed={setCollapsed} alertCount={0} user={user} onLogout={handleLogout} onSearch={()=>setShowSearch(true)} onCheatsheet={()=>setShowCheatsheet(true)} onNotificationNav={handleNotifNav} isMobile={isMobile}/>}
+        {!hideAppShell && <TopBar title={page.title} sub={page.sub} onNav={setNav} onRefresh={()=>setRefreshKey(k=>k+1)} collapsed={collapsed} setCollapsed={setCollapsed} alertCount={0} user={user} onLogout={handleLogout} onSearch={()=>setShowSearch(true)} onCheatsheet={()=>setShowCheatsheet(true)} onNotificationNav={handleNotifNav} isMobile={isMobile}/>}
         <div style={{flex:1,overflowY:"auto",paddingBottom:isMobile&&!hideAppShell?68:0}}>
           {/* Inner ErrorBoundary: if a single module's chunk fails or
               the module throws on mount, recover the module area only —
@@ -2329,7 +2353,7 @@ function App(){
               escapes this one. */}
           <AppErrorBoundary>
             <Suspense fallback={<ModuleLoader/>}>
-              {MODULE_MAP[nav]||<DashboardModule/>}
+              <Fragment key={nav+"-"+refreshKey}>{MODULE_MAP[nav]||<DashboardModule/>}</Fragment>
             </Suspense>
           </AppErrorBoundary>
         </div>
