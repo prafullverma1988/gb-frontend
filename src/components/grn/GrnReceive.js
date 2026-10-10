@@ -564,13 +564,13 @@ const GrnReceive = forwardRef(function GrnReceive({
           <div key={row.id} style={{ display: "grid", gridTemplateColumns: dCols, gap: 7, padding: "6px 8px", alignItems: "center", borderBottom: i < dRows.length - 1 ? "1px dashed " + T.b1 : "none" }}>
             <div>
               <input value={row.item_name}
-                onChange={e => { const v = e.target.value; const m = libFind(v); setDRow(row.id, { item_name: v, unit: m?.unit || row.unit, _factorErr: false }); }}
+                onChange={e => { const v = e.target.value; const m = libFind(v); setDRow(row.id, { item_name: v, unit: m?.unit || row.unit, factor: "", _factorErr: false }); }}
                 onBlur={e => fetchLastRate(row.id, e.target.value.trim())}
                 placeholder={t("material.e_g_cement_opc_53")} list={"grn_lib_" + i} style={{ ...inpS, fontSize: 12.5, padding: "7px 9px" }} />
               <datalist id={"grn_lib_" + i}>{lib.map(m => <option key={m.id || m.name} value={m.name} />)}</datalist>
             </div>
             <input type="number" value={row.qty} onChange={e => setDRow(row.id, { qty: e.target.value })} placeholder="0" style={{ ...inpS, fontSize: 12.5, padding: "7px 9px" }} />
-            <PickSelect value={unit} onChange={e => setDRow(row.id, { unit: e.target.value, _factorErr: false })} style={{ ...inpS, fontSize: 12.5, padding: "7px 9px", cursor: "pointer" }}>
+            <PickSelect value={unit} onChange={e => setDRow(row.id, { unit: e.target.value, factor: "", _factorErr: false })} style={{ ...inpS, fontSize: 12.5, padding: "7px 9px", cursor: "pointer" }}>
               {unitOptions(uoms.length ? uoms : UNITS_MR.map(u => ({ symbol: u })), [unit, lm?.unit]).map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
             </PickSelect>
             {isWh && (

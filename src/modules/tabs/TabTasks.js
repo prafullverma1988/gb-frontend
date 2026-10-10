@@ -174,13 +174,22 @@ function usePtStockUnits(projectId){
 const ptStockKey=(n)=>String(n||"").trim().toLowerCase();
 // "Same unit" server (utils/unitNorm.js) jaisa: aakhri "s" aur pakke hamnaam.
 const PT_UNIT_ALIAS={kg:["kg","kgs","kilo","kilos","kilogram","kilograms"],ton:["t","ton","tons","tonne","tonnes","mt","mts","metricton","metrictonne","metrictons"],
-  qtl:["q","qtl","qtls","quintal","quintals"],nos:["no","nos","number","numbers"],cum:["cum","cumt","cumtr","m3","cbm","cubicmeter","cubicmetre","cubicmeters","cubicmetres"],
+  qtl:["q","qtl","qtls","quintal","quintals"],nos:["no","nos","number","numbers"],cum:["cum","cumt","cumtr","cmtr","m3","cbm","cubicmeter","cubicmetre","cubicmeters","cubicmetres"],
   cft:["cft","cuft","ft3","cubicfeet","cubicfoot"],sqft:["sqft","sft","ft2","squarefeet","squarefoot"],sqm:["sqm","sqmt","sqmtr","m2","squaremeter","squaremetre","squaremeters","squaremetres"],
-  ltr:["l","lt","ltr","ltrs","litre","litres","liter","liters"],box:["box","boxes"]};
+  ltr:["l","lt","ltr","ltrs","litre","litres","liter","liters"],box:["box","boxes"],
+  // Server ke saath barabar (10 Oct 2026, D review): purani fix list ke naam. RMT ≠ Mtr abhi bhi alag.
+  mtr:["mtr","mtrs","meter","meters","metre","metres"],rft:["rft","runningft","runningfeet","runningfoot"],pcs:["pc","pcs","piece","pieces"]};
 const PT_ALIAS_OF={}; for(const [c,l] of Object.entries(PT_UNIT_ALIAS)) for(const a of l) PT_ALIAS_OF[a]=c;
 const ptCanonUnit=(u)=>{ const k=String(u||"").trim().toLowerCase().replace(/\./g,"").replace(/\s+/g,""); if(!k) return ""; if(PT_ALIAS_OF[k]) return PT_ALIAS_OF[k]; return k.length>3&&k.endsWith("s")&&!k.endsWith("ss")?k.slice(0,-1):k; };
 const ptSameStockUnit=(a,b)=>{ const x=ptCanonUnit(a); return !!x&&x===ptCanonUnit(b); };
-const ptKgPerUnit=(u)=>{ const k=ptCanonUnit(u); return k==="kg"?1:k==="ton"?1000:k==="qtl"?100:null; };
+// Wazan wali unit: server (utils/unitNorm.js kgPerUnit) jaisa regex — alias table se nahi (10 Oct 2026, D review).
+const ptKgPerUnit=(u)=>{
+  const k=String(u||"").trim().toLowerCase().replace(/\./g,"");
+  if(/^(kg|kgs|kilo|kilogram|kilograms)$/.test(k)) return 1;
+  if(/^(t|ton|tons|tonne|tonnes|mt|mts|metric ton|metric tonne)$/.test(k)) return 1000;
+  if(/^(q|qtl|qtls|quintal|quintals)$/.test(k)) return 100;
+  return null;
+};
 // null = koi sawaal nahi; {weight} apne aap; {factor} bhara hua; {need} factor chahiye.
 function ptStockConv(st,unit,qty,factor){
   const stock=String((st&&st.unit)||"").trim(), u=String(unit||"").trim();
@@ -3345,7 +3354,7 @@ function TaskGRNModal({task, prefill, projectId, onClose, onSaved}){
               <input value={form.material_name} onChange={e=>{
                   // Naam Library se mile to unit wahi (pehle naam badalne par unit wahi purani "Bag" rehti thi — Bug 2, D).
                   const v=e.target.value; const m=grnMatLib.find(x=>ptStockKey(x.name)===ptStockKey(v));
-                  setForm(p=>({...p,material_name:v,unit:m?.unit||p.unit})); setFactorErr(false);
+                  setForm(p=>({...p,material_name:v,unit:m?.unit||p.unit})); setFactor(""); setFactorErr(false); // naam/unit badli to purana "1 unit = kitne" jhootha (10 Oct 2026, D review)
                 }}
                 placeholder={t("master_library.e_g_opc_cement_53_grade")} list="grn-mat-list"
                 style={{width:"100%",padding:"9px 11px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}
@@ -3363,7 +3372,7 @@ function TaskGRNModal({task, prefill, projectId, onClose, onSaved}){
               <div>
                 {/* Unit: Library → Units, default material ki Library unit; jo dikhe wahi save (Bug 2 — pehle 🔒 Library ki dikhti, save "Bag" hota). */}
                 <label style={{fontSize:9.5,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>{t("common.unit")}</label>
-                <PickSelect value={form.unit} onChange={e=>{ setForm(p=>({...p,unit:e.target.value})); setFactorErr(false); }}
+                <PickSelect value={form.unit} onChange={e=>{ setForm(p=>({...p,unit:e.target.value})); setFactor(""); setFactorErr(false); }}
                   style={{width:"100%",padding:"9px 11px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",fontFamily:"inherit",background:"white"}}>
                   {ptWithUnit(unitOpts,form.unit,(grnMatLib.find(m=>ptStockKey(m.name)===ptStockKey(form.material_name))||{}).unit).map(o=><option key={o.value} value={o.value}>{o.label}</option>)}
                 </PickSelect>

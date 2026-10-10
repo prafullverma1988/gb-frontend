@@ -75,12 +75,16 @@ const UNIT_ALIAS = {
   ton: ["t", "ton", "tons", "tonne", "tonnes", "mt", "mts", "metricton", "metrictonne", "metrictons"],
   qtl: ["q", "qtl", "qtls", "quintal", "quintals"],
   nos: ["no", "nos", "number", "numbers"],
-  cum: ["cum", "cumt", "cumtr", "m3", "cbm", "cubicmeter", "cubicmetre", "cubicmeters", "cubicmetres"],
+  cum: ["cum", "cumt", "cumtr", "cmtr", "m3", "cbm", "cubicmeter", "cubicmetre", "cubicmeters", "cubicmetres"],
   cft: ["cft", "cuft", "ft3", "cubicfeet", "cubicfoot"],
   sqft: ["sqft", "sft", "ft2", "squarefeet", "squarefoot"],
   sqm: ["sqm", "sqmt", "sqmtr", "m2", "squaremeter", "squaremetre", "squaremeters", "squaremetres"],
   ltr: ["l", "lt", "ltr", "ltrs", "litre", "litres", "liter", "liters"],
   box: ["box", "boxes"],
+  // Server ke saath barabar (10 Oct 2026, D review): purani fix list ke naam. RMT ≠ Mtr abhi bhi alag.
+  mtr: ["mtr", "mtrs", "meter", "meters", "metre", "metres"],
+  rft: ["rft", "runningft", "runningfeet", "runningfoot"],
+  pcs: ["pc", "pcs", "piece", "pieces"],
 };
 const ALIAS_OF = {};
 for (const [c, list] of Object.entries(UNIT_ALIAS)) for (const a of list) ALIAS_OF[a] = c;

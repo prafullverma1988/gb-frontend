@@ -1706,7 +1706,21 @@ function CreatePOModal({onClose,onSave,prefillItems,prefillVendor,editPo,dbProje
             notes:form.notes||"",
             receivingContacts:contacts,
           };
-          try { await onSave(newPO); }
+          try {
+            const r = await onSave(newPO);
+            // Server ne line ki unit MR ki unit se alag paayi (PO_UNIT_NE_MR): us line ki unit
+            // MR wali kar do taaki agli Save chale. Line pehle linked_mr_id se, warna naam se
+            // (10 Oct 2026, D review).
+            const fx = r && r.unitFix;
+            if (fx && fx.mr_unit) {
+              setForm(p=>{
+                const nm=(x)=>String(x||"").trim().toLowerCase();
+                let k=p.items.findIndex(it=>it.linked_mr_id && String(it.linked_mr_id)===String(fx.mr_id));
+                if(k<0) k=p.items.findIndex(it=>nm(it.desc)===nm(fx.item));
+                return k<0 ? p : {...p,items:p.items.map((it,j)=>j===k?{...it,unit:fx.mr_unit}:it)};
+              });
+            }
+          }
           finally { submittingRef.current = false; setSubmitting(false); }
         }} disabled={!form.vendor||!form.project||!hasReceivingContact(contacts)||submitting} color={T.blu} full icon={<IcPO size={14} color="white"/>}>{submitting?(isEdit?t("common.saving_2"):t("common.creating")):(isEdit?t("procurement.save_resubmit"):t("procurement.create_po_draft"))}</Btn>
       </MFoot>
@@ -3103,7 +3117,11 @@ function ProcurementModule(){
             notes: newPO.notes||"",
             receiving_contacts: newPO.receivingContacts||[],
           });
-          if (!res.success) { alert(res.message||"Update failed"); return; }
+          if (!res.success) {
+            alert(res.message||"Update failed");
+            // Line ki unit MR se alag (PO_UNIT_NE_MR) — modal us line ki unit MR wali kar de (10 Oct 2026, D review)
+            return res.code==="PO_UNIT_NE_MR" ? {unitFix:res.data} : undefined;
+          }
           // If was in Revision, flip to Draft + re-submit for approval
           const wasRevision = editPo?.approval === "Revision";
           if (wasRevision) {
@@ -3164,7 +3182,8 @@ function ProcurementModule(){
           // ko list me daalna jhooth hoga. Wajah dikhao aur modal khula rakho
           // taki user wahin theek kar sake.
           alert(res.message||"PO create failed");
-          return;
+          // Same: PO_UNIT_NE_MR par line ki unit MR wali (10 Oct 2026, D review)
+          return res.code==="PO_UNIT_NE_MR" ? {unitFix:res.data} : undefined;
         }
         setShowCreatePO(false);
         setCreatePOPrefill(null);

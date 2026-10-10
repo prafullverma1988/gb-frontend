@@ -914,12 +914,21 @@ const loadLibraryUoms=()=>{
 // ke stock se alag ho to "1 {unit} = kitne {stock}?" (stock_factor). "Same
 // unit" server (utils/unitNorm.js) jaisa; wazan se wazan server khud badalta.
 const FIN_UNIT_ALIAS={kg:["kg","kgs","kilo","kilos","kilogram","kilograms"],ton:["t","ton","tons","tonne","tonnes","mt","mts","metricton","metrictonne","metrictons"],
-  qtl:["q","qtl","qtls","quintal","quintals"],nos:["no","nos","number","numbers"],cum:["cum","cumt","cumtr","m3","cbm","cubicmeter","cubicmetre","cubicmeters","cubicmetres"],
+  qtl:["q","qtl","qtls","quintal","quintals"],nos:["no","nos","number","numbers"],cum:["cum","cumt","cumtr","cmtr","m3","cbm","cubicmeter","cubicmetre","cubicmeters","cubicmetres"],
   cft:["cft","cuft","ft3","cubicfeet","cubicfoot"],sqft:["sqft","sft","ft2","squarefeet","squarefoot"],sqm:["sqm","sqmt","sqmtr","m2","squaremeter","squaremetre","squaremeters","squaremetres"],
-  ltr:["l","lt","ltr","ltrs","litre","litres","liter","liters"],box:["box","boxes"]};
+  ltr:["l","lt","ltr","ltrs","litre","litres","liter","liters"],box:["box","boxes"],
+  // Server ke saath barabar (10 Oct 2026, D review): purani fix list ke naam. RMT ≠ Mtr abhi bhi alag.
+  mtr:["mtr","mtrs","meter","meters","metre","metres"],rft:["rft","runningft","runningfeet","runningfoot"],pcs:["pc","pcs","piece","pieces"]};
 const FIN_ALIAS_OF={}; for(const [c,l] of Object.entries(FIN_UNIT_ALIAS)) for(const a of l) FIN_ALIAS_OF[a]=c;
 const finCanonUnit=(u)=>{ const k=String(u||"").trim().toLowerCase().replace(/\./g,"").replace(/\s+/g,""); if(!k) return ""; if(FIN_ALIAS_OF[k]) return FIN_ALIAS_OF[k]; return k.length>3&&k.endsWith("s")&&!k.endsWith("ss")?k.slice(0,-1):k; };
-const finKgPerUnit=(u)=>{ const k=finCanonUnit(u); return k==="kg"?1:k==="ton"?1000:k==="qtl"?100:null; };
+// Wazan wali unit: server (utils/unitNorm.js kgPerUnit) jaisa regex — alias table se nahi (10 Oct 2026, D review).
+const finKgPerUnit=(u)=>{
+  const k=String(u||"").trim().toLowerCase().replace(/\./g,"");
+  if(/^(kg|kgs|kilo|kilogram|kilograms)$/.test(k)) return 1;
+  if(/^(t|ton|tons|tonne|tonnes|mt|mts|metric ton|metric tonne)$/.test(k)) return 1000;
+  if(/^(q|qtl|qtls|quintal|quintals)$/.test(k)) return 100;
+  return null;
+};
 // null = koi sawaal nahi; {weight} apne aap; {factor} bhara hua; {need} factor chahiye.
 function finStockConv(st,unit,qty,factor){
   const stock=String((st&&st.unit)||"").trim(), u=String(unit||"").trim();
@@ -1861,6 +1870,8 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
   const updRow=(id,k,v)=>setRows(p=>p.map(r=>{
     if(r.id!==id) return r;
     let u={...r,[k]:v};
+    // Unit ya material badli to purana "1 {unit} = kitne {stock}" jhootha — saaf (10 Oct 2026, D review)
+    if(k==="unit"||k==="material"){ u.stock_factor=""; u._factorErr=false; }
     if(k==="qty"||k==="rate"||k==="total"||k==="alt_qty"||k==="altOn"){
       // alt_qty plays the qty role in the solver's touch order
       if(k!=="altOn") u._t=_touch(u._t,k==="alt_qty"?"qty":k);

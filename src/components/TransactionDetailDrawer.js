@@ -330,6 +330,11 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
         _rate0: it.rate ?? "",
         _item0: it.item_name || it.item || it.name || it.description || "",
         _unit0: it.unit || "",
+        // "Billing unit alag?" wali line ka aaya hua maap — server GET deta hai,
+        // Edit wapas bhejta hai, warna save par kho jaata tha (10 Oct 2026, D review).
+        primary_qty: it.primary_qty ?? null,
+        primary_unit: it.primary_unit ?? null,
+        weight_source: it.weight_source ?? null,
       })));
     }
   }, [txn]);
@@ -374,7 +379,10 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
     it._new || String(it.item) !== String(it._item0) || String(it.qty) !== String(it._qty0)
     || String(it.rate) !== String(it._rate0) || String(it.unit) !== String(it._unit0));
   const editItemsTotal = r2(editItems.reduce((s, it) => s + lineAmt(it), 0) + headerExtra);
-  const updItem = (i, k, v) => setEditItems(p => p.map((it, idx) => idx === i ? { ...it, [k]: v } : it));
+  // Unit ya material badle to purana "1 {unit} = kitne {stock}" aur stock ki unit
+  // dono jhoothe ho jaate hain — saaf karo, server agli save par dobara poochhega
+  // (10 Oct 2026, D review).
+  const updItem = (i, k, v) => setEditItems(p => p.map((it, idx) => idx === i ? { ...it, [k]: v, ...((k === "unit" || k === "item") ? { stock_factor: "", _stock: null } : {}) } : it));
   const addItem = () => setEditItems(p => [...p, { item: "", qty: "", unit: "", rate: "", head: "", description: "", _fromGRN: false, _locked: false, _amt0: null, _new: true }]);
   const delItem = (i) => setEditItems(p => p.filter((_, idx) => idx !== i));
   const miniInp = (align = "left") => ({ width: "100%", padding: "4px 6px", borderRadius: 4, border: `1px solid ${T.b1}`, fontSize: 11.5, outline: "none", boxSizing: "border-box", fontFamily: "inherit", textAlign: align, background: "#fff" });
@@ -420,6 +428,10 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
             fromGRN: !!it._fromGRN,
             // Server ne stock ki unit par roka tha aur "1 {unit} = kitne {stock}" bhara (D.4)
             ...(!it._fromGRN && it._stock && parseFloat(it.stock_factor) > 0 ? { stock_factor: parseFloat(it.stock_factor) } : {}),
+            // Aaya hua maap jaisa mila waisa wapas — null ho to bhejo hi mat (10 Oct 2026, D review)
+            ...(it.primary_qty != null ? { primary_qty: it.primary_qty } : {}),
+            ...(it.primary_unit != null ? { primary_unit: it.primary_unit } : {}),
+            ...(it.weight_source != null ? { weight_source: it.weight_source } : {}),
           }));
       }
       const res = await api.put("/finance/transactions/" + txn.id, payload);
@@ -646,10 +658,7 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
                               <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                                 <input type="number" min="0" step="any" value={it.stock_factor || ""} onChange={e => updItem(i, "stock_factor", e.target.value)} style={{ ...miniInp("right"), width: 80 }}/>
                                 <span style={{ fontSize: 11, color: T.t2 }}>{it._stock}</span>
-                                <button type="button" onClick={() => setEditItems(p => p.map((x, j) => (j === i ? { ...x, unit: x._stock, stock_factor: "" } : x)))}
-                                  style={{ padding: "2px 9px", borderRadius: 12, border: `1px solid ${T.ambM}`, background: "#fff", color: T.amb, fontSize: 10.5, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
-                                  {t("unit.keep_stock", { stock: it._stock })}
-                                </button>
+                                {/* "{stock} me hi likho" chip hataya: drawer me ye qty badle bina unit ka naam badalta tha (600 CFT → "600 Cum") — 10 Oct 2026, D review */}
                               </div>
                               {parseFloat(it.stock_factor) > 0 && (
                                 <div style={{ fontSize: 10.5, color: T.t3, marginTop: 3 }}>{t("unit.stock_preview", { qty: Math.round((parseFloat(it.qty) || 0) * parseFloat(it.stock_factor) * 1000) / 1000, stock: it._stock })}</div>
