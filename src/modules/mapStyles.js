@@ -235,11 +235,17 @@ export function drainLineOpts(g) {
   const st = styleOf("line", "drain");
   return lineOpts(g, { colour: st.colour, width: 2, dash: "dashed" }, { clickable: false, zIndex: 1 });
 }
-// ── Electrical line ke pole — line ka har point ek pole (site par har pole
-// par tap hota hai). Pole "none" chuna ho to nahi.
+// ── Electrical line ke pole. Phone par chal kar bani line me pole ki jagah
+// alag likhi hoti hai (props.poles — "⚡ Pole yahan"), kyunki wahan har 2–5 m
+// par point hai. Na ho to line ka har point ek pole (tap / draw). Pole
+// "none" chuna ho to nahi.
 export function polePoints(code, props, pts) {
   if (templateOf("line", code) !== "electrical" || !Array.isArray(pts) || pts.length < 2) return [];
-  if ((props || {}).pole === "none") return [];
+  const p = props || {};
+  if (p.pole === "none") return [];
+  if (Array.isArray(p.poles)) {
+    return p.poles.map((q) => ({ lat: Number(q[0]), lng: Number(q[1]) })).filter((q) => Number.isFinite(q.lat) && Number.isFinite(q.lng));
+  }
   return pts;
 }
 export function poleIcon(g, colour) {
