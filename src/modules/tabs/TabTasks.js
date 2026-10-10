@@ -3386,7 +3386,7 @@ function TaskGRNModal({task, prefill, projectId, onClose, onSaved}){
                     <input type="number" min="0" step="any" value={factor} onChange={e=>{ setFactor(e.target.value); setFactorErr(false); }}
                       style={{width:100,padding:"7px 9px",borderRadius:6,border:"1.5px solid "+(factorErr&&conv.need?"#DC2626":"#FDE68A"),fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"inherit",background:"white"}}/>
                     <span style={{fontSize:12,color:"#374151"}}>{conv.stock}</span>
-                    <button type="button" onClick={()=>{ setForm(p=>({...p,unit:conv.stock})); setFactor(""); setFactorErr(false); }}
+                    <button type="button" onClick={()=>{ /* qty doosri unit ki thi — khaali, dobara likho (D review) */ setForm(p=>({...p,unit:conv.stock,received_qty:""})); setFactor(""); setFactorErr(false); }}
                       style={{padding:"5px 11px",borderRadius:14,border:"1px solid #FDE68A",background:"white",color:"#92400E",fontSize:11.5,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
                       {t("unit.keep_stock",{stock:conv.stock})}
                     </button>

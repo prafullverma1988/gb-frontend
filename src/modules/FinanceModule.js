@@ -2992,7 +2992,7 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
                         <input type="number" min="0" step="any" value={row.stock_factor||""} onChange={e=>setRows(p=>p.map(r=>r.id===row.id?{...r,stock_factor:e.target.value,_factorErr:false}:r))}
                           style={inp({width:90,borderColor:err?T.red:T.ambM})}/>
                         <span style={{fontSize:11.5,color:T.t2}}>{cv.stock}</span>
-                        <button type="button" onClick={()=>setRows(p=>p.map(r=>r.id===row.id?{...r,unit:cv.stock,stock_factor:"",_factorErr:false}:r))}
+                        <button type="button" onClick={()=>setRows(p=>p.map(r=>r.id===row.id?{...r,unit:cv.stock,qty:"",stock_factor:"",_factorErr:false}:r))/* qty doosri unit ki thi — khaali, dobara likho (D review) */}
                           style={{padding:"3px 10px",borderRadius:14,border:"1px solid "+T.ambM,background:T.surface,color:T.amb,fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
                           {t("unit.keep_stock",{stock:cv.stock})}
                         </button>

@@ -596,7 +596,7 @@ const GrnReceive = forwardRef(function GrnReceive({
                   <input type="number" min="0" step="any" value={row.factor || ""} onChange={e => setDRow(row.id, { factor: e.target.value, _factorErr: false })}
                     style={{ ...inpS, width: 90, background: T.surface, borderColor: row._factorErr && cv.need ? T.red : T.ambM }} />
                   <span style={{ fontSize: 11.5, color: T.t2 }}>{cv.stock}</span>
-                  <button type="button" onClick={() => setDRow(row.id, { unit: cv.stock, factor: "", _factorErr: false })}
+                  <button type="button" onClick={() => setDRow(row.id, { unit: cv.stock, qty: "", factor: "", _factorErr: false }) /* qty doosri unit ki thi — khaali, dobara likho (D review) */}
                     style={{ padding: "4px 10px", borderRadius: 14, border: "1px solid " + T.ambM, background: T.surface, color: T.amb, fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
                     {t("unit.keep_stock", { stock: cv.stock })}
                   </button>
