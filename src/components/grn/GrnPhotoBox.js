@@ -39,6 +39,14 @@ const EMPTY = { challan: [], rec: [], site: [] };
 // Server ka photo_key → tile (andar ke material par T3 ki key material_issue / material_transfer).
 const tileOfKey = (k) => (k === "grn" ? "challan" : k === "grn_rec_slip" ? "rec" : "site");
 
+// Ek-click receive (bina form wale screen): teeno tile Photo Settings me Off
+// hon to photo ka sheet kholna bekaar — seedha bhejo, naye khaane khaali (E).
+export async function grnPhotosOff() {
+  const p = await loadPhotoPolicy();
+  return ["grn", "grn_rec_slip", "grn_vehicle"].every(k => policyFor(p, k).mode === "off");
+}
+export const GRN_NO_PHOTO_BODY = { photo_urls: null, photos_pending: 0, rec_slip_no: null, rec_slip_url: null, site_photo_urls: [], site_photos_pending: 0 };
+
 // Dohra rec slip ka peela hint — screen band ho jaaye to alert me bhi yahi.
 export function recSlipDupText(no, dup, receivingIssue) {
   if (!dup) return "";

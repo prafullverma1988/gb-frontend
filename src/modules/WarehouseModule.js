@@ -2711,6 +2711,9 @@ function IssueDetailDrawer({issue,onClose,canDelete,canReceive,onDeleted,onRecei
   const [receiveOpen,setReceiveOpen]=useState(false);
   const [receiveItems,setReceiveItems]=useState([]);
   const [receiving,setReceiving]=useState(false);
+  // Receive par do photo tile — Rec slip + Material (purani key material_issue),
+  // site ke "Aa raha hai" card jaisa (10 Oct 2026, E). Pehle yahan photo thi hi nahi.
+  const phRef=useRef(null);
 
   useEffect(()=>{
     if(!issue?.dbId)return;
@@ -2738,10 +2741,16 @@ function IssueDetailDrawer({issue,onClose,canDelete,canReceive,onDeleted,onRecei
 
   const handleReceive=async()=>{
     setReceiving(true);
+    // Rec slip ka upload poora hone tak ruko; material ki photo peeche chadh sakti hai.
+    const ph=phRef.current;
+    if(ph&&!(await ph.ready())){ setReceiving(false); return; }
     const items=receiveItems.map(it=>({id:it.id,received_qty:Number(it.received_qty||0)}));
-    const r=await api.post(`/warehouse/issues/${detail.dbId}/receive`,{items});
+    const r=await api.post(`/warehouse/issues/${detail.dbId}/receive`,{items,...(ph?ph.body():{})});
     setReceiving(false);
     if(r.success){
+      // Peeche chadhti photo site ki GRN (data.grn_id) par; dohra rec slip ho to bata do.
+      const msg=ph?ph.done(r.data?.grn_id,{dup:r.data?.rec_slip_dup,receivingIssue:r.data?.receiving_issue}):"";
+      if(msg) alert(msg);
       onReceived&&onReceived();
       api.get(`/warehouse/issues/${detail.dbId}`).then(rr=>{
         if(rr.success){
@@ -2750,7 +2759,7 @@ function IssueDetailDrawer({issue,onClose,canDelete,canReceive,onDeleted,onRecei
           setReceiveOpen(false);
         }
       });
-    } else alert(r.message||"Receive failed");
+    } else { if(ph) ph.fail(r); alert(r.message||t("grn.save_failed")); }
   };
 
   const items=detail?.items||[];
@@ -2881,6 +2890,7 @@ function IssueDetailDrawer({issue,onClose,canDelete,canReceive,onDeleted,onRecei
                       style={{height:32,padding:"0 8px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:12,outline:"none",fontFamily:"inherit",textAlign:"right"}}/>
                   </div>
                 ))}
+                <GrnPhotoTiles ref={phRef} inbound="material_issue" dest={{projectId:detail.project_id}}/>
                 <div style={{display:"flex",gap:8,marginTop:10,justifyContent:"flex-end"}}>
                   <GhostBtn onClick={()=>setReceiveOpen(false)}>{t("common.cancel")}</GhostBtn>
                   <Btn onClick={handleReceive} disabled={receiving} c={T.grn} icon={IcChk} size="sm">
@@ -3326,6 +3336,10 @@ export function TransferDetailDrawer({transfer,onClose,canDelete,canReceive,onDe
   const [receiveOpen,setReceiveOpen]=useState(false);
   const [receiveItems,setReceiveItems]=useState([]);
   const [receiving,setReceiving]=useState(false);
+  // Receive par do photo tile — Rec slip + Material (purani key material_transfer)
+  // (10 Oct 2026, E). Store me receive par GRN nahi banti: rok wahi lagti hai,
+  // photo kahin judti nahi (server pehle bhi aisa hi tha).
+  const phRef=useRef(null);
 
   useEffect(()=>{
     if(!transfer?.dbId)return;
@@ -3353,10 +3367,17 @@ export function TransferDetailDrawer({transfer,onClose,canDelete,canReceive,onDe
 
   const handleReceive=async()=>{
     setReceiving(true);
+    // Site par: rec slip ka intezaar, material ki photo peeche chadh sakti hai (GRN par
+    // judti hai). Store me GRN nahi — wahan teeno upload poore hone ka intezaar.
+    const ph=phRef.current;
+    const toStore=!!detail?.to_warehouse_id;
+    if(ph&&!(await ph.ready({wait:toStore}))){ setReceiving(false); return; }
     const items=receiveItems.map(it=>({id:it.id,received_qty:Number(it.received_qty||0)}));
-    const r=await api.post(`/warehouse/transfers/${detail.dbId}/receive`,{items});
+    const r=await api.post(`/warehouse/transfers/${detail.dbId}/receive`,{items,...(ph?ph.body():{})});
     setReceiving(false);
     if(r.success){
+      const msg=ph?ph.done(r.data?.grn_id||null,{dup:r.data?.rec_slip_dup,receivingIssue:r.data?.receiving_issue}):"";
+      if(msg) alert(msg);
       onReceived&&onReceived();
       // refresh detail
       api.get(`/warehouse/transfers/${detail.dbId}`).then(rr=>{
@@ -3367,7 +3388,7 @@ export function TransferDetailDrawer({transfer,onClose,canDelete,canReceive,onDe
         }
       });
     }
-    else alert(r.message||"Receive failed");
+    else { if(ph) ph.fail(r); alert(r.message||t("grn.save_failed")); }
   };
 
   const items=detail?.items||[];
@@ -3500,6 +3521,8 @@ export function TransferDetailDrawer({transfer,onClose,canDelete,canReceive,onDe
                       style={{height:32,padding:"0 8px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:12,outline:"none",fontFamily:"inherit",textAlign:"right"}}/>
                   </div>
                 ))}
+                <GrnPhotoTiles ref={phRef} inbound="material_transfer"
+                  dest={detail?.to_project_id?{projectId:detail.to_project_id}:{warehouseId:detail?.to_warehouse_id}}/>
                 <div style={{display:"flex",gap:8,marginTop:10,justifyContent:"flex-end"}}>
                   <GhostBtn onClick={()=>setReceiveOpen(false)}>{t("common.cancel")}</GhostBtn>
                   <Btn onClick={handleReceive} disabled={receiving} c={T.grn} icon={IcChk} size="sm">

@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import PickSelect from "../../components/PickSelect";
 import api, { API_BASE } from "../../config/api";
 import { T } from "../shared/tokens";
 import { Panel } from "../shared/ui";
 import { t } from "../../i18n";
 import { cld } from "../../utils/cloudinary";
+import { GrnPhotoTiles } from "../../components/grn/GrnPhotoBox";
 
 // Stage status colors (solar)
 const SOLAR_STAGE_S = {
@@ -57,6 +58,9 @@ function TabSuryaGhar({ projectId }) {
   const [grnChallan, setGrnChallan] = useState("");
   const [grnQty, setGrnQty] = useState("");
   const [grnSaving, setGrnSaving] = useState(false);
+  // GRN form ki teen photo tile (10 Oct 2026, E) — mark-received GRN banata hai;
+  // pehle yahan photo thi hi nahi aur naye tenant par "Vendor challan" Zaroori hai.
+  const grnPhRef = useRef(null);
   // Stage 14 — Installation Team
   const [subcons, setSubcons] = useState([]);
   const [installerSubconId, setInstallerSubconId] = useState("");
@@ -261,17 +265,22 @@ function TabSuryaGhar({ projectId }) {
 
   const receiveGrn = async (mrId) => {
     setGrnSaving(true);
+    // Rec slip ka upload poora hone tak ruko; challan / gadi ki photo peeche chadh sakti hai (E).
+    const ph = grnPhRef.current;
+    if (ph && !(await ph.ready())) { setGrnSaving(false); return; }
     try {
-      const body = { challan_no: grnChallan || undefined };
+      const body = { challan_no: grnChallan || undefined, ...(ph ? ph.body() : {}) };
       if (grnQty) body.received_qty = parseFloat(grnQty);
       const res = await api.patch(`/procurement/mrs/${mrId}/mark-received`, body);
       if (res.success) {
+        const dupMsg = ph ? ph.done(res.grn_id, { dup: res.weighment?.rec_slip_dup, receivingIssue: res.weighment?.receiving_issue }) : "";
+        if (dupMsg) alert(dupMsg);
         setMrs(p => p.map(m => m.id === mrId ? { ...m, mat_status: res.mat_status || "Received", challan_no: grnChallan } : m));
         setGrnFor(null); setGrnChallan(""); setGrnQty("");
         // Refresh stages — stage 13 may have been auto-completed by backend
         try{const st=await api.get("/solar/projects/"+projectId+"/stages");if(st.success)setStages(st.data||[]);}catch(e){}
-      } else { setErr(res.message || "GRN failed"); }
-    } catch (e) { setErr(e.message || "GRN failed"); }
+      } else { if (ph) ph.fail(res); setErr(res.message || t("grn.save_failed")); }
+    } catch (e) { setErr(e.message || t("grn.save_failed")); }
     setGrnSaving(false);
   };
 
@@ -704,6 +713,9 @@ function TabSuryaGhar({ projectId }) {
                                         <input type="number" value={grnQty} onChange={e=>setGrnQty(e.target.value)} placeholder={String(mr.quantity)}
                                           style={{width:"100%",padding:"6px 9px",borderRadius:6,border:`1.5px solid ${T.grnM}`,fontSize:11.5,outline:"none",fontFamily:"inherit",boxSizing:"border-box",background:"white"}}/>
                                       </div>
+                                    </div>
+                                    <div style={{marginBottom:8}}>
+                                      <GrnPhotoTiles ref={grnPhRef} dest={{projectId:mr.project_id||projectId}} vendor={mr.po_vendor_name||mr.linked_vendor||""} challan={grnChallan}/>
                                     </div>
                                     <div style={{display:"flex",gap:6,alignItems:"center"}}>
                                       <span style={{fontSize:10,color:T.t4}}>{t("solar.ordered_quantity_unit", { quantity: mr.quantity, unit: mr.unit })}</span>
