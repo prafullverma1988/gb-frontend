@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, lazy, Suspense } from "react";
 import PickSelect from "../../components/PickSelect";
-import api from "../../config/api";
+import api, { getUser } from "../../config/api";
 import { T } from "../shared/tokens";
 import { t, Rich } from "../../i18n";
 import { useRoadAccess } from "../road/roadShared";
@@ -31,6 +31,18 @@ const wtypeLabel = (w) => ({ road: t("tender_ai_plan.wtype_road"), drain: t("ten
 const WTYPE_COLOR = { road: "#B45309", drain: "#0E7490", pipeline: "#1565C0", water: "#0284C7", sewer: "#7C3AED", electrical: "#D97706", structure: "#475569", other: "#64748B" };
 const fmtAmt = (n) => { const v = Number(n || 0); if (!v) return "—"; if (v >= 1e7) return "₹" + (v / 1e7).toFixed(2) + " Cr"; if (v >= 1e5) return "₹" + (v / 1e5).toFixed(2) + " L"; return "₹" + v.toLocaleString("en-IN"); };
 const fmtQty = (n) => Number(n || 0).toLocaleString("en-IN", { maximumFractionDigits: 3 });
+const fmtDay = (d) => { if (!d) return "—"; const x = new Date(String(d).length <= 10 ? d + "T00:00:00" : d); return isNaN(x) ? String(d).slice(0, 10) : x.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "2-digit" }); };
+// "Kholo" — judi cheez project ke kis tab me hati hai (server group ka `open`).
+// Concrete (RMC) ka apna module hai, project tab nahi — wahan sirf ref dikhta hai.
+// Judi cheez ka group — server ki key se label (render par, bhasha badle to naya)
+const grpLabel = (k) => ({
+  material_used: t("tender_ai_plan.grp_material_used"), labour: t("tender_ai_plan.grp_labour"), grn: t("tender_ai_plan.grp_grn"),
+  mr: t("tender_ai_plan.grp_mr"), subcon: t("tender_ai_plan.grp_subcon"), finance: t("tender_ai_plan.grp_finance"),
+  dpr: t("tender_ai_plan.grp_dpr"), photos: t("tender_ai_plan.grp_photos"), issues: t("tender_ai_plan.grp_issues"),
+  comments: t("tender_ai_plan.grp_comments"), budget: t("tender_ai_plan.grp_budget"), plan: t("tender_ai_plan.grp_plan"),
+  map: t("tender_ai_plan.grp_map"),
+})[k] || k;
+const OPEN_TAB = { task: "task", material: "material", subcon: "subcon", estimate: "estimate", equipment: "equipment", trip: "equipment", site: "site", budget: "budget", design: "design" };
 
 /* ── DIGEST BUILDER — poori workbook ka compact saar ──────────────────
    Har sheet: naam + size + pehli 2 heading (inhi me village/road likha
@@ -209,10 +221,20 @@ export default function TenderAiPlan({ tenderId, onOpenProject, initialFile }) {
   const [cities, setCities] = useState([]); const [ctypes, setCtypes] = useState([]);
   const [cityId, setCityId] = useState(""); const [ctypeId, setCtypeId] = useState("");
   const [execResult, setExecResult] = useState(null);
-  // Pehle se bana hua plan? — execute se pehle server se poochhte hain, tabhi
-  // "purana hata kar naya" ya "milao" ka chunav dikhta hai.
+  // Pehle se bana hua plan? — execute se pehle server se poochhte hain.
+  // N (11 Oct 2026, Prafull): teen alag raaste — "add" (default, purana nahi
+  // chhedta) · "soft" (purana archive, wapas la sakte ho) · "hard" (Danger
+  // Zone: hamesha ke liye, judi cheez ke rehte band).
   const [execPrev, setExecPrev] = useState(null);     // null | {loading} | {has_existing, sites}
-  const [execMode, setExecMode] = useState("merge");  // "merge" | "overwrite"
+  const [execMode, setExecMode] = useState("add");    // "add" | "soft" | "hard"
+  const [execErr, setExecErr] = useState("");
+  const [softNote, setSoftNote] = useState("");
+  const [hardPrev, setHardPrev] = useState(null);     // null | {loading} | {sites, has_password}
+  const [hardPw, setHardPw] = useState("");
+  const [hardNames, setHardNames] = useState({});     // project_id → type kiya naam
+  const [archived, setArchived] = useState([]);       // "Purana plan (hataya)"
+  const [restoring, setRestoring] = useState(null);
+  const isAdmin = ["admin", "super_admin"].includes(getUser()?.role);
   const [job, setJob] = useState(null);        // {status,kind,error} — peechhe chal raha kaam
   const [dinfo, setDinfo] = useState(null);    // digest ka saar — screen par dikhta hai
   const [boqCount, setBoqCount] = useState(0); // tender me imported BOQ items
@@ -260,6 +282,12 @@ export default function TenderAiPlan({ tenderId, onOpenProject, initialFile }) {
     return draft;
   }, [tenderId]);
   useEffect(() => { load(); }, [load]);
+
+  // "Purana plan (hataya)" — soft se hataye ped, "Wapas lao" ke saath
+  const loadArchived = useCallback(() => {
+    api.get(`/tenders/${tenderId}/ai-plan/archived`).then((r) => setArchived(r?.success && Array.isArray(r.data) ? r.data : [])).catch(() => {});
+  }, [tenderId]);
+  useEffect(() => { loadArchived(); }, [loadArchived]);
 
   // BOQ Import se seedha aaye ho (Prafull ka idea 1): wahi file yahan
   // pahunchti hai aur analyze apne aap chal jaata hai — dobara chunna nahi.
@@ -352,12 +380,10 @@ export default function TenderAiPlan({ tenderId, onOpenProject, initialFile }) {
     setExecOpen(true); setExecPrev({ loading: true });
     // Haath ke edit pehle save — preview usi plan par bane jo execute hoga
     if (dirty && plan) { try { await api.put(`/tenders/${tenderId}/ai-plan`, { plan }); setDirty(false); } catch (_) {} }
+    // Default hamesha "Naya add karo" — purana chhedne ka raasta user khud chune.
+    setExecMode("add"); setExecErr(""); setSoftNote(""); setHardPrev(null); setHardPw(""); setHardNames({});
     api.get(`/tenders/${tenderId}/ai-plan/execute-preview`).then((r) => {
-      const d = r?.success && r.data ? r.data : { has_existing: false, sites: [] };
-      setExecPrev(d);
-      // Purane/alag naam ke kaam pade hon to "purana hata kar naya" hi default —
-      // yahi wo haalat hai jisme milaane se purana upar baitha reh jaata tha.
-      setExecMode(d.has_existing && (d.sites || []).some((s) => s.not_in_plan > 0) ? "overwrite" : "merge");
+      setExecPrev(r?.success && r.data ? r.data : { has_existing: false, sites: [] });
     }).catch(() => setExecPrev({ has_existing: false, sites: [] }));
     if (!cities.length) {
       const [cr, tr] = await Promise.all([api.get("/library/cities").catch(() => null), api.get("/library/construction-types").catch(() => null)]);
@@ -366,20 +392,47 @@ export default function TenderAiPlan({ tenderId, onOpenProject, initialFile }) {
     }
   };
 
+  // "Hamesha ke liye mitao" — mitne wale task se kya juda hai (refresh bhi yahi)
+  const loadHard = async () => {
+    setHardPrev({ loading: true });
+    const r = await api.get(`/tenders/${tenderId}/ai-plan/hard-preview`).catch(() => null);
+    setHardPrev(r?.success && r.data ? r.data : { sites: [], has_password: true, error: r?.message || t("common.something_went_wrong") });
+  };
+  const pickMode = (m) => { setExecMode(m); setExecErr(""); if (m === "hard" && !hardPrev) loadHard(); };
+  const hardBlockers = (hardPrev?.sites || []).reduce((a, s) => a + (Number(s.blockers) || 0), 0);
+  const hardSites = hardPrev?.sites || [];
+  const hardReady = !!hardPrev && !hardPrev.loading && !hardPrev.error && hardBlockers === 0 && hardPw.length > 0
+    && hardSites.every((s) => String(hardNames[s.project_id] || "").trim().length > 0);
+
   const doExecute = async () => {
-    setBusy("exec"); setErr("");
+    setBusy("exec"); setErr(""); setExecErr("");
     try {
       if (dirty && plan) { await api.put(`/tenders/${tenderId}/ai-plan`, { plan }); setDirty(false); }
-      const overwrite = execMode === "overwrite" && !!execPrev?.has_existing;
-      const r = await api.post(`/tenders/${tenderId}/ai-plan/execute`, { city_id: cityId || null, construction_type_id: ctypeId || null, mode: overwrite ? "overwrite" : "merge" }, { timeoutMs: 120000 });
+      const body = { city_id: cityId || null, construction_type_id: ctypeId || null, mode: execMode };
+      if (execMode === "soft") body.note = softNote.trim();
+      if (execMode === "hard") { body.password = hardPw; body.confirm_names = hardNames; }
+      const r = await api.post(`/tenders/${tenderId}/ai-plan/execute`, body, { timeoutMs: 120000 });
       if (r?.success) {
-        setExecResult(r.data); setExecOpen(false);
+        setExecResult(r.data); setExecOpen(false); setHardPw("");
         window.toast?.success?.(t("tender_ai_plan.toast_execute_ho_gaya", { sites: r.data.projects.length, works: r.data.works_created })
-          + (r.data.removed ? t("tender_ai_plan.toast_purane_hate", { n: r.data.removed }) : "") + (r.data.archived?.length ? t("tender_ai_plan.toast_archive", { n: r.data.archived.length }) : ""));
+          + (r.data.archived_tasks ? t("tender_ai_plan.toast_archive", { n: r.data.archived_tasks }) : "")
+          + (r.data.hard_deleted ? t("tender_ai_plan.toast_purane_hate", { n: r.data.hard_deleted }) : ""));
+        loadArchived();
+      } else {
+        // Server ne judi cheez pakdi (beech me kisi ne joda) — list taaza karo
+        if (r?.code === "HARD_BLOCKED") loadHard();
+        setExecErr(r?.message || t("tender_ai_plan.execute_fail"));
       }
-      else setErr(r?.message || t("tender_ai_plan.execute_fail"));
-    } catch (e) { setErr(e?.message || t("common.something_went_wrong")); }
+    } catch (e) { setExecErr(e?.message || t("common.something_went_wrong")); }
     setBusy("");
+  };
+
+  const restoreArchived = async (it) => {
+    setRestoring(it.id);
+    const r = await api.post(`/tenders/${tenderId}/ai-plan/archived/${it.id}/restore`, {}).catch(() => null);
+    if (r?.success) window.toast?.success?.(r.message || t("tender_ai_plan.arch_restored"));
+    else window.toast?.error?.(r?.message || t("common.something_went_wrong"));
+    setRestoring(null); loadArchived();
   };
 
   const upd = (fn) => { setPlan((p) => { const n = JSON.parse(JSON.stringify(p)); fn(n); return n; }); setDirty(true); };
@@ -847,7 +900,45 @@ export default function TenderAiPlan({ tenderId, onOpenProject, initialFile }) {
               {execResult.archived?.length ? <> · 📦 {t("tender_ai_plan.archived_n", { n: execResult.archived.length })}</> : ""}
               {execResult.skipped?.length ? t("tender_ai_plan.skipped_pehle_se_the", { skipped: execResult.skipped.length }) : ""}
             </div>
+            {/* N (11 Oct 2026): naya add / purana hatao ka saaf nateeja */}
+            {(execResult.kept > 0 || execResult.added_after_lock > 0 || execResult.archived_tasks > 0 || execResult.hard_deleted > 0 || execResult.qty_diff?.length > 0) && (
+              <div style={{ marginTop: 4, display: "flex", flexDirection: "column", gap: 2 }}>
+                {execResult.kept > 0 && <div>⚪ {t("tender_ai_plan.res_kept", { n: execResult.kept })}</div>}
+                {execResult.added_after_lock > 0 && <div>🔒 {t("tender_ai_plan.res_lock", { n: execResult.added_after_lock })}</div>}
+                {execResult.qty_diff?.length > 0 && <div style={{ color: T.amb }}>🟡 {t("tender_ai_plan.res_qty", { n: execResult.qty_diff.length })}</div>}
+                {execResult.archived_tasks > 0 && <div>📦 {t("tender_ai_plan.res_archived", { n: execResult.archived_tasks })}</div>}
+                {execResult.hard_deleted > 0 && <div style={{ color: T.red }}>🗑 {t("tender_ai_plan.res_hard", { n: execResult.hard_deleted })}</div>}
+              </div>
+            )}
             {(execResult.skipped?.length > 0 || execResult.archived?.length > 0) && <div style={{ fontSize: 10.5, color: T.t4, marginTop: 3 }}>{[...(execResult.skipped || []), ...(execResult.archived || [])].join(" · ")}</div>}
+          </div>
+        )}
+
+        {/* PURANA PLAN (HATAYA) — "Purana plan hatao" se archive hue ped. Kuch
+            mita nahi tha; "Wapas lao" se wahi ped zinda (naam naye kaam se
+            takraye to bhi — dono dikhte hain). */}
+        {archived.length > 0 && (
+          <div style={{ background: T.surface, border: `1px solid ${T.b1}`, borderRadius: 10, padding: "10px 14px", fontSize: 12, color: T.t2 }}>
+            <div style={{ fontWeight: 700, color: T.t1, marginBottom: 6 }}>📦 {t("tender_ai_plan.arch_head")}</div>
+            {archived.map((p) => (
+              <div key={p.project_id} style={{ marginBottom: 6 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: T.t3, marginBottom: 3 }}>🏘 {p.project}</div>
+                {p.items.map((it) => (
+                  <div key={it.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 0", borderTop: `1px solid ${T.b1}` }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 600, color: T.t1 }}>{it.task_no ? it.task_no + " · " : ""}{it.name}</div>
+                      <div style={{ fontSize: 10.5, color: T.t4 }}>{t("tender_ai_plan.arch_line", { n: it.n_tasks, date: fmtDay(it.at), by: it.by || "—" })}{it.note ? " · " + t("tender_ai_plan.arch_note", { note: it.note }) : ""}</div>
+                      {it.clash && <div style={{ fontSize: 10.5, color: T.amb }}>{t("tender_ai_plan.arch_clash")}</div>}
+                    </div>
+                    {isAdmin && (
+                      <button onClick={() => restoreArchived(it)} disabled={restoring === it.id}
+                        style={{ padding: "5px 12px", borderRadius: 7, border: `1px solid ${T.grnM}`, background: T.grnL, color: T.grn, fontSize: 11.5, fontWeight: 700, cursor: "pointer", flexShrink: 0 }}>
+                        {restoring === it.id ? t("tender_ai_plan.arch_restoring") : t("tender_ai_plan.arch_restore")}</button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ))}
           </div>
         )}
 
@@ -871,44 +962,159 @@ export default function TenderAiPlan({ tenderId, onOpenProject, initialFile }) {
         </div>
       </>}
 
-      {/* EXECUTE CONFIRM */}
+      {/* EXECUTE CONFIRM — N (11 Oct 2026): teen alag raaste, har ek ka apna
+          preview final confirm se pehle. Pehle sirf "Milao" / "Purana hata kar
+          naya" tha: chhue hue kaam ke neeche naya nahi judta tha, aur lock par
+          kuch nahi. */}
       {execOpen && plan && (<>
         <div onClick={() => setExecOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 400 }} />
-        <div style={{ position: "fixed", top: "50%", left: "50%", transform: "translate(-50%,-50%)", background: T.surface, borderRadius: 12, width: "min(440px,94vw)", zIndex: 401, padding: "18px 20px", boxShadow: "0 24px 64px rgba(0,0,0,0.3)" }}>
+        <div style={{ position: "fixed", top: "50%", left: "50%", transform: "translate(-50%,-50%)", background: T.surface, borderRadius: 12, width: "min(720px,94vw)", maxHeight: "90vh", overflowY: "auto", zIndex: 401, padding: "18px 20px", boxShadow: "0 24px 64px rgba(0,0,0,0.3)" }}>
           <div style={{ fontSize: 14, fontWeight: 700, color: T.t1, marginBottom: 4 }}>{t("tender_ai_plan.plan_execute_karein")}</div>
           <div style={{ fontSize: 12, color: T.t3, lineHeight: 1.6, marginBottom: 12 }}><Rich k="tender_ai_plan.plan_sites_plan2_totalworks_kaam_budget" params={{ plan: plan.sites.length, plan2: plan.sites.map((s) => s.name).join(", "), totalWorks, fmtAmt: fmtAmt(totalAmt) }} />
             {execPrev && !execPrev.loading && !execPrev.has_existing && <><br /><Rich k="tender_ai_plan.dobara_nahi_banega" /></>}
           </div>
-
-          {/* Pehle se bana hai? To pehle chunav: purana hata kar naya, ya milao.
-              Bina is chunav ke naya plan purane ke neeche jud jaata tha aur
-              purana upar baitha rehta tha — "execute hua hi nahi" lagta tha. */}
           {execPrev?.loading && <div style={{ fontSize: 11.5, color: T.t4, marginBottom: 12 }}>{t("tender_ai_plan.pehle_se_kya_bana_dekh_raha")}</div>}
-          {execPrev && !execPrev.loading && execPrev.has_existing && (
-            <div style={{ marginBottom: 14 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: T.amb, marginBottom: 5 }}>{t("tender_ai_plan.pehle_se_bana_hai")}</div>
+
+          {/* ── Teen raaste ── pehle do aam, teesra Danger Zone me alag */}
+          {execPrev && !execPrev.loading && (() => {
+            const card = (m, k, hk, col, locked) => (
+              <label key={m} style={{ display: "flex", gap: 8, alignItems: "flex-start", padding: "9px 11px", borderRadius: 8, cursor: locked ? "not-allowed" : "pointer", opacity: locked ? 0.55 : 1,
+                border: `1.5px solid ${execMode === m ? col : T.b1}`, background: execMode === m ? T.surfaceB : "transparent" }}>
+                <input type="radio" name="execMode" checked={execMode === m} disabled={locked} onChange={() => pickMode(m)} style={{ marginTop: 2 }} />
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 12.5, fontWeight: 700, color: m === "hard" ? T.red : T.t1 }}>{t(k)}
+                    {locked && <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: T.t4, border: `1px solid ${T.b1}`, borderRadius: 10, padding: "1px 7px" }}>{t("tender_ai_plan.sirf_admin_chip")}</span>}</div>
+                  <div style={{ fontSize: 10.5, color: T.t4, lineHeight: 1.45 }}>{t(hk)}</div>
+                </div>
+              </label>
+            );
+            return (
+              <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 12 }}>
+                {card("add", "tender_ai_plan.m_add", "tender_ai_plan.m_add_hint", T.grn, false)}
+                {execPrev.has_existing && card("soft", "tender_ai_plan.m_soft", "tender_ai_plan.m_soft_hint", T.amb, !isAdmin)}
+                {execPrev.has_existing && (
+                  <div style={{ marginTop: 6, border: `1.5px solid ${T.redM}`, borderRadius: 9, padding: "8px 8px 8px", background: T.redL }}>
+                    <div style={{ fontSize: 10, fontWeight: 800, color: T.red, textTransform: "uppercase", letterSpacing: 0.6, margin: "0 3px 6px" }}>⚠ {t("tender_ai_plan.danger_zone")}</div>
+                    {card("hard", "tender_ai_plan.m_hard", "tender_ai_plan.m_hard_hint", T.red, !isAdmin)}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* ── 1. Naya add karo — per site: naya / pehle se / qty alag ── */}
+          {execPrev && !execPrev.loading && execMode === "add" && (execPrev.sites || []).map((s) => {
+            const a = s.add || {};
+            return (
+              <div key={s.name} style={{ border: `1px solid ${T.b1}`, borderRadius: 8, padding: "8px 11px", marginBottom: 8, fontSize: 11.5, color: T.t2, lineHeight: 1.55 }}>
+                <div style={{ fontWeight: 700, color: T.t1, marginBottom: 3 }}>🏘 {s.project_id ? s.name : t("tender_ai_plan.site_nayi_banegi", { site: s.name })}</div>
+                {s.plan_locked && <div style={{ color: T.blu }}>{t("tender_ai_plan.add_locked")}</div>}
+                {a.new_count > 0
+                  ? <div><div style={{ color: T.grn, fontWeight: 700 }}>{t("tender_ai_plan.add_new_head", { n: a.new_count })}</div>
+                      {(a.new || []).slice(0, 30).map((x) => <div key={x.path} style={{ paddingLeft: 12 }}>+ {x.path}{x.n > 1 ? ` (${x.n})` : ""}</div>)}
+                      {(a.new || []).length > 30 && <div style={{ paddingLeft: 12, color: T.t4 }}>{t("tender_ai_plan.add_more", { n: a.new.length - 30 })}</div>}</div>
+                  : <div style={{ color: T.t4 }}>{t("tender_ai_plan.add_none")}</div>}
+                {a.existing > 0 && <div style={{ color: T.t3 }}>{t("tender_ai_plan.add_existing", { n: a.existing })}</div>}
+                {(a.qty_diff || []).length > 0 && <div style={{ marginTop: 3 }}>
+                  <div style={{ color: T.amb, fontWeight: 700 }}>{t("tender_ai_plan.add_qty_head")}</div>
+                  {a.qty_diff.slice(0, 20).map((q) => <div key={q.path} style={{ paddingLeft: 12, color: T.t3 }}>{t("tender_ai_plan.add_qty_line", { path: q.path, x: fmtQty(q.plan), y: fmtQty(q.site) })}</div>)}
+                </div>}
+                {(a.blocked || []).map((b) => <div key={b.path} style={{ color: T.amb }}>{t("tender_ai_plan.add_blocked", { path: b.path, why: b.why })}</div>)}
+              </div>
+            );
+          })}
+
+          {/* ── 2. Purana plan hatao — kya archive hoga + note ── */}
+          {execPrev && !execPrev.loading && execMode === "soft" && (
+            <div style={{ marginBottom: 10 }}>
               {(execPrev.sites || []).filter((s) => s.roots > 0).map((s) => (
-                <div key={s.name} style={{ fontSize: 11.5, color: T.t3, lineHeight: 1.5 }}>
-                  <Rich k="tender_ai_plan.preview_site_line" params={{ site: s.name, roots: s.roots, tasks: s.tasks, in_plan: s.in_plan, extra: s.not_in_plan }} />
-                  {s.touched ? t("tender_ai_plan.preview_touched", { n: s.touched }) : ""}
-                  {s.plan_locked ? t("tender_ai_plan.preview_lock") : ""}
+                <div key={s.name} style={{ border: `1px solid ${T.ambM}`, background: T.ambL, borderRadius: 8, padding: "8px 11px", marginBottom: 8, fontSize: 11.5, color: T.t2, lineHeight: 1.55 }}>
+                  <div style={{ fontWeight: 700, color: T.t1 }}>🏘 {s.name} — {t("tender_ai_plan.soft_will_archive", { roots: s.roots, n: s.tasks })}</div>
+                  {(s.list || []).map((r) => <div key={r.id} style={{ paddingLeft: 12 }}>📦 {r.task_no ? r.task_no + " · " : ""}{r.name} ({r.n_tasks})</div>)}
                 </div>
               ))}
-              <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 9 }}>
-                {[["overwrite", "tender_ai_plan.mode_overwrite", "tender_ai_plan.mode_overwrite_hint", T.amb],
-                  ["merge", "tender_ai_plan.mode_merge", "tender_ai_plan.mode_merge_hint", T.grn]].map(([m, k, hk, col]) => (
-                  <label key={m} style={{ display: "flex", gap: 8, alignItems: "flex-start", padding: "8px 10px", borderRadius: 8, cursor: "pointer",
-                    border: `1px solid ${execMode === m ? col : T.b1}`, background: execMode === m ? T.surfaceB : "transparent" }}>
-                    <input type="radio" name="execMode" checked={execMode === m} onChange={() => setExecMode(m)} style={{ marginTop: 2 }} />
-                    <div>
-                      <div style={{ fontSize: 12, fontWeight: 700, color: T.t1 }}>{t(k)}</div>
-                      <div style={{ fontSize: 10.5, color: T.t4, lineHeight: 1.45 }}>{t(hk)}</div>
-                    </div>
-                  </label>
-                ))}
-              </div>
+              <label style={{ fontSize: 10.5, fontWeight: 700, color: T.t3 }}>{t("tender_ai_plan.soft_note_label")}</label>
+              <textarea value={softNote} onChange={(e) => setSoftNote(e.target.value)} rows={2} maxLength={300} placeholder={t("tender_ai_plan.soft_note_ph")}
+                style={inp({ width: "100%", marginTop: 3, resize: "vertical" })} />
             </div>
           )}
+
+          {/* ── 3. Hamesha ke liye mitao — pehle judi cheezein, phir do taale ── */}
+          {execMode === "hard" && (
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                <div style={{ fontSize: 11, color: T.t4, flex: 1 }}>{t("tender_ai_plan.hard_restore_note")}</div>
+                <button onClick={loadHard} disabled={hardPrev?.loading}
+                  style={{ padding: "4px 10px", borderRadius: 6, border: `1px solid ${T.b1}`, background: T.surface, color: T.t3, fontSize: 11, cursor: "pointer" }}>{t("tender_ai_plan.hard_refresh")}</button>
+              </div>
+              {hardPrev?.loading && <div style={{ fontSize: 11.5, color: T.t4 }}>{t("tender_ai_plan.hard_loading")}</div>}
+              {hardPrev?.error && <div style={{ fontSize: 11.5, color: T.red }}>{hardPrev.error}</div>}
+              {hardPrev && !hardPrev.loading && hardSites.map((s) => {
+                const blk = s.groups.filter((g) => g.blocker && g.count > 0);
+                const rest = s.groups.filter((g) => !g.blocker && g.count > 0);
+                return (
+                  <div key={s.project_id} style={{ border: `1px solid ${s.blockers ? T.redM : T.b1}`, borderRadius: 8, padding: "8px 11px", marginBottom: 8, fontSize: 11.5, color: T.t2 }}>
+                    <div style={{ fontWeight: 700, color: T.t1, marginBottom: 4 }}>🏘 {t("tender_ai_plan.hard_site_head", { site: s.name, roots: s.roots, tasks: s.tasks })}</div>
+                    {s.blockers > 0
+                      ? <div style={{ color: T.red, fontWeight: 700, marginBottom: 3 }}>⛔ {t("tender_ai_plan.hard_blockers_head", { n: s.blockers })}</div>
+                      : <div style={{ color: T.grn, fontWeight: 700, marginBottom: 3 }}>✓ {t("tender_ai_plan.hard_ok_head")}</div>}
+                    {blk.map((g) => (
+                      <div key={g.key} style={{ marginBottom: 6 }}>
+                        <div style={{ fontWeight: 700, color: T.red }}>{grpLabel(g.key)} · {g.count}</div>
+                        <div style={{ overflowX: "auto" }}>
+                          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+                            <thead><tr style={{ color: T.t4, textAlign: "left" }}>
+                              <th style={{ padding: "2px 6px" }}>{t("tender_ai_plan.col_date")}</th><th style={{ padding: "2px 6px" }}>{t("tender_ai_plan.col_ref")}</th>
+                              <th style={{ padding: "2px 6px" }}>{t("tender_ai_plan.col_qty")}</th><th style={{ padding: "2px 6px" }}>{t("tender_ai_plan.col_task")}</th><th /></tr></thead>
+                            <tbody>
+                              {g.rows.map((r) => (
+                                <tr key={r.table + r.id} style={{ borderTop: `1px solid ${T.b1}` }}>
+                                  <td style={{ padding: "3px 6px", whiteSpace: "nowrap" }}>{fmtDay(r.d)}</td>
+                                  <td style={{ padding: "3px 6px" }}>{r.ref || "—"}{r.extra ? <span style={{ color: T.t4 }}> · {r.extra}</span> : null}</td>
+                                  <td style={{ padding: "3px 6px", whiteSpace: "nowrap" }}>{r.qty != null && r.qty !== "" ? (r.unit === "₹" ? fmtAmt(r.qty) : `${fmtQty(r.qty)} ${r.unit || ""}`) : "—"}</td>
+                                  <td style={{ padding: "3px 6px" }}>{r.task || "—"}</td>
+                                  <td style={{ padding: "3px 6px", textAlign: "right" }}>
+                                    {OPEN_TAB[r.open] && onOpenProject
+                                      ? <button onClick={() => onOpenProject(s.project_id, OPEN_TAB[r.open])}
+                                          style={{ padding: "2px 9px", borderRadius: 6, border: `1px solid ${T.bluM}`, background: T.bluL, color: T.blu, fontSize: 10.5, fontWeight: 700, cursor: "pointer" }}>{t("tender_ai_plan.kholo")} →</button>
+                                      : null}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                        {g.count > g.rows.length && <div style={{ color: T.t4, fontSize: 10.5 }}>{t("tender_ai_plan.add_more", { n: g.count - g.rows.length })}</div>}
+                      </div>
+                    ))}
+                    {rest.length > 0 && (
+                      <div style={{ color: T.t3, marginTop: 2 }}>
+                        <div style={{ fontWeight: 700 }}>{t("tender_ai_plan.hard_will_go")}</div>
+                        {rest.map((g) => <div key={g.key} style={{ paddingLeft: 12 }}>{grpLabel(g.key)} · {g.count}{g.key === "map" ? " — " + t("tender_ai_plan.hard_unlink") : ""}</div>)}
+                      </div>
+                    )}
+                    {s.blockers === 0 && (
+                      <div style={{ marginTop: 6 }}>
+                        <label style={{ fontSize: 10.5, fontWeight: 700, color: T.red }}>{t("tender_ai_plan.hard_name_label", { site: s.name })}</label>
+                        <input value={hardNames[s.project_id] || ""} onChange={(e) => setHardNames((p) => ({ ...p, [s.project_id]: e.target.value }))}
+                          style={inp({ width: "100%", marginTop: 3, borderColor: T.redM })} />
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+              {hardPrev && !hardPrev.loading && !hardPrev.error && hardBlockers === 0 && hardSites.length > 0 && (
+                hardPrev.has_password === false
+                  ? <div style={{ fontSize: 11.5, color: T.red }}>{t("tender_ai_plan.hard_no_pw")}</div>
+                  : <div>
+                      <label style={{ fontSize: 10.5, fontWeight: 700, color: T.red }}>{t("tender_ai_plan.hard_pw_label")}</label>
+                      <input type="password" value={hardPw} onChange={(e) => setHardPw(e.target.value)} autoComplete="new-password"
+                        style={inp({ width: "100%", marginTop: 3, borderColor: T.redM })} />
+                    </div>
+              )}
+            </div>
+          )}
+
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
             <div><label style={{ fontSize: 10, fontWeight: 700, color: T.t4, textTransform: "uppercase" }}>{t("tender_ai_plan.city_nayi_site_ke_liye")}</label>
               <PickSelect value={cityId} onChange={(e) => setCityId(e.target.value)} style={inp({ width: "100%", marginTop: 3 })}>
@@ -917,13 +1123,24 @@ export default function TenderAiPlan({ tenderId, onOpenProject, initialFile }) {
               <PickSelect value={ctypeId} onChange={(e) => setCtypeId(e.target.value)} style={inp({ width: "100%", marginTop: 3 })}>
                 <option value="">{t("tender_ai_plan.chuno")}</option>{ctypes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</PickSelect></div>
           </div>
-          <div style={{ display: "flex", gap: 8 }}>
-            <button onClick={() => setExecOpen(false)} style={{ flex: 1, padding: "9px", borderRadius: 7, background: T.surfaceB, border: `1px solid ${T.b1}`, fontSize: 12, fontWeight: 600, color: T.t3, cursor: "pointer" }}>{t("tender_ai_plan.cancel")}</button>
-            <button onClick={doExecute} disabled={busy === "exec" || !!execPrev?.loading}
-              style={{ flex: 2, padding: "9px", borderRadius: 7, border: "none", background: (execMode === "overwrite" && execPrev?.has_existing) ? T.amb : T.grn, color: "white", fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>
-              {busy === "exec" ? t("tender_ai_plan.ban_raha_hai")
-                : (execMode === "overwrite" && execPrev?.has_existing) ? t("tender_ai_plan.haan_purana_hata_kar_banao") : t("tender_ai_plan.haan_banao")}</button>
-          </div>
+          {execErr && <div style={{ padding: "7px 11px", background: T.redL, border: `1px solid ${T.redM}`, borderRadius: 8, fontSize: 11.5, color: T.red, marginBottom: 10 }}>{execErr}</div>}
+          {(() => {
+            const loadingPrev = !!execPrev?.loading;
+            const dis = busy === "exec" || loadingPrev
+              || (execMode === "soft" && !softNote.trim())
+              || (execMode === "hard" && !hardReady);
+            const bg = execMode === "hard" ? T.red : execMode === "soft" ? T.amb : T.grn;
+            const label = busy === "exec" ? t("tender_ai_plan.ban_raha_hai")
+              : execMode === "hard" ? (hardBlockers > 0 ? t("tender_ai_plan.hard_btn_blocked", { n: hardBlockers }) : t("tender_ai_plan.hard_btn"))
+              : execMode === "soft" ? t("tender_ai_plan.btn_soft") : t("tender_ai_plan.btn_add");
+            return (
+              <div style={{ display: "flex", gap: 8 }}>
+                <button onClick={() => setExecOpen(false)} style={{ flex: 1, padding: "9px", borderRadius: 7, background: T.surfaceB, border: `1px solid ${T.b1}`, fontSize: 12, fontWeight: 600, color: T.t3, cursor: "pointer" }}>{t("tender_ai_plan.cancel")}</button>
+                <button onClick={doExecute} disabled={dis}
+                  style={{ flex: 2, padding: "9px", borderRadius: 7, border: "none", background: dis ? T.b2 : bg, color: "white", fontSize: 12.5, fontWeight: 700, cursor: dis ? "not-allowed" : "pointer" }}>{label}</button>
+              </div>
+            );
+          })()}
         </div>
       </>)}
     </div>

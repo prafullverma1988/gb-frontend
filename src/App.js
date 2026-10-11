@@ -2310,7 +2310,7 @@ function App(){
     mapping:   guard("mapping", "Site Mapping",   <MapLibraryModule/>),
     township:  guard("township", "Township CRM",   <TownshipCRMModule/>),
     reports:   guard("reports",  "Reports",        <ReportsModule/>),
-    tenders:   guard("tenders",  "Tenders",        <TendersModule onOpenProject={(pid)=>handleNotifNav("projects","/projects/"+pid+"/overview")}/>),
+    tenders:   guard("tenders",  "Tenders",        <TendersModule onOpenProject={(pid,tab)=>handleNotifNav("projects","/projects/"+pid+"/"+(tab||"overview"))}/>),
     settings:  <SettingsModule/>,
     profile:   <SettingsModule initialSection="profile"/>,
     saas:     <SaaSModule/>,
