@@ -51,6 +51,9 @@ const kindMeta = (k) => ({
   count:         { c: T.cyn, label: t("warehouse.ledger_k_count") },
   damaged_fixed: { c: T.grn, label: t("warehouse.ledger_k_damaged_fixed") },
   repair_fixed:  { c: T.grn, label: t("warehouse.ledger_k_repair_fixed") },
+  // Conversion (11 Oct 2026) — bana (aaya) / ghata (gaya); naam server deta hai ("← TMT se bana (CNV-001)").
+  conversion_in:  { c: T.grn, label: t("conversion.ledger_k_in") },
+  conversion_out: { c: T.amb, label: t("conversion.ledger_k_out") },
   before:       { c: T.t3,  label: t("warehouse.ledger_k_before") },
 }[k] || { c: T.t3, label: k });
 

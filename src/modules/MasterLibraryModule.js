@@ -950,7 +950,8 @@ function MaterialMasterSection() {
 
   const columns = [
     { key: "code", label: t("common.code"), minW: 80, render: r => <code style={{ fontSize: 12, fontWeight: 600, color: T.blue, background: T.blueSoft, padding: "2px 8px", borderRadius: 4 }}>{r.code}</code> },
-    { key: "name", label: t("master_library.material_name"), minW: 180, render: r => <span style={{ fontWeight: 600 }}>{r.name}</span> },
+    // "🔄 Bana hua" — Conversion se bana item (material_master.is_fabricated, 11 Oct 2026, Conversion).
+    { key: "name", label: t("master_library.material_name"), minW: 180, render: r => <span style={{ fontWeight: 600 }}>{r.name}{Number(r.is_fabricated) === 1 && <span title={t("conversion.fabricated_hint")} style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: "#4B45C4", background: "#EEEDFB", borderRadius: 8, padding: "1px 7px" }}>{t("conversion.fabricated")}</span>}</span> },
     { key: "category", label: t("common.category"), minW: 110, render: r => <Badge text={r.category_name || r.category} color={T.textMid} bg={T.borderLight} /> },
     { key: "unit", label: t("common.unit"), minW: 80 },
     // GET /library/materials snake_case deta hai (hsn_code, gst_rate, base_rate…). Pehle

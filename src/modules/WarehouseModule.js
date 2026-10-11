@@ -15,6 +15,7 @@ import { BackClose } from "../utils/backNav";
 import { WarehouseLedgerTab, WarehouseLedgerDrawer } from "./WarehouseLedger";
 import { AllGodownsView } from "./WarehouseConsolidated";
 import { WarehouseGintiTab, DisposalModal, DisposalsPanel } from "./WarehouseGinti";
+import { ConversionTab } from "./WarehouseConversion";
 import { can, canAny, canEntry } from "../utils/perms";
 
 // ── ICONS ──────────────────────────────────────────────────────────────
@@ -3885,6 +3886,8 @@ function WarehouseModule(){
     {id:"ginti",  l:t("warehouse.gt_tab"),     I:IcChk,  badge:gintiPending>0?gintiPending:null, bc:T.amb},
     {id:"grn",    l:t("material.material_in"),   I:IcIn,   badge:pendingInMRs>0?pendingInMRs:null, bc:T.pur},
     {id:"issue",  l:t("warehouse.material_out"),  I:IcOut,  badge:pendingOutMRs>0?pendingOutMRs:null, bc:T.cyn},
+    // 🔄 Conversion (11 Oct 2026, Conversion) — TMT se Ring jaisa; Material In/Out ke saath.
+    {id:"conversion", l:t("conversion.tab"), I:IcTrns, badge:null},
     {id:"mr",     l:t("common.requests"),      I:IcMR,   badge:pendingMRs>0?pendingMRs:null, bc:T.amb},
     {id:"transfer",l:t("common.transfers"),    I:IcTrns, badge:null},
   ];
@@ -4046,6 +4049,8 @@ function WarehouseModule(){
               else alert(r.message||"Pass-to-procurement failed");
             },
           }}/>}
+        {tab==="conversion"&&<ConversionTab key={whId} whId={whId} whName={activeWh?.name} stock={stock} library={library}
+          canEntry={whEntry} isAdmin={isAdmin} onStockChanged={()=>{loadAll();setLedgerSeq(n=>n+1);}}/>}
         {tab==="transfer"&&<TransfersTab transfers={transfers} onNew={whRecv?()=>setTransferNewOpen(true):undefined} onSelect={t=>setTransferDetail(t)}/>}
       </div>
 
