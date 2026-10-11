@@ -431,7 +431,7 @@ export function fieldOfItem(it, byId, depth = 0) {
 }
 export function formOfItem(it, byId, depth = 0) {
   const f = fieldOfItem(it, byId, depth);
-  if (f && Array.isArray(f.sub)) return f.sub;
+  if (f && Array.isArray(f.sub) && f.sub.length) return f.sub;
   return formOf(it.kind, it.atype || "other");
 }
 // Naksha par kaisa: field ka nishaan / rang, warna type ka.
@@ -442,6 +442,8 @@ export function kidLook(it, byId) {
 }
 // Line ka form — andar ke field bhi (bagal ki line ke) — "Kitne / adhoore" ke liye.
 export function mapFieldsOf(fields) { return (fields || []).filter((f) => (f.type === "child" || f.type === "side") && f.child); }
+// Field ki andar wali detail; na ho / khaali ho to us cheez ke type ka form (server jaisa).
+export const subOf = (f) => (Array.isArray(f.sub) && f.sub.length ? f.sub : formOf(f.child.kind, f.child.code));
 
 // ── Taiyar shapes — 24×24 box, beech (12,12) par ─────────────────
 export const SHAPES = {
@@ -1191,6 +1193,16 @@ const numOr = (v, d = null) => (v === "" || v == null || !Number.isFinite(Number
 const stripPlace = (p) => { const o = { ...(p || {}) }; delete o._place; return o; };
 const numProps = (p) => cleanProps(stripPlace(p)) || {};
 const sameProps = (a, b) => JSON.stringify(numProps(a)) === JSON.stringify(numProps(b));
+// Dono taraf ke nishaan ek jaise tareeke se (Manual kabhi "ek jaisa" nahi).
+const samePlace = (a, b) => {
+  const keys = new Set([...Object.keys(a || {}), ...Object.keys(b || {})]);
+  for (const k of keys) {
+    const x = (a || {})[k], y = (b || {})[k];
+    if (!x || !y || x.mode === "manual" || y.mode === "manual") return false;
+    if (["mode", "qty", "every", "start", "cap"].some((q) => String(x[q] ?? "") !== String(y[q] ?? ""))) return false;
+  }
+  return true;
+};
 // kidsAt(parentId, key) → [{ id, pts, props }] — line ki maujooda cheezein
 // (library / tender list se). parentId null = nayi line.
 export function initPlace(fields, props, parentId, kidsAt) {
@@ -1201,7 +1213,9 @@ export function initPlace(fields, props, parentId, kidsAt) {
     const m = meta[f.key] || {};
     if (f.type === "child") {
       const have = at(f.key).filter((k) => Array.isArray(k.pts) && k.pts[0]);
-      out[f.key] = { mode: m.mode || f.mode || "auto", qty: blank(p[f.key]) ? "" : String(p[f.key]),
+      // Tareeka yaad na ho (purane / haath se lage) aur nishaan lage hon = Manual —
+      // warna save par wo default ke hisaab se dobara bichh jaate.
+      out[f.key] = { mode: m.mode || (have.length ? "manual" : f.mode || "auto"), qty: blank(p[f.key]) ? "" : String(p[f.key]),
         every: m.every_m != null ? String(m.every_m) : f.every_m != null ? String(f.every_m) : "",
         start: m.start_m != null ? String(m.start_m) : f.start_m != null ? String(f.start_m) : "0",
         cap: m.cap != null ? String(m.cap) : "",
@@ -1211,11 +1225,11 @@ export function initPlace(fields, props, parentId, kidsAt) {
       const side = (sd) => {
         const row = at(`${f.key}:${sd}`)[0] || null;
         return { id: row ? row.id : null, props: row ? stripPlace(row.props) : {},
-          place: initPlace(Array.isArray(f.sub) ? f.sub : [], row ? row.props : null, row ? row.id : null, kidsAt) };
+          place: initPlace(subOf(f), row ? row.props : null, row ? row.id : null, kidsAt) };
       };
       const left = side("left"), right = side("right");
       out[f.key] = { gap: m.gap_m != null ? String(m.gap_m) : f.offset_m != null ? String(f.offset_m) : "1",
-        same: sameProps(left.props, right.props), left, right };
+        same: typeof m.same === "boolean" ? m.same : sameProps(left.props, right.props) && samePlace(left.place, right.place), left, right };
     }
   }
   return out;
@@ -1261,13 +1275,13 @@ export function buildPreview(line, fields, detail, place, W) {
         const same = st.same && v === "both";
         for (const sd of want) {
           const src = same ? st.left : st[sd];
-          const w = widthOfProps(numProps(src.props));
+          const w = widthOfProps(numProps(src.props)) || (f.key === "drain_side" ? Number((det || {}).drain_width_m) || 0 : 0);
           const g = sideGeom(pts, gaps, width, numOr(st.gap, 1), w, sd);
           if (g.pts.length < 2) continue;
           const lk = `${fk}:${sd}`;
           out.lines.push({ fk: lk, f, colour, pts: g.pts, gaps: g.gaps, w });
           const subPl = same && sd === "right" ? mergeSame(st.left.place, st.right.place) : src.place;
-          walk(g.pts, g.gaps, f.sub || [], numProps(src.props), subPl, lk + "/", 0, same && sd === "right");
+          walk(g.pts, g.gaps, subOf(f), numProps(src.props), subPl, lk + "/", 0, same && sd === "right");
         }
       }
     }
@@ -1291,12 +1305,12 @@ export function placePayload(fields, detail, place) {
     } else {
       const v = (detail || {})[f.key];
       const same = st.same && v === "both";
-      const o = { gap_m: numOr(st.gap, null) };
+      const o = { gap_m: numOr(st.gap, null), same: !!st.same };
       for (const sd of ["left", "right"]) {
         if (!(v === "both" || v === sd)) continue;
         const src = same ? st.left : st[sd];
         const subPl = same && sd === "right" ? mergeSame(st.left.place, st.right.place) : src.place;
-        o[sd] = { props: cleanProps(src.props) || {}, place: placePayload(f.sub || [], numProps(src.props), subPl || {}) };
+        o[sd] = { props: cleanProps(src.props) || {}, place: placePayload(subOf(f), numProps(src.props), subPl || {}) };
       }
       out[f.key] = o;
     }
@@ -1428,7 +1442,7 @@ export function MapPlacePanel({ fields, detail, setDetail, place, setPlace, line
     const n = pv.counts[fk] || 0;
     const plan = numOr(st.qty, 0);
     const colour = f.color || styleOf("point", f.child.code).colour;
-    const plain = (f.sub || []).filter((x) => !isMapField(x));
+    const plain = subOf(f).filter((x) => !isMapField(x));
     return (
       <div key={fk} style={{ display: "flex", flexDirection: "column", gap: 6, padding: "8px 0", borderTop: `1px solid ${C.b1}` }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
@@ -1486,8 +1500,8 @@ export function MapPlacePanel({ fields, detail, setDetail, place, setPlace, line
   const sideBlock = (f, st, fk, sd, title, lock) => {
     const src = st[sd];
     const setSrc = (patch) => setPlace((pl) => updAt(pl, prefixOf(fk) + f.key, (s0) => ({ ...s0, [sd]: { ...s0[sd], ...patch } })));
-    const plain = (f.sub || []).filter((x) => !isMapField(x));
-    const marks = mapFieldsOf(f.sub || []).filter((x) => x.type === "child");
+    const plain = subOf(f).filter((x) => !isMapField(x));
+    const marks = mapFieldsOf(subOf(f)).filter((x) => x.type === "child");
     return (
       <div key={sd} style={{ border: `1px solid ${C.b1}`, borderRadius: 7, padding: "8px 10px", background: C.surfaceB, display: "flex", flexDirection: "column", gap: 6 }}>
         <span style={{ fontSize: 11, fontWeight: 700, color: C.t3 }}>{title}</span>
