@@ -244,7 +244,9 @@ function MaterialFormModal({material,library=[],onClose,onSaved}){
     min_qty:material?.minQty??material?.min_qty??0,
     max_qty:material?.maxQty??material?.max_qty??0,
     rate:material?.rate??0,
-    location:material?.location||"Main Godown",
+    // Rack / Jagah zaroori (11 Oct 2026, T) — pehle "Main Godown" pehle se bhara aata tha,
+    // isse har item usi jagah par chala jaata. Ab khaali; placeholder me misaal.
+    location:material?.location||"",
   });
   // Lazy-load the library list when the parent's `library` prop is empty
   // (e.g. the initial /library/materials call failed during a backend
@@ -281,9 +283,11 @@ function MaterialFormModal({material,library=[],onClose,onSaved}){
   };
   const submit=async()=>{
     if(!f.name.trim()){alert(t("warehouse.material_ka_naam_dalna_padega"));return;}
+    // Rack / Jagah khaali nahi (11 Oct 2026, T) — server bhi LOCATION_REQUIRED se rokta hai.
+    if(!String(f.location||"").trim()){alert(t("warehouse.location_required"));return;}
     setSaving(true);
     try{
-      const body={...f,qty:Number(f.qty)||0,min_qty:Number(f.min_qty)||0,max_qty:Number(f.max_qty)||0,rate:Number(f.rate)||0};
+      const body={...f,location:String(f.location).trim(),qty:Number(f.qty)||0,min_qty:Number(f.min_qty)||0,max_qty:Number(f.max_qty)||0,rate:Number(f.rate)||0};
       // Edit par qty nahi bhejte — stock sirf document (GRN / issue / transfer /
       // Ginti / nikasi) se badalta hai; form khulne ke waqt ki purani qty wapas
       // likhna beech ki entry mita deta (server bhi ab qty nahi leta).
@@ -354,8 +358,8 @@ function MaterialFormModal({material,library=[],onClose,onSaved}){
         {!editing&&(
           <Field label={t("warehouse.opening_qty")}><Input value={f.qty} type="number" onChange={e=>upd("qty",e.target.value)}/></Field>
         )}
-        <Field label={t("warehouse.location")}>
-          <Input value={f.location} onChange={e=>upd("location",e.target.value)} placeholder={t("warehouse.main_godown")}/>
+        <Field label={<span>{t("warehouse.location")} <span style={{color:T.red}}>*</span></span>}>
+          <Input value={f.location} onChange={e=>upd("location",e.target.value)} placeholder={t("warehouse.location_placeholder")}/>
         </Field>
       </div>
     </ModalShell>
@@ -2062,6 +2066,13 @@ function HiddenMaterialsModal({canRestore,onClose,onRestored}){
   );
 }
 
+// Rack / Jagah (11 Oct 2026, T) — khaali ho to laal "Jagah likho" tag; kuch rokta nahi.
+function LocLine({m,style}){
+  const loc=String(m.location||"").trim();
+  return loc
+    ?<div title={loc} style={{fontSize:10,color:T.t4,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",...style}}>📍 {loc}</div>
+    :<div style={style}><span style={{fontSize:9.5,fontWeight:700,color:T.red,background:T.redL,border:`1px solid ${T.redM}`,padding:"1px 6px",borderRadius:9,whiteSpace:"nowrap"}}>{t("warehouse.location_add_tag")}</span></div>;
+}
 function StockTab({stock,grns,issues,onSelect,onAddMaterial,onAddStock,onIssue,onQuickRequest,onDispose,onHidden}){
   const [search,setSearch]=useState("");
   const [cat,setCat]=useState("All");
@@ -2255,6 +2266,7 @@ function StockTab({stock,grns,issues,onSelect,onAddMaterial,onAddStock,onIssue,o
                       {/* Name + mini bar */}
                       <div style={{padding:"8px 10px 8px 6px",minWidth:0}}>
                         <div style={{fontSize:12.5,fontWeight:600,color:T.t1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{m.name}</div>
+                        <LocLine m={m} style={{marginTop:2}}/>
                         <div style={{marginTop:5,display:"flex",alignItems:"center",gap:7}}>
                           <MiniBar m={m}/>
                           <span style={{fontSize:9,color:T.t4,whiteSpace:"nowrap"}}>
@@ -2367,6 +2379,7 @@ function StockTab({stock,grns,issues,onSelect,onAddMaterial,onAddStock,onIssue,o
                             {h.label!=="OK"&&<span style={{fontSize:8.5,color:h.c,fontWeight:700,background:h.bg,padding:"1px 5px",borderRadius:5,marginLeft:"auto"}}>{h.label==="Out"?"OUT":h.label.toUpperCase()}</span>}
                           </div>
 
+                          <LocLine m={m} style={{marginBottom:6}}/>
                           <BucketChips m={m} style={{marginBottom:6}}/>
                           {/* stock bar */}
                           <div style={{position:"relative",height:4,background:T.b1,borderRadius:2,marginBottom:8}}>
@@ -2410,8 +2423,8 @@ function StockTab({stock,grns,issues,onSelect,onAddMaterial,onAddStock,onIssue,o
           ══════════════════════════════════════════ */}
       {view==="list"&&filtered.length>0&&(
         <div style={{background:T.surface,borderRadius:10,border:`1px solid ${T.b1}`,overflow:"hidden"}}>
-          <div style={{display:"grid",gridTemplateColumns:"4px 50px 1fr 120px 100px 100px 90px",padding:"8px 14px",background:T.sb,gap:8,alignItems:"center"}}>
-            {["","Code","Material","Category","Stock","Value","Status"].map((h,i)=>(
+          <div style={{display:"grid",gridTemplateColumns:"4px 50px 1fr 130px 120px 100px 100px 90px",padding:"8px 14px",background:T.sb,gap:8,alignItems:"center"}}>
+            {["","Code","Material",t("warehouse.location"),"Category","Stock","Value","Status"].map((h,i)=>(
               <span key={i} style={{fontSize:9.5,fontWeight:700,color:"rgba(255,255,255,0.45)",textTransform:"uppercase",letterSpacing:".3px"}}>{h}</span>
             ))}
           </div>
@@ -2420,7 +2433,7 @@ function StockTab({stock,grns,issues,onSelect,onAddMaterial,onAddStock,onIssue,o
             const v=getVel(m);
             return(
               <div key={m.id} onClick={()=>onSelect(m)}
-                style={{display:"grid",gridTemplateColumns:"4px 50px 1fr 120px 100px 100px 90px",padding:"9px 14px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",cursor:"pointer",transition:"background .1s",gap:8}}
+                style={{display:"grid",gridTemplateColumns:"4px 50px 1fr 130px 120px 100px 100px 90px",padding:"9px 14px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",cursor:"pointer",transition:"background .1s",gap:8}}
                 onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB}
                 onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
                 <div style={{alignSelf:"stretch",background:h.label==="OK"?T.grn+"44":h.c+"99",borderRadius:0}}/>
@@ -2433,6 +2446,7 @@ function StockTab({stock,grns,issues,onSelect,onAddMaterial,onAddStock,onIssue,o
                     <BucketChips m={m}/>
                   </div>
                 </div>
+                <LocLine m={m}/>
                 <span style={{fontSize:11,color:T.t3}}>{m.category}</span>
                 <div>
                   <span style={{fontSize:13,fontWeight:700,color:h.label==="Out"?"#EF4444":h.label==="Low"?T.amb:T.t1}}>{fmtN(m.qty)}</span>
