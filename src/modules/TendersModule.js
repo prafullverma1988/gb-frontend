@@ -26,7 +26,7 @@ import { CreateTransactionModal } from "./FinanceModule";
 import { t, Rich } from "../i18n";
 import { BackClose } from "../utils/backNav";
 import { can, canAny, canEntry } from "../utils/perms";
-import { useMapLibrary, styleOf, lineOpts, markerIcon, MapLibraryDialog, RegisterDialog, ChildEditor, childFields, kidsShort,
+import { useMapLibrary, styleOf, lineOpts, markerIcon, MapLibraryDialog, RegisterDialog, ChildEditor, childFields, kidsShort, ToAreaDialog,
   formOf, propsRows, missingOf, TypeDetailFields, drainPaths, drainLineOpts, polePoints, poleIcon } from "./mapStyles";
 // xlsx (~400 KB) sirf BOQ file kholte waqt chahiye — Tenders khulte hi nahi (PERF-05).
 // loadFile() pehle loadXlsx() await karta hai; baaki helper (sheetToAoa,
@@ -4240,6 +4240,7 @@ function MapTab({tenderId, sites}) {
   const [libOpen, setLibOpen] = useState(false);
   const [regOpen, setRegOpen] = useState(false);   // lines ka register (11 Oct 2026)
   const [kidsFor, setKidsFor] = useState(null);    // "Saath ki cheezein" — kis line ki (id)
+  const [areaFor, setAreaFor] = useState(null);    // "Rakba banao" — kis line se (item)
   const [sugg, setSugg]       = useState([]);     // search ke suggestions
   const photoMarkersRef = useRef([]);
   const infoWinRef = useRef(null);
@@ -5984,6 +5985,14 @@ function MapTab({tenderId, sites}) {
     {/* Naya drawn feature — type ke hisaab se apne field */}
     {hover && hover.card && <HoverCard x={hover.x} y={hover.y} card={hover.card}/>}
     {libOpen && <MapLibraryDialog onClose={()=>setLibOpen(false)}/>}
+    {areaFor && (
+      <ToAreaDialog name={areaFor.name} onClose={()=>setAreaFor(null)} onSave={async (atype, keep) => {
+        const r = await api.post(`/tenders/${tenderId}/alignments/${areaFor.id}/to-area`, { atype, keep_line: keep }).catch(() => null);
+        if (!r?.success) return r?.message || t("map_form.save_nahi_hua");
+        setAreaFor(null); toast.success(t("map_form.rakba_ban_gaya")); load();
+        return null;
+      }}/>
+    )}
     {kidsFor && (()=> {
       const ln = items.find(x => x.id === kidsFor);
       if (!ln) return null;
@@ -6087,6 +6096,9 @@ function MapTab({tenderId, sites}) {
           {/* Line ke saath ki cheezein — valve / manhole / pole / nali (11 Oct 2026). */}
           {pending.edit && pending.kind === "line" && childFields("line", pending.atype).length > 0 && (
             <SecBtn label={t("map_form.saath_btn")} onClick={()=>{ const id = pending.id; setPending(null); setKidsFor(id); }}/>
+          )}
+          {pending.edit && pending.kind === "line" && (pending.coords || []).length >= 3 && (
+            <SecBtn label={"▱ " + t("map_form.rakba_banao")} onClick={()=>{ const it = items.find(x => x.id === pending.id); setPending(null); setAreaFor(it || null); }}/>
           )}
           <PrimBtn label={busy?t("tenders.save_ho_raha_hai"):t("common.save")} Icon={IcChk} onClick={savePending} disabled={busy}/>
         </>}>
