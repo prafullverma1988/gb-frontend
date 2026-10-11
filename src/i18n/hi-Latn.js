@@ -3151,6 +3151,7 @@ const dict = {
   "finance.copying_from":                                      "Copying from:",
   "finance.cost":                                              "Cost",
   "finance.cost_breakup":                                      "Cost breakup",
+  "finance.pnl_machine_oil_store":                             "Machine oil (store se)",
   "finance.could_not_load_invoice":                            "Could not load invoice",
   "finance.cr_fmtn":                                           "CR ₹{fmtN}",
   "finance.create_bill":                                       "+ Create Bill",

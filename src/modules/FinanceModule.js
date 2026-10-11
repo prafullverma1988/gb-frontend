@@ -3731,10 +3731,10 @@ function ProjectPnlView(){
       ["Company — Project-wise P&L (accrual, invoice-basis)"],
       [`Generated: ${new Date().toLocaleDateString("en-IN")}`],[],
       ["Project","Status","Revenue (Invoiced)","Cost","P&L",
-       "Material Purchase","Sub-Con","Site Expense","Equipment","Material Return","Transfer In","Transfer Out"],
+       "Material Purchase","Sub-Con","Site Expense","Equipment",t("finance.pnl_machine_oil_store"),"Material Return","Transfer In","Transfer Out"],
       ...items.map(i=>[i.project,i.status||"",i.revenue,i.cost,i.pnl,
         i.cost_breakup.material_purchase,i.cost_breakup.subcon_expense,i.cost_breakup.site_expense,
-        i.cost_breakup.equipment,i.cost_breakup.material_return,i.cost_breakup.transfer_in,i.cost_breakup.transfer_out]),
+        i.cost_breakup.equipment,i.cost_breakup.machine_oil_store||0,i.cost_breakup.material_return,i.cost_breakup.transfer_in,i.cost_breakup.transfer_out]),
       [],["TOTAL","",totals.revenue,totals.cost,totals.pnl],
     ]);
   };
@@ -3766,6 +3766,8 @@ function ProjectPnlView(){
   const brk=[
     ["Material Purchase","material_purchase",false],["Sub-Con","subcon_expense",false],
     ["Site Expense","site_expense",false],["Equipment","equipment",false],
+    // Store se machine me daala oil (backend utils/projectPnl) — machine kharcha ka hissa
+    [t("finance.pnl_machine_oil_store"),"machine_oil_store",false],
     ["Material Return","material_return",true],["Transfer In","transfer_in",false],["Transfer Out","transfer_out",true],
   ];
 
