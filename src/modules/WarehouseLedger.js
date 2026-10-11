@@ -172,19 +172,22 @@ export function WarehouseLedgerTab({ onOpen }) {
 // ════════════════════════════════════════════════════════════════
 // Drawer — ek material ka poora khaata
 // ════════════════════════════════════════════════════════════════
-export function WarehouseLedgerDrawer({ material, godownName, onClose }) {
+// isAdmin — khaate ki line se qty theek karna sirf Admin (11 Oct 2026, AA).
+export function WarehouseLedgerDrawer({ material, godownName, onClose, isAdmin, onChanged }) {
   const [d, setD] = useState(null);
   const [tab, setTab] = useState("all");        // all | in | out
   const [sortNew, setSortNew] = useState(true);
+  const [selKey, setSelKey] = useState(null);   // khuli line — rowKey
+  const [reload, setReload] = useState(0);      // qty save ke baad khaata dobara
 
+  useEffect(() => { setD(null); setTab("all"); setSortNew(true); setSelKey(null); }, [material]);
   useEffect(() => {
     let alive = true;
-    setD(null); setTab("all"); setSortNew(true);
     api.get("/warehouse/material-ledger?name=" + encodeURIComponent(material.material_name)).then(r => {
       if (alive) setD(r.success && r.data ? r.data : { _err: r.message || "", rows: [] });
     }).catch(() => { if (alive) setD({ _err: "", rows: [] }); });
     return () => { alive = false; };
-  }, [material]);
+  }, [material, reload]);
 
   // Chalta balance hamesha purane se naye ki taraf, "pehle ka" se shuru.
   const rows = useMemo(() => {
@@ -200,6 +203,8 @@ export function WarehouseLedgerDrawer({ material, godownName, onClose }) {
   }, [d, sortNew]);
 
   const visible = tab === "all" ? rows : rows.filter(e => e.type === tab && !e._before);
+  // Khuli line naye data se — save ke baad wahi line taaza dikhe.
+  const sel = selKey ? rows.find(e => rowKey(e) === selKey) : null;
   const stock = d ? d.stock : material.stock;
   // Min se neeche ya khatam = laal (mobile aur Stock tab jaisa hi niyam).
   const stockColor = stock <= 0 || (material.min_qty > 0 && stock < material.min_qty) ? T.red : T.grn;
@@ -276,8 +281,12 @@ export function WarehouseLedgerDrawer({ material, godownName, onClose }) {
             const isIn = e.type === "in";
             const who = e._before ? t("warehouse.ledger_opening_hint") : whoLine(e);
             const reach = reachLine(e);
+            const bg = i % 2 ? T.surfaceB : T.surface;
             return (
-              <div key={i} style={{ display: "grid", gridTemplateColumns: GRID, gap: 6, padding: "8px 16px", borderBottom: `1px solid ${T.b1}`, alignItems: "center", borderLeft: `3px solid ${km.c}`, background: i % 2 ? T.surfaceB : T.surface }}>
+              <div key={i} onClick={() => setSelKey(rowKey(e))}
+                onMouseEnter={ev => { ev.currentTarget.style.background = T.bluL; }}
+                onMouseLeave={ev => { ev.currentTarget.style.background = bg; }}
+                style={{ display: "grid", gridTemplateColumns: GRID, gap: 6, padding: "8px 16px", borderBottom: `1px solid ${T.b1}`, alignItems: "center", borderLeft: `3px solid ${km.c}`, background: bg, cursor: "pointer" }}>
                 <div style={{ fontSize: 10.5, color: T.t3 }}>{e._before ? "—" : fmtDate(e.date)}</div>
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontSize: 11.5, fontWeight: 600, color: T.t1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{e._before ? (e.party || "—") : partyLine(e)}</div>
@@ -289,6 +298,11 @@ export function WarehouseLedgerDrawer({ material, godownName, onClose }) {
                   {reach && <div style={{ fontSize: 9.5, color: reach.c, fontWeight: 600 }}>{reach.txt}</div>}
                   {/* Issue ka note (11 Oct 2026, O) */}
                   {e.kind === "issue" && e.note && <div title={e.note} style={{ fontSize: 9.5, color: T.t4, fontStyle: "italic", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t("material.issue_note", { note: e.note })}</div>}
+                  {/* Qty badli thi — aakhri badlav line par hi (11 Oct 2026, AA) */}
+                  {(e.edits || []).length > 0 && (() => { const x = e.edits[e.edits.length - 1]; return (
+                    <div title={x.note} style={{ fontSize: 9.5, color: T.pur, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      ✎ {t("warehouse.ledger_row_edited", { old: fmtQ(x.old_qty), new: fmtQ(x.new_qty), note: x.note })}
+                    </div>); })()}
                 </div>
                 <div style={{ fontSize: 12, fontWeight: 800, color: isIn ? T.grn : T.b2, textAlign: "right" }}>{isIn ? fmtQ(e.qty) : "—"}</div>
                 <div style={{ fontSize: 12, fontWeight: 800, color: !isIn ? T.red : T.b2, textAlign: "right" }}>{!isIn ? fmtQ(e.qty) : "—"}</div>
@@ -302,6 +316,120 @@ export function WarehouseLedgerDrawer({ material, godownName, onClose }) {
               <div style={{ fontSize: 12, fontWeight: 800, color: "#4ADE80", textAlign: "right" }}>{fmtQ(d.total_in)}</div>
               <div style={{ fontSize: 12, fontWeight: 800, color: "#F87171", textAlign: "right" }}>{fmtQ(d.total_out)}</div>
               <div style={{ fontSize: 12, fontWeight: 800, color: "#fff", textAlign: "right" }}>{fmtQ(d.stock)}</div>
+            </div>
+          )}
+        </div>
+      </div>
+      {sel && <LedgerRowDrawer e={sel} unit={material.unit} isAdmin={isAdmin}
+        onClose={() => setSelKey(null)} onSaved={() => { setReload(x => x + 1); onChanged && onChanged(); }}/>}
+    </>
+  );
+}
+
+// Line ki pehchaan — kind + row_id (server deta hai); "Pehle ka" ki apni.
+const rowKey = (e) => (e._before ? "before" : e.kind + ":" + (e.row_id ?? e.ref));
+
+// ════════════════════════════════════════════════════════════════
+// Line ka detail — side drawer (11 Oct 2026, AA). Prafull: "ledger me opening
+// stock ya kisi bhi row me click → detail side me khulega → qty edit, note,
+// save with admin password → qty change aur note usme hamesha dikhega."
+// Qty sirf store me bani "aaya" line (Opening / Stock add / Site se wapas) ki,
+// sirf Admin, company ke delete-password ke saath. Baaki line par wajah.
+// ════════════════════════════════════════════════════════════════
+function LedgerRowDrawer({ e, unit, isAdmin, onClose, onSaved }) {
+  const km = kindMeta(e.kind);
+  const [qty, setQty] = useState(String(e.qty ?? ""));
+  const [note, setNote] = useState("");
+  const [pw, setPw] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState(null);         // { ok, txt }
+  // Doosri line khuli to form saaf.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { setQty(String(e.qty ?? "")); setNote(""); setPw(""); setMsg(null); }, [e.kind, e.row_id, e._before]);
+
+  const canEdit = !e._before && e.editable && isAdmin;
+  const why = e._before ? t("warehouse.ledger_row_before_why")
+    : !e.editable ? (e.edit_why || t("warehouse.ledger_row_no_edit"))
+    : !isAdmin ? t("warehouse.ledger_row_admin_only") : "";
+  const who = e._before ? t("warehouse.ledger_opening_hint") : whoLine(e);
+
+  const save = async () => {
+    if (busy) return;
+    if (!note.trim()) { setMsg({ ok: false, txt: t("warehouse.ledger_row_need_note") }); return; }
+    if (!pw) { setMsg({ ok: false, txt: t("warehouse.ledger_row_need_pw") }); return; }
+    setBusy(true); setMsg(null);
+    const r = await api.patch(`/warehouse/material-ledger/rows/${encodeURIComponent(e.kind)}/${e.row_id}/qty`,
+      { new_qty: qty, note: note.trim(), password: pw }).catch(() => ({ success: false }));
+    setBusy(false);
+    if (r && r.success) { setPw(""); setNote(""); setMsg({ ok: true, txt: r.message || "" }); onSaved && onSaved(); }
+    else setMsg({ ok: false, txt: (r && r.message) || t("warehouse.ledger_row_fail") });
+  };
+
+  const Row = ({ l, v }) => (
+    <div style={{ display: "grid", gridTemplateColumns: "120px 1fr", gap: 8, padding: "7px 0", borderBottom: `1px solid ${T.b1}` }}>
+      <div style={{ fontSize: 11, color: T.t3, fontWeight: 600 }}>{l}</div>
+      <div style={{ fontSize: 12, color: T.t1, fontWeight: 600, wordBreak: "break-word" }}>{v || "—"}</div>
+    </div>
+  );
+  const inp = { width: "100%", boxSizing: "border-box", padding: "8px 10px", borderRadius: 7, border: `1.5px solid ${T.b1}`, fontSize: 12.5, outline: "none", fontFamily: "inherit" };
+  const lbl = { fontSize: 10.5, fontWeight: 700, color: T.t3, textTransform: "uppercase", letterSpacing: ".4px", margin: "10px 0 4px" };
+
+  return (
+    <>
+      <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.35)", zIndex: 1402 }}/>
+      <div style={{ position: "fixed", top: 0, right: 0, height: "100vh", width: "min(420px,100vw)", background: T.surface, zIndex: 1403,
+        display: "flex", flexDirection: "column", boxShadow: "-12px 0 40px rgba(0,0,0,0.22)", fontFamily: "'Segoe UI',system-ui,sans-serif" }}>
+        <div style={{ background: "#0D1B2A", padding: "13px 18px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexShrink: 0 }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "#fff" }}>{e._before ? t("warehouse.ledger_opening") : (e.ref || km.label)}</div>
+            <div style={{ fontSize: 10.5, color: "rgba(255,255,255,0.55)", marginTop: 2 }}>{t("warehouse.ledger_row_title")}</div>
+          </div>
+          <button onClick={onClose}
+            style={{ width: 30, height: 30, borderRadius: 8, border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.07)", color: "#fff", fontSize: 16, cursor: "pointer", flexShrink: 0 }}>×</button>
+        </div>
+        <div style={{ height: 3, background: km.c, flexShrink: 0 }}/>
+        <div style={{ flex: 1, overflowY: "auto", padding: "12px 18px 18px" }}>
+          <Row l={t("warehouse.ledger_col_date")} v={e._before ? "—" : fmtDate(e.date)}/>
+          <Row l={t("warehouse.ledger_row_type")} v={<span style={{ color: km.c }}>{km.label} · {e.type === "in" ? t("warehouse.ledger_in") : t("warehouse.ledger_out")}</span>}/>
+          <Row l={t("warehouse.ledger_row_qty")} v={<span style={{ color: e.type === "in" ? T.grn : T.red, fontSize: 14 }}>{e.type === "in" ? "+" : "−"}{fmtQ(e.qty)} {e.unit || unit || ""}</span>}/>
+          {!e._before && <Row l={t("warehouse.ledger_row_rate")} v={e.rate ? "₹" + fmtQ(e.rate) : "—"}/>}
+          {!e._before && <Row l={t("warehouse.ledger_row_amount")} v={e.amount ? "₹" + Number(e.amount).toLocaleString("en-IN", { maximumFractionDigits: 2 }) : "—"}/>}
+          {!e._before && <Row l={t("warehouse.ledger_row_ref")} v={e.ref}/>}
+          <Row l={t("warehouse.ledger_row_party")} v={e._before ? "—" : partyLine(e)}/>
+          <Row l={t("warehouse.ledger_row_by")} v={who}/>
+          {!e._before && <Row l={t("warehouse.ledger_row_note")} v={e.note}/>}
+
+          {/* Qty badlav ka itihaas — hamesha dikhe */}
+          {(e.edits || []).length > 0 && (
+            <div style={{ marginTop: 14 }}>
+              <div style={lbl}>{t("warehouse.ledger_row_history")}</div>
+              {e.edits.map((x, k) => (
+                <div key={k} style={{ fontSize: 11.5, color: T.t2, padding: "7px 10px", background: T.purL, borderRadius: 7, marginBottom: 5, borderLeft: `3px solid ${T.pur}` }}>
+                  {t("warehouse.ledger_row_history_line", { old: fmtQ(x.old_qty), new: fmtQ(x.new_qty), note: x.note, name: x.by || "—", date: fmtDate(x.at) })}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {why && <div style={{ marginTop: 14, padding: "9px 11px", background: T.surfaceB, border: `1px solid ${T.b1}`, borderRadius: 7, fontSize: 11.5, color: T.t3 }}>{why}</div>}
+
+          {canEdit && (
+            <div style={{ marginTop: 16, padding: "12px 14px", border: `1.5px solid ${T.b2}`, borderRadius: 9, background: T.surfaceB }}>
+              <div style={{ fontSize: 12.5, fontWeight: 700, color: T.t1 }}>{t("warehouse.ledger_row_edit_title")}</div>
+              {e.consumed > 0 && <div style={{ fontSize: 11, color: T.amb, marginTop: 4 }}>{t("warehouse.ledger_row_consumed", { n: fmtQ(e.consumed), unit: e.unit || unit || "" })}</div>}
+              <div style={lbl}>{t("warehouse.ledger_row_qty")}</div>
+              <input type="number" min={e.consumed || 0} step="any" value={qty} onChange={ev => setQty(ev.target.value)} style={inp}/>
+              <div style={lbl}>{t("warehouse.ledger_row_note_label")}</div>
+              <textarea rows={2} value={note} onChange={ev => setNote(ev.target.value)} placeholder={t("warehouse.ledger_row_note_ph")} style={{ ...inp, resize: "vertical" }}/>
+              <div style={lbl}>{t("warehouse.ledger_row_pw")}</div>
+              <input type="password" autoComplete="new-password" value={pw} onChange={ev => setPw(ev.target.value)} style={inp}/>
+              {msg && <div style={{ marginTop: 9, fontSize: 11.5, fontWeight: 600, color: msg.ok ? T.grn : T.red }}>{msg.txt}</div>}
+              <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 11 }}>
+                <button onClick={save} disabled={busy}
+                  style={{ padding: "8px 18px", borderRadius: 7, border: "none", background: T.blu, color: "#fff", fontSize: 12.5, fontWeight: 700, cursor: busy ? "default" : "pointer", opacity: busy ? 0.6 : 1 }}>
+                  {busy ? t("common.saving") : t("warehouse.ledger_row_save")}
+                </button>
+              </div>
             </div>
           )}
         </div>

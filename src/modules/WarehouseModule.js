@@ -2089,7 +2089,7 @@ function StockTab({stock,grns,issues,onSelect,onAddMaterial,onAddStock,onIssue,o
       if(!m[it.matId]) m[it.matId]={inCount:0,outCount:0};
       m[it.matId].inCount++;
     }));
-    (issues||[]).forEach(i=>(i.items||[]).forEach(it=>{
+    (issues||[]).filter(i=>i.status!=="Cancelled").forEach(i=>(i.items||[]).forEach(it=>{
       if(!it.matId) return;
       if(!m[it.matId]) m[it.matId]={inCount:0,outCount:0};
       m[it.matId].outCount++;
@@ -2643,12 +2643,16 @@ function IssueTab({issues,projects,onNew,onSelect}){
     "Pending":{c:T.amb,bg:T.ambL,brd:T.ambM},
     "Partial":{c:T.blu,bg:T.bluL,brd:T.bluM},
     "Received":{c:T.grn,bg:T.grnL,brd:T.grnM},
+    "Cancelled":{c:T.t3,bg:T.surfaceB,brd:T.b2},
   };
-  let filtered=issues;
+  // Cancel hue issue (11 Oct 2026, AA) — "Cancelled" chip me hi; "All" aur
+  // ginti me nahi (stock wapas aa chuka, ab kuch gaya hi nahi).
+  const live=issues.filter(i=>i.status!=="Cancelled");
+  let filtered=fStatus==="Cancelled"?issues.filter(i=>i.status==="Cancelled"):live;
   if (fProj) filtered=filtered.filter(i=>i.project_id===fProj);
-  if (fStatus!=="All") filtered=filtered.filter(i=>(i.status||"Pending")===fStatus);
-  const pendingCount=issues.filter(i=>(i.status||"Pending")==="Pending").length;
-  const partialCount=issues.filter(i=>i.status==="Partial").length;
+  if (fStatus!=="All"&&fStatus!=="Cancelled") filtered=filtered.filter(i=>(i.status||"Pending")===fStatus);
+  const pendingCount=live.filter(i=>(i.status||"Pending")==="Pending").length;
+  const partialCount=live.filter(i=>i.status==="Partial").length;
 
   return(
     <div>
@@ -2662,8 +2666,8 @@ function IssueTab({issues,projects,onNew,onSelect}){
         <div style={{minWidth:200,maxWidth:240,flex:1}}>
           <SearchSelect compact value={fProj} options={[{id:null,name:"All projects"},...projects]} onChange={v=>setFProj(v)} placeholder={t("warehouse.filter_by_project")}/>
         </div>
-        {["All","Pending","Partial","Received"].map(s=>{
-          const count = s==="All" ? issues.length : issues.filter(i=>(i.status||"Pending")===s).length;
+        {["All","Pending","Partial","Received","Cancelled"].map(s=>{
+          const count = s==="All" ? live.length : issues.filter(i=>(i.status||"Pending")===s).length;
           return (
             <button key={s} onClick={()=>setFStatus(s)}
               style={{padding:"5px 13px",borderRadius:20,border:`1.5px solid ${fStatus===s?(STATUS_S[s]?.brd||T.blu):T.b1}`,background:fStatus===s?(STATUS_S[s]?.bg||T.bluL):"none",color:fStatus===s?(STATUS_S[s]?.c||T.blu):T.t3,fontSize:11.5,fontWeight:fStatus===s?700:400,cursor:"pointer",fontFamily:"inherit"}}>
@@ -2696,9 +2700,11 @@ function IssueTab({issues,projects,onNew,onSelect}){
                   <div style={{fontSize:10,color:T.t4,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{(iss.items||[]).map(it=>`${it.name||it.material_name} ×${fmtN(it.qty)} ${it.unit||""}`).slice(0,2).join(", ")}</div>
                   {/* Issue ka note list me bhi (11 Oct 2026, O) */}
                   {iss.remarks&&<div title={iss.remarks} style={{fontSize:10,color:T.t4,fontStyle:"italic",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{t("material.issue_note",{note:iss.remarks})}</div>}
+                  {/* Cancel ki wajah (11 Oct 2026, AA) */}
+                  {status==="Cancelled"&&<div title={iss.cancel_reason||""} style={{fontSize:10,color:T.red,fontWeight:600,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{t("warehouse.issue_cancelled_line",{reason:iss.cancel_reason||"—",name:iss.cancelled_by_name||"—",date:fmtDate(iss.cancelled_at)})}</div>}
                 </div>
                 <span style={{fontSize:11.5,color:T.t2}}>{iss.issuedTo}</span>
-                <span style={{fontSize:12,fontWeight:700,color:T.amb,textAlign:"right"}}>₹{fmt(iss.total)}</span>
+                <span style={{fontSize:12,fontWeight:700,color:status==="Cancelled"?T.t4:T.amb,textAlign:"right",textDecoration:status==="Cancelled"?"line-through":"none"}}>₹{fmt(iss.total)}</span>
                 <span style={{fontSize:11.5,color:T.t3}}>{iss.by}</span>
                 <Pill label={status} c={ss.c} bg={ss.bg} brd={ss.brd}/>
               </div>
@@ -2720,10 +2726,15 @@ async function askDeleteReason(){
   return r.trim();
 }
 
-function IssueDetailDrawer({issue,onClose,canDelete,canReceive,onDeleted,onReceived}){
+function IssueDetailDrawer({issue,onClose,canCancel,canReceive,onDeleted,onReceived}){
   const [detail,setDetail]=useState(issue);
   const [loading,setLoading]=useState(true);
   const [deleting,setDeleting]=useState(false);
+  // Delete → Cancel (11 Oct 2026, AA): wajah + Admin password, issue mitta nahi.
+  const [cancelOpen,setCancelOpen]=useState(false);
+  const [cancelReason,setCancelReason]=useState("");
+  const [cancelPw,setCancelPw]=useState("");
+  const [cancelErr,setCancelErr]=useState("");
   const [receiveOpen,setReceiveOpen]=useState(false);
   const [receiveItems,setReceiveItems]=useState([]);
   const [receiving,setReceiving]=useState(false);
@@ -2744,15 +2755,17 @@ function IssueDetailDrawer({issue,onClose,canDelete,canReceive,onDeleted,onRecei
     }).catch(()=>setLoading(false));
   },[issue?.dbId]);
 
-  const handleDelete=async()=>{
-    if(!await window.confirmAsync(`${detail?.id} ko delete karein? Source warehouse stock restore hoga${detail?.status==="Received"||detail?.status==="Partial"?" + dest project ka GRN bhi hatega":""}. Yeh undo nahi ho sakta.`)) return;
-    // Wajah zaroori (Roles & Access, 5 Oct 2026) — audit me poori tasveer ke saath.
-    const reason=await askDeleteReason(); if(reason==null) return;
-    setDeleting(true);
-    const r=await api.del(`/warehouse/issues/${detail.dbId}`,{reason});
+  // Cancel — server (DELETE /warehouse/issues/:id) stock wapas karta hai aur
+  // issue ko status Cancelled + wajah ke saath rakhta hai. Site par receive ho
+  // chuka ho to server mana karta hai (Return from Project ka raasta batata hai).
+  const handleCancel=async()=>{
+    if(cancelReason.trim().length<3){ setCancelErr(t("warehouse.delete_reason_short")); return; }
+    if(!cancelPw){ setCancelErr(t("warehouse.ledger_row_need_pw")); return; }
+    setDeleting(true); setCancelErr("");
+    const r=await api.del(`/warehouse/issues/${detail.dbId}`,{reason:cancelReason.trim(),password:cancelPw}).catch(()=>({success:false}));
     setDeleting(false);
-    if(r.success){onDeleted&&onDeleted();onClose();}
-    else alert(r.message||"Delete failed");
+    if(r.success){ setCancelPw(""); if(r.message) alert(r.message); onDeleted&&onDeleted(); onClose(); }
+    else setCancelErr(r.message||t("warehouse.issue_cancel_fail"));
   };
 
   const handleReceive=async()=>{
@@ -2785,7 +2798,8 @@ function IssueDetailDrawer({issue,onClose,canDelete,canReceive,onDeleted,onRecei
   const isPending=status==="Pending";
   const isPartial=status==="Partial";
   const isReceived=status==="Received";
-  const STATUS_S={"Pending":{c:T.amb,bg:T.ambL,brd:T.ambM},"Partial":{c:T.blu,bg:T.bluL,brd:T.bluM},"Received":{c:T.grn,bg:T.grnL,brd:T.grnM}};
+  const isCancelled=status==="Cancelled";
+  const STATUS_S={"Pending":{c:T.amb,bg:T.ambL,brd:T.ambM},"Partial":{c:T.blu,bg:T.bluL,brd:T.bluM},"Received":{c:T.grn,bg:T.grnL,brd:T.grnM},"Cancelled":{c:T.t3,bg:T.surfaceB,brd:T.b1}};
   const ss=STATUS_S[status]||STATUS_S["Pending"];
 
   return (
@@ -2810,6 +2824,12 @@ function IssueDetailDrawer({issue,onClose,canDelete,canReceive,onDeleted,onRecei
           <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",color:T.t4,fontSize:13}}>{t("common.loading")}</div>
         ):(
           <div style={{flex:1,overflowY:"auto",padding:"14px 18px"}}>
+            {isCancelled&&(
+              <div style={{padding:"11px 14px",background:T.surfaceB,border:`1.5px solid ${T.b2}`,borderRadius:8,marginBottom:12}}>
+                <div style={{fontSize:12.5,fontWeight:700,color:T.t2}}>{t("warehouse.issue_cancelled_tag")} — {t("warehouse.issue_cancelled_stock_back")}</div>
+                <div style={{fontSize:11.5,color:T.t3,marginTop:3}}>{t("warehouse.issue_cancelled_line",{reason:detail.cancel_reason||"—",name:detail.cancelled_by_name||"—",date:fmtDate(detail.cancelled_at)})}</div>
+              </div>
+            )}
             {isPending&&(
               <div style={{padding:"11px 14px",background:T.ambL,border:`1.5px solid ${T.ambM}`,borderRadius:8,marginBottom:12,display:"flex",alignItems:"center",gap:10}}>
                 <span style={{fontSize:18}}>⏳</span>
@@ -2848,7 +2868,7 @@ function IssueDetailDrawer({issue,onClose,canDelete,canReceive,onDeleted,onRecei
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:14}}>
               <div style={{padding:"9px 11px",background:T.surfaceB,borderRadius:7,border:`1px solid ${T.b1}`}}>
                 <div style={{fontSize:9,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>{t("common.status")}</div>
-                <Pill label={status} c={ss.c} bg={ss.bg} brd={ss.brd}/>
+                <Pill label={isCancelled?t("warehouse.issue_cancelled_tag"):status} c={ss.c} bg={ss.bg} brd={ss.brd}/>
               </div>
               <div style={{padding:"9px 11px",background:T.surfaceB,borderRadius:7,border:`1px solid ${T.b1}`}}>
                 <div style={{fontSize:9,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>{t("warehouse.issued_to")}</div>
@@ -2916,6 +2936,26 @@ function IssueDetailDrawer({issue,onClose,canDelete,canReceive,onDeleted,onRecei
               </div>
             )}
 
+            {cancelOpen&&isPending&&(
+              <div style={{padding:"12px 14px",background:T.redL,border:`1.5px solid ${T.red}44`,borderRadius:9,marginBottom:14}}>
+                <div style={{fontSize:12.5,fontWeight:700,color:T.red}}>{t("warehouse.issue_cancel_title",{no:detail?.id})}</div>
+                <div style={{fontSize:11,color:T.t3,margin:"3px 0 9px"}}>{t("warehouse.issue_cancel_hint")}</div>
+                <div style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>{t("warehouse.issue_cancel_reason")}</div>
+                <textarea rows={2} value={cancelReason} onChange={e=>setCancelReason(e.target.value)} placeholder={t("warehouse.issue_cancel_reason_ph")}
+                  style={{width:"100%",boxSizing:"border-box",padding:"7px 9px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:12,outline:"none",fontFamily:"inherit",resize:"vertical",marginBottom:8}}/>
+                <div style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>{t("warehouse.ledger_row_pw")}</div>
+                <input type="password" autoComplete="new-password" value={cancelPw} onChange={e=>setCancelPw(e.target.value)}
+                  style={{width:"100%",boxSizing:"border-box",height:32,padding:"0 9px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:12,outline:"none",fontFamily:"inherit"}}/>
+                {cancelErr&&<div style={{fontSize:11.5,color:T.red,fontWeight:600,marginTop:7}}>{cancelErr}</div>}
+                <div style={{display:"flex",gap:8,marginTop:10,justifyContent:"flex-end"}}>
+                  <GhostBtn onClick={()=>{setCancelOpen(false);setCancelErr("");setCancelPw("");}}>{t("common.close")}</GhostBtn>
+                  <Btn onClick={handleCancel} disabled={deleting} c={T.red} icon={IcTrash} size="sm">
+                    {deleting?t("warehouse.issue_cancelling"):t("warehouse.issue_cancel_confirm_btn")}
+                  </Btn>
+                </div>
+              </div>
+            )}
+
             {detail?.remarks&&(
               <div style={{padding:"9px 12px",background:T.surfaceB,border:`1px solid ${T.b1}`,borderRadius:7,marginBottom:8}}>
                 <div style={{fontSize:9.5,color:T.t4,marginBottom:2,fontWeight:700,textTransform:"uppercase",letterSpacing:".4px"}}>{t("common.remarks")}</div>
@@ -2944,9 +2984,10 @@ function IssueDetailDrawer({issue,onClose,canDelete,canReceive,onDeleted,onRecei
             {isPending&&canReceive&&!receiveOpen&&detail?.project_id&&(
               <Btn onClick={()=>setReceiveOpen(true)} c={T.grn} icon={IcIn} size="sm">{t("warehouse.receive_at_project", { project: detail.project })}</Btn>
             )}
-            {canDelete&&(
-              <Btn onClick={handleDelete} disabled={deleting} c={T.red} icon={IcTrash} size="sm">
-                {deleting?t("common.deleting"):t("warehouse.delete_reverse")}
+            {/* Cancel sirf site par receive se pehle (Pending) — uske baad Return from Project */}
+            {canCancel&&isPending&&!cancelOpen&&(
+              <Btn onClick={()=>{setCancelOpen(true);setCancelErr("");}} c={T.red} icon={IcTrash} size="sm">
+                {t("warehouse.issue_cancel_btn")}
               </Btn>
             )}
           </div>
@@ -3261,7 +3302,7 @@ function MaterialOutTab({issues,mrs,projects,onNewIssue,onSelectIssue,onSubMR,on
   return (
     <div>
       <SubTabBar active={sub} onSelect={setSub} tabs={[
-        {id:"issued",  l:t("warehouse.issued"),          count:issues.length,c:T.amb},
+        {id:"issued",  l:t("warehouse.issued"),          count:issues.filter(i=>i.status!=="Cancelled").length,c:T.amb},
         {id:"requests",l:t("warehouse.project_requests"),count:projMrs.length,c:T.cyn},
       ]}/>
       {sub==="requests"&&(
@@ -3608,6 +3649,7 @@ function WarehouseModule(){
   const [issueFromMR,setIssueFromMR]=useState(null);    // {mr} when issuing against MR
   const [matDetail,setMatDetail]=useState(null);
   const [ledgerMat,setLedgerMat]=useState(null);  // Ledger tab — khula hua material ka khaata
+  const [ledgerSeq,setLedgerSeq]=useState(0);     // khaate se qty badli → Ledger list dobara (11 Oct 2026, AA)
   const [transferDetail,setTransferDetail]=useState(null);
   const [orderMR,setOrderMR]=useState(null);       // Tab 1: place order modal target
   const [grnMR,setGrnMR]=useState(null);           // Tab 1: receive GRN modal target
@@ -3631,6 +3673,9 @@ function WarehouseModule(){
   const whEntry = canEntry("Warehouse", meUser);
   const whEdit = can("Warehouse", "edit", meUser);
   const whDelete = can("Warehouse", "delete", meUser);
+  // Admin-only (11 Oct 2026, AA): khaate ki line se qty theek karna aur issue
+  // Cancel — dono par company ka Admin password bhi (server deleteGuard).
+  const isAdmin = ["admin","super_admin"].includes((meUser?.role||"").toLowerCase());
   const whRecv = canEntry(["Warehouse", "Material"], meUser);
   // Store MR manzoori = PATCH /warehouse/mr/:id (Approved/Rejected) — server
   // Warehouse ka Approve maangta hai, transition me Edit bhi.
@@ -3941,7 +3986,7 @@ function WarehouseModule(){
           isAdmin={["admin","super_admin"].includes((meUser?.role||"").toLowerCase())} onChanged={()=>loadAll()}/>}
         {tab==="ginti"&&<WarehouseGintiTab key={whId} stock={stock} canCreate={canGintiCreate} canApprove={canGintiApprove} onStockChanged={()=>loadAll()}/>}
         {/* key=whId: godown badla to khaata usi godown ka dobara aaye */}
-        {tab==="ledger"&&<WarehouseLedgerTab key={whId} onOpen={m=>setLedgerMat(m)}/>}
+        {tab==="ledger"&&<WarehouseLedgerTab key={whId+":"+ledgerSeq} onOpen={m=>setLedgerMat(m)}/>}
         {tab==="grn"&&<MaterialInTab grns={grns} mrs={mrs} projects={projects} users={users} library={library}
           procMode={procMode}
           onNewGRN={whEntry?()=>setGrnNewOpen(true):undefined} onVerifyGRN={whEdit?handleVerifyGRN:undefined}
@@ -4004,7 +4049,8 @@ function WarehouseModule(){
         {tab==="transfer"&&<TransfersTab transfers={transfers} onNew={whRecv?()=>setTransferNewOpen(true):undefined} onSelect={t=>setTransferDetail(t)}/>}
       </div>
 
-      {ledgerMat&&<WarehouseLedgerDrawer material={ledgerMat} godownName={activeWh?.name} onClose={()=>setLedgerMat(null)}/>}
+      {ledgerMat&&<WarehouseLedgerDrawer material={ledgerMat} godownName={activeWh?.name} isAdmin={isAdmin} onClose={()=>setLedgerMat(null)}
+        onChanged={()=>{setLedgerSeq(x=>x+1);loadAll();}}/>}
       {matDetail&&(
         <MaterialDetailDrawer material={matDetail}
           onClose={()=>setMatDetail(null)}
@@ -4058,7 +4104,7 @@ function WarehouseModule(){
       )}
       {issueDetail&&(
         <IssueDetailDrawer issue={issueDetail}
-          canDelete={whDelete} canReceive={whRecv}
+          canCancel={isAdmin} canReceive={whRecv}
           onClose={()=>setIssueDetail(null)}
           onDeleted={()=>loadAll()}
           onReceived={()=>loadAll()}/>
