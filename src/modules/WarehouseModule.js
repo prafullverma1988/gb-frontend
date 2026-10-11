@@ -2680,6 +2680,8 @@ function IssueTab({issues,projects,onNew,onSelect}){
                 <div style={{minWidth:0}}>
                   <div style={{fontSize:12,fontWeight:600,color:T.t1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{iss.project}</div>
                   <div style={{fontSize:10,color:T.t4,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{(iss.items||[]).map(it=>`${it.name||it.material_name} ×${fmtN(it.qty)} ${it.unit||""}`).slice(0,2).join(", ")}</div>
+                  {/* Issue ka note list me bhi (11 Oct 2026, O) */}
+                  {iss.remarks&&<div title={iss.remarks} style={{fontSize:10,color:T.t4,fontStyle:"italic",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{t("material.issue_note",{note:iss.remarks})}</div>}
                 </div>
                 <span style={{fontSize:11.5,color:T.t2}}>{iss.issuedTo}</span>
                 <span style={{fontSize:12,fontWeight:700,color:T.amb,textAlign:"right"}}>₹{fmt(iss.total)}</span>

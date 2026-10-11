@@ -1524,6 +1524,12 @@ function TabMaterial({ project }) {
                                           ⚠ {row.open_issues} issue
                                         </span>
                                       )}
+                                      {/* Store se aaya maal: kisko diya + store ka note (11 Oct 2026, O) */}
+                                      {(row.issued_to_name||row.issue_note)&&(
+                                        <div style={{fontSize:10.5,color:T.t3,marginTop:3,lineHeight:1.35}}>
+                                          {[t("material.from_store"),row.issued_to_name?t("material.issued_to_name",{name:row.issued_to_name}):"",row.issue_note?t("material.issue_note",{note:row.issue_note}):""].filter(Boolean).join(" · ")}
+                                        </div>
+                                      )}
                                     </>
                                   : <span>{row.task_name?<span style={{fontSize:10,color:T.t4,marginRight:4}}>{row.task_no}</span>:""}{row.task_name||""}{row.remark?<span style={{color:T.t3}}>{row.task_name?" · ":""}{row.remark}</span>:<span style={{color:T.t4,fontSize:10}}>{!row.task_name?t("material.project_level"):""}</span>}</span>
                                 }

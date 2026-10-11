@@ -287,6 +287,8 @@ export function WarehouseLedgerDrawer({ material, godownName, onClose }) {
                     {who ? (e._before ? who : " · " + who) : ""}
                   </div>
                   {reach && <div style={{ fontSize: 9.5, color: reach.c, fontWeight: 600 }}>{reach.txt}</div>}
+                  {/* Issue ka note (11 Oct 2026, O) */}
+                  {e.kind === "issue" && e.note && <div title={e.note} style={{ fontSize: 9.5, color: T.t4, fontStyle: "italic", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t("material.issue_note", { note: e.note })}</div>}
                 </div>
                 <div style={{ fontSize: 12, fontWeight: 800, color: isIn ? T.grn : T.b2, textAlign: "right" }}>{isIn ? fmtQ(e.qty) : "—"}</div>
                 <div style={{ fontSize: 12, fontWeight: 800, color: !isIn ? T.red : T.b2, textAlign: "right" }}>{!isIn ? fmtQ(e.qty) : "—"}</div>

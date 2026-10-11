@@ -478,6 +478,10 @@ export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin 
                       ["GRN #",          grn.grn_number],
                       ["Vendor",         grn.vendor_name],
                       ["Challan",        grn.challan_no],
+                      // Store se aaya maal: kisko diya + store ka note (11 Oct 2026, O)
+                      ...((grn.issued_to_name || grn.issue_note) ? [[t("material.from_store"),
+                        [grn.issued_to_name ? t("material.issued_to_name", { name: grn.issued_to_name }) : "",
+                         grn.issue_note ? t("material.issue_note", { note: grn.issue_note }) : ""].filter(Boolean).join(" · ")]] : []),
                       // Dharam kaante ki tolai wali gadi (28 Sep 2026)
                       ...(grn.vehicle_no ? [["⚖️ " + t("weigh.vehicle_no"), grn.vehicle_no]] : []),
                       ["Received On",    fmtDate(grn.received_date)],
