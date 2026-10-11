@@ -835,7 +835,8 @@ function applyMapDraft(f, d) {
   }
   return out;
 }
-function MapSettings({ d, set, allowLine }) {
+// lookOnly: sirf nishaan + rang (marking ke dialog se); colourOnly: bagal ki line ka rang.
+function MapSettings({ d, set, allowLine, lookOnly, colourOnly }) {
   const colour = d.color || (d.mark === "line" ? "#2563EB" : "#475569");
   const inp = { padding: "5px 8px", borderRadius: 7, border: `1.5px solid ${C.b1}`, fontSize: 12, fontFamily: "inherit", width: 76, boxSizing: "border-box" };
   const chip = (on) => ({ display: "inline-flex", alignItems: "center", gap: 5, padding: "3px 9px", borderRadius: 20, fontSize: 11.5, fontFamily: "inherit", cursor: "pointer",
@@ -849,7 +850,7 @@ function MapSettings({ d, set, allowLine }) {
   const marks = allowLine ? [...MARK_KEYS, "line"] : MARK_KEYS;
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: "8px 10px", border: `1px solid ${C.b1}`, borderRadius: 7, background: C.surfaceB }}>
-      {row(t("map_form.nishaan"), marks.map((m) => (
+      {!colourOnly && row(t("map_form.nishaan"), marks.map((m) => (
         <button key={m} type="button" onClick={() => set({ ...d, mark: m })} style={chip(d.mark === m)}>
           <MarkIcon mark={m} colour={colour} size={14} />{markLabel(m)}
         </button>
@@ -859,7 +860,7 @@ function MapSettings({ d, set, allowLine }) {
           style={{ width: 20, height: 20, borderRadius: "50%", background: c, cursor: "pointer", padding: 0,
             border: d.color === c ? `2px solid ${C.t1}` : "2px solid #FFFFFF", boxShadow: `0 0 0 1px ${C.b1}` }} />
       )))}
-      {d.mark === "line" ? row(t("map_form.kinare_se_m"), (<>
+      {lookOnly || colourOnly ? null : d.mark === "line" ? row(t("map_form.kinare_se_m"), (<>
         <input value={d.offset} inputMode="decimal" maxLength={5} placeholder="1" onChange={(e) => set({ ...d, offset: e.target.value.replace(/[^\d.]/g, "") })} style={inp} />
         <span style={{ fontSize: 11, color: C.t4 }}>{t("map_form.kinare_note")}</span>
       </>)) : (<>
@@ -1335,8 +1336,53 @@ const getAt = (pl, fk) => {
 };
 const prefixOf = (fk) => { const i = fk.lastIndexOf("/"); return i < 0 ? "" : fk.slice(0, i + 1); };
 
-export function MapPlacePanel({ fields, detail, setDetail, place, setPlace, line, widthM, loadMaps, canEdit = true, mapHeight = 300, lineType }) {
+// typeKind / typeCode: marking ka type — "Nishaan / rang" usi type ke field me
+// save hota hai (library ka Edit ho to), us type ki sab marking par.
+export function MapPlacePanel({ fields, detail, setDetail, place, setPlace, line, widthM, loadMaps, canEdit = true, mapHeight = 300, lineType, typeKind, typeCode }) {
   const [clickKey, setClickKey] = useState(null);
+  const { lib, reload } = useMapLibrary();
+  const [lookEdit, setLookEdit] = useState(null);    // { fk, d }
+  const [lookBusy, setLookBusy] = useState(false);
+  const canLook = !!(lib && lib.canEdit && typeCode);
+  // fk ("valve_n" / "electrical:left/streetlight_n") → us field ki definition badlo (type ka form).
+  const saveLook = async () => {
+    if (!lookEdit || lookBusy) return;
+    const keys = lookEdit.fk.split("/").map((x) => x.split(":")[0]);
+    const tr = typeRow(typeKind || "line", typeCode);
+    const base = tr && Array.isArray(tr.fields) ? tr.fields : [];
+    const walk = (list, i) => (list || []).map((f) => {
+      if (f.key !== keys[i]) return f;
+      if (i < keys.length - 1) return { ...f, sub: walk(subOf(f), i + 1) };
+      const n = { ...f };
+      if (f.type === "child") n.mark = lookEdit.d.mark || f.mark || "dot";
+      if (lookEdit.d.color) n.color = lookEdit.d.color; else delete n.color;
+      return n;
+    });
+    setLookBusy(true); setMsg("");
+    const r = await api.put("/tenders/alignments/feature-types/style", { kind: typeKind || "line", code: typeCode, fields: walk(base, 0) }).catch(() => null);
+    setLookBusy(false);
+    if (!r || !r.success) { setMsg((r && r.message) || t("map_style.save_nahi_hua")); return; }
+    setLookEdit(null);
+    await reload();
+  };
+  // Naye field jaisa hi: Dot / Box / Cross… aur rang — field ke naam ke saath.
+  const lookLink = (f, fk) => (canLook ? (
+    <button type="button" onClick={() => setLookEdit(lookEdit && lookEdit.fk === fk ? null : { fk, d: { mark: f.type === "side" ? "line" : f.mark || "dot", color: f.color || "" } })}
+      style={{ padding: "3px 9px", borderRadius: 20, border: `1px dashed ${lookEdit && lookEdit.fk === fk ? C.ind : C.b1}`, background: C.surface, cursor: "pointer",
+        fontFamily: "inherit", fontSize: 11, color: lookEdit && lookEdit.fk === fk ? C.ind : C.t2 }}>
+      {t("map_form.nishaan_rang")} {lookEdit && lookEdit.fk === fk ? "▾" : "▸"}
+    </button>
+  ) : null);
+  const lookBox = (f, fk) => (lookEdit && lookEdit.fk === fk ? (
+    <div style={{ display: "flex", flexDirection: "column", gap: 6, paddingLeft: 23 }}>
+      <MapSettings d={lookEdit.d} set={(d) => setLookEdit({ fk, d })} allowLine={false} lookOnly colourOnly={f.type === "side"} />
+      <div style={{ fontSize: 11, color: C.t3 }}>{t("map_form.nishaan_sab_par", { type: typeName(typeKind || "line", typeCode) })}</div>
+      <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+        <button type="button" onClick={() => setLookEdit(null)} disabled={lookBusy} style={smallBtnS(false)}>{t("common.cancel")}</button>
+        <button type="button" onClick={saveLook} disabled={lookBusy} style={smallBtnS(true)}>{t("map_form.theek")}</button>
+      </div>
+    </div>
+  ) : null);
   const [msg, setMsg] = useState("");
   const [openD, setOpenD] = useState(() => new Set());
   const W = Number(widthM) > 0 ? Number(widthM) : widthOfProps(numProps(detail)) || 7;
@@ -1448,6 +1494,7 @@ export function MapPlacePanel({ fields, detail, setDetail, place, setPlace, line
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
           <MarkIcon mark={f.mark || "dot"} colour={colour} size={15} />
           <span style={{ fontSize: 12.5, fontWeight: 700, color: C.t1 }}>{f.label}</span>
+          {lookLink(f, fk)}
           {st.mode !== "interval" && (
             <input value={st.qty} inputMode="numeric" placeholder="0" disabled={dis} aria-label={t("map_form.kitne")}
               onChange={(e) => set({ qty: e.target.value.replace(/[^\d]/g, "").slice(0, 4) })} style={inpS} />
@@ -1456,6 +1503,7 @@ export function MapPlacePanel({ fields, detail, setDetail, place, setPlace, line
             <button key={v} type="button" disabled={dis} onClick={() => { set({ mode: v }); if (v !== "manual" && clickKey === fk) setClickKey(null); }} style={chip(st.mode === v, dis)}>{t(k)}</button>
           ))}
         </div>
+        {lookBox(f, fk)}
         {st.mode === "interval" && (
           <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", paddingLeft: 23 }}>
             <span style={small}>{t("map_form.har")}</span>
@@ -1520,6 +1568,7 @@ export function MapPlacePanel({ fields, detail, setDetail, place, setPlace, line
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
           <MarkIcon mark="line" colour={colour} size={15} />
           <span style={{ fontSize: 12.5, fontWeight: 700, color: C.t1 }}>{f.label}</span>
+          {lookLink(f, fk)}
           {["none", "left", "right", "both"].map((x) => (
             <button key={x} type="button" disabled={!canEdit} onClick={() => setDet({ ...det, [f.key]: x })} style={chip(v === x, !canEdit)}>{t(`map_form.side_${x}`)}</button>
           ))}
@@ -1528,6 +1577,7 @@ export function MapPlacePanel({ fields, detail, setDetail, place, setPlace, line
             <input value={st.gap} inputMode="decimal" disabled={!canEdit} onChange={(e) => set({ gap: e.target.value.replace(/[^\d.]/g, "") })} style={inpS} />
           </>)}
         </div>
+        {lookBox(f, fk)}
         {v === "both" && (
           <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11.5, color: C.t2, cursor: "pointer", paddingLeft: 23 }}>
             <input type="checkbox" checked={!!st.same} disabled={!canEdit} onChange={(e) => set({ same: e.target.checked })} />

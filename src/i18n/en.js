@@ -5136,6 +5136,8 @@ const dict = {
   "map_library.km_nishaan":                                  "Km markers",
   "map_library.zoom_par":                                    "on zoom",
   "map_style.shape_cross":                                   "Cross",
+  "map_form.nishaan_rang":                                   "Mark / colour",
+  "map_form.nishaan_sab_par":                                "This mark and colour apply to every \"{type}\" marking (saved in the library).",
   "map_form.mode_auto":                                       "Auto",
   "map_form.mode_interval":                                   "By distance",
   "map_form.mode_manual":                                     "Manual",

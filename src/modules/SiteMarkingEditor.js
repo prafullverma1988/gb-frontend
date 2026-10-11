@@ -1711,7 +1711,8 @@ export default function SiteMarkingEditor({ lib, loadMaps, onClose, onSaved, onO
           <div style={{ marginTop: 12 }}>
             <div style={{ ...lbl, marginBottom: 2 }}>{t("map_form.naksha_ke_nishaan")}</div>
             <MapPlacePanel fields={fields.filter((f) => !(hide || []).includes(f.key))} detail={detail} setDetail={setDetail} place={place} setPlace={setPlace}
-              line={{ pts, gaps: breaks }} widthM={Number(widthM) > 0 ? Number(widthM) : undefined} loadMaps={loadMaps} lineType={atype || "other"} mapHeight={260} />
+              line={{ pts, gaps: breaks }} widthM={Number(widthM) > 0 ? Number(widthM) : undefined} loadMaps={loadMaps} lineType={atype || "other"} mapHeight={260}
+              typeKind="line" typeCode={atype || "other"} />
           </div>
         )}
       </div>
