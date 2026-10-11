@@ -354,6 +354,7 @@ export function MapLibraryDialog({ onClose }) {
   const [add, setAdd] = useState(null);            // { label, colour, shape, template }
   const [draft, setDraft] = useState(null);        // { key, fields } — form badla, abhi save nahi
   const [nf, setNf] = useState(null);              // naya field: { label, type, unit, options, required }
+  const [ren, setRen] = useState(null);            // naam badal rahe: { key, label }
   const canEdit = !!(lib && lib.canEdit);
   const canCreate = !!(lib && lib.canCreate);
 
@@ -490,7 +491,26 @@ export function MapLibraryDialog({ onClose }) {
             {fields.map((f, i) => (
               <div key={f.key} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 10px", borderTop: i ? `1px solid ${C.b1}` : "none" }}>
                 <span style={{ flex: 1, minWidth: 0, fontSize: 12, color: C.t1, fontWeight: 600 }}>
-                  {f.label}{f.unit ? <span style={{ color: C.t4, fontWeight: 400 }}>{` (${f.unit})`}</span> : null}
+                  {ren && ren.key === f.key ? (
+                    // Naam badalna (11 Oct 2026) — template ka field badla to apna naam ban jaata
+                    // hai (phir bhasha ke saath nahi badalta). Key / value wahi, data nahi chhedta.
+                    <span style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
+                      <input autoFocus value={ren.label} maxLength={60} onChange={(e) => setRen({ ...ren, label: e.target.value })}
+                        onKeyDown={(e) => { if (e.key === "Escape") setRen(null); }} style={{ ...inpS, padding: "4px 7px", width: 180 }} />
+                      <button type="button" style={smallBtn(true)} onClick={() => {
+                        const l = String(ren.label || "").trim();
+                        if (!l) { setErr(t("map_form.field_naam_likho")); return; }
+                        edit(fields.map((x) => (x.key === f.key ? { ...x, label: l, tpl: false } : x))); setRen(null); setErr("");
+                      }}>{t("map_form.theek")}</button>
+                    </span>
+                  ) : (<>
+                    {f.label}{f.unit ? <span style={{ color: C.t4, fontWeight: 400 }}>{` (${f.unit})`}</span> : null}
+                    {canEdit && (
+                      <button type="button" title={t("map_form.naam_badlo")} aria-label={t("map_form.naam_badlo")} disabled={!!busy}
+                        onClick={() => setRen({ key: f.key, label: f.label })}
+                        style={{ background: "none", border: "none", cursor: "pointer", color: C.t4, fontSize: 12, padding: "0 4px" }}>✎</button>
+                    )}
+                  </>)}
                   <span style={{ display: "block", fontSize: 10.5, color: C.t4, fontWeight: 400, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{fieldTypeText(f)}</span>
                 </span>
                 <label style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, color: C.t3, cursor: canEdit ? "pointer" : "default" }}>
@@ -568,7 +588,7 @@ export function MapLibraryDialog({ onClose }) {
         </div>
         <div style={{ display: "flex", gap: 4, padding: "10px 18px 0" }}>
           {[["line", "map_style.tab_line"], ["point", "map_style.tab_point"], ["area", "map_style.tab_area"]].map(([k, l]) => (
-            <button key={k} type="button" onClick={() => { setTab(k); setOpen(null); setAdd(null); setDraft(null); setNf(null); }}
+            <button key={k} type="button" onClick={() => { setTab(k); setOpen(null); setAdd(null); setDraft(null); setNf(null); setRen(null); }}
               style={{ padding: "7px 14px", border: "none", borderBottom: `2px solid ${tab === k ? C.ind : "transparent"}`, background: "none", cursor: "pointer",
                 fontFamily: "inherit", fontSize: 12.5, fontWeight: tab === k ? 700 : 500, color: tab === k ? C.ind : C.t3 }}>{t(l)}</button>
           ))}
@@ -585,7 +605,7 @@ export function MapLibraryDialog({ onClose }) {
               const isOpen = open === key;
               return (
                 <div key={key} style={{ borderTop: i ? `1px solid ${C.b1}` : "none" }}>
-                  <div role="button" tabIndex={0} onClick={() => { setOpen(isOpen ? null : key); setNf(null); }} onKeyDown={(e) => { if (e.key === "Enter") { setOpen(isOpen ? null : key); setNf(null); } }}
+                  <div role="button" tabIndex={0} onClick={() => { setOpen(isOpen ? null : key); setNf(null); setRen(null); }} onKeyDown={(e) => { if (e.key === "Enter") { setOpen(isOpen ? null : key); setNf(null); } }}
                     style={{ display: "flex", alignItems: "center", gap: 12, padding: "9px 14px", cursor: "pointer", background: isOpen ? C.indL : C.surface }}>
                     <span style={{ width: 26, display: "flex", justifyContent: "center" }}>
                       {row.kind === "point" ? <ShapeIcon shape={row.shape} colour={row.colour} size={20} />
@@ -654,6 +674,98 @@ export function MapLibraryDialog({ onClose }) {
           )}
           <div style={{ fontSize: 11, color: C.t4, marginTop: 12, lineHeight: 1.5 }}>{t("map_style.note")}</div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════
+// REGISTER KI KHIDKI (11 Oct 2026) — Tender ke naksha ki lines ka register.
+// rows: [{ id, name, kind, code, props, poles, size, lenM, extra: [..] }],
+// extraHead: tender ke apne column (Site, Chainage, Chaudai…). Type chuno to
+// har field ka column; "Sab type" me ek "Detail" column. CSV wahi table.
+// ══════════════════════════════════════════════════════════════════
+export function RegisterDialog({ title, rows, extraHead, canExport, onClose }) {
+  const [pick, setPick] = useState("");
+  useEffect(() => {
+    const h = (e) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, [onClose]);
+  const types = [];
+  rows.forEach((r) => {
+    const k = `${r.kind}:${r.code}`;
+    const hit = types.find((x) => x.k === k);
+    if (hit) hit.n++; else types.push({ k, kind: r.kind, code: r.code, n: 1 });
+  });
+  types.sort((a, b) => typeName(a.kind, a.code).localeCompare(typeName(b.kind, b.code)));
+  const [pKind, pCode] = pick ? pick.split(":") : [null, null];
+  const list = pick ? rows.filter((r) => r.kind === pKind && r.code === pCode) : rows;
+  const fields = pick ? formOf(pKind, pCode) : [];
+  const poleCol = pick && list.some((r) => r.poles > 0);
+  const head = [t("map_form.reg_naam"), ...(pick ? [] : [t("map_form.reg_type")]), ...(extraHead || []), t("map_form.reg_size"),
+    ...(pick ? fields.map((f) => f.label + (f.unit ? ` (${f.unit})` : "")) : [t("map_form.detail")]),
+    ...(poleCol ? [t("map_form.pole_ginti")] : []), t("map_form.detail_adhoori")];
+  const cells = (r) => {
+    const det = detailPairs(r.kind, r.code, r.props);
+    return [r.name || "", ...(pick ? [] : [typeName(r.kind, r.code)]), ...(r.extra || []), r.size || "",
+      ...(pick ? fields.map((f) => { const d = det.find((x) => x[0] === f.key); return d ? d[3] : ""; }) : [det.map(([, , l, v]) => `${l}: ${v}`).join(" · ")]),
+      ...(poleCol ? [r.poles ? String(r.poles) : ""] : []), missingOf(formOf(r.kind, r.code), r.props).join(", ")];
+  };
+  const lenSum = list.reduce((m, r) => m + (r.kind === "line" ? Number(r.lenM) || 0 : 0), 0);
+  const lenTxt = lenSum >= 1000 ? `${(lenSum / 1000).toFixed(2)} km` : `${Math.round(lenSum)} m`;
+  const csv = () => {
+    const q = (v) => { const x = String(v == null ? "" : v); return /[",\r\n]/.test(x) ? `"${x.replace(/"/g, '""')}"` : x; };
+    const text = "\uFEFF" + [head, ...list.map(cells)].map((r) => r.map(q).join(",")).join("\r\n") + "\r\n";
+    const url = URL.createObjectURL(new Blob([text], { type: "text/csv;charset=utf-8" }));
+    const a = document.createElement("a");
+    a.href = url; a.download = `${String(title || "register").replace(/[\\/:*?"<>|]+/g, "_").slice(0, 60)}-register.csv`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+  };
+  const th = { textAlign: "left", padding: "8px 10px", fontSize: 11, color: C.t3, fontWeight: 700, borderBottom: `1px solid ${C.b1}`, whiteSpace: "nowrap", background: C.surfaceB, position: "sticky", top: 0 };
+  const td = { padding: "7px 10px", fontSize: 12, borderBottom: `1px solid ${C.b1}`, verticalAlign: "top", fontVariantNumeric: "tabular-nums" };
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 9995, background: "rgba(15,23,42,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+      <div role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}
+        style={{ width: 1100, maxWidth: "100%", maxHeight: "90vh", background: C.surface, borderRadius: 10, boxShadow: "0 12px 40px rgba(0,0,0,.2)", display: "flex", flexDirection: "column", overflow: "hidden", fontFamily: "'Segoe UI',system-ui,sans-serif" }}>
+        <div style={{ padding: "12px 16px", borderBottom: `1px solid ${C.b1}`, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: C.t1 }}>{t("map_form.reg_title")}{title ? ` — ${title}` : ""}</div>
+          <PickSelect value={pick} onChange={(e) => setPick(e.target.value)}
+            style={{ padding: "6px 9px", borderRadius: 7, border: `1.5px solid ${C.b1}`, fontSize: 12.5, fontFamily: "inherit", minWidth: 200 }}>
+            <option value="">{t("map_form.reg_sab_type", { n: rows.length })}</option>
+            {types.map((x) => <option key={x.k} value={x.k}>{`${typeName(x.kind, x.code)} (${x.n})`}</option>)}
+          </PickSelect>
+          <span style={{ flex: 1 }} />
+          <span style={{ fontSize: 12, color: C.t3 }}>{t("map_form.reg_total", { n: list.length, len: lenTxt })}</span>
+          {canExport && list.length > 0 && (
+            <button type="button" onClick={csv} style={{ padding: "6px 12px", borderRadius: 7, border: `1px solid ${C.b1}`, background: C.surface, cursor: "pointer", fontFamily: "inherit", fontSize: 12, color: C.t2 }}>
+              ⬇ {t("map_form.reg_csv")}
+            </button>
+          )}
+          <button type="button" onClick={onClose} aria-label={t("common.close")} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 18, color: C.t3, lineHeight: 1 }}>×</button>
+        </div>
+        {list.length === 0 ? (
+          <div style={{ padding: 16, fontSize: 12.5, color: C.t4 }}>{t("map_form.reg_khaali")}</div>
+        ) : (
+          <div style={{ overflow: "auto" }}>
+            <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 720 }}>
+              <thead><tr>{head.map((h, i) => <th key={i} style={th}>{h}</th>)}</tr></thead>
+              <tbody>
+                {list.map((r) => {
+                  const c = cells(r);
+                  return (
+                    <tr key={r.id}>
+                      {c.map((v, i) => (
+                        <td key={i} style={{ ...td, color: i === c.length - 1 ? C.amb : C.t1, fontWeight: i === 0 ? 600 : 400 }}>{v || (i === c.length - 1 ? "" : "—")}</td>
+                      ))}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );

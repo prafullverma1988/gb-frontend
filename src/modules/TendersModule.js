@@ -26,7 +26,7 @@ import { CreateTransactionModal } from "./FinanceModule";
 import { t, Rich } from "../i18n";
 import { BackClose } from "../utils/backNav";
 import { can, canAny, canEntry } from "../utils/perms";
-import { useMapLibrary, styleOf, lineOpts, markerIcon, MapLibraryDialog,
+import { useMapLibrary, styleOf, lineOpts, markerIcon, MapLibraryDialog, RegisterDialog,
   formOf, propsRows, missingOf, TypeDetailFields, drainPaths, drainLineOpts, polePoints, poleIcon } from "./mapStyles";
 // xlsx (~400 KB) sirf BOQ file kholte waqt chahiye — Tenders khulte hi nahi (PERF-05).
 // loadFile() pehle loadXlsx() await karta hai; baaki helper (sheetToAoa,
@@ -4238,6 +4238,7 @@ function MapTab({tenderId, sites}) {
   // Map library (rang/shape/line-style) — load hote hi naksha dobara rangta hai.
   const { lib: mapLib } = useMapLibrary();
   const [libOpen, setLibOpen] = useState(false);
+  const [regOpen, setRegOpen] = useState(false);   // lines ka register (11 Oct 2026)
   const [sugg, setSugg]       = useState([]);     // search ke suggestions
   const photoMarkersRef = useRef([]);
   const infoWinRef = useRef(null);
@@ -5184,6 +5185,13 @@ function MapTab({tenderId, sites}) {
             border:`1px solid ${T.b1}`, background:T.surface, fontSize:12, color:T.t2, cursor:"pointer", whiteSpace:"nowrap", fontFamily:"inherit"}}>
             🎨 {t("map_style.button")}
           </button>
+          {/* Register — har line / structure ka detail ek table me, type-wise column. */}
+          {items.length > 0 && (
+            <button onClick={()=>setRegOpen(true)} style={{display:"flex", alignItems:"center", gap:5, padding:"7px 12px", borderRadius:7,
+              border:`1px solid ${T.b1}`, background:T.surface, fontSize:12, color:T.t2, cursor:"pointer", whiteSpace:"nowrap", fontFamily:"inherit"}}>
+              📋 {t("map_form.reg_tab")}
+            </button>
+          )}
           {/* KML download = Export tick (5 Oct 2026) — server bhi Tenders YA Mapping ka Export maangta hai. */}
           {items.length > 0 && canAny(["Tenders","Mapping"], "export") && (
             <button onClick={async ()=>{
@@ -5972,6 +5980,19 @@ function MapTab({tenderId, sites}) {
     {/* Naya drawn feature — type ke hisaab se apne field */}
     {hover && hover.card && <HoverCard x={hover.x} y={hover.y} card={hover.card}/>}
     {libOpen && <MapLibraryDialog onClose={()=>setLibOpen(false)}/>}
+    {regOpen && (
+      <RegisterDialog title="" canExport={canAny(["Tenders","Mapping"], "export")} onClose={()=>setRegOpen(false)}
+        extraHead={[t("common.site"), t("tenders.hv_chainage"), t("tenders.hv_chaudai")]}
+        rows={items.map(it => ({
+          id: it.id, name: it.name || "", kind: it.kind, code: it.atype || "other", props: it.props,
+          poles: it.kind === "line" ? polePoints(it.atype, it.props, it.geometry || []).length : 0,
+          lenM: Number(it.length_m) || 0,
+          size: it.kind === "line" ? fmtKm(it.length_m) : it.kind === "area" ? fmtArea(it.area_sqm) : "",
+          extra: [it.project_name || "",
+            it.kind === "line" && it.start_chainage_m != null ? `${chFmt(Number(it.start_chainage_m))} → ${chFmt(Number(it.start_chainage_m) + Number(it.length_m || 0))}` : "",
+            Number(it.width_m) > 0 ? `${it.width_m} m` : ""],
+        }))}/>
+    )}
 
     {refPreview && (
       <Modal title={t("tenders.ref_kmz")} sub={refPreview.file_name} width={600}

@@ -5084,6 +5084,8 @@ const dict = {
   "map_form.koi_field_nahi":                                  "This type has no fields.",
   "map_form.koi_template_nahi":                               "No template",
   "map_form.nahi":                                            "No",
+  "map_form.naam_badlo":                                      "Rename",
+  "map_form.theek":                                           "OK",
   "map_form.options_likho":                                   "Enter the list options (comma separated)",
   "map_form.options_ph":                                      "Options, comma separated — e.g. MS, PCC, Rail",
   "map_form.pole_ginti":                                      "Poles",

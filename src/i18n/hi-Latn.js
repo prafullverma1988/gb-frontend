@@ -5086,6 +5086,8 @@ const dict = {
   "map_form.koi_field_nahi":                                  "Is type ka koi field nahi.",
   "map_form.koi_template_nahi":                               "Koi template nahi",
   "map_form.nahi":                                            "Nahi",
+  "map_form.naam_badlo":                                      "Naam badlo",
+  "map_form.theek":                                           "Theek",
   "map_form.options_likho":                                   "List ke option likho (comma se alag)",
   "map_form.options_ph":                                      "Option, comma se alag — jaise MS, PCC, Rail",
   "map_form.pole_ginti":                                      "Kitne pole",

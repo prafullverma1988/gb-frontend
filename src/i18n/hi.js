@@ -5083,6 +5083,8 @@ const dict = {
   "map_form.koi_field_nahi":                                  "इस प्रकार का कोई फ़ील्ड नहीं।",
   "map_form.koi_template_nahi":                               "कोई टेम्पलेट नहीं",
   "map_form.nahi":                                            "नहीं",
+  "map_form.naam_badlo":                                      "नाम बदलें",
+  "map_form.theek":                                           "ठीक",
   "map_form.options_likho":                                   "सूची के विकल्प लिखें (कॉमा से अलग)",
   "map_form.options_ph":                                      "विकल्प, कॉमा से अलग — जैसे MS, PCC, Rail",
   "map_form.pole_ginti":                                      "कितने पोल",
