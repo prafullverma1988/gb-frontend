@@ -5135,6 +5135,8 @@ const dict = {
   "map_library.km_nishaan":                                  "किमी के निशान",
   "map_library.zoom_par":                                    "ज़ूम पर",
   "map_style.shape_cross":                                   "क्रॉस",
+  "map_form.nishaan_rang":                                   "निशान / रंग",
+  "map_form.nishaan_sab_par":                                "यह निशान और रंग \"{type}\" की सब मार्किंग पर लगेगा (लाइब्रेरी में सेव)।",
   "map_form.mode_auto":                                       "ऑटो",
   "map_form.mode_interval":                                   "दूरी से",
   "map_form.mode_manual":                                     "मैनुअल",

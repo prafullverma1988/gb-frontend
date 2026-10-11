@@ -1158,7 +1158,8 @@ function TypeDialog({ item, onClose, onSave, kidsAt, loadMaps }) {
         <div style={{ marginTop: 14 }}>
           <div style={{ ...lbl, marginBottom: 2 }}>{t("map_form.naksha_ke_nishaan")}</div>
           <MapPlacePanel fields={fields} detail={detail} setDetail={setDetail} place={place} setPlace={setPlace}
-            line={{ pts: cleanPts(item), gaps: item.gaps }} loadMaps={loadMaps} lineType={code} mapHeight={320} />
+            line={{ pts: cleanPts(item), gaps: item.gaps }} loadMaps={loadMaps} lineType={code} mapHeight={320}
+            typeKind={kind} typeCode={item.parent_id == null || code !== orig ? code : null} />
         </div>
       )}
       {oldDia && (

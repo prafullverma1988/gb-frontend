@@ -6172,7 +6172,8 @@ function MapTab({tenderId, sites}) {
                       setPlace={(fn)=>setPending(p=>{ const cur = placeOf(p); return { ...p, place: typeof fn === "function" ? fn(cur) : fn, placeFor: p.atype }; })}
                       line={{ pts: (pending.coords || []).map(c=>({ lat: Number(c.lat), lng: Number(c.lng) })), gaps: pending.gaps }}
                       widthM={Number(pending.width_m) > 0 ? Number(pending.width_m) : undefined}
-                      loadMaps={()=>loadGoogleMaps(apiKey)} lineType={pending.atype} mapHeight={260}/>
+                      loadMaps={()=>loadGoogleMaps(apiKey)} lineType={pending.atype} mapHeight={260}
+                      typeKind="line" typeCode={pending.atype}/>
                   </div>
                 )}
               </div>

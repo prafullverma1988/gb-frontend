@@ -5138,6 +5138,8 @@ const dict = {
   "map_library.km_nishaan":                                  "Km ke nishaan",
   "map_library.zoom_par":                                    "zoom par",
   "map_style.shape_cross":                                   "Cross",
+  "map_form.nishaan_rang":                                   "Nishaan / rang",
+  "map_form.nishaan_sab_par":                                "Ye nishaan aur rang \"{type}\" ki sab marking par lagega (library me save).",
   "map_form.mode_auto":                                       "Auto",
   "map_form.mode_interval":                                   "Doori se",
   "map_form.mode_manual":                                     "Manual",
