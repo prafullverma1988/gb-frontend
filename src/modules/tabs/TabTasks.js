@@ -538,6 +538,10 @@ function TabTasks({ projectId, isAdmin }) {
   const allFlat = ptFlatten(tasks);
   const TEAM_PT = [...new Set(allFlat.map(t=>t.assignee).filter(Boolean))];
   const phaseCodeMap = ptPhaseCodes(tasks); // id -> {code, phaseColor, phaseName, isPhase}
+  // Har task ke bhai-behen me pehla / aakhri hai ya nahi — ↑ ↓ button disable karne ke liye
+  // (server pehle-se-upar / aakhri-se-neeche pe 400 deta hai; yahan pehle hi rok dete hain)
+  const sibEdge = {};
+  (function walkSib(list){ list.forEach((x,i)=>{ sibEdge[x.id]={first:i===0,last:i===list.length-1}; if(x.children?.length) walkSib(x.children); }); })(tasks);
 
   // ── Level filter metadata ─────────────────────────────────────
   // Count tasks at each depth by walking the tree recursively (ptFlatten
@@ -822,6 +826,13 @@ function TabTasks({ projectId, isAdmin }) {
                   style={{width:22,height:22,borderRadius:4,background:T.surface,border:"1px solid "+T.b1,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
                   <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke={T.grn} strokeWidth={2.5}><path d="M12 5v14M5 12h14"/></svg>
                 </button>}
+                {canEditTask&&["up","down"].map(dir=>{
+                  const off=dir==="up"?sibEdge[item.id]?.first:sibEdge[item.id]?.last;
+                  return <button key={dir} disabled={!!off} onClick={()=>moveTask(item.id,dir)} title={t(dir==="up"?"tasks.move_up":"tasks.move_down")}
+                    style={{width:22,height:22,borderRadius:4,background:T.surface,border:"1px solid "+T.b1,cursor:off?"not-allowed":"pointer",opacity:off?.35:1,display:"flex",alignItems:"center",justifyContent:"center",padding:0}}>
+                    <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke={T.t3} strokeWidth={2.5}><path d={dir==="up"?"M5 15l7-7 7 7":"M19 9l-7 7-7-7"}/></svg>
+                  </button>;
+                })}
                 {canEditTask&&<button onClick={()=>setEditTask(item)} title={t("common.edit_2")}
                   style={{width:22,height:22,borderRadius:4,background:T.surface,border:"1px solid "+T.b1,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
                   <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke={T.blu} strokeWidth={2}><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
