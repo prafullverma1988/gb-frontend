@@ -2387,7 +2387,7 @@ function OilPanel({ data, onAdd, onCancel }) {
                     <span><Pill label={r.action === "change" ? t("machinery.oil_change") : t("machinery.oil_topup")} c={r.action === "change" ? T.ind : T.t3} bg={r.action === "change" ? T.indL : T.sltL} /></span>
                     <span style={{ fontSize: 11.5, color: T.t3 }}>
                       {r.source === "store" ? t("machinery.oil_src_store", { name: r.warehouse_name || "—", no: r.issue_no || "" }) : t("machinery.oil_src_vendor", { name: r.vendor || "—" })}
-                      {r.source === "vendor" && r.payment_mode === "credit" && <span> · {r.settlement_status === "paid" ? t("common.paid") : t("common.baaki")}</span>}
+                      {r.source === "vendor" && r.payment_mode === "credit" && <span> · {r.settlement_status === "paid" ? t("common.paid") : (off || r.settlement_status === "cancelled") ? t("common.cancelled") : t("common.baaki")}</span>}
                     </span>
                     <span style={{ fontSize: 12, fontWeight: 600, textAlign: "right", textDecoration: off ? "line-through" : "none" }}>₹{Math.round(r.amount).toLocaleString("en-IN")}</span>
                     <span style={{ fontSize: 11.5, color: T.t3 }}>{r.by_name || "—"}</span>
