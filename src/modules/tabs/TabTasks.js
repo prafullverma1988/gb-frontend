@@ -796,6 +796,8 @@ function TabTasks({ projectId, isAdmin }) {
                 ? <span style={{fontSize:10.5,color:T.t4,fontVariantNumeric:"tabular-nums",flexShrink:0,whiteSpace:"nowrap"}}>· {ch}</span>
                 : null;})()}
               {item.tag&&<span style={{background:"#FEF3C7",color:"#92400E",fontSize:8,fontWeight:600,padding:"1px 5px",borderRadius:3,flexShrink:0,whiteSpace:"nowrap"}}>{item.tag}</span>}
+              {/* N (11 Oct 2026): plan lock ke baad AI Plan "Naya add karo" se juda */}
+              {item.added_after_lock_at&&<span title={t("tasks.baad_me_joda_title")} style={{background:"#EEF2FF",color:"#4B45C4",border:"1px solid #C7D2FE",fontSize:8,fontWeight:700,padding:"0px 5px",borderRadius:3,flexShrink:0,whiteSpace:"nowrap"}}>{t("tasks.baad_me_joda",{date:new Date(String(item.added_after_lock_at).replace(" ","T")).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"})})}</span>}
               {delay>0&&<span style={{background:"#FEE2E2",color:"#DC2626",fontSize:8,fontWeight:600,padding:"1px 4px",borderRadius:3,flexShrink:0}}>+{delay}d</span>}
               {(()=>{const fv=ptFinishVar(item);
                 if(fv.kind==="late")   return <span style={{background:"#FEE2E2",color:"#DC2626",fontSize:8,fontWeight:700,padding:"1px 5px",borderRadius:3,flexShrink:0}}>{t("tasks.daysd_late", { days: fv.days })}</span>;
