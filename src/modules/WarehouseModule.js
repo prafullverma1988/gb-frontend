@@ -2645,6 +2645,8 @@ function IssueTab({issues,projects,onNew,onSelect}){
     "Partial":{c:T.blu,bg:T.bluL,brd:T.bluM},
     "Received":{c:T.grn,bg:T.grnL,brd:T.grnM},
     "Cancelled":{c:T.t3,bg:T.surfaceB,brd:T.b2},
+    // Machine me gaya oil (11 Oct 2026, AB) — receive nahi hota
+    "Consumed":{c:T.blu,bg:T.bluL,brd:T.bluM},
   };
   // Cancel hue issue (11 Oct 2026, AA) — "Cancelled" chip me hi; "All" aur
   // ginti me nahi (stock wapas aa chuka, ab kuch gaya hi nahi).
@@ -2707,7 +2709,7 @@ function IssueTab({issues,projects,onNew,onSelect}){
                 <span style={{fontSize:11.5,color:T.t2}}>{iss.issuedTo}</span>
                 <span style={{fontSize:12,fontWeight:700,color:status==="Cancelled"?T.t4:T.amb,textAlign:"right",textDecoration:status==="Cancelled"?"line-through":"none"}}>₹{fmt(iss.total)}</span>
                 <span style={{fontSize:11.5,color:T.t3}}>{iss.by}</span>
-                <Pill label={status} c={ss.c} bg={ss.bg} brd={ss.brd}/>
+                <Pill label={status==="Consumed"?t("warehouse.issue_machine_tag"):status} c={ss.c} bg={ss.bg} brd={ss.brd}/>
               </div>
             );
           })}
@@ -2800,7 +2802,9 @@ function IssueDetailDrawer({issue,onClose,canCancel,canReceive,onDeleted,onRecei
   const isPartial=status==="Partial";
   const isReceived=status==="Received";
   const isCancelled=status==="Cancelled";
-  const STATUS_S={"Pending":{c:T.amb,bg:T.ambL,brd:T.ambM},"Partial":{c:T.blu,bg:T.bluL,brd:T.bluM},"Received":{c:T.grn,bg:T.grnL,brd:T.grnM},"Cancelled":{c:T.t3,bg:T.surfaceB,brd:T.b1}};
+  // Machine me gaya oil (11 Oct 2026, AB) — Machinery ka "🛢 Oil daala"
+  const isConsumed=status==="Consumed";
+  const STATUS_S={"Pending":{c:T.amb,bg:T.ambL,brd:T.ambM},"Partial":{c:T.blu,bg:T.bluL,brd:T.bluM},"Received":{c:T.grn,bg:T.grnL,brd:T.grnM},"Cancelled":{c:T.t3,bg:T.surfaceB,brd:T.b1},"Consumed":{c:T.blu,bg:T.bluL,brd:T.bluM}};
   const ss=STATUS_S[status]||STATUS_S["Pending"];
 
   return (
@@ -2845,6 +2849,12 @@ function IssueDetailDrawer({issue,onClose,canCancel,canReceive,onDeleted,onRecei
                 <div style={{fontSize:12.5,fontWeight:700,color:T.blu}}>{t("warehouse.partially_received")}</div>
               </div>
             )}
+            {isConsumed&&(
+              <div style={{padding:"11px 14px",background:T.bluL,border:`1.5px solid ${T.bluM}`,borderRadius:8,marginBottom:12}}>
+                <div style={{fontSize:12.5,fontWeight:700,color:T.blu}}>{t("warehouse.issue_machine_title")}</div>
+                <div style={{fontSize:11,color:T.blu,marginTop:2}}>{t("warehouse.issue_machine_hint")}</div>
+              </div>
+            )}
 
             <div style={{padding:"14px 16px",background:`linear-gradient(135deg, ${T.ambL} 0%, ${T.bluL} 100%)`,borderRadius:10,border:`1px solid ${T.ambM}`,marginBottom:14}}>
               <div style={{display:"grid",gridTemplateColumns:"1fr auto 1fr",gap:14,alignItems:"center"}}>
@@ -2860,7 +2870,7 @@ function IssueDetailDrawer({issue,onClose,canCancel,canReceive,onDeleted,onRecei
                   <div style={{fontSize:9.5,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>{t("warehouse.to_project_2")}</div>
                   <div style={{fontSize:14,fontWeight:700,color:T.t1}}>{detail?.project||"—"}</div>
                   <div style={{fontSize:10.5,color:isReceived?T.grn:isPartial?T.blu:T.amb,marginTop:3,fontWeight:600}}>
-                    {isReceived?t("warehouse.credited"):isPartial?t("warehouse.partial"):t("warehouse.pending_receive")}
+                    {isReceived?t("warehouse.credited"):isPartial?t("warehouse.partial"):isConsumed?t("warehouse.issue_machine_tag"):t("warehouse.pending_receive")}
                   </div>
                 </div>
               </div>
@@ -2869,7 +2879,7 @@ function IssueDetailDrawer({issue,onClose,canCancel,canReceive,onDeleted,onRecei
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:14}}>
               <div style={{padding:"9px 11px",background:T.surfaceB,borderRadius:7,border:`1px solid ${T.b1}`}}>
                 <div style={{fontSize:9,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>{t("common.status")}</div>
-                <Pill label={isCancelled?t("warehouse.issue_cancelled_tag"):status} c={ss.c} bg={ss.bg} brd={ss.brd}/>
+                <Pill label={isCancelled?t("warehouse.issue_cancelled_tag"):isConsumed?t("warehouse.issue_machine_tag"):status} c={ss.c} bg={ss.bg} brd={ss.brd}/>
               </div>
               <div style={{padding:"9px 11px",background:T.surfaceB,borderRadius:7,border:`1px solid ${T.b1}`}}>
                 <div style={{fontSize:9,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>{t("warehouse.issued_to")}</div>
@@ -2937,7 +2947,7 @@ function IssueDetailDrawer({issue,onClose,canCancel,canReceive,onDeleted,onRecei
               </div>
             )}
 
-            {cancelOpen&&isPending&&(
+            {cancelOpen&&(isPending||isConsumed)&&(
               <div style={{padding:"12px 14px",background:T.redL,border:`1.5px solid ${T.red}44`,borderRadius:9,marginBottom:14}}>
                 <div style={{fontSize:12.5,fontWeight:700,color:T.red}}>{t("warehouse.issue_cancel_title",{no:detail?.id})}</div>
                 <div style={{fontSize:11,color:T.t3,margin:"3px 0 9px"}}>{t("warehouse.issue_cancel_hint")}</div>
@@ -2986,7 +2996,7 @@ function IssueDetailDrawer({issue,onClose,canCancel,canReceive,onDeleted,onRecei
               <Btn onClick={()=>setReceiveOpen(true)} c={T.grn} icon={IcIn} size="sm">{t("warehouse.receive_at_project", { project: detail.project })}</Btn>
             )}
             {/* Cancel sirf site par receive se pehle (Pending) — uske baad Return from Project */}
-            {canCancel&&isPending&&!cancelOpen&&(
+            {canCancel&&(isPending||isConsumed)&&!cancelOpen&&(
               <Btn onClick={()=>{setCancelOpen(true);setCancelErr("");}} c={T.red} icon={IcTrash} size="sm">
                 {t("warehouse.issue_cancel_btn")}
               </Btn>
