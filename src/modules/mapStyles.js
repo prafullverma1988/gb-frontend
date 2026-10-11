@@ -770,8 +770,17 @@ export function RegisterDialog({ title, rows, extraHead, canExport, onClose }) {
   const cells = (r) => {
     const det = detailPairs(r.kind, r.code, r.props);
     return [r.name || "", ...(pick ? [] : [typeName(r.kind, r.code)]), ...(r.extra || []), r.size || "",
-      ...(pick ? fields.map((f) => { const d = det.find((x) => x[0] === f.key); return d ? d[3] : ""; }) : [det.map(([, , l, v]) => `${l}: ${v}`).join(" · ")]),
-      ...(poleCol ? [r.poles ? String(r.poles) : ""] : []), missingOf(formOf(r.kind, r.code), r.props).join(", ")];
+      ...(pick ? fields.map((f) => {
+        if (f.type === "child" || f.type === "side") {
+          const x = kidsSummary({ kind: r.kind, atype: r.code, props: r.props }, r.kids || []).find((y) => y.f.key === f.key);
+          if (!x) return "";
+          if (f.type === "side") return x.sides.map((sd) => t("map_form.side_" + sd)).join(", ");
+          return x.plan ? `${x.done}/${x.plan}` : x.done ? String(x.done) : "";
+        }
+        const d = det.find((x) => x[0] === f.key); return d ? d[3] : "";
+      }) : [det.map(([, , l, v]) => `${l}: ${v}`).join(" · ")]),
+      ...(poleCol ? [r.poles ? String(r.poles) : ""] : []),
+      [...missingOf(formOf(r.kind, r.code), r.props), ...(r.kind === "line" ? kidsShort({ kind: r.kind, atype: r.code, props: r.props }, r.kids || []) : [])].join(", ")];
   };
   const lenSum = list.reduce((m, r) => m + (r.kind === "line" ? Number(r.lenM) || 0 : 0), 0);
   const lenTxt = lenSum >= 1000 ? `${(lenSum / 1000).toFixed(2)} km` : `${Math.round(lenSum)} m`;

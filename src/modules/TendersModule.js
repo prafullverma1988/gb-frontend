@@ -6003,14 +6003,17 @@ function MapTab({tenderId, sites}) {
     })()}
     {regOpen && (
       <RegisterDialog title="" canExport={canAny(["Tenders","Mapping"], "export")} onClose={()=>setRegOpen(false)}
-        extraHead={[t("common.site"), t("tenders.hv_chainage"), t("tenders.hv_chaudai")]}
+        extraHead={[t("common.site"), t("map_form.kis_line_par"), t("tenders.hv_chainage"), t("tenders.hv_chaudai")]}
         rows={items.map(it => ({
           id: it.id, name: it.name || "", kind: it.kind, code: it.atype || "other", props: it.props,
+          kids: items.filter(k => k.parent_id === it.id),
           poles: it.kind === "line" ? polePoints(it.atype, it.props, it.geometry || []).length : 0,
           lenM: Number(it.length_m) || 0,
           size: it.kind === "line" ? fmtKm(it.length_m) : it.kind === "area" ? fmtArea(it.area_sqm) : "",
           extra: [it.project_name || "",
-            it.kind === "line" && it.start_chainage_m != null ? `${chFmt(Number(it.start_chainage_m))} → ${chFmt(Number(it.start_chainage_m) + Number(it.length_m || 0))}` : "",
+            it.parent_id ? ((items.find(x => x.id === it.parent_id) || {}).name || "") : "",
+            it.kind === "line" && it.start_chainage_m != null ? `${chFmt(Number(it.start_chainage_m))} → ${chFmt(Number(it.start_chainage_m) + Number(it.length_m || 0))}`
+              : it.chainage_m != null ? chFmt(Number((items.find(x => x.id === it.parent_id) || {}).start_chainage_m || 0) + Number(it.chainage_m)) : "",
             Number(it.width_m) > 0 ? `${it.width_m} m` : ""],
         }))}/>
     )}

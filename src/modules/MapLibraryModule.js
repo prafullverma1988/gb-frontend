@@ -212,6 +212,9 @@ function kmlPlacemark(it, folderName) {
     partsOfLine(pts, it.gaps).length > 1 ? `Parts: ${partsOfLine(pts, it.gaps).length} (broken line)` : "",
     // Type ka detail (L4) — "Label: value"; ExtendedData me key (GIS column).
     ...detailPairs(it.kind, it.atype || "other", it.props).map(([, , l, v]) => `${l}: ${v}`),
+    // Line ki cheez (valve…): kis line par, line par kitni doori
+    it.parent_id != null && _byId.get(it.parent_id) ? `On line: ${_byId.get(it.parent_id).name || ""}` : "",
+    it.chainage_m != null ? `Line chainage: ${fmtCh(it.chainage_m)}` : "",
   ].filter(Boolean).join(" | ");
   const det = detailPairs(it.kind, it.atype || "other", it.props);
   const ext = det.length
@@ -256,6 +259,8 @@ function buildGeoJson(items, folderName) {
           length_m: round2(it.lenM), area_sqm: round2(it.areaSqm),
           folder: folderName || null, file: it.file || null, by: it.by || null,
           type: it.atype || "other",
+          on_line: it.parent_id != null && _byId.get(it.parent_id) ? _byId.get(it.parent_id).name || null : null,
+          line_chainage_m: it.chainage_m == null ? null : round2(it.chainage_m),
           ...Object.fromEntries(detailPairs(it.kind, it.atype || "other", it.props).map(([k, v]) => [k, v])),
         },
         geometry,
@@ -269,9 +274,10 @@ function buildCsv(items, folderName) {
     const s = String(v == null ? "" : v);
     return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
-  const head = ["folder", "file", "name", "kind", "type", "detail", "detail_missing", "length_m", "area_sqm", "start_chainage_m", "parts", "points", "by", "created_at"];
+  const head = ["folder", "file", "name", "kind", "type", "on_line", "line_chainage_m", "detail", "detail_missing", "length_m", "area_sqm", "start_chainage_m", "parts", "points", "by", "created_at"];
   const rows = items.map((it) => [
     folderName || "", it.file || "", it.name || "", it.kind || "line", it.atype || "other",
+    it.parent_id != null && _byId.get(it.parent_id) ? _byId.get(it.parent_id).name || "" : "", it.chainage_m == null ? "" : round2(it.chainage_m),
     detailPairs(it.kind, it.atype || "other", it.props).map(([, , l, v]) => `${l}: ${v}`).join("; "),
     missingIn(it).join("; "),
     round2(it.lenM) ?? "", round2(it.areaSqm) ?? "", round2(it.startCh) ?? "",
@@ -924,12 +930,28 @@ function RegisterView({ items, folders, canExport }) {
   const fields = pick ? formOf(pKind, pCode) : [];
   const where = (it) => [it.folder_id == null ? t("map_library.bina_folder") : (fname.get(String(it.folder_id)) || "—"), it.file || ""].filter(Boolean).join(" › ");
   const size = (it) => (it.kind === "area" ? fmtArea(it.areaSqm) : it.kind === "point" ? "" : fmtLen(it.lenM)) || "";
-  const valOf = (it, f) => { const d = detailPairs(it.kind, it.atype || "other", it.props).find((x) => x[0] === f.key); return d ? d[3] : ""; };
+  // Saath ki cheez ka column (Valve / Manhole…): "lage/plan"; bagal ki line: kitni bani.
+  const valOf = (it, f) => {
+    if (f.type === "child" || f.type === "side") {
+      const x = kidsSummary(it, kidsOf(it.id)).find((y) => y.f.key === f.key);
+      if (!x) return "";
+      if (f.type === "side") return x.sides.map((sd) => t("map_form.side_" + sd)).join(", ");
+      return x.plan ? `${x.done}/${x.plan}` : x.done ? String(x.done) : "";
+    }
+    const d = detailPairs(it.kind, it.atype || "other", it.props).find((x) => x[0] === f.key); return d ? d[3] : "";
+  };
+  // Line ki cheez (valve…) ho to kis line par + chainage.
+  const onLine = (it) => {
+    const par = it.parent_id != null ? _byId.get(it.parent_id) : null;
+    if (!par) return "";
+    return `${par.name || "—"}${it.chainage_m != null ? ` · Ch ${fmtCh(Number(par.startCh || 0) + Number(it.chainage_m))}` : ""}`;
+  };
+  const lineCol = rows.some((it) => it.parent_id != null);
   const poleCol = pick && pKind === "line" && rows.some((it) => polesIn(it) > 0);
-  const head = [t("map_form.reg_naam"), ...(pick ? [] : [t("map_form.reg_type")]), t("map_form.reg_jagah"), t("map_form.reg_size"),
+  const head = [t("map_form.reg_naam"), ...(pick ? [] : [t("map_form.reg_type")]), ...(lineCol ? [t("map_form.kis_line_par")] : []), t("map_form.reg_jagah"), t("map_form.reg_size"),
     ...(pick ? fields.map((f) => f.label + (f.unit ? ` (${f.unit})` : "")) : [t("map_form.detail")]),
     ...(poleCol ? [t("map_form.pole_ginti")] : []), t("map_form.detail_adhoori")];
-  const cells = (it) => [it.name || "", ...(pick ? [] : [typeName(it.kind, it.atype || "other")]), where(it), size(it),
+  const cells = (it) => [it.name || "", ...(pick ? [] : [typeName(it.kind, it.atype || "other")]), ...(lineCol ? [onLine(it)] : []), where(it), size(it),
     ...(pick ? fields.map((f) => valOf(it, f)) : [detailPairs(it.kind, it.atype || "other", it.props).map(([, , l, v]) => `${l}: ${v}`).join(" · ")]),
     ...(poleCol ? [polesIn(it) ? String(polesIn(it)) : ""] : []), missingIn(it).join(", ")];
   const lenSum = rows.reduce((m, it) => m + (it.kind === "line" ? Number(it.lenM) || 0 : 0), 0);
@@ -1265,7 +1287,8 @@ function MapLibraryModule() {
 
   const doExport = (fmtId, inf) => {
     try {
-      const items = inf.items;
+      // Line ke saath ki cheezein (valve / bagal ki nali…) bhi file me (11 Oct 2026).
+      const items = withKids(inf.items);
       if (!items.length) { flash(t("map_library.export_khaali"), "error"); return; }
       const g = inf.group;
       const folderName = g && g.fk !== NONE ? ((g.folder && g.folder.name) || "") : "";
@@ -1275,7 +1298,7 @@ function MapLibraryModule() {
       let text;
       if (fmtId === "kml") {
         const groups = inf.type === "folder"
-          ? g.files.map((f) => ({ name: fileTitle(f.file), items: f.items }))
+          ? g.files.map((f) => ({ name: fileTitle(f.file), items: withKids(f.items) }))
           : [{ name: fileTitle(inf.file), items }];
         text = buildKml(base, groups, folderName, inf.type === "folder");
       } else if (fmtId === "geojson") text = buildGeoJson(items, folderName);
