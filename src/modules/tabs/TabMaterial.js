@@ -8,7 +8,6 @@ import MaterialFlowDrawer from "../../components/MaterialFlowDrawer";
 import MRDetailDrawer from "../../components/MRDetailDrawer";
 import MaterialTransferTab from "../../components/MaterialTransferTab";
 import MaterialLedgerDrawer from "../../components/MaterialLedgerDrawer";
-import SiteConversionPanel from "./TabMaterialConversion";
 import GrnReceive from "../../components/grn/GrnReceive";
 import WeighbridgePanel from "../../components/grn/WeighbridgePanel";
 import { GrnPhotoTiles } from "../../components/grn/GrnPhotoBox";
@@ -107,7 +106,6 @@ function TabMaterial({ project }) {
   const [newMatUnit, setNewMatUnit] = useState("Nos");
   const [newMatSaving, setNewMatSaving] = useState(false);
   const [showGRN, setShowGRN] = useState(false);
-  const [showConv, setShowConv] = useState(false);   // 🔄 Conversion (11 Oct 2026) — site ke stock par
   const [saving, setSaving] = useState(false);
   const mrSubmitRef = useRef(false);
   // Multi-item MR — each row is a separate material+qty+amount.
@@ -1255,10 +1253,6 @@ function TabMaterial({ project }) {
             <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2.5}><path d="M20 6L9 17l-5-5"/></svg>
            {t("common.record_grn")}
           </button>}
-          {canUse&&<button onClick={()=>setShowConv(true)}
-            style={{padding:"7px 13px",borderRadius:7,background:"#4B45C4",color:"white",fontSize:12,fontWeight:700,border:"none",cursor:"pointer"}}>
-           {t("conversion.btn")}
-          </button>}
         </div>
 
         {/* TILE VIEW */}
@@ -1737,21 +1731,6 @@ function TabMaterial({ project }) {
       {activeTab==="transfer"&&(
         <MaterialTransferTab projectId={projectId} projectName={projectName}/>
       )}
-
-      {/* ── 🔄 Conversion (Material ENTRY; cancel sirf Admin) ── */}
-      {showConv&&<SiteConversionPanel project={project} canEntry={canUse}
-        isAdmin={["admin","super_admin"].includes(String(meUser?.role||"").toLowerCase())}
-        onClose={()=>setShowConv(false)}
-        onChanged={async()=>{
-          try {
-            const [r1, r2] = await Promise.all([
-              api.get("/tasks/project/"+projectId+"/material-ledger"),
-              api.get("/tasks/project/"+projectId+"/inventory"),
-            ]);
-            if (r1.success) setLedger(r1.data || []);
-            if (r2.success) setInventory(r2.data || []);
-          } catch {}
-        }}/>}
 
       {/* ── MATERIAL LEDGER DRAWER (material click → GRN/Used/MR tabs) ── */}
       <MaterialLedgerDrawer

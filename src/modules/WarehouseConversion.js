@@ -1,8 +1,16 @@
 // ── 🔄 MATERIAL CONVERSION — Store (11 Oct 2026, Conversion) ──────────
 // TMT se Ring jaisa: store ka ek ya zyada material ghata (input, FIFO se),
 // ek ya zyada bana (output, store me naya batch), wastage Kabad me. Output ka
-// rate = input ka FIFO cost + banwai (labour / making) ÷ output qty — form par
-// live (server ka /conversions/preview, kuch likhta nahi).
+// rate = input ka cost + banane ka kharcha (making) ÷ output qty — form par
+// live (server ka /conversions/preview, kuch likhta nahi). SIRF STORE — site
+// par conversion nahi (11 Oct 2026, Prafull).
+//
+// Input ka rate (Prafull): bill ka rate (GRN par bana bill), bill na ho to GRN
+// ka rate, wo bhi na ho to ₹0 "rate baad me (bill se)" — har line par source.
+// Banane ka kharcha: "Apni labour" (sirf rate me) ya "Bahar se (job /
+// outsource)" — vendor, bill no., bill photo, Cash (company kharcha) / Udhaar
+// (Pending Payments, party zaroori). Basis: per Kg (input) / per piece
+// (output) / kul ₹.
 //
 // Nuskha (BOM): "1 Nos Ring 8mm = 0.347 Kg TMT 8mm" — output qty bharte hi
 // input sujhata hai, zyada wastage par peela warning. Nuskha banana / badalna /
@@ -11,14 +19,16 @@
 // Cancel sirf Admin — wajah + company ka delete-password; bana hua item aage
 // nikal chuka ho to server rok deta hai.
 //
-// Data: gb-backend routes/conversions.js (/api/conversions). Project ke Material
-// tab ki apni copy alag hai (tabs/TabMaterialConversion.js) — module independence.
+// Data: gb-backend routes/conversions.js (/api/conversions).
 
 import { useState, useEffect, useMemo, useCallback } from "react";
 import PickSelect from "../components/PickSelect";
 import api from "../config/api";
 import { t } from "../i18n";
 import { BackClose } from "../utils/backNav";
+import uploadManager from "../utils/uploadManager";
+import { cld } from "../utils/cloudinary";
+import { loadPhotoPolicy, policyFor, fileInputProps } from "../utils/photoPolicy";
 
 const T = {
   bg: "#F4F6F9", surface: "#FFFFFF", surfaceB: "#F8F9FB",
@@ -50,6 +60,9 @@ const statusChip = (s) => (s === "Cancelled"
 const Chip = ({ s }) => (
   <span style={{ fontSize: 10, fontWeight: 700, color: s.c, background: s.bg, borderRadius: 10, padding: "2px 8px", whiteSpace: "nowrap" }}>{s.l}</span>
 );
+// Input ke rate ka source — server ka rate_source.
+const srcLabel = (s) => (s === "bill" ? t("conversion.src_bill") : s === "grn" ? t("conversion.src_grn") : t("conversion.src_none"));
+const BILL_FOLDER = "gb_buildcon/conversion_bill";
 // Nuskha se: is output qty ke liye kitna input (bina wastage).
 const suggestIn = (r, outQty) => (r && num(r.out_qty) > 0 ? Math.round((num(outQty) / num(r.out_qty)) * num(r.in_qty) * 1000) / 1000 : null);
 const recipeLine = (r) => t("conversion.recipe_line", { out_qty: fmtQ(r.out_qty), out_unit: r.out_unit, out: r.out_material_name, in_qty: fmtQ(r.in_qty), in_unit: r.in_unit, in: r.in_material_name });
@@ -92,7 +105,18 @@ function ConversionForm({ whId, whName, stock, library, recipes, onClose, onSave
   const [ins, setIns] = useState([blankIn()]);
   const [outs, setOuts] = useState([blankOut()]);
   const [waste, setWaste] = useState({ qty: "", of: "" });
-  const [labour, setLabour] = useState("");
+  // Banane ka kharcha — own (apni labour) | vendor (bahar se)
+  const [mk, setMk] = useState({ kind: "own", basis: "lumpsum", rate: "", party: "", vname: "", bill: "", pay: "cash" });
+  const [billPhotos, setBillPhotos] = useState([]);
+  const [parties, setParties] = useState(null);
+  const [pol, setPol] = useState(null);
+  const isVendor = mk.kind === "vendor";
+  useEffect(() => {
+    if (!isVendor || parties !== null) return;
+    api.get("/finance/parties").then((r) => setParties(r && r.success && Array.isArray(r.data) ? r.data : [])).catch(() => setParties([]));
+    loadPhotoPolicy().then(setPol).catch(() => {});
+  }, [isVendor, parties]);
+  const billPol = policyFor(pol, "conversion_bill");
   const [date, setDate] = useState(istToday());
   const [note, setNote] = useState("");
   const [prev, setPrev] = useState(null);
@@ -117,7 +141,10 @@ function ConversionForm({ whId, whName, stock, library, recipes, onClose, onSave
     const wOf = waste.of || (inLines[0] && inLines[0].id);
     const wMat = byId.get(String(wOf));
     return {
-      warehouse_id: Number(whId), date, note, labour_cost: labour === "" ? 0 : Number(labour), recipe_id: recipe ? recipe.id : null,
+      warehouse_id: Number(whId), date, note, recipe_id: recipe ? recipe.id : null,
+      making: { kind: mk.kind, basis: mk.basis, rate: mk.rate === "" ? null : Number(mk.rate),
+        ...(isVendor ? { vendor_party_id: mk.party ? Number(mk.party) : null, vendor_name: mk.party ? null : (mk.vname.trim() || null),
+          bill_no: mk.bill.trim() || null, payment_mode: mk.pay } : {}) },
       inputs: inLines.map((l) => ({ material_id: Number(l.id), qty: Number(l.qty), unit: (byId.get(String(l.id)) || {}).unit })),
       outputs: outLines.map((o) => {
         const s = stockByName.get(key(o.name));
@@ -127,7 +154,7 @@ function ConversionForm({ whId, whName, stock, library, recipes, onClose, onSave
       wastage: num(waste.qty) > 0 && wMat ? { qty: Number(waste.qty), unit: wMat.unit, material_id: wMat.id } : null,
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify([ins, outs, waste, labour, date, note, recipeId, whId])]);
+  }, [JSON.stringify([ins, outs, waste, mk, date, note, recipeId, whId])]);
 
   // Live hisaab — rukne ke 450ms baad server se (kuch save nahi hota).
   useEffect(() => {
@@ -166,8 +193,12 @@ function ConversionForm({ whId, whName, stock, library, recipes, onClose, onSave
   const save = async () => {
     setErr("");
     if (!body) { setErr(t("conversion.need_lines")); return; }
+    if (isVendor && mk.pay === "credit" && !mk.party) { setErr(t("conversion.need_party")); return; }
+    if (isVendor && uploadManager.getQueue().some((q) => q.folder === BILL_FOLDER && (q.status === "queued" || q.status === "uploading"))) {
+      setErr(t("conversion.bill_uploading")); return;
+    }
     setBusy(true);
-    const r = await api.post("/conversions", body).catch((e) => ({ success: false, message: e.message }));
+    const r = await api.post("/conversions", isVendor ? { ...body, photo_urls: billPhotos } : body).catch((e) => ({ success: false, message: e.message }));
     setBusy(false);
     if (!r || !r.success) { setErr((r && r.message) || t("conversion.save_failed")); return; }
     const warn = (r.warnings || []).length ? "\n⚠ " + r.warnings.join("\n⚠ ") : "";
@@ -213,7 +244,11 @@ function ConversionForm({ whId, whName, stock, library, recipes, onClose, onSave
             </PickSelect>
             <input type="number" min="0" value={l.qty} placeholder={t("conversion.qty")} onChange={(e) => setIns((x) => x.map((y, j) => (j === i ? { ...y, qty: e.target.value } : y)))} style={inp} />
             <span style={{ fontSize: 12, color: T.t3 }}>{m ? m.unit : ""}</span>
-            <span style={{ fontSize: 11, color: T.t3 }}>{p ? t("conversion.rate_per", { rate: fmtQ(p.rate), unit: p.unit }) : (m ? t("conversion.in_stock", { qty: fmtQ(m.qty), unit: m.unit }) : "")}</span>
+            <span style={{ fontSize: 11, color: p && p.rate_source === "none" ? T.amb : T.t3 }}>
+              {p ? <>{p.rate_source === "none" ? t("conversion.rate_later") : t("conversion.rate_per", { rate: fmtQ(p.rate), unit: p.unit })}
+                <span style={{ display: "block", fontSize: 10, fontWeight: 700, color: p.rate_source === "bill" ? T.grn : p.rate_source === "grn" ? T.t3 : T.amb }}>{srcLabel(p.rate_source)}</span></>
+                : (m ? t("conversion.in_stock", { qty: fmtQ(m.qty), unit: m.unit }) : "")}
+            </span>
             <button onClick={() => setIns((x) => (x.length > 1 ? x.filter((_, j) => j !== i) : [blankIn()]))} style={{ border: "none", background: "none", color: T.t4, cursor: "pointer", fontSize: 16 }}>×</button>
           </div>
         );
@@ -263,10 +298,6 @@ function ConversionForm({ whId, whName, stock, library, recipes, onClose, onSave
           <div style={{ fontSize: 10.5, color: T.t4, marginTop: 3 }}>{t("conversion.wastage_hint_store")}</div>
         </div>
         <div>
-          <span style={lbl}>{t("conversion.labour")}</span>
-          <input type="number" min="0" value={labour} onChange={(e) => setLabour(e.target.value)} style={inp} />
-        </div>
-        <div>
           <span style={lbl}>{t("common.date")}</span>
           <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={inp} />
         </div>
@@ -274,6 +305,90 @@ function ConversionForm({ whId, whName, stock, library, recipes, onClose, onSave
           <span style={lbl}>{t("conversion.note")}</span>
           <input value={note} onChange={(e) => setNote(e.target.value)} style={inp} />
         </div>
+      </div>
+
+      {/* Banane ka kharcha */}
+      <div style={{ marginTop: 16, padding: "11px 14px", border: `1px solid ${T.b1}`, borderRadius: 9 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: T.t3, textTransform: "uppercase", letterSpacing: ".4px", marginBottom: 8 }}>{t("conversion.making_title")}</div>
+        <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
+          {[["own", t("conversion.making_own")], ["vendor", t("conversion.making_vendor")]].map(([k, l]) => (
+            <button key={k} onClick={() => setMk((x) => ({ ...x, kind: k }))}
+              style={{ ...btn(mk.kind === k ? T.indL : T.surface, mk.kind === k ? T.ind : T.t3, mk.kind === k ? T.ind : T.b1), padding: "6px 12px", fontSize: 12 }}>{l}</button>
+          ))}
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
+          <div>
+            <span style={lbl}>{t("conversion.making_basis")}</span>
+            <PickSelect value={mk.basis} onChange={(e) => setMk((x) => ({ ...x, basis: e.target.value }))} style={inp}>
+              <option value="per_kg">{t("conversion.basis_per_kg")}</option>
+              <option value="per_piece">{t("conversion.basis_per_piece")}</option>
+              <option value="lumpsum">{t("conversion.basis_lumpsum")}</option>
+            </PickSelect>
+          </div>
+          <div>
+            <span style={lbl}>{mk.basis === "lumpsum" ? t("conversion.making_amount") : t("conversion.making_rate")}</span>
+            <input type="number" min="0" value={mk.rate} onChange={(e) => setMk((x) => ({ ...x, rate: e.target.value }))} style={inp} />
+          </div>
+          <div>
+            <span style={lbl}>{t("conversion.making_total")}</span>
+            <div style={{ fontSize: 13, fontWeight: 700, color: T.t1, paddingTop: 7 }}>
+              {prev ? inr(prev.making.amount) : "—"}
+              {prev && prev.making.basis_qty != null && <span style={{ fontSize: 10.5, color: T.t4, fontWeight: 500 }}> · {fmtQ(prev.making.basis_qty)} {prev.making.basis_unit}</span>}
+            </div>
+          </div>
+        </div>
+        <div style={{ fontSize: 10.5, color: T.t4, marginTop: 6 }}>{isVendor ? t("conversion.making_vendor_hint") : t("conversion.making_own_hint")}</div>
+        {isVendor && (
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 10 }}>
+            <div>
+              <span style={lbl}>{t("conversion.vendor")}</span>
+              <PickSelect value={mk.party} onChange={(e) => setMk((x) => ({ ...x, party: e.target.value }))} style={inp}>
+                <option value="">{mk.pay === "credit" ? t("conversion.vendor_pick") : t("conversion.vendor_no_party")}</option>
+                {(parties || []).map((pt) => <option key={pt.id} value={pt.id}>{pt.name}</option>)}
+              </PickSelect>
+              {!mk.party && mk.pay === "cash" && <input value={mk.vname} placeholder={t("conversion.vendor_name_ph")} onChange={(e) => setMk((x) => ({ ...x, vname: e.target.value }))} style={{ ...inp, marginTop: 6 }} />}
+            </div>
+            <div>
+              <span style={lbl}>{t("conversion.bill_no")}</span>
+              <input value={mk.bill} onChange={(e) => setMk((x) => ({ ...x, bill: e.target.value }))} style={inp} />
+            </div>
+            <div>
+              <span style={lbl}>{t("conversion.pay_mode")}</span>
+              <div style={{ display: "flex", gap: 6 }}>
+                {[["cash", t("conversion.pay_cash")], ["credit", t("conversion.pay_credit")]].map(([k, l]) => (
+                  <button key={k} onClick={() => setMk((x) => ({ ...x, pay: k }))}
+                    style={{ ...btn(mk.pay === k ? T.indL : T.surface, mk.pay === k ? T.ind : T.t3, mk.pay === k ? T.ind : T.b1), padding: "6px 12px", fontSize: 12 }}>{l}</button>
+                ))}
+              </div>
+              <div style={{ fontSize: 10.5, color: T.t4, marginTop: 4 }}>{mk.pay === "credit" ? t("conversion.pay_credit_hint") : t("conversion.pay_cash_hint")}</div>
+            </div>
+            {billPol.mode !== "off" && (
+              <div>
+                <span style={lbl}>{t("conversion.bill_photo")}{billPol.mode === "required" ? " *" : ""}</span>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  {billPhotos.map((u, i) => (
+                    <div key={i} style={{ position: "relative", width: 52, height: 52, borderRadius: 6, overflow: "hidden", border: `1px solid ${T.b1}` }}>
+                      <img src={cld(u, "thumb")} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                      <button type="button" onClick={() => setBillPhotos((x) => x.filter((_, j) => j !== i))}
+                        style={{ position: "absolute", top: 2, right: 2, width: 16, height: 16, borderRadius: "50%", background: "rgba(0,0,0,.6)", color: "#fff", border: "none", fontSize: 10, cursor: "pointer", padding: 0 }}>×</button>
+                    </div>
+                  ))}
+                  <label style={{ width: 52, height: 52, borderRadius: 6, border: `1.5px dashed ${T.b2}`, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: 18 }}>
+                    📷
+                    <input {...fileInputProps({ source: billPol.source === "camera" ? "camera" : "both" }, { multiple: true })} style={{ display: "none" }}
+                      onChange={(e) => {
+                        Array.from(e.target.files || []).forEach((file) => uploadManager.add({
+                          file, folder: BILL_FOLDER, label: t("conversion.bill_photo_upload", { name: file.name }),
+                          onDone: (url) => setBillPhotos((x) => [...x, url]),
+                        }));
+                        e.target.value = "";
+                      }} />
+                  </label>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Cost */}
@@ -338,6 +453,13 @@ function ConversionDetail({ conv, isAdmin, onClose, onCancelled }) {
         <div><div style={{ color: T.t4, fontSize: 10.5 }}>{t("conversion.cost_input")}</div><b>{inr(c.input_cost)}</b></div>
         <div><div style={{ color: T.t4, fontSize: 10.5 }}>{t("conversion.cost_labour")}</div><b>{inr(c.labour_cost)}</b></div>
         <div><div style={{ color: T.t4, fontSize: 10.5 }}>{t("conversion.cost_total")}</div><b>{inr(c.total_cost)}</b></div>
+      </div>
+      <div style={{ marginTop: 10, fontSize: 12, color: T.t2 }}>
+        {c.making_kind === "vendor"
+          ? t("conversion.detail_vendor", { vendor: c.vendor_name || "—", bill: c.bill_no || "—",
+              pay: c.payment_mode === "credit" ? t("conversion.pay_credit") : t("conversion.pay_cash") })
+            + (c.payment_mode === "credit" && c.settlement_status === "paid" ? " · " + t("conversion.detail_paid") : "")
+          : t("conversion.detail_own")}
       </div>
       {c.note && <div style={{ marginTop: 10, fontSize: 12, color: T.t2, fontStyle: "italic" }}>"{c.note}"</div>}
       {c.status === "Cancelled" && (
