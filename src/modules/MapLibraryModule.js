@@ -1371,7 +1371,8 @@ const failMsg = (r, fallback) => (!r || r._networkError ? t("map_library.net_err
 const normalizeLib = (d) => ({
   canSeeAll: !!(d && d.can_see_all),
   // perms / can_* naye field hain — purane backend par nahi aate, tab sab mana.
-  perms: { export: yes(d && d.perms && d.perms.export), delete: yes(d && d.perms && d.perms.delete), create: yes(d && d.perms && d.perms.create) },
+  perms: { export: yes(d && d.perms && d.perms.export), delete: yes(d && d.perms && d.perms.delete), create: yes(d && d.perms && d.perms.create),
+    edit: yes(d && d.perms && d.perms.edit) },
   folders: (Array.isArray(d && d.folders) ? d.folders : []).filter((f) => f && f.id != null),
   items: (Array.isArray(d && d.items) ? d.items : []).filter((x) => x && x.id != null),
   projects: Array.isArray(d && d.projects) ? d.projects : [],

@@ -1918,7 +1918,8 @@ export default function SiteMarkingEditor({ lib, loadMaps, onClose, onSaved, onO
         {milaan()}
         {/* Line ke saath ki cheezein (valve / manhole / pole / nali…) — abhi lagao,
             ya baad me library se. (M2, 11 Oct 2026) */}
-        {saved.free && onOpenKids && kind === "line" && saved.item && saved.item.id && mapFieldsOf(formOf("line", atype || "other")).length > 0 && (
+        {/* Save ke baad badalna = Edit ka kaam; sirf Create / Entry wale ko button nahi (warna Save par mana). */}
+        {saved.free && onOpenKids && perms.edit && kind === "line" && saved.item && saved.item.id && mapFieldsOf(formOf("line", atype || "other")).length > 0 && (
           <Btn tone="primary" onClick={() => onOpenKids(saved.item.id)} style={{ width: "100%", marginBottom: 8 }}>{t("map_form.nishaan_badlo_btn")}</Btn>
         )}
         {(saved.free ? perms.export : canServerKml) && (
