@@ -726,6 +726,7 @@ export default function SiteMarkingEditor({ lib, loadMaps, onClose, onSaved, onO
   const [folderSel, setFolderSel] = useState("");  // "" = bina folder, "new", ya folder id
   const [newFolder, setNewFolder] = useState("");
   const [fileName, setFileName] = useState("");
+  const [freeProj, setFreeProj] = useState("");    // freelance marking ka project (optional) — "Kaam se" ped
   // Type ka detail form (L, 10 Oct 2026) — sadak ki chaudai / surface, pipe ka
   // material / dia, electrical HT / LT… Type badla to khaali (doosre type ke
   // field is par nahi chalte).
@@ -782,14 +783,14 @@ export default function SiteMarkingEditor({ lib, loadMaps, onClose, onSaved, onO
     } else onClose();
   }, [onClose, step]);
 
-  // ── Projects (kaam wala mode) ──
+  // ── Projects (kaam wala mode; freelance me "Project (optional)" — 11 Oct 2026) ──
   useEffect(() => {
-    if (mode !== "task" || projects !== null) return;
+    if ((mode !== "task" && step !== "save") || projects !== null) return;
     api.get("/projects").then((r) => {
       const list = r && r.success ? (Array.isArray(r.data) ? r.data : (r.data && r.data.projects) || []) : [];
       setProjects(list.filter((p) => p && p.id != null).map((p) => ({ id: p.id, name: p.name || `#${p.id}`, city: p.city || "" })));
     }).catch(() => setProjects([]));
-  }, [mode, projects]);
+  }, [mode, projects, step]);
 
   const loadTasks = useCallback(async (pid) => {
     const mt = await api.get(`/tenders/by-project/${pid}/map-tasks`).catch(() => null);
@@ -1068,6 +1069,7 @@ export default function SiteMarkingEditor({ lib, loadMaps, onClose, onSaved, onO
     };
     if (folderSel === "new") body.folder = newFolder.trim();
     else if (folderSel) body.folder_id = Number(folderSel);
+    if (freeProj) body.project_id = Number(freeProj);
     setSaving(true); setErr("");
     const r = await api.post("/map-library", body).catch(() => null);
     setSaving(false);
@@ -1714,6 +1716,11 @@ export default function SiteMarkingEditor({ lib, loadMaps, onClose, onSaved, onO
         {folderSel === "new" && (
           <input value={newFolder} maxLength={160} onChange={(e) => setNewFolder(e.target.value)} placeholder={t("map_draw.naye_folder_ka_naam")} style={{ ...inp, marginBottom: 10 }} />
         )}
+        <label style={lbl} htmlFor="smk-proj">{t("map_form.project_optional")}</label>
+        <PickSelect id="smk-proj" value={freeProj} onChange={(e) => setFreeProj(e.target.value)} style={{ ...inp, marginBottom: 10 }}>
+          <option value="">{t("map_form.bina_project")}</option>
+          {(projects || []).map((p) => <option key={p.id} value={String(p.id)}>{p.name}</option>)}
+        </PickSelect>
         <label style={lbl} htmlFor="smk-file">{t("map_draw.file")}</label>
         <input id="smk-file" list="smk-files" value={fileName} maxLength={160} onChange={(e) => setFileName(e.target.value)} placeholder={name || t("map_draw.file_ph")} style={inp} />
         <datalist id="smk-files">{fileOptions.map((f) => <option key={f} value={f} />)}</datalist>

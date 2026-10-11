@@ -26,7 +26,7 @@ import { useBackClose } from "../utils/backNav";
 import { can, canEntry } from "../utils/perms";
 import SiteMarkingEditor from "./SiteMarkingEditor";
 import { useMapLibrary, styleOf, lineOpts, markerIcon, MapLibraryDialog, typeName, typesFor, StyleSwatch,
-  formOf, propsRows, missingOf, cleanProps, detailPairs, childFields, kidsSummary, kidsShort, ChildEditor, TypeDetailFields, drainPaths, drainLineOpts, polePoints, poleIcon } from "./mapStyles";
+  formOf, propsRows, missingOf, cleanProps, detailPairs, childFields, kidsSummary, kidsShort, ChildEditor, ToAreaDialog, TypeDetailFields, drainPaths, drainLineOpts, polePoints, poleIcon } from "./mapStyles";
 
 // ── ICONS ─────────────────────────────────────────────────────────
 const Ic = ({ d, size = 16, color = "currentColor", sw = 1.8, fill = "none" }) => (
@@ -724,11 +724,25 @@ function LibraryTree({ tree, sel, open, onToggle, onSelect, canSeeAll }) {
                     <span style={{ ...nameStyle(600), color: f.file ? T.t1 : T.t3 }}>{fileTitle(f.file)}</span>
                     <span style={meta}>{[t("map_library.n_marking", { n: f.items.length }), len].filter(Boolean).join(" · ")}</span>
                   </div>
-                  {fOpen && f.items.map((it) => {
+                  {fOpen && (() => {
+                    // Ek file me kai type (pipe, valve, nali…) — type ke hisaab se chhote
+                    // shirshak ke neeche (11 Oct 2026). Ek hi type ho to seedhi list.
+                    const order = [...f.items].sort((a, b) => `${a.kind}:${a.atype || "other"}`.localeCompare(`${b.kind}:${b.atype || "other"}`));
+                    const many = new Set(order.map((x) => `${x.kind}:${x.atype || "other"}`)).size > 1;
+                    let last = null;
+                    return order.map((it) => {
+                    const tk = `${it.kind}:${it.atype || "other"}`;
+                    const headRow = many && tk !== last ? (
+                      <div key={"h" + it.id} style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 10px 3px 52px", fontSize: 10.5, fontWeight: 700, color: T.t4, textTransform: "uppercase", letterSpacing: 0.3 }}>
+                        <StyleSwatch kind={it.kind} code={it.atype || "other"} size={12} />
+                        {typeName(it.kind, it.atype || "other")} · {order.filter((x) => `${x.kind}:${x.atype || "other"}` === tk).length}
+                      </div>
+                    ) : null;
+                    last = tk;
                     const active = !!(sel && sel.type === "item" && sel.id === it.id);
                     const size = it.kind === "area" ? fmtArea(it.areaSqm) : it.kind === "point" ? null : fmtLen(it.lenM);
                     const pickItem = () => onSelect({ type: "item", id: it.id, fk: g.fk, file: f.file });
-                    return (
+                    const rowEl = (
                       <div key={it.id} data-mlib-item={it.id} {...keys(pickItem)} onClick={pickItem} style={row(active, 2)}>
                         <span style={{ width: 18, flexShrink: 0 }} />
                         <KindIcon kind={it.kind} size={14} color={active ? T.ind : T.t3} />
@@ -742,7 +756,9 @@ function LibraryTree({ tree, sel, open, onToggle, onSelect, canSeeAll }) {
                         <span style={meta}>{[size, canSeeAll ? it.by : null].filter(Boolean).join(" · ")}</span>
                       </div>
                     );
-                  })}
+                    return headRow ? [headRow, rowEl] : rowEl;
+                  });
+                  })()}
                 </div>
               );
             })}
@@ -750,6 +766,166 @@ function LibraryTree({ tree, sel, open, onToggle, onSelect, canSeeAll }) {
         );
       })}
     </div>
+  );
+}
+
+// ── "KAAM SE" / "TYPE SE" PED (11 Oct 2026) ──────────────────────
+// Prafull: "ek file me multiple type hai — folder aur file ko tender aur
+// project ke hisab se". Database me kuch nahi badalta — sirf dikhane ka
+// tareeka. Kaam se: Tender → Project (site) → Type → marking; library ki
+// marking (jiska project laga ho) aur Tender map ki lines dono. Tender ki
+// line yahan sirf dekhne / Register / export ke liye — badalna Tender map se.
+const TREE_KEY = "san_mlib_tree";
+const readTreeMode = () => {
+  try { const v = window.localStorage.getItem(TREE_KEY); return ["work", "type", "folder"].includes(v) ? v : "work"; }
+  catch (_) { return "work"; }
+};
+// Tender line → library marking jaisi shakl (id "t…" taaki takraaye nahi).
+const tl2it = (x) => ({
+  id: "t" + x.id, tid: x.id, tender: true, name: x.name || "", kind: x.kind || "line", atype: x.atype || "other",
+  pts: Array.isArray(x.geometry) ? x.geometry : [], gaps: x.gaps, lenM: Number(x.length_m) || 0,
+  areaSqm: x.area_sqm == null ? null : Number(x.area_sqm), startCh: x.start_chainage_m, props: x.props,
+  project_id: x.project_id, project_name: x.project_name, tender_id: x.tender_id, tender_no: x.tender_no, tender_title: x.tender_title,
+  parent_id: x.parent_id ? "t" + x.parent_id : null, child_key: x.child_key, chainage_m: x.chainage_m,
+  can_edit: false, can_delete: false,
+});
+const mkNode = (key, title, extra) => ({ key, title, kids: [], items: [], ...(extra || {}) });
+const finishNode = (n) => {
+  n.kids.forEach(finishNode);
+  n.kids.sort((a, b) => (a.last === b.last ? String(a.title).localeCompare(String(b.title)) : a.last ? 1 : -1));
+  n.all = [...n.items, ...n.kids.flatMap((k) => k.all)];
+  return n;
+};
+const typeNodes = (items, prefix) => {
+  const m = new Map();
+  items.forEach((it) => {
+    const k = `${prefix}|ty:${it.kind}:${it.atype || "other"}`;
+    if (!m.has(k)) m.set(k, mkNode(k, typeName(it.kind, it.atype || "other"), { isType: true, kind: it.kind, code: it.atype || "other" }));
+    m.get(k).items.push(it);
+  });
+  return [...m.values()];
+};
+function buildWorkTree(lib, tls, projects) {
+  const pmap = new Map((projects || []).map((p) => [Number(p.id), p]));
+  const tenders = new Map();
+  const noTender = mkNode("w:nt", t("map_form.bina_tender"), { last: true });
+  const noProj = mkNode("w:np", t("map_form.bina_project"), { last: true });
+  const tenderNode = (id, no, title) => {
+    const k = "w:t:" + id;
+    if (!tenders.has(k)) tenders.set(k, mkNode(k, [no, title].filter(Boolean).join(" — ") || `#${id}`));
+    return tenders.get(k);
+  };
+  const buckets = new Map();
+  const put = (pn, it) => { if (!buckets.has(pn.key)) buckets.set(pn.key, { pn, items: [] }); buckets.get(pn.key).items.push(it); };
+  const projNode = (parent, pid, name) => {
+    const k = `${parent.key}|p:${pid || 0}`;
+    let n = parent.kids.find((x) => x.key === k);
+    if (!n) { n = mkNode(k, name || t("map_form.site_nahi"), { project_id: pid || null }); parent.kids.push(n); }
+    return n;
+  };
+  lib.filter((x) => x.parent_id == null).forEach((it) => {
+    if (!it.project_id) { put(noProj, it); return; }
+    const pr = pmap.get(Number(it.project_id)) || {};
+    put(projNode(pr.tender_id ? tenderNode(pr.tender_id, pr.tender_no, pr.tender_title) : noTender, it.project_id, pr.name), it);
+  });
+  tls.filter((x) => x.parent_id == null).forEach((it) => put(projNode(tenderNode(it.tender_id, it.tender_no, it.tender_title), it.project_id, it.project_name), it));
+  buckets.forEach(({ pn, items }) => pn.kids.push(...typeNodes(items, pn.key)));
+  const top = [...tenders.values()];
+  if (noTender.kids.length) top.push(noTender);
+  if (noProj.kids.length) top.push(noProj);
+  return top.map(finishNode).sort((a, b) => (a.last === b.last ? String(a.title).localeCompare(String(b.title)) : a.last ? 1 : -1));
+}
+function buildTypeTree(lib, tls) {
+  return typeNodes([...lib, ...tls].filter((x) => x.parent_id == null), "y").map(finishNode)
+    .sort((a, b) => String(a.title).localeCompare(String(b.title)));
+}
+const indexNodes = (nodes, m = new Map()) => { nodes.forEach((n) => { m.set(n.key, n); indexNodes(n.kids, m); }); return m; };
+
+function GroupTree({ nodes, sel, open, onToggle, onSelect, canSeeAll }) {
+  const row = (active, depth) => ({
+    display: "flex", alignItems: "center", gap: 7, cursor: "pointer", outline: "none",
+    padding: `7px 10px 7px ${8 + depth * 18}px`, borderLeft: `3px solid ${active ? T.ind : "transparent"}`,
+    background: active ? T.indL : "transparent",
+  });
+  const keys = (act) => ({ role: "button", tabIndex: 0, onKeyDown: (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); act(); } } });
+  const meta = { fontSize: 11, color: T.t4, flexShrink: 0, whiteSpace: "nowrap" };
+  const nameS = (w) => ({ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: w, color: T.t1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" });
+  const leaf = (it, depth) => {
+    const active = !!(sel && sel.type === "item" && sel.id === it.id);
+    const size = it.kind === "area" ? fmtArea(it.areaSqm) : it.kind === "point" ? null : fmtLen(it.lenM);
+    const pick = () => onSelect({ type: "item", id: it.id });
+    return (
+      <div key={it.id} data-mlib-item={it.id} {...keys(pick)} onClick={pick} style={row(active, depth)}>
+        <span style={{ width: 18, flexShrink: 0 }} />
+        <KindIcon kind={it.kind} size={14} color={active ? T.ind : T.t3} />
+        <span style={nameS(500)}>{it.name}</span>
+        {missingIn(it).length > 0 && (
+          <span style={{ fontSize: 10, fontWeight: 700, color: T.amb, border: `1px solid ${T.ambM}`, background: T.ambL, borderRadius: 4, padding: "0 5px", flexShrink: 0 }}>{t("map_form.adhoori")}</span>
+        )}
+        {it.tender && <span style={{ fontSize: 10, color: T.ind, border: `1px solid ${T.indM}`, borderRadius: 4, padding: "0 5px", flexShrink: 0 }}>{t("map_form.tender_tag")}</span>}
+        <span style={meta}>{[size, canSeeAll && !it.tender ? it.by : null].filter(Boolean).join(" · ")}</span>
+      </div>
+    );
+  };
+  const node = (n, depth) => {
+    const isOpen = !!open[n.key];
+    const active = !!(sel && sel.type === "node" && sel.key === n.key);
+    const pick = () => onSelect({ type: "node", key: n.key });
+    const len = fmtLen(statsOf(n.all).len);
+    return (
+      <div key={n.key} style={{ borderBottom: depth === 0 ? `1px solid ${T.b1}` : "none" }}>
+        <div {...keys(pick)} onClick={pick} style={row(active, depth)}>
+          <button type="button" aria-expanded={isOpen} onClick={(e) => { e.stopPropagation(); onToggle(n.key); }}
+            style={{ background: "none", border: "none", padding: 2, margin: 0, cursor: "pointer", display: "flex", color: T.t4 }}>
+            {isOpen ? <IcChevD size={14} /> : <IcChevR size={14} />}
+          </button>
+          {n.isType ? <StyleSwatch kind={n.kind} code={n.code} size={14} /> : <IcFolder size={15} color={active ? T.ind : T.t3} />}
+          <span style={nameS(depth === 0 ? 700 : 600)}>{n.title}</span>
+          <span style={meta}>{[t("map_library.n_marking", { n: n.all.length }), len].filter(Boolean).join(" · ")}</span>
+        </div>
+        {isOpen && n.kids.map((k) => node(k, depth + 1))}
+        {isOpen && n.items.map((it) => leaf(it, depth + 1))}
+      </div>
+    );
+  };
+  if (!nodes.length) return <div style={{ padding: 14, fontSize: 12, color: T.t4 }}>{t("map_library.library_empty")}</div>;
+  return <div>{nodes.map((n) => node(n, 0))}</div>;
+}
+
+// Marking (ek ya kai) ko project se jodo — tender project ke saath aata hai.
+function ProjectDialog({ count, current, onClose, onSave }) {
+  const [list, setList] = useState(null);
+  const [pid, setPid] = useState(current == null ? "" : String(current));
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  useEffect(() => {
+    api.get("/projects").then((r) => {
+      const l = r && r.success ? (Array.isArray(r.data) ? r.data : (r.data && r.data.projects) || []) : [];
+      setList(l.filter((p) => p && p.id != null));
+    }).catch(() => setList([]));
+  }, []);
+  const submit = async () => {
+    if (busy) return;
+    setBusy(true); setErr("");
+    const msg = await onSave(pid === "" ? null : Number(pid));
+    if (msg) { setErr(msg); setBusy(false); }
+  };
+  return (
+    <Modal title={t("map_form.project_badlo")} onClose={busy ? () => {} : onClose}
+      footer={<>
+        <Btn onClick={onClose} disabled={busy}>{t("common.cancel")}</Btn>
+        <Btn tone="primary" onClick={submit} disabled={busy || list === null}>{t("common.save")}</Btn>
+      </>}>
+      <div style={{ fontSize: 12.5, color: T.t2, marginBottom: 10 }}>{t("map_form.project_note", { n: count })}</div>
+      <label style={lbl} htmlFor="mlib-proj">{t("map_form.project")}</label>
+      {list === null ? <div style={{ fontSize: 12, color: T.t4 }}>…</div> : (
+        <PickSelect id="mlib-proj" value={pid} onChange={(e) => setPid(e.target.value)} style={inp}>
+          <option value="">{t("map_form.bina_project")}</option>
+          {list.map((p) => <option key={p.id} value={String(p.id)}>{p.name}</option>)}
+        </PickSelect>
+      )}
+      {err && <div style={errBox}>{err}</div>}
+    </Modal>
   );
 }
 
@@ -1078,6 +1254,7 @@ const normalizeLib = (d) => ({
   perms: { export: yes(d && d.perms && d.perms.export), delete: yes(d && d.perms && d.perms.delete), create: yes(d && d.perms && d.perms.create) },
   folders: (Array.isArray(d && d.folders) ? d.folders : []).filter((f) => f && f.id != null),
   items: (Array.isArray(d && d.items) ? d.items : []).filter((x) => x && x.id != null),
+  projects: Array.isArray(d && d.projects) ? d.projects : [],
 });
 const sameSel = (a, b) => !!(a && b && a.type === b.type && a.fk === b.fk && a.file === b.file && a.id === b.id);
 
@@ -1094,6 +1271,10 @@ function MapLibraryModule() {
   const [drawing, setDrawing] = useState(false);   // nayi marking ka editor khula hai
   const [libOpen, setLibOpen] = useState(false);   // Map library (rang/shape)
   const { lib: mapLib } = useMapLibrary();         // type ke naam/rang/form ke liye
+  // Ped ka tareeka: Kaam se (Tender → Project → Type) / Type se / Folder se — yaad rehta hai.
+  const [treeMode, setTreeModeS] = useState(readTreeMode);
+  const setTreeMode = (m) => { setTreeModeS(m); setSel(null); try { window.localStorage.setItem(TREE_KEY, m); } catch (_) { /* private mode */ } };
+  const [tLines, setTLines] = useState(null);     // Tender map ki lines (dekhne ke liye) — null = abhi nahi laaye
   const [adhooriOnly, setAdhooriOnly] = useState(false);   // sirf "Detail adhoori" wali marking
   const toastTimer = useRef(null);
   const libRef = useRef(lib);
@@ -1133,7 +1314,8 @@ function MapLibraryModule() {
   useEffect(() => { if (view === "deleted") loadDeleted(); }, [view, loadDeleted]);
 
   const allData = lib.data;
-  useMemo(() => indexKids(allData ? allData.items : []), [allData]);
+  const tItems = useMemo(() => (tLines || []).map(tl2it), [tLines]);
+  useMemo(() => indexKids([...(allData ? allData.items : []), ...tItems]), [allData, tItems]);
   // "Detail adhoori" — zaroori field khaali wali marking (form library se aata
   // hai, isliye mapLib bhi deps me). Filter chalu ho to ped me sirf wahi.
   const adhooriCount = useMemo(() => (allData && mapLib ? allData.items.filter((it) => missingIn(it).length).length : 0), [allData, mapLib]);
@@ -1145,6 +1327,12 @@ function MapLibraryModule() {
   }, [allData, adhooriOnly, mapLib]);
   useEffect(() => { if (adhooriOnly && !adhooriCount) setAdhooriOnly(false); }, [adhooriOnly, adhooriCount]);
   const tree = useMemo(() => (data ? buildTree(data) : EMPTY), [data]);
+  const tShown = useMemo(() => (adhooriOnly ? tItems.filter((it) => missingIn(it).length) : tItems), [tItems, adhooriOnly, mapLib]); // eslint-disable-line react-hooks/exhaustive-deps
+  const gTree = useMemo(() => {
+    if (!data || treeMode === "folder") return EMPTY;
+    return treeMode === "type" ? buildTypeTree(data.items, tShown) : buildWorkTree(data.items, tShown, allData && allData.projects);
+  }, [data, tShown, treeMode, allData, mapLib]); // eslint-disable-line react-hooks/exhaustive-deps
+  const nodeIdx = useMemo(() => indexNodes(gTree), [gTree]);
   const canSeeAll = !!(data && data.canSeeAll);
   const perms = (data && data.perms) || { export: false, delete: false };
 
@@ -1155,24 +1343,30 @@ function MapLibraryModule() {
 
   const info = useMemo(() => {
     if (!data) return null;
-    if (!sel) return { type: "all", items: data.items };
+    if (!sel) return { type: "all", items: treeMode === "folder" ? data.items : [...data.items, ...tShown] };
     if (sel.type === "item") {
-      const it = data.items.find((x) => x.id === sel.id);
+      const it = data.items.find((x) => x.id === sel.id) || tItems.find((x) => x.id === sel.id);
       if (!it) return null;
+      if (it.tender) return { type: "item", item: it, group: null, file: "", items: [it] };
       return { type: "item", item: it, group: tree.find((g) => g.fk === fkOf(it.folder_id)), file: String(it.file || "").trim(), items: [it] };
+    }
+    if (sel.type === "node") {
+      const n = nodeIdx.get(sel.key);
+      return n ? { type: "node", node: n, items: n.all } : null;
     }
     const g = tree.find((x) => x.fk === sel.fk);
     if (!g) return null;
     if (sel.type === "folder") return { type: "folder", group: g, items: g.items };
     const f = g.files.find((x) => x.file === sel.file);
     return f ? { type: "file", group: g, file: f.file, items: f.items } : null;
-  }, [data, tree, sel]);
+  }, [data, tree, sel, tItems, nodeIdx, treeMode, tShown]);
   // Chuni hui cheez refresh ke baad nahi rahi (kisi ne hata di) to sab par laut aao.
   useEffect(() => { if (data && sel && !info) setSel(null); }, [data, sel, info]);
 
   const select = (next) => {
-    const same = sameSel(sel, next);
+    const same = sameSel(sel, next) || (next.type === "node" && sel && sel.type === "node" && sel.key === next.key);
     setSel(next);
+    if (next.type === "node") setOpen((o) => ({ ...o, [next.key]: same ? !o[next.key] : true }));
     if (next.type === "folder") setOpen((o) => ({ ...o, [next.fk]: same ? !o[next.fk] : true }));
     else if (next.type === "file") {
       const k = `${next.fk}|${next.file}`;
@@ -1183,6 +1377,7 @@ function MapLibraryModule() {
 
   // Map par kisi line/pin par click → ped me wahi marking khol kar dikhao.
   const reveal = (id) => {
+    if (String(id).startsWith("t")) { if (tItems.some((x) => x.id === id)) setSel({ type: "item", id }); return; }   // tender ki line
     const it = data && data.items.find((x) => x.id === id);
     if (!it) return;
     const fk = fkOf(it.folder_id);
@@ -1195,9 +1390,16 @@ function MapLibraryModule() {
     }, 60);
   };
 
+  // Tender map ki lines — "Kaam se" / "Type se" ped ke liye, ek baar (Refresh par dobara).
+  const loadTLines = useCallback(async () => {
+    const r = await api.get("/tenders/alignments/all-lines").catch(() => null);
+    setTLines(r && r.success && Array.isArray(r.data) ? r.data : []);
+  }, []);
+  useEffect(() => { if (treeMode !== "folder" && tLines === null && lib.status === "ok") loadTLines(); }, [treeMode, tLines, lib.status, loadTLines]);
   const refresh = async () => {
     if (refreshing) return;
     setRefreshing(true);
+    if (tLines !== null) loadTLines();
     if (lib.status === "ok") await loadLib("refresh");
     else { setLib({ status: "loading", data: null, error: "" }); await loadLib("first"); }
     if (view === "deleted") await loadDeleted();
@@ -1292,12 +1494,12 @@ function MapLibraryModule() {
       if (!items.length) { flash(t("map_library.export_khaali"), "error"); return; }
       const g = inf.group;
       const folderName = g && g.fk !== NONE ? ((g.folder && g.folder.name) || "") : "";
-      const base = inf.type === "item" ? inf.item.name
+      const base = inf.type === "item" ? inf.item.name : inf.type === "node" ? inf.node.title
         : inf.type === "file" ? [folderName, fileTitle(inf.file)].filter(Boolean).join(" - ") : folderTitle(g);
       const fmt = FORMATS.find((x) => x.id === fmtId);
       let text;
       if (fmtId === "kml") {
-        const groups = inf.type === "folder"
+        const groups = inf.type === "node" ? [{ name: inf.node.title, items }] : inf.type === "folder"
           ? g.files.map((f) => ({ name: fileTitle(f.file), items: withKids(f.items) }))
           : [{ name: fileTitle(inf.file), items }];
         text = buildKml(base, groups, folderName, inf.type === "folder");
@@ -1327,16 +1529,20 @@ function MapLibraryModule() {
       head = folderTitle(g);
       owner = folderRec && folderRec.by && (canSeeAll || g.dup) ? folderRec.by : null;
     } else if (info.type === "file") { head = fileTitle(info.file); crumbs = folderTitle(g); }
+    else if (info.type === "node") head = info.node.title;
+    else if (it.tender) { head = it.name; crumbs = [it.tender_no, it.project_name].filter(Boolean).join(" › "); }
     else { head = it.name; crumbs = [g ? folderTitle(g) : t("map_library.bina_folder"), fileTitle(info.file)].join(" › "); }
 
-    const HeadIcon = info.type === "folder" ? IcFolder : info.type === "file" ? IcFile : info.type === "all" ? IcMap : null;
+    const HeadIcon = info.type === "folder" || info.type === "node" ? IcFolder : info.type === "file" ? IcFile : info.type === "all" ? IcMap : null;
     const summary = info.type === "item" ? null : [
       statText(st),
       fmtLen(st.len) ? t("map_library.line_lambai", { len: fmtLen(st.len) }) : null,
       fmtArea(st.sqm) ? t("map_library.rakba_total", { area: fmtArea(st.sqm) }) : null,
     ].filter(Boolean).join(" · ");
 
-    const canExport = perms.export && (info.type === "folder" || info.type === "file" || info.type === "item") && info.items.length > 0;
+    const canExport = perms.export && (info.type === "folder" || info.type === "file" || info.type === "item" || info.type === "node") && info.items.length > 0;
+    // Project me daalo (ek ya kai) — sirf apni library ki marking jo badal sakte ho.
+    const projIds = (info.type === "item" ? [it] : info.items).filter((x) => x && !x.tender && x.parent_id == null && yes(x.can_edit)).map((x) => x.id);
     const itemEdit = info.type === "item" && yes(it.can_edit);
     const itemDelete = info.type === "item" && yes(it.can_delete);
     const folderEdit = !!(folderRec && yes(folderRec.can_edit));
@@ -1412,6 +1618,14 @@ function MapLibraryModule() {
           </div>
         )}
 
+        {it && it.tender && (
+          <div style={{ ...section, fontSize: 12, color: T.t3 }}>{t("map_form.tender_line_note")}</div>
+        )}
+        {info.type !== "item" && info.type !== "all" && projIds.length > 0 && (
+          <div style={section}>
+            <Btn onClick={() => setDialog({ kind: "project", ids: projIds, current: null })}>{t("map_form.project_me_daalo", { n: projIds.length })}</Btn>
+          </div>
+        )}
         {(itemEdit || folderEdit) && (
           <div style={section}>
             <div style={secHead}>{t("map_library.badlav")}</div>
@@ -1421,6 +1635,12 @@ function MapLibraryModule() {
               {itemEdit && <Btn onClick={() => setDialog({ kind: "type-item", item: it })}>{t("map_library.type_detail_badlo")}</Btn>}
               {itemEdit && it.kind === "line" && childFields("line", it.atype || "other").length > 0 && (
                 <Btn tone="primary" onClick={() => setDialog({ kind: "kids", id: it.id })}>{t("map_form.saath_btn")}</Btn>
+              )}
+              {itemEdit && it.kind === "line" && cleanPts(it).length >= 3 && it.parent_id == null && (
+                <Btn onClick={() => setDialog({ kind: "to-area", item: it })}>▱ {t("map_form.rakba_banao")}</Btn>
+              )}
+              {itemEdit && it.parent_id == null && (
+                <Btn onClick={() => setDialog({ kind: "project", ids: [it.id], current: it.project_id })}>{t("map_form.project_badlo")}</Btn>
               )}
               {folderEdit && <Btn onClick={() => setDialog({ kind: "rename-folder", group: g })}>{t("map_library.naam_badlo")}</Btn>}
             </div>
@@ -1486,6 +1706,14 @@ function MapLibraryModule() {
               {t("map_library.summary", { folders: folderCount, files: fileCount, n: data.items.filter((x) => x.parent_id == null).length })}
             </div>
             {canSeeAll && <div style={{ fontSize: 11.5, color: T.t3, marginTop: 2 }}>{t("map_library.poori_company_ki_library")}</div>}
+            <div style={{ display: "flex", gap: 4, marginTop: 8, flexWrap: "wrap" }}>
+              {[["work", "map_form.ped_kaam"], ["type", "map_form.ped_type"], ["folder", "map_form.ped_folder"]].map(([m, k]) => (
+                <button key={m} type="button" onClick={() => setTreeMode(m)} aria-pressed={treeMode === m}
+                  style={{ padding: "3px 10px", borderRadius: 20, fontSize: 11.5, fontFamily: "inherit", cursor: "pointer",
+                    border: `1px solid ${treeMode === m ? T.ind : T.b1}`, background: treeMode === m ? T.indL : T.surface,
+                    color: treeMode === m ? T.ind : T.t3, fontWeight: treeMode === m ? 700 : 500 }}>{t(k)}</button>
+              ))}
+            </div>
             {(adhooriCount > 0 || adhooriOnly) && (
               <button type="button" onClick={() => { setAdhooriOnly((v) => !v); setSel(null); }} aria-pressed={adhooriOnly}
                 style={{ marginTop: 8, padding: "3px 10px", borderRadius: 20, fontSize: 11.5, fontFamily: "inherit", cursor: "pointer",
@@ -1495,12 +1723,16 @@ function MapLibraryModule() {
             )}
           </div>
           <div className="mlib-tree">
-            <LibraryTree tree={tree} sel={sel} open={open} onToggle={toggle} onSelect={select} canSeeAll={canSeeAll} />
+            {treeMode === "folder"
+              ? <LibraryTree tree={tree} sel={sel} open={open} onToggle={toggle} onSelect={select} canSeeAll={canSeeAll} />
+              : tLines === null ? <div style={{ padding: 14, fontSize: 12, color: T.t4 }}>{t("map_library.load_ho_rahi")}</div>
+                : <GroupTree nodes={gTree} sel={sel} open={open} onToggle={toggle} onSelect={select} canSeeAll={canSeeAll} />}
           </div>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 14, minWidth: 0 }}>
           <MapPreview items={info ? withKids(info.items) : EMPTY} onPick={reveal}
             whereOf={(it) => {
+              if (it.tender) return [it.tender_no, it.project_name].filter(Boolean).join(" › ");
               const g = tree.find((x) => x.fk === fkOf(it.folder_id));
               return [g ? folderTitle(g) : t("map_library.bina_folder"), fileTitle(String(it.file || "").trim())].join(" › ");
             }} />
@@ -1556,6 +1788,29 @@ function MapLibraryModule() {
         <TypeDialog item={dItem} onClose={() => setDialog(null)} onSave={(atype, props, dia) => retypeItem(dItem, atype, props, dia)} />
       )}
       {libOpen && <MapLibraryDialog onClose={() => setLibOpen(false)} />}
+      {dialog && dialog.kind === "to-area" && (
+        <ToAreaDialog name={dItem.name} onClose={() => setDialog(null)} onSave={async (atype, keep) => {
+          const r = await api.post(`/map-library/${dItem.id}/to-area`, { atype, keep_line: keep }).catch(() => null);
+          if (!r || !r.success) return failMsg(r, t("map_library.save_nahi_hua"));
+          setDialog(null);
+          await loadLib("refresh");
+          flash(t("map_form.rakba_ban_gaya"));
+          if (r.data && r.data.id) setTimeout(() => reveal(r.data.id), 0);
+          return null;
+        }} />
+      )}
+      {dialog && dialog.kind === "project" && (
+        <ProjectDialog count={dialog.ids.length} current={dialog.current} onClose={() => setDialog(null)} onSave={async (pid) => {
+          const r = dialog.ids.length === 1
+            ? await api.patch(`/map-library/${dialog.ids[0]}`, { project_id: pid }).catch(() => null)
+            : await api.post("/map-library/set-project", { ids: dialog.ids, project_id: pid }).catch(() => null);
+          if (!r || !r.success) return failMsg(r, t("map_library.save_nahi_hua"));
+          setDialog(null);
+          await loadLib("refresh");
+          flash(t("map_form.project_lag_gaya"));
+          return null;
+        }} />
+      )}
       {dialog && dialog.kind === "kids" && allData && (() => {
         const ln = allData.items.find((x) => x.id === dialog.id);
         if (!ln) return null;

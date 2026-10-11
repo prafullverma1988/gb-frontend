@@ -1080,3 +1080,57 @@ export function ChildEditor({ line, kids, api, loadMaps, canEdit, onChanged, onC
 }
 const smallBtnS = (primary) => ({ padding: "6px 12px", borderRadius: 7, fontSize: 12, fontFamily: "inherit", cursor: "pointer", fontWeight: primary ? 700 : 500,
   border: primary ? "none" : `1px solid ${C.b1}`, background: primary ? C.ind : C.surface, color: primary ? "#fff" : C.t2 });
+
+// ══════════════════════════════════════════════════════════════════
+// LINE → RAKBA (11 Oct 2026) — khinchi line ke point band karke rakba.
+// Rakba ka type alag chuno (Plot / Boundary…). Default: line bhi rahe
+// (sadak ke saath zameen ka hissa); "Line ki jagah rakba" par line hat'ti hai.
+// onSave(atype, keepLine) → string (galti) ya null.
+// ══════════════════════════════════════════════════════════════════
+export function ToAreaDialog({ name, onClose, onSave }) {
+  const opts = typesFor("area");
+  const [code, setCode] = useState((opts.find(([c]) => c === "plot") || opts[0] || ["other"])[0]);
+  const [keep, setKeep] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const go = async () => {
+    if (busy) return;
+    setBusy(true); setErr("");
+    const m = await onSave(code, keep);
+    if (m) { setErr(m); setBusy(false); }
+  };
+  const radio = (v, label, note) => (
+    <label style={{ display: "flex", gap: 8, alignItems: "flex-start", cursor: "pointer", padding: "8px 10px", borderRadius: 8,
+      border: `1px solid ${keep === v ? C.ind : C.b1}`, background: keep === v ? C.indL : C.surface }}>
+      <input type="radio" checked={keep === v} onChange={() => setKeep(v)} style={{ marginTop: 2 }} />
+      <span><span style={{ fontSize: 12.5, fontWeight: 600, color: C.t1 }}>{label}</span>
+        <span style={{ display: "block", fontSize: 11, color: C.t4, marginTop: 2 }}>{note}</span></span>
+    </label>
+  );
+  return (
+    <div onClick={busy ? undefined : onClose} style={{ position: "fixed", inset: 0, zIndex: 9996, background: "rgba(15,23,42,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+      <div role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}
+        style={{ width: 440, maxWidth: "100%", background: C.surface, borderRadius: 10, boxShadow: "0 12px 40px rgba(0,0,0,.2)", padding: 16, fontFamily: "'Segoe UI',system-ui,sans-serif", display: "flex", flexDirection: "column", gap: 12 }}>
+        <div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: C.t1 }}>{t("map_form.rakba_banao")}</div>
+          <div style={{ fontSize: 12, color: C.t3, marginTop: 2 }}>{name}</div>
+        </div>
+        <div style={{ fontSize: 11.5, color: C.t3, lineHeight: 1.5 }}>{t("map_form.rakba_note")}</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <StyleSwatch kind="area" code={code} size={18} />
+          <PickSelect value={code} onChange={(e) => setCode(e.target.value)}
+            style={{ flex: 1, padding: "7px 9px", borderRadius: 7, border: `1.5px solid ${C.b1}`, fontSize: 12.5, fontFamily: "inherit" }}>
+            {opts.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+          </PickSelect>
+        </div>
+        {radio(true, t("map_form.line_bhi_rahe"), t("map_form.line_bhi_rahe_note"))}
+        {radio(false, t("map_form.line_ki_jagah"), t("map_form.line_ki_jagah_note"))}
+        {err && <div style={{ padding: "7px 10px", borderRadius: 7, background: C.redL, color: C.red, fontSize: 12 }}>{err}</div>}
+        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+          <button type="button" onClick={onClose} disabled={busy} style={smallBtnS(false)}>{t("common.cancel")}</button>
+          <button type="button" onClick={go} disabled={busy} style={smallBtnS(true)}>{busy ? "…" : t("map_form.rakba_banao")}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
