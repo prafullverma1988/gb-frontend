@@ -806,7 +806,7 @@ function GRNModal({po,onClose,onSave}){
 const poCanOrder=(p)=>p.approval==="Approved"&&p.poStatus==="Open"&&(p.orderStatus||"NotOrdered")==="NotOrdered";
 const poCanReceive=(p)=>p.approval==="Approved"&&p.poStatus==="Open"&&["Ordered","PartiallyReceived"].includes(p.orderStatus);
 
-function PODetailDrawer({po,onClose,onApprove,onShare,onGRN,onEdit,onCancel,onSendToVendor}){
+function PODetailDrawer({po,onClose,onApprove,onShare,onGRN,onEdit,onCancel,onSendToVendor,onSplit}){
   const [detail, setDetail] = useState(po);
   const [fetching, setFetching] = useState(true);
   const [cancelling, setCancelling] = useState(false);
@@ -841,6 +841,11 @@ function PODetailDrawer({po,onClose,onApprove,onShare,onGRN,onEdit,onCancel,onSe
                 rate:parseFloat(it.rate)||0,
                 amount:(parseFloat(it.quantity)||0)*(parseFloat(it.rate)||0),
                 receivedQty:parseFloat(it.received_qty)||0,
+                // Line ki apni jagah (multi-site / order split) — neeche ka 📍 chip
+                // isi se banta hai; pehle ye yahan gir jaate the aur chip kabhi nahi dikhta.
+                project_id:it.project_id||null, project_name:it.project_name||"",
+                delivery_site:it.delivery_site||"", linked_mr_id:it.linked_mr_id||null,
+                asset_item_id:it.asset_item_id||null, asset_warehouse_id:it.asset_warehouse_id||null,
               })),
             };
             setDetail(mapped);
@@ -1019,6 +1024,12 @@ function PODetailDrawer({po,onClose,onApprove,onShare,onGRN,onEdit,onCancel,onSe
         {poCanReceive(d)&&onGRN&&(
           <button onClick={()=>onGRN(d)} style={{flex:"1 1 110px",padding:"8px",borderRadius:7,background:T.ambL,color:T.amb,border:"1.5px solid "+T.amb,fontSize:11.5,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:4}}>
             <IcGRN size={12} color={T.amb}/> {t("common.record_grn")}
+          </button>
+        )}
+        {/* Order split — line ka hissa doosre project / store (Approved / Ordered, poora aaya nahi) */}
+        {poCanSplit(d)&&onSplit&&(
+          <button onClick={()=>onSplit(d)} style={{flex:"1 1 110px",padding:"8px",borderRadius:7,background:T.surfaceB,color:T.t2,border:"1px solid "+T.b1,fontSize:11.5,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:4}}>
+            {t("procurement.split_title")}
           </button>
         )}
         {/* Share — secondary, available anytime for sharing PO copy */}
@@ -1754,14 +1765,21 @@ function SendToVendorModal({po,onClose,onSent,srcMr,vendorPhone:vPhone=""}){
   // Line ki MR par maang ki photo / asset ka spec ho to line ke neeche — WhatsApp
   // aur Email dono isi message se bante hain (Prafull, 2 Oct 2026: "PO mail pe bhi").
   const srcOf = (it) => (srcMr && it.linked_mr_id ? srcMr(it.linked_mr_id) : null);
+  // Lines alag-alag jagah ki hon (multi-site / order split) to har line ke neeche
+  // uski jagah — vendor ki gadi kahan utre, wo message me hi dikhe.
+  const lineSite = (it) => String(it.delivery_site || it.project_name || "").trim();
+  const sites = [...new Set((po.items||[]).map(lineSite).filter(Boolean))];
+  const multiSite = sites.length > 1;
+  const deliveryTxt = multiSite ? sites.join(" · ") : (po.deliverySite||po.project);
   const itemSummary = (po.items||[]).map(it=>[
     `${it.desc||"Item"} - ${it.qty}${it.unit?` ${it.unit}`:""} @ ₹${it.rate}`,
+    ...(multiSite && lineSite(it) ? [`   📍 ${lineSite(it)}`] : []),
     ...vendorLines(it.desc||"", srcOf(it), "   "),
   ].join("\n")).join("\n");
   const reqPhotoN = (po.items||[]).reduce((n,it)=>{ const m=srcOf(it); return n+(m?photoList(m.photo_urls).length:0); },0);
   // Receiving contacts message me isliye ki vendor ka driver site pahunch kar
   // seedha call kar sake — yahi is poore feature ka asli output hai.
-  const waMsg = `*Purchase Order ${po.poNum||"PO-"+po.id}*\nFrom: ${companyName()}\nProject: ${po.project}\nDelivery: ${po.deliverySite||po.project}\nExp Date: ${po.delivery||"TBD"}\n${contactsText(po.receivingContacts)}\nItems:\n${itemSummary}\n\nTotal: ₹${(po.amount||0).toLocaleString("en-IN")}`;
+  const waMsg = `*Purchase Order ${po.poNum||"PO-"+po.id}*\nFrom: ${companyName()}\nProject: ${po.project}\nDelivery: ${deliveryTxt}\nExp Date: ${po.delivery||"TBD"}\n${contactsText(po.receivingContacts)}\nItems:\n${itemSummary}\n\nTotal: ₹${(po.amount||0).toLocaleString("en-IN")}`;
   const emailSubj = `Purchase Order ${po.poNum||"PO-"+po.id} — ${companyName()}`;
   const emailBody = waMsg.replace(/\*/g,"");
 
@@ -1805,7 +1823,7 @@ function SendToVendorModal({po,onClose,onSent,srcMr,vendorPhone:vPhone=""}){
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,fontSize:11}}>
             <div><span style={{color:T.t4}}>{t("procurement.items")} </span><b style={{color:T.t1}}>{(po.items||[]).length}</b></div>
             <div><span style={{color:T.t4}}>{t("common.total_2")} </span><b style={{color:T.t1}}>₹{(po.amount||0).toLocaleString("en-IN")}</b></div>
-            <div style={{gridColumn:"1 / 3"}}><span style={{color:T.t4}}>{t("procurement.delivery")} </span><b style={{color:T.t1}}>{po.deliverySite}</b> · <span style={{color:T.t4}}>by</span> <b style={{color:T.t1}}>{po.delivery||"TBD"}</b></div>
+            <div style={{gridColumn:"1 / 3"}}><span style={{color:T.t4}}>{t("procurement.delivery")} </span><b style={{color:T.t1}}>{deliveryTxt}</b> · <span style={{color:T.t4}}>by</span> <b style={{color:T.t1}}>{po.delivery||"TBD"}</b></div>
             {reqPhotoN>0&&(
               <div style={{gridColumn:"1 / 3",color:T.t3}}>{t("procurement.maang_ki_photo_saath_jaayegi",{n:reqPhotoN})}</div>
             )}
@@ -1839,6 +1857,168 @@ function SendToVendorModal({po,onClose,onSent,srcMr,vendorPhone:vPhone=""}){
         <Btn onClick={onClose} outline color={T.slt} full>{t("common.cancel")}</Btn>
         <Btn onClick={markSent} disabled={sending} color={T.grn} full icon={<IcApprv size={14} color="white"/>}>
           {sending?t("procurement.marking"):t("procurement.mark_as_sent_order_stage")}
+        </Btn>
+      </MFoot>
+    </Modal>
+  );
+}
+
+// ── ORDER SPLIT (11 Oct 2026) ─────────────────────────────────────────
+// PO ki ek line ka hissa doosre project / store ko — POST /procurement/pos/:id/split.
+// Pehli row = line ki abhi wali jagah; nayi row ki qty bharte hi pehli row
+// apne aap ghat-ti hai (pehli = kul − baaki). Save tabhi jab jod = line ki qty,
+// har qty 0 se zyada, koi jagah do baar nahi, aur pehli row aaye hue se kam nahi.
+// Server yahi sab dobara jaanchta hai. PO ka total wahi — dobara approval nahi.
+const poCanSplit=(p)=>p.approval==="Approved"&&p.poStatus==="Open"&&p.orderStatus!=="Received";
+const splitLinesOf=(p)=>(p.items||[]).filter(it=>it.id&&!it.asset_item_id&&!it.asset_warehouse_id&&it.qty>0&&(it.receivedQty||0)<it.qty-0.001);
+const splitR3=(n)=>Math.round((Number(n)||0)*1000)/1000;
+const splitDest=(k)=>k.startsWith("w:")?{warehouse_id:Number(k.slice(2))}:{project_id:Number(k.slice(2))};
+
+function SplitPOModal({po,mrs,dbProjects,onClose,onDone}){
+  const lines=splitLinesOf(po);
+  const [lineId,setLineId]=useState(lines[0]?.id||null);
+  const line=lines.find(l=>String(l.id)===String(lineId))||null;
+  const [first,setFirst]=useState(lines[0]?String(lines[0].qty):"");
+  const [rows,setRows]=useState([]);           // nayi jagah: {key:"p:12"|"w:3"|"", qty:""}
+  const [stores,setStores]=useState([]);
+  const [saving,setSaving]=useState(false);
+  const [err,setErr]=useState("");
+  // Store "chunne" wali list (?scope=all) — store ka access na ho tab bhi wahan maal bheja ja sakta hai
+  useEffect(()=>{
+    let alive=true;
+    api.get("/warehouse/warehouses?scope=all")
+      .then(r=>{ if(alive&&r?.success&&Array.isArray(r.data)) setStores(r.data.filter(w=>Number(w.is_active)!==0)); })
+      .catch(()=>{});
+    return ()=>{ alive=false; };
+  },[]);
+
+  // Line ki abhi wali jagah: store ki apni MR ("Procurement ko bhejo") ho to wo store, warna line ka project
+  const srcMr=line&&line.linked_mr_id?(mrs||[]).find(m=>String(m.id)===String(line.linked_mr_id))||null:null;
+  const origWh=srcMr&&!srcMr.project_id&&srcMr.restock_warehouse_id?srcMr.restock_warehouse_id:null;
+  const origKey=origWh?"w:"+origWh:(line&&line.project_id?"p:"+line.project_id:"");
+  const origName=origWh?(srcMr.store_warehouse_name||line.delivery_site||"—"):(line?(line.project_name||line.delivery_site||po.project||"—"):"—");
+  const total=line?line.qty:0;
+  const unit=line?line.unit||"":"";
+  const recv=line?line.receivedQty||0:0;
+
+  const restOf=(list)=>splitR3(total-list.reduce((s,r)=>s+(parseFloat(r.qty)||0),0));
+  const pickLine=(id)=>{
+    const l=lines.find(x=>String(x.id)===String(id));
+    setLineId(id); setRows([]); setFirst(l?String(l.qty):""); setErr("");
+  };
+  const setRow=(i,patch)=>{
+    const next=rows.map((r,j)=>j===i?{...r,...patch}:r);
+    setRows(next); setErr("");
+    if("qty" in patch) setFirst(String(restOf(next)));
+  };
+  const addRow=()=>{ setRows([...rows,{key:"",qty:""}]); setErr(""); };
+  const removeRow=(i)=>{ const next=rows.filter((_,j)=>j!==i); setRows(next); setFirst(String(restOf(next))); setErr(""); };
+
+  const firstQty=parseFloat(first)||0;
+  const sum=splitR3(firstQty+rows.reduce((s,r)=>s+(parseFloat(r.qty)||0),0));
+  const keys=[origKey,...rows.map(r=>r.key)].filter(Boolean);
+  const dup=keys.length!==new Set(keys).size;
+  const belowRecv=firstQty<recv-0.001;
+  const allPos=firstQty>0&&rows.every(r=>(parseFloat(r.qty)||0)>0);
+  const allDest=rows.every(r=>r.key);
+  const match=Math.abs(sum-total)<=0.001;
+  const canSave=!!line&&rows.length>0&&allPos&&allDest&&!dup&&!belowRecv&&match&&!saving;
+
+  const opts=[
+    {grp:t("procurement.split_group_projects"),items:(dbProjects||[]).map(p=>({key:"p:"+p.id,label:p.name}))},
+    {grp:t("procurement.split_group_stores"),items:stores.map(w=>({key:"w:"+w.id,label:w.name}))},
+  ];
+
+  const save=async()=>{
+    if(!canSave) return;
+    setSaving(true); setErr("");
+    const parts=[
+      {...(origKey?splitDest(origKey):{}),qty:splitR3(firstQty)},
+      ...rows.map(r=>({...splitDest(r.key),qty:splitR3(parseFloat(r.qty))})),
+    ];
+    try{
+      const res=await api.post(`/procurement/pos/${po.id}/split`,{po_item_id:line.id,parts});
+      if(res?.success){ onDone(res); return; }
+      setErr(res?.message||t("procurement.split_failed"));
+    }catch(e){ setErr(e?.message||t("procurement.split_failed")); }
+    setSaving(false);
+  };
+
+  const qtyInp={width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",textAlign:"right"};
+  const destBox={padding:"8px 11px",borderRadius:7,border:`1px solid ${T.b1}`,background:T.surfaceB,fontSize:12.5,color:T.t1,fontWeight:600,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"};
+  return(
+    <Modal onClose={onClose} width={540}>
+      <MHead title={t("procurement.split_title")} sub={`${po.poNum||"PO-"+po.id} · ${po.vendor||"—"}`} onClose={onClose}/>
+      <MBody>
+        <div style={{background:T.bluL,border:`1px solid ${T.bluM}`,borderRadius:7,padding:"9px 12px",marginBottom:12,fontSize:11.5,color:T.blu,lineHeight:1.5}}>
+          {t("procurement.split_hint")}
+        </div>
+        {!line?(
+          <div style={{padding:"18px",textAlign:"center",color:T.t3,fontSize:12.5}}>{t("procurement.split_no_line")}</div>
+        ):(<>
+          {lines.length>1&&(
+            <div style={{marginBottom:12}}>
+              <Fld label={t("procurement.split_line")}>
+                <Sel value={String(lineId)} onChange={e=>pickLine(e.target.value)}>
+                  {lines.map(l=><option key={l.id} value={String(l.id)}>{`${l.desc} — ${l.qty} ${l.unit||""}`}</option>)}
+                </Sel>
+              </Fld>
+            </div>
+          )}
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:8}}>
+            <span style={{fontSize:13,fontWeight:600,color:T.t1}}>{line.desc}</span>
+            <span style={{fontSize:13,fontWeight:700,color:T.t1}}>{t("procurement.split_total",{qty:total,unit})}</span>
+          </div>
+
+          {/* Row 1 — abhi ki jagah */}
+          <div style={{display:"grid",gridTemplateColumns:"1fr 110px 28px",gap:6,alignItems:"center",marginBottom:4}}>
+            <div style={destBox} title={origName}>{origName} <span style={{fontSize:10,fontWeight:500,color:T.t4}}>· {t("procurement.split_current")}</span></div>
+            <input type="number" min={0} value={first} onChange={e=>{setFirst(e.target.value);setErr("");}} style={{...qtyInp,borderColor:belowRecv?T.red:T.b1}}/>
+            <span/>
+          </div>
+          {recv>0&&(
+            <div style={{fontSize:10.5,color:belowRecv?T.red:T.amb,marginBottom:6}}>{t("procurement.split_received",{qty:recv,unit})}</div>
+          )}
+
+          {/* Nayi jagah */}
+          {rows.map((r,i)=>{
+            const taken=new Set(keys.filter(k=>k!==r.key));
+            return(
+              <div key={i} style={{display:"grid",gridTemplateColumns:"1fr 110px 28px",gap:6,alignItems:"center",marginTop:6}}>
+                <Sel value={r.key} onChange={e=>setRow(i,{key:e.target.value})}>
+                  <option value="">{t("procurement.split_pick_dest")}</option>
+                  {opts.map(g=>g.items.length>0&&(
+                    <optgroup key={g.grp} label={g.grp}>
+                      {g.items.map(o=><option key={o.key} value={o.key} disabled={taken.has(o.key)}>{o.label}</option>)}
+                    </optgroup>
+                  ))}
+                </Sel>
+                <input type="number" min={0} value={r.qty} placeholder="0" onChange={e=>setRow(i,{qty:e.target.value})} style={qtyInp}/>
+                <button onClick={()=>removeRow(i)} title={t("procurement.split_remove_row")}
+                  style={{width:28,height:28,borderRadius:6,border:`1px solid ${T.b1}`,background:T.surface,color:T.t3,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                  <IcX size={12} color={T.t3}/>
+                </button>
+              </div>
+            );
+          })}
+          <button onClick={addRow}
+            style={{marginTop:10,display:"inline-flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:6,background:T.bluL,border:`1px dashed ${T.blu}`,color:T.blu,fontSize:11.5,fontWeight:700,cursor:"pointer"}}>
+            <IcAdd size={12} color={T.blu}/> {t("procurement.split_add_row")}
+          </button>
+
+          <div style={{marginTop:14,padding:"9px 12px",borderRadius:7,fontSize:12,fontWeight:700,
+            background:match?T.grnL:T.redL,border:`1px solid ${match?T.grnM:T.redM}`,color:match?T.grn:T.red}}>
+            {match?t("procurement.split_sum_ok",{sum,total,unit}):t("procurement.split_sum_bad",{sum,total,unit})}
+          </div>
+          {dup&&<div style={{marginTop:6,fontSize:11.5,color:T.red}}>{t("procurement.split_dup")}</div>}
+          {belowRecv&&<div style={{marginTop:6,fontSize:11.5,color:T.red}}>{t("procurement.split_below_recv",{qty:recv,unit})}</div>}
+          {err&&<div style={{marginTop:8,padding:"8px 11px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,fontSize:11.5,color:T.red}}>{err}</div>}
+        </>)}
+      </MBody>
+      <MFoot>
+        <Btn onClick={onClose} outline color={T.slt} full>{t("common.cancel")}</Btn>
+        <Btn onClick={save} disabled={!canSave} color={T.blu} full>
+          {saving?t("procurement.split_saving"):t("procurement.split_save")}
         </Btn>
       </MFoot>
     </Modal>
@@ -1967,6 +2147,7 @@ function ProcurementModule(){
       // se store ki team laata hai (asset PO ka project 0 hota hai; pehle Edit
       // par ye yahan girta tha aur dropdown khaali aata tha).
       asset_warehouse_id: it.asset_warehouse_id || null,
+      asset_item_id: it.asset_item_id || null,
     })),
   });
   const mapRFQ=r=>{
@@ -2121,6 +2302,8 @@ function ProcurementModule(){
   const [shareTarget,setShareTarget]=useState(null);
   const [sendToVendorTarget,setSendToVendorTarget]=useState(null);
   const [grnTarget,setGrnTarget]=useState(null);
+  const [splitTarget,setSplitTarget]=useState(null);   // "Order split karo" ka PO
+  const [poMenu,setPoMenu]=useState(null);             // PO row ka ⋮ menu (PO id)
   const [showCreatePO,setShowCreatePO]=useState(false);
   const [createPOPrefill,setCreatePOPrefill]=useState(null);
   const [editPo,setEditPo]=useState(null);
@@ -2958,7 +3141,7 @@ function ProcurementModule(){
             </div>
             {/* PO list */}
             <div style={{flex:1,overflowY:"auto",overflowX:"hidden",background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`}}>
-              <div style={{display:"grid",gridTemplateColumns:"90px 160px 1fr 130px 90px 100px 110px 80px",padding:"7px 14px",background:T.surfaceB,borderBottom:`1px solid ${T.b1}`,position:"sticky",top:0,zIndex:10}}>
+              <div style={{display:"grid",gridTemplateColumns:"90px 160px 1fr 130px 90px 100px 110px 106px",padding:"7px 14px",background:T.surfaceB,borderBottom:`1px solid ${T.b1}`,position:"sticky",top:0,zIndex:10}}>
                 {["PO#","Vendor","Project","Site","Status","Approval","Amount","Actions"].map((h,i)=><span key={i} style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase"}}>{h}</span>)}
               </div>
               {filteredPOs.map(po=>{
@@ -2967,7 +3150,7 @@ function ProcurementModule(){
                 const as=APPR_STATUS[dispLbl]||APPR_STATUS.Draft;
                 const borderC=po.approval==="Revision"?"#1D4ED8":po.approval==="Rejected"?T.red:po.approval==="Draft"?T.amb:dispLbl==="Ordered"?"#7C3AED":dispLbl==="PartiallyReceived"?"#0891B2":dispLbl==="Received"?T.grn:"transparent";
                 return(<div key={po.id}>
-                  <div onClick={()=>setSelPO(po)} style={{display:"grid",gridTemplateColumns:"90px 160px 1fr 130px 90px 100px 110px 80px",padding:"10px 14px",borderBottom:po.reviewNote?"none":`1px solid ${T.b1}`,alignItems:"center",cursor:"pointer",borderLeft:`3px solid ${borderC}`,transition:"background 0.1s"}}
+                  <div onClick={()=>setSelPO(po)} style={{display:"grid",gridTemplateColumns:"90px 160px 1fr 130px 90px 100px 110px 106px",padding:"10px 14px",borderBottom:po.reviewNote?"none":`1px solid ${T.b1}`,alignItems:"center",cursor:"pointer",borderLeft:`3px solid ${borderC}`,transition:"background 0.1s"}}
                     onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB} onMouseLeave={e=>e.currentTarget.style.background="none"}>
                     <span style={{fontSize:12,fontWeight:700,color:T.blu,fontFamily:"monospace"}}>{po.poNum||("PO-"+po.id)}</span>
                     <span style={{fontSize:12,color:T.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{po.vendor}</span>
@@ -2982,6 +3165,21 @@ function ProcurementModule(){
                       {/* Approve ke baad agla kadam ORDER hai (vendor ko bhejo) — receive tab jab order ho chuka */}
                       {poCanOrder(po)&&pEdit&&<button onClick={e=>{e.stopPropagation();setSendToVendorTarget(po);}} title={t("procurement.send_to_vendor")} style={{height:26,padding:"0 9px",borderRadius:6,background:T.bluL,border:`1px solid ${T.blu}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:4,color:T.blu,fontSize:10.5,fontWeight:700,whiteSpace:"nowrap"}}><IcTruck size={12} color={T.blu}/>{t("procurement.order_btn")}</button>}
                       {poCanReceive(po)&&pReceive&&<button onClick={e=>{e.stopPropagation();setGrnTarget(po);}} title={t("common.record_grn")} style={{width:26,height:26,borderRadius:6,background:T.ambL,border:`1px solid ${T.ambM}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><IcGRN size={13} color={T.amb}/></button>}
+                      {/* ⋮ — Order split (11 Oct 2026). Approved / Ordered PO, Procurement Edit. */}
+                      {poCanSplit(po)&&pEdit&&<div style={{position:"relative"}}>
+                        <button onClick={e=>{e.stopPropagation();setPoMenu(poMenu===po.id?null:po.id);}} title={t("common.actions")}
+                          style={{width:26,height:26,borderRadius:6,background:poMenu===po.id?T.surfaceB:"none",border:`1px solid ${poMenu===po.id?T.b1:"transparent"}`,color:T.t3,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,lineHeight:1,fontWeight:700}}>⋮</button>
+                        {poMenu===po.id&&(<>
+                          <div onClick={e=>{e.stopPropagation();setPoMenu(null);}} style={{position:"fixed",inset:0,zIndex:50}}/>
+                          <div style={{position:"absolute",right:0,top:30,background:T.surface,border:`1px solid ${T.b1}`,borderRadius:8,boxShadow:"0 8px 24px rgba(0,0,0,0.14)",zIndex:51,width:190,overflow:"hidden"}}>
+                            <button onClick={e=>{e.stopPropagation();setPoMenu(null);setSplitTarget(po);}}
+                              style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"10px 13px",border:"none",background:"none",color:T.t1,fontSize:12.5,fontWeight:600,cursor:"pointer",textAlign:"left"}}
+                              onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB} onMouseLeave={e=>e.currentTarget.style.background="none"}>
+                              <IcFlow size={13} color={T.t2}/> {t("procurement.split_title")}
+                            </button>
+                          </div>
+                        </>)}
+                      </div>}
                     </div>
                   </div>
                   {po.reviewNote&&(po.approval==="Revision"||po.approval==="Rejected")&&(
@@ -3038,6 +3236,7 @@ function ProcurementModule(){
       {/* ═══ MODALS ═══ */}
       {selPO&&<PODetailDrawer po={selPO} onClose={()=>setSelPO(null)} onApprove={canApprovePO(selPO.id)?(id)=>{approvePO(id);setSelPO(p=>p?{...p,approval:"Approved"}:p);}:null} onShare={(po)=>{setShareTarget(po);setSelPO(null);}} onGRN={pReceive?(po)=>{setGrnTarget(po);setSelPO(null);}:null}
         onSendToVendor={pEdit?(po)=>{setSendToVendorTarget(po);}:null}
+        onSplit={pEdit?(d)=>{setSplitTarget(pos.find(x=>String(x.id)===String(d.id))||d);setSelPO(null);}:null}
         onEdit={pEdit?(po)=>{setEditPo(po);setShowCreatePO(true);setSelPO(null);}:null}
         onCancel={!pApprove?null:async(po)=>{
           let res=await api.patch("/procurement/pos/"+po.id+"/cancel",{});
@@ -3063,6 +3262,14 @@ function ProcurementModule(){
           setSelPO(p=>p&&p.id===sendToVendorTarget.id?{...p,orderStatus:"Ordered"}:p);
         }}/>}
       {grnTarget&&<GRNModal po={grnTarget} onClose={()=>setGrnTarget(null)} onSave={saveGRN}/>}
+      {splitTarget&&<SplitPOModal po={splitTarget} mrs={mrs} dbProjects={dbProjects} onClose={()=>setSplitTarget(null)}
+        onDone={(res)=>{
+          // PO ki lines + nayi MR dono badle — poori list taaza
+          setSplitTarget(null);
+          if(res?.data) setPOs(p=>p.map(x=>x.id===res.data.id?mapPO(res.data):x));
+          loadAll();
+          if(res?.message) window.alert(res.message);
+        }}/>}
       {selRFQ&&<RFQDetailDrawer rfq={selRFQ} onClose={()=>setSelRFQ(null)} onPunch={pCreate?(vi)=>{setPunchTarget(selRFQ);setPunchVendorIdx(vi);setSelRFQ(null);}:null} onLock={pEdit?(vName)=>{lockRFQ(selRFQ.id,vName);setSelRFQ(r=>r?{...r,locked:vName}:r);}:null} onPublish={pEdit?(id)=>{publishRFQ(id);setSelRFQ(r=>r?{...r,status:"Published",bidStart:"Today",bidEnd:"+5 days"}:r);}:null} onCreatePO={pCreate?(r)=>{setSelRFQ(null);createPOFromRFQ(r);}:null}/>}
       {punchTarget&&punchVendorIdx!=null&&<PunchQuoteModal rfq={punchTarget} vendorIndex={punchVendorIdx} onSave={(vi,rates)=>savePunch(punchTarget.id,vi,rates)} onClose={()=>{setPunchTarget(null);setPunchVendorIdx(null);}}/>}
       {showCreateRFQ&&<CreateRFQModal dbProjects={dbProjects} dbVendors={dbVendors} onClose={()=>setShowCreateRFQ(false)} onSave={async(form,validItems,vendors)=>{
