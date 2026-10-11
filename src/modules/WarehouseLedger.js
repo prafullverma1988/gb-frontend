@@ -54,6 +54,9 @@ const kindMeta = (k) => ({
   // Conversion (11 Oct 2026) — bana (aaya) / ghata (gaya); naam server deta hai ("← TMT se bana (CNV-001)").
   conversion_in:  { c: T.grn, label: t("conversion.ledger_k_in") },
   conversion_out: { c: T.amb, label: t("conversion.ledger_k_out") },
+  // Job Work (11 Oct 2026) — vendor ko bheja / wapas aaya (bana ya raw); naam server deta hai ("→ Job Work JW-001 (vendor)").
+  jobwork_in:     { c: T.grn, label: t("jobwork.ledger_k_in") },
+  jobwork_out:    { c: T.amb, label: t("jobwork.ledger_k_out") },
   before:       { c: T.t3,  label: t("warehouse.ledger_k_before") },
 }[k] || { c: T.t3, label: k });
 
