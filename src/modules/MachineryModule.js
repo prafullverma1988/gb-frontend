@@ -23,7 +23,7 @@ import { t, Rich } from "../i18n";
 import ImportFixPanel, { useImportFix } from "../components/ImportFix";
 import { BackClose } from "../utils/backNav";
 import CityPicker from "../components/CityPicker";
-import { can, canAny, canEntry } from "../utils/perms";
+import { can, canAny, canEntry, currentUser } from "../utils/perms";
 import { canApproveAction } from "../utils/approvalAuthority";
 import { cld } from "../utils/cloudinary";
 // Server samay UTC me deta hai (9 Oct 2026 se fuel / sensor bhi) — dikhao
@@ -808,6 +808,7 @@ function CostReport({ econ, health }) {
                   <div style={{ fontSize: 9.5, color: T.t4 }}>
                     {[m.cost.fuel ? "diesel " + rupee(m.cost.fuel) : null,
                       m.cost.service ? "service " + rupee(m.cost.service) : null,
+                      m.cost.oil ? t("machinery.c_oil", { x: rupee(m.cost.oil) }) : null,
                       m.cost.documents ? "kaagaz " + rupee(m.cost.documents) : null,
                       m.cost.hire_paid ? "kiraya " + rupee(m.cost.hire_paid) : null].filter(Boolean).join(" · ") || "—"}
                   </div>
@@ -1649,18 +1650,23 @@ function MachineDetail({ id, onBack, onChanged, onEdit, onRemoved, canRemove, pa
   const [svcEdit, setSvcEdit] = useState(null);   // khuli service jise band karna hai
   const [svcTemplates, setSvcTemplates] = useState([]);
   const [gps, setGps] = useState(null);
+  // 🛢 Oil (11 Oct 2026, AB) — form, tab ka data, cancel wali row
+  const [oilOpen, setOilOpen] = useState(false);
+  const [oil, setOil] = useState(null);
+  const [oilCancel, setOilCancel] = useState(null);
 
   // silent = form-save ke baad ka refresh. Spinner sirf pehli baar — warna har
   // save par poori detail blank ho kar apna tab bhool jaati hai.
   const load = useCallback(async (silent) => {
     if (!silent) setLoading(true);
-    const [a, b, c, d, e, g] = await Promise.all([
+    const [a, b, c, d, e, g, o] = await Promise.all([
       api.get("/machinery/fleet/" + id).catch(() => null),
       api.get("/machinery/fleet/" + id + "/timeline").catch(() => null),
       api.get("/machinery/service?equipment_id=" + id).catch(() => null),
       api.get("/machinery/fleet/" + id + "/service-due").catch(() => null),
       api.get("/machinery/templates?equipment_id=" + id).catch(() => null),
       api.get("/telematics/machine/" + id).catch(() => null),
+      api.get("/machinery/oil?equipment_id=" + id).catch(() => null),
     ]);
     setM(a?.success ? a.data : null);
     setTimeline(b?.success ? b.data || [] : []);
@@ -1668,6 +1674,7 @@ function MachineDetail({ id, onBack, onChanged, onEdit, onRemoved, canRemove, pa
     setSvcDue(d?.success ? d.data : null);
     setSvcTemplates(e?.success ? e.data || [] : []);
     setGps(g?.success ? g.data : null);
+    setOil(o?.success ? o.data : null);
     setLoading(false);
   }, [id]);
   useEffect(() => { load(); }, [load]);
@@ -1702,6 +1709,7 @@ function MachineDetail({ id, onBack, onChanged, onEdit, onRemoved, canRemove, pa
     { id: "fuel", l: t("app.fuel") },
     { id: "usage", l: t("machinery.usage") },
     { id: "docs", l: t("common.documents") },
+    { id: "oil", l: t("machinery.oil_tab") + ((oil && (oil.summary || []).some((x) => x.warning)) ? " ⚠" : "") },
     // GPS tab sirf judi hui machine par — bina jod ke dikha kar "khaali
     // khaana jo kabhi nahi bharega" nahi dena (wahi niyam jo rented ke
     // service tab par laga hai). Jodna Machinery ke GPS tab se hota hai.
@@ -1749,6 +1757,8 @@ function MachineDetail({ id, onBack, onChanged, onEdit, onRemoved, canRemove, pa
             </div>
           )}
           {canMachEntry() && <Btn ghost icon={IcGauge} onClick={() => setMeterOpen(true)}>{t("machinery.meter")}</Btn>}
+          {/* Store se (Warehouse ENTRY) ya vendor se (Machinery ENTRY) — 11 Oct 2026, AB */}
+          {canOilAny() && <Btn ghost onClick={() => setOilOpen(true)}>{t("machinery.oil_button")}</Btn>}
           {canShiftCity() && <Btn ghost onClick={() => setCityOpen(true)}>{t("machinery.city_badlo")}</Btn>}
           {canRemove && canRemoveMachine() && <Btn ghost onClick={() => setRemoveOpen(true)} style={{ color: T.red }}>{t("machinery.gaadi_hatao")}</Btn>}
           {onEdit && canMach("edit") && <Btn ghost onClick={() => onEdit(m)}>{t("common.edit_2")}</Btn>}
@@ -1848,7 +1858,10 @@ function MachineDetail({ id, onBack, onChanged, onEdit, onRemoved, canRemove, pa
           )}
 
           <Panel title={t("machinery.service_log")}
-            action={canMachEntry() ? <Btn size="sm" icon={IcWrench} onClick={() => { setSvcEdit(null); setSvcOpen(true); }}>{t("machinery.service")}</Btn> : null}>
+            action={canMachEntry() || canOilAny() ? <div style={{ display: "flex", gap: 6 }}>
+              {canMachEntry() && <Btn size="sm" icon={IcWrench} onClick={() => { setSvcEdit(null); setSvcOpen(true); }}>{t("machinery.service")}</Btn>}
+              {canOilAny() && <Btn size="sm" ghost onClick={() => setOilOpen(true)}>{t("machinery.oil_button")}</Btn>}
+            </div> : null}>
             {services.length === 0 && (
               <Empty>
                {t("machinery.koi_service_darj_nahi")}<br />
@@ -1962,6 +1975,10 @@ function MachineDetail({ id, onBack, onChanged, onEdit, onRemoved, canRemove, pa
         </Panel>
       )}
 
+      {activeTab === "oil" && (
+        <OilPanel data={oil} onAdd={canOilAny() ? () => setOilOpen(true) : null} onCancel={setOilCancel} />
+      )}
+
       {activeTab === "gps" && gps && gps.linked && (
         <>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 14 }}>
@@ -2035,6 +2052,10 @@ function MachineDetail({ id, onBack, onChanged, onEdit, onRemoved, canRemove, pa
         onSaved={() => { load(true); onChanged && onChanged(); }} />
       <MeterForm open={meterOpen} onClose={() => setMeterOpen(false)} machine={m} current={m.meter}
         onSaved={() => { load(true); onChanged && onChanged(); }} />
+      <OilForm open={oilOpen} onClose={() => setOilOpen(false)} machine={m} parties={parties}
+        onSaved={() => { load(true); onChanged && onChanged(); }} />
+      <OilCancelModal row={oilCancel} onClose={() => setOilCancel(null)}
+        onDone={() => { load(true); onChanged && onChanged(); }} />
       <ServiceForm open={svcOpen} onClose={() => { setSvcOpen(false); setSvcEdit(null); }}
         machine={m} parties={parties} existing={svcEdit} templates={svcTemplates}
         onSaved={() => { load(true); onChanged && onChanged(); }} />
@@ -2049,6 +2070,376 @@ function MachineDetail({ id, onBack, onChanged, onEdit, onRemoved, canRemove, pa
   );
 }
 
+
+// ══════════════════════════════════════════════════════════════════
+// 🛢 OIL DAALA — machine me oil (11 Oct 2026, AB)
+// ══════════════════════════════════════════════════════════════════
+// Server: routes/machinery-oil.js. "Store se" DEFAULT — store ka asli issue
+// (stock ghatta hai, FIFO rate). "Vendor se khareeda" = service jaisa paisa
+// (cash = site expense, udhaar = Pending Payments, party zaroori). Change =
+// service task poora → due reset; Top-up se nahi. Rok: store se Warehouse
+// ENTRY, vendor se Machinery ENTRY — button wahi dikhe jo server maane.
+const OIL_TYPES = [
+  { id: "engine", get l() { return t("machinery.oil_engine"); } },
+  { id: "gear", get l() { return t("machinery.oil_gear"); } },
+  { id: "hydraulic", get l() { return t("machinery.oil_hydraulic"); } },
+  { id: "grease", get l() { return t("machinery.oil_grease"); } },
+  { id: "other", get l() { return t("machinery.oil_other"); } },
+];
+const oilUnit = (type) => (type === "grease" ? "kg" : "L");
+// Stock unit ka milaan (server ka utils/unitNorm sameStockUnit jaisa, sirf
+// litre / kg ke liye kaafi) — galat item par Save se pehle hi bata do.
+const OIL_UNIT_ALIAS = { l: ["l", "lt", "ltr", "ltrs", "litre", "litres", "liter", "liters"], kg: ["kg", "kgs", "kilo", "kilos", "kilogram", "kilograms"] };
+const oilUnitOk = (stockUnit, unit) => {
+  const k = String(stockUnit || "").trim().toLowerCase().replace(/[.\s]/g, "");
+  if (!k) return true;
+  return OIL_UNIT_ALIAS[unit === "kg" ? "kg" : "l"].includes(k);
+};
+const canOilStore = () => canEntry("Warehouse");
+const canOilAny = () => canMachEntry() || canOilStore();
+
+function OilForm({ open, onClose, onSaved, machine, parties }) {
+  const [form, setForm] = useState(null);
+  const [f, setF] = useState({});
+  const [items, setItems] = useState(null);
+  const [projects, setProjects] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const upd = (k, v) => setF((p) => ({ ...p, [k]: v }));
+
+  useEffect(() => {
+    if (!open || !machine) return;
+    setError(""); setForm(null); setItems(null);
+    api.get("/machinery/oil/form?equipment_id=" + machine.id).catch(() => null).then((r) => {
+      if (!r || !r.success) { setError(srvMsg(r)); return; }
+      const d = r.data, m = d.machine || {};
+      setForm(d);
+      const mv = m.meter ? (m.meter_unit === "km" ? m.meter.km : m.meter.hours) : null;
+      const s = m.match && m.match.engine ? m.match.engine.suggested : null;
+      setF({
+        oil_type: "engine", action: "change", oil_date: d.today || todayStr(), qty: "", oil_label: "",
+        template_id: s ? String(s) : "", meter: mv != null ? String(mv) : "", note: "",
+        source: d.can_store ? "store" : "vendor", warehouse_id: d.default_store_id ? String(d.default_store_id) : "",
+        wh_material_id: "", project_id: "", payment_mode: "cash", vendor_party_id: null, vendor_name: "",
+        rate: "", amount: "", invoice_no: "", photo_url: "",
+      });
+    });
+  }, [open, machine]);
+
+  // Store badla → uske items (stock + unit)
+  const whId = f.warehouse_id, src = f.source;
+  useEffect(() => {
+    if (!open || src !== "store" || !whId) { setItems(null); return; }
+    setItems(null);
+    api.get("/machinery/oil/store-items?warehouse_id=" + whId).catch(() => null)
+      .then((r) => setItems(r && r.success ? r.data || [] : []));
+  }, [open, whId, src]);
+
+  const m = form ? form.machine || {} : {};
+  const site = m.location && m.location.project_id ? m.location : null;
+  useEffect(() => {
+    if (!open || !form || site || projects !== null) return;
+    api.get("/projects").catch(() => null).then((r) => setProjects(r && r.success ? (r.data || []).filter((p) => p.is_active !== 0) : []));
+  }, [open, form, site, projects]);
+
+  const setType = (ty) => {
+    const s = m.match && m.match[ty] ? m.match[ty].suggested : null;
+    setF((p) => ({ ...p, oil_type: ty, template_id: s ? String(s) : "" }));
+  };
+  const unit = oilUnit(f.oil_type);
+  const item = (items || []).find((x) => String(x.id) === String(f.wh_material_id)) || null;
+  const qtyN = parseFloat(f.qty) || 0;
+  const unitBad = item && !oilUnitOk(item.unit, unit);
+  const short = item && qtyN > Number(item.qty) + 0.0001;
+  const amtN = f.amount !== "" && f.amount != null ? parseFloat(f.amount) || 0 : (parseFloat(f.rate) || 0) * qtyN;
+  const match = m.match ? m.match[f.oil_type] : null;
+  const ambiguous = f.action === "change" && match && match.candidates && match.candidates.length > 1 && !f.template_id;
+
+  const save = async () => {
+    setError("");
+    if (f.oil_type === "other" && !String(f.oil_label || "").trim()) { setError(t("machinery.oil_label_zaroori")); return; }
+    if (!(qtyN > 0)) { setError(t("machinery.oil_qty_galat")); return; }
+    if (ambiguous) { setError(t("machinery.oil_task_select_web")); return; }
+    if (f.source === "store") {
+      if (!f.warehouse_id) { setError(t("machinery.oil_store_zaroori")); return; }
+      if (!item) { setError(t("machinery.oil_item_zaroori")); return; }
+      if (unitBad) { setError(t("machinery.oil_unit_bad", { stock: item.unit, unit })); return; }
+      if (short) { setError(t("machinery.oil_stock_kam", { qty: fmtN(item.qty), unit: item.unit || "" })); return; }
+    } else {
+      if (!(amtN > 0)) { setError(t("machinery.oil_amount_zaroori")); return; }
+      if (f.payment_mode === "credit" && !f.vendor_party_id) { setError(t("machinery.oil_udhaar_party")); return; }
+    }
+    const km = m.meter_unit === "km";
+    const body = {
+      equipment_id: machine.id, oil_type: f.oil_type, oil_label: f.oil_type === "other" ? f.oil_label.trim() : null,
+      qty: qtyN, action: f.action, template_id: f.action === "change" && f.template_id ? Number(f.template_id) : null,
+      oil_date: f.oil_date, note: f.note || null, source: f.source,
+      ...(f.meter !== "" ? (km ? { meter_km: Number(f.meter) } : { meter_hours: Number(f.meter) }) : {}),
+      project_id: !site && f.project_id ? Number(f.project_id) : null,
+      photo_urls: f.photo_url ? [f.photo_url] : [],
+    };
+    if (f.source === "store") Object.assign(body, { warehouse_id: Number(f.warehouse_id), wh_material_id: Number(f.wh_material_id) });
+    else Object.assign(body, {
+      payment_mode: f.payment_mode, vendor_party_id: f.vendor_party_id || null,
+      vendor_name: f.vendor_party_id ? null : (f.vendor_name || null),
+      rate: f.rate !== "" ? parseFloat(f.rate) : null, amount: f.amount !== "" ? parseFloat(f.amount) : null,
+      invoice_no: f.invoice_no || null,
+    });
+    setBusy(true);
+    try {
+      const r = await api.post("/machinery/oil", body);
+      if (r && r.success) { window.alert(r.message || t("machinery.oil_saved")); onSaved(); onClose(); }
+      else setError(srvMsg(r));
+    } catch (e) { setError((e && e.message) || t("common.something_went_wrong")); }
+    setBusy(false);
+  };
+
+  const seg = (on) => ({
+    padding: "7px 12px", borderRadius: 8, border: `1.5px solid ${on ? T.ind : T.b1}`, background: on ? T.indL : T.surface,
+    color: on ? T.ind : T.t2, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
+  });
+  const link = { background: "none", border: "none", color: T.ind, fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", padding: 0, textDecoration: "underline", marginTop: 10 };
+
+  return (
+    <Modal open={open} onClose={onClose} width={720} title={t("machinery.oil_title")}
+      sub={machine ? machine.name + (machine.registration_no ? ` · ${machine.registration_no}` : "") : ""}
+      footer={<><Btn ghost onClick={onClose}>{t("common.cancel")}</Btn>
+        <Btn onClick={save} disabled={busy || !form}>{busy ? t("common.saving") : t("machinery.oil_save")}</Btn></>}>
+      {!form ? (error ? <ErrBox>{error}</ErrBox> : <Empty>{t("common.loading")}</Empty>) : (
+        <>
+          <div style={{ fontSize: 11.5, color: T.t3, marginBottom: 10 }}>
+            {site ? t("machinery.oil_project_site", { name: site.project_name || "—" }) : t("machinery.oil_project_none")}
+          </div>
+          <Field label={t("machinery.oil_kaunsa")}>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {OIL_TYPES.map((o) => <button key={o.id} type="button" onClick={() => setType(o.id)} style={seg(f.oil_type === o.id)}>{o.l}</button>)}
+            </div>
+          </Field>
+          {f.oil_type === "other" && (
+            <input value={f.oil_label || ""} onChange={(e) => upd("oil_label", e.target.value)} placeholder={t("machinery.oil_label_ph")} style={{ ...inp, marginTop: 8 }} />
+          )}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1.4fr 1fr 1fr", gap: 12, marginTop: 12 }}>
+            <Field label={t("machinery.oil_qty_unit", { unit })}>
+              <input value={f.qty || ""} inputMode="decimal" onChange={(e) => upd("qty", e.target.value.replace(/[^0-9.]/g, ""))} style={inp} />
+            </Field>
+            <Field label={t("machinery.oil_kya_kiya")}>
+              <div style={{ display: "flex", gap: 6 }}>
+                <button type="button" onClick={() => upd("action", "change")} style={{ ...seg(f.action === "change"), flex: 1 }}>{t("machinery.oil_change")}</button>
+                <button type="button" onClick={() => upd("action", "topup")} style={{ ...seg(f.action === "topup"), flex: 1 }}>{t("machinery.oil_topup")}</button>
+              </div>
+            </Field>
+            <Field label={t("common.date")}>
+              <input type="date" value={f.oil_date || ""} onChange={(e) => upd("oil_date", e.target.value)} style={inp} />
+            </Field>
+            <Field label={m.meter_unit === "km" ? t("machinery.oil_meter_km") : t("machinery.oil_meter_hrs")}>
+              <input value={f.meter || ""} inputMode="decimal" onChange={(e) => upd("meter", e.target.value.replace(/[^0-9.]/g, ""))} style={inp} />
+            </Field>
+          </div>
+          <div style={{ fontSize: 10.5, color: T.t4, marginTop: 5 }}>{f.action === "change" ? t("machinery.oil_change_hint") : t("machinery.oil_topup_hint")}</div>
+          {f.action === "change" && (m.tasks || []).length > 0 && (
+            <div style={{ marginTop: 10 }}>
+              <Field label={t("machinery.oil_task")} hint={ambiguous ? t("machinery.oil_task_select_web") : t("machinery.oil_task_hint")}>
+                <PickSelect value={f.template_id || ""} onChange={(e) => upd("template_id", e.target.value)} style={inp}>
+                  <option value="">{t("machinery.oil_task_none")}</option>
+                  {m.tasks.map((x) => <option key={x.template_id} value={x.template_id}>{x.task}</option>)}
+                </PickSelect>
+              </Field>
+            </div>
+          )}
+
+          <div style={{ marginTop: 14, padding: "12px 14px", border: `1.5px solid ${T.b1}`, borderRadius: 10, background: T.surfaceB }}>
+            {f.source === "store" ? (
+              <>
+                <div style={{ fontSize: 12.5, fontWeight: 800, color: T.t1 }}>{t("machinery.oil_store_se")}</div>
+                <div style={{ fontSize: 10.5, color: T.t4, margin: "2px 0 10px" }}>{t("machinery.oil_store_hint")}</div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1.4fr", gap: 12 }}>
+                  <Field label={t("machinery.oil_store")}>
+                    <PickSelect value={f.warehouse_id || ""} onChange={(e) => setF((p) => ({ ...p, warehouse_id: e.target.value, wh_material_id: "" }))} style={inp}>
+                      <option value="">{t("machinery.chuno")}</option>
+                      {(form.stores || []).map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+                    </PickSelect>
+                  </Field>
+                  <Field label={t("machinery.oil_item")}>
+                    <PickSelect value={f.wh_material_id || ""} onChange={(e) => upd("wh_material_id", e.target.value)} style={inp} disabled={!f.warehouse_id || items === null}>
+                      <option value="">{items === null && f.warehouse_id ? t("common.loading") : t("machinery.oil_item_select")}</option>
+                      {(items || []).map((x) => <option key={x.id} value={x.id}>{x.name} — {fmtN(x.qty)} {x.unit || ""}</option>)}
+                    </PickSelect>
+                  </Field>
+                </div>
+                {item && (
+                  <div style={{ fontSize: 11.5, marginTop: 6, fontWeight: 600, color: unitBad || short ? T.red : T.t3 }}>
+                    {unitBad ? t("machinery.oil_unit_bad", { stock: item.unit, unit })
+                      : short ? t("machinery.oil_stock_kam", { qty: fmtN(item.qty), unit: item.unit || "" })
+                      : t("machinery.oil_store_me", { qty: fmtN(item.qty), unit: item.unit || "" })}
+                  </div>
+                )}
+                {!site && (
+                  <div style={{ marginTop: 10 }}>
+                    <Field label={t("common.project")} hint={t("machinery.oil_project_pick_hint")}>
+                      <PickSelect value={f.project_id || ""} onChange={(e) => upd("project_id", e.target.value)} style={inp}>
+                        <option value="">{t("machinery.oil_bina_project")}</option>
+                        {(projects || []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                      </PickSelect>
+                    </Field>
+                  </div>
+                )}
+                {form.can_vendor && <button type="button" onClick={() => upd("source", "vendor")} style={link}>{t("machinery.oil_vendor_link")}</button>}
+              </>
+            ) : (
+              <>
+                <div style={{ fontSize: 12.5, fontWeight: 800, color: T.t1 }}>{t("machinery.oil_vendor_se")}</div>
+                <div style={{ fontSize: 10.5, color: T.t4, margin: "2px 0 10px" }}>{t("machinery.oil_vendor_hint")}</div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+                  <Field label={t("machinery.oil_rate_unit", { unit })}>
+                    <input value={f.rate || ""} inputMode="decimal" onChange={(e) => upd("rate", e.target.value.replace(/[^0-9.]/g, ""))} style={inp} />
+                  </Field>
+                  <Field label={t("machinery.oil_amount")} hint={t("machinery.oil_total_x", { x: "₹" + Math.round(amtN).toLocaleString("en-IN") })}>
+                    <input value={f.amount || ""} inputMode="decimal" onChange={(e) => upd("amount", e.target.value.replace(/[^0-9.]/g, ""))} style={inp} />
+                  </Field>
+                  <Field label={t("common.payment")}>
+                    <PickSelect value={f.payment_mode || "cash"} onChange={(e) => upd("payment_mode", e.target.value)} style={inp}>
+                      <option value="cash">{t("machinery.cash_site_se_diya")}</option>
+                      <option value="credit">{t("machinery.udhaar_baad_me_pay")}</option>
+                    </PickSelect>
+                  </Field>
+                  <Field label={f.payment_mode === "credit" ? t("machinery.vendor_party") : t("machinery.vendor_party_2")} span={2}>
+                    <PartyPicker value={f.vendor_party_id} onChange={(v) => upd("vendor_party_id", v)}
+                      parties={parties || []} roles={SERVICE_VENDOR_ROLES} placeholder={t("machinery.chuno")} />
+                  </Field>
+                  <Field label={t("machinery.bill_no")}>
+                    <input value={f.invoice_no || ""} onChange={(e) => upd("invoice_no", e.target.value)} style={inp} />
+                  </Field>
+                  {!f.vendor_party_id && (
+                    <Field label={t("machinery.ya_naam_likho_sirf_cash")} span={2}>
+                      <input value={f.vendor_name || ""} onChange={(e) => upd("vendor_name", e.target.value)} style={inp}
+                        disabled={f.payment_mode === "credit"} placeholder={t("machinery.oil_dukaan_ph")} />
+                    </Field>
+                  )}
+                </div>
+                {form.can_store && <button type="button" onClick={() => upd("source", "store")} style={link}>{t("machinery.oil_store_link")}</button>}
+              </>
+            )}
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1.6fr 1fr", gap: 12, marginTop: 12 }}>
+            <Field label={t("common.note")}>
+              <input value={f.note || ""} onChange={(e) => upd("note", e.target.value)} placeholder={t("machinery.oil_note_ph")} style={inp} />
+            </Field>
+            <FileField value={f.photo_url} onChange={(u) => upd("photo_url", u)} label={f.source === "vendor" ? t("machinery.oil_bill_photo") : t("machinery.oil_photo")} />
+          </div>
+          {error && <ErrBox>{error}</ErrBox>}
+        </>
+      )}
+    </Modal>
+  );
+}
+
+// Oil ka summary + record — machine detail ka "Oil" tab.
+function OilPanel({ data, onAdd, onCancel }) {
+  const rows = (data && data.rows) || [];
+  const summary = (data && data.summary) || [];
+  const isAdmin = ["admin", "super_admin"].includes(currentUser().role);
+  return (
+    <>
+      {summary.filter((x) => x.warning).map((x) => <ErrBox key={"w" + x.name}>{x.warning}</ErrBox>)}
+      <Panel title={t("machinery.oil_summary_title")} style={{ marginBottom: 14, marginTop: summary.some((x) => x.warning) ? 12 : 0 }}
+        action={onAdd ? <Btn size="sm" onClick={onAdd}>{t("machinery.oil_button")}</Btn> : null}>
+        {summary.length === 0 && <Empty>{t("machinery.oil_koi_nahi")}</Empty>}
+        {summary.length > 0 && (
+          <>
+            <Row head cols="1.3fr 1fr 1.4fr 1fr">
+              <span>{t("machinery.oil_col_oil")}</span><span>{t("machinery.oil_col_90")}</span><span>{t("machinery.oil_col_rate")}</span><span>{t("machinery.oil_col_topup")}</span>
+            </Row>
+            {summary.map((x) => (
+              <Row key={x.name} cols="1.3fr 1fr 1.4fr 1fr">
+                <span style={{ fontSize: 12.5, fontWeight: 700, color: x.warning ? T.red : T.t1 }}>{x.name}</span>
+                <span style={{ fontSize: 12 }}>{fmtN(x.qty_90)} {x.unit} · {t("machinery.oil_n_baar", { n: x.entries_90 })}</span>
+                <span style={{ fontSize: 12, fontWeight: 600, color: x.warning ? T.red : T.t1 }}>
+                  {x.rate_90 != null ? `${fmtN(x.rate_90)} ${x.per_text}` : <span style={{ fontSize: 11, fontWeight: 500, color: T.t4 }}>{x.reason_text || "—"}</span>}
+                </span>
+                <span style={{ fontSize: 11.5, color: T.t3 }}>
+                  {x.topup_rate_30 != null ? `${fmtN(x.topup_rate_30)} / ${fmtN(x.topup_rate_90)}` : "—"}
+                </span>
+              </Row>
+            ))}
+            <div style={{ padding: "9px 15px", fontSize: 10.5, color: T.t4 }}>{t("machinery.oil_rate_hint")}</div>
+          </>
+        )}
+      </Panel>
+      <Panel title={t("machinery.oil_history_title")}>
+        {rows.length === 0 && <Empty>{t("machinery.oil_koi_nahi")}</Empty>}
+        {rows.length > 0 && (
+          <>
+            <Row head cols="88px 1.1fr 80px 80px 1.5fr 100px 1fr 80px">
+              <span>{t("common.date")}</span><span>{t("machinery.oil_col_oil")}</span><span>{t("machinery.oil_col_qty")}</span><span>{t("common.type")}</span>
+              <span>{t("machinery.oil_col_source")}</span><span style={{ textAlign: "right" }}>{t("common.amount_2")}</span><span>{t("machinery.oil_col_by")}</span><span />
+            </Row>
+            {rows.map((r) => {
+              const off = r.status === "cancelled";
+              return (
+                <div key={r.id} style={{ opacity: off ? 0.6 : 1 }}>
+                  <Row cols="88px 1.1fr 80px 80px 1.5fr 100px 1fr 80px">
+                    <span style={{ fontSize: 11.5, color: T.t3 }}>{fmtD(r.oil_date)}</span>
+                    <span style={{ fontSize: 12, fontWeight: 600, textDecoration: off ? "line-through" : "none" }}>
+                      {r.name}{r.task && <div style={{ fontSize: 10, color: T.grn, fontWeight: 600 }}>{t("machinery.oil_task_done", { task: r.task })}</div>}
+                    </span>
+                    <span style={{ fontSize: 12 }}>{fmtN(r.qty)} {r.unit}</span>
+                    <span><Pill label={r.action === "change" ? t("machinery.oil_change") : t("machinery.oil_topup")} c={r.action === "change" ? T.ind : T.t3} bg={r.action === "change" ? T.indL : T.sltL} /></span>
+                    <span style={{ fontSize: 11.5, color: T.t3 }}>
+                      {r.source === "store" ? t("machinery.oil_src_store", { name: r.warehouse_name || "—", no: r.issue_no || "" }) : t("machinery.oil_src_vendor", { name: r.vendor || "—" })}
+                      {r.source === "vendor" && r.payment_mode === "credit" && <span> · {r.settlement_status === "paid" ? t("common.paid") : t("common.baaki")}</span>}
+                    </span>
+                    <span style={{ fontSize: 12, fontWeight: 600, textAlign: "right", textDecoration: off ? "line-through" : "none" }}>₹{Math.round(r.amount).toLocaleString("en-IN")}</span>
+                    <span style={{ fontSize: 11.5, color: T.t3 }}>{r.by_name || "—"}</span>
+                    <span>{isAdmin && !off && onCancel && (
+                      <button type="button" onClick={() => onCancel(r)} style={{ background: "none", border: "none", color: T.red, fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", padding: 0 }}>{t("machinery.oil_cancel_btn")}</button>
+                    )}</span>
+                  </Row>
+                  {off && <div style={{ padding: "0 15px 8px", fontSize: 10.5, color: T.red }}>{t("machinery.oil_cancelled_line", { reason: r.cancel_reason || "—", name: r.cancelled_by_name || "—" })}</div>}
+                </div>
+              );
+            })}
+          </>
+        )}
+      </Panel>
+    </>
+  );
+}
+
+// Cancel — Admin + wajah + company ka delete-password (store issue cancel jaisa).
+function OilCancelModal({ row, onClose, onDone }) {
+  const [reason, setReason] = useState("");
+  const [pw, setPw] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  useEffect(() => { setReason(""); setPw(""); setError(""); }, [row]);
+  const go = async () => {
+    if (reason.trim().length < 3) { setError(t("machinery.oil_cancel_reason_min")); return; }
+    setBusy(true); setError("");
+    const r = await api.post("/machinery/oil/" + row.id + "/cancel", { reason: reason.trim(), password: pw }).catch(() => null);
+    setBusy(false);
+    if (r && r.success) { window.alert(r.message); onDone(); onClose(); }
+    else setError(srvMsg(r));
+  };
+  return (
+    <Modal open={!!row} onClose={onClose} width={480} title={t("machinery.oil_cancel_title")}
+      sub={row ? `${row.name} · ${fmtN(row.qty)} ${row.unit} · ${fmtD(row.oil_date)}` : ""}
+      footer={<><Btn ghost onClick={onClose}>{t("common.close")}</Btn>
+        <Btn onClick={go} disabled={busy} c={T.red}>{busy ? t("common.saving") : t("machinery.oil_cancel_btn")}</Btn></>}>
+      <div style={{ fontSize: 11.5, color: T.t3, marginBottom: 10 }}>
+        {row && row.source === "store" ? t("machinery.oil_cancel_hint_store") : t("machinery.oil_cancel_hint_vendor")}
+      </div>
+      <Field label={t("machinery.oil_cancel_reason")}>
+        <textarea rows={2} value={reason} onChange={(e) => setReason(e.target.value)} style={{ ...inp, resize: "vertical" }} />
+      </Field>
+      <div style={{ height: 10 }} />
+      <Field label={t("machinery.oil_cancel_pw")}>
+        <input type="password" autoComplete="new-password" value={pw} onChange={(e) => setPw(e.target.value)} style={inp} />
+      </Field>
+      {error && <ErrBox>{error}</ErrBox>}
+    </Modal>
+  );
+}
 
 // ══════════════════════════════════════════════════════════════════
 // CITY SHIFT — machine kis city me khadi hai
