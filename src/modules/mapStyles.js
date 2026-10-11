@@ -152,9 +152,11 @@ export function kidsShort(line, kids) {
     .map((x) => `${x.f.child.label || x.f.label} ${x.done}/${x.plan}`);
 }
 // [naam, value] — sirf bhare hue, form ke kram me (card / detail ke liye).
-export function propsRows(kind, code, props, hide) {
+export function propsRows(kind, code, props, hide) { return rowsOf(formOf(kind, code), props, hide); }
+// Wahi, seedhe form se (line ki cheez ka form = line ke field ki andar wali detail).
+export function rowsOf(fields, props, hide) {
   const p = props || {};
-  return formOf(kind, code)
+  return (fields || [])
     .filter((f) => !(hide || []).includes(f.key))
     .map((f) => [f.label || f.key, fieldValue(f, p[f.key])])
     .filter((r) => r[1] != null);
@@ -162,9 +164,10 @@ export function propsRows(kind, code, props, hide) {
 
 // Export / register ke liye: [key, kachchi value, label, dikhne wali] — GIS
 // ka column key (har bhasha me ek jaisa), padhne ke liye label.
-export function detailPairs(kind, code, props) {
+export function detailPairs(kind, code, props) { return pairsOf(formOf(kind, code), props); }
+export function pairsOf(fields, props) {
   const p = props || {};
-  const out = formOf(kind, code).filter((f) => !blank(p[f.key]))
+  const out = (fields || []).filter((f) => !blank(p[f.key]))
     .map((f) => [f.key, String(p[f.key]), f.label || f.key, fieldValue(f, p[f.key])]);
   if (Array.isArray(p.poles)) out.push(["poles", String(p.poles.length), t("map_form.pole_ginti"), String(p.poles.length)]);
   return out;
@@ -173,8 +176,9 @@ export function detailPairs(kind, code, props) {
 // Form — type chunte hi uske field. Chhoti list chips me (dobara dabao to
 // khaali), lambi list picker me. hide: jo field is jagah alag se poochhe
 // jaate hain (jaise tender me "Chaudai").
-export function TypeDetailFields({ fields, value, onChange, hide, idPrefix = "tdf" }) {
-  const list = (fields || []).filter((f) => !(hide || []).includes(f.key));
+// noMap: map wale field (nishaan / bagal ki line) yahan nahi — MapPlacePanel me.
+export function TypeDetailFields({ fields, value, onChange, hide, idPrefix = "tdf", noMap }) {
+  const list = (fields || []).filter((f) => !(hide || []).includes(f.key) && !(noMap && isMapField(f)));
   if (!list.length) return null;
   const v = value || {};
   const set = (k, x) => onChange({ ...v, [k]: x });
@@ -283,6 +287,162 @@ export function poleIcon(g, colour) {
   return { path: g.maps.SymbolPath.CIRCLE, scale: 3.6, fillColor: "#FFFFFF", fillOpacity: 1, strokeColor: colour, strokeWeight: 2 };
 }
 
+// ══════════════════════════════════════════════════════════════════════
+// NAKSHA KE NISHAAN (N, 11 Oct 2026) — Prafull: "field ko map me dikhana hai
+// to tick; line me dots, chhota cross line ya square box; kitne, aur auto /
+// fixed distance / manual". Sadak ek line, baaki sab uske field (nali,
+// electrical, pipe — apni detail ke saath; uske andar light / chamber / valve).
+// Ganit server (utils/mapChildren.js, utils/lineOffset.js) jaisa hi — form
+// me jo dikhe wahi save ho.
+// ══════════════════════════════════════════════════════════════════════
+export const MARK_KEYS = ["dot", "box", "cross", "triangle", "diamond", "star", "valve", "pump", "chamber", "tank"];
+export const MARK_COLOURS = ["#2563EB", "#059669", "#D97706", "#EA580C", "#DC2626", "#7C3AED", "#0891B2", "#475569"];
+const MARK_SHAPE = { dot: "circle", box: "square" };
+export const markLabel = (m) => t(`map_form.mark_${m}`);
+// Naksha par chhota nishaan. Cross = line ke aar-paar chhoti lakeer (rot =
+// line ki disha, uttar se ghadi ki sui ki taraf).
+export function markIcon(g, mark, colour, rot) {
+  if (mark === "dot") return { path: g.maps.SymbolPath.CIRCLE, scale: 4.5, fillColor: colour, fillOpacity: 1, strokeColor: "#FFFFFF", strokeWeight: 1.5 };
+  if (mark === "cross") return { path: "M0 -8 L0 8", strokeColor: colour, strokeOpacity: 1, strokeWeight: 3.5, rotation: (Number(rot) || 0) + 90, scale: 1 };
+  const d = SHAPES[MARK_SHAPE[mark] || mark] || SHAPES.square;
+  return { path: d, anchor: new g.maps.Point(12, 12), scale: 0.62, fillColor: colour, fillOpacity: 1, strokeColor: "#FFFFFF", strokeWeight: 1.2 };
+}
+export function MarkIcon({ mark, colour, size = 16 }) {
+  if (mark === "line") return <LineSample colour={colour} width={3} w={size + 8} />;
+  if (mark === "cross") {
+    return (
+      <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M2 12h20" stroke={C.t4} strokeWidth="1.5" />
+        <path d="M12 3v18" stroke={colour} strokeWidth="4" strokeLinecap="round" />
+      </svg>
+    );
+  }
+  if (mark === "dot") return <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="6" fill={colour} /></svg>;
+  return <ShapeIcon shape={MARK_SHAPE[mark] || mark} colour={colour} size={size} />;
+}
+
+// ── Line ka ganit (server jaisa) ──
+const M_LAT = 111320;
+export function offsetSide(coords, dist, side) {
+  const clean = [];
+  for (const p of coords || []) {
+    const lat = Number(p && p.lat), lng = Number(p && p.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+    const last = clean[clean.length - 1];
+    if (last && Math.abs(last.lat - lat) < 1e-9 && Math.abs(last.lng - lng) < 1e-9) continue;
+    clean.push({ lat, lng });
+  }
+  if (clean.length < 2 || !(Math.abs(dist) > 0)) return [];
+  const lat0 = clean.reduce((m, p) => m + p.lat, 0) / clean.length;
+  const kx = M_LAT * Math.cos((lat0 * Math.PI) / 180);
+  const xy = clean.map((p) => ({ x: p.lng * kx, y: p.lat * M_LAT }));
+  const d = Math.abs(dist) * (side === "right" ? -1 : 1);
+  const nrm = (v) => { const L = Math.hypot(v.x, v.y); return L === 0 ? { x: 0, y: 0 } : { x: v.x / L, y: v.y / L }; };
+  const segN = [];
+  for (let i = 0; i + 1 < xy.length; i++) { const dir = nrm({ x: xy[i + 1].x - xy[i].x, y: xy[i + 1].y - xy[i].y }); segN.push({ x: -dir.y, y: dir.x }); }
+  return xy.map((p, i) => {
+    const a = segN[i - 1], b = segN[i];
+    let n;
+    if (!a) n = b; else if (!b) n = a;
+    else { const s2 = nrm({ x: a.x + b.x, y: a.y + b.y }); const c = s2.x * a.x + s2.y * a.y; const k = c > 0.2 ? 1 / c : 5; n = { x: s2.x * k, y: s2.y * k }; }
+    return { lat: (p.y + n.y * d) / M_LAT, lng: (p.x + n.x * d) / kx };
+  });
+}
+// Asli chaudai ki patti (paas zoom par): bayan kinara + ulta daayan.
+export function corridor(coords, w) {
+  if (!(Number(w) > 0)) return [];
+  const l = offsetSide(coords, w / 2, "left"), r = offsetSide(coords, w / 2, "right");
+  return l.length > 1 && r.length > 1 ? [...l, ...r.slice().reverse()] : [];
+}
+const WIDTH_KEYS = ["width_m", "top_width_m", "chaudai", "chaudai_m", "width"];
+export function widthOfProps(pp) {
+  const q = pp || {};
+  for (const k of WIDTH_KEYS) if (Number(q[k]) > 0) return Number(q[k]);
+  return Number(q.dia_mm) > 0 ? Number(q.dia_mm) / 1000 : 0;
+}
+export const linePartsOf = (pts, gaps) => partsOfPts(pts, gaps).filter((p) => p.length >= 2);
+export const lineLenOf = (parts) => lineLen(parts);
+export function pointAtCh(parts, ch) {
+  let cum = 0, last = null;
+  for (const p of parts) {
+    for (let i = 1; i < p.length; i++) {
+      const a = p[i - 1], b = p[i], m = hav(a, b);
+      if (ch <= cum + m) { const f = m > 0 ? Math.max(0, Math.min(1, (ch - cum) / m)) : 0; return { lat: a.lat + (b.lat - a.lat) * f, lng: a.lng + (b.lng - a.lng) * f }; }
+      cum += m; last = b;
+    }
+  }
+  return last;
+}
+// Point → line par sabse paas: { d (m), ch, pt, brg (disha) }.
+export function projectOn(parts, q) {
+  let best = null, cum = 0;
+  for (const p of parts) {
+    for (let i = 1; i < p.length; i++) {
+      const a = p[i - 1], b = p[i], m = hav(a, b);
+      const kx = 111320 * Math.cos((a.lat * Math.PI) / 180), ky = 110540;
+      const bx = (b.lng - a.lng) * kx, by = (b.lat - a.lat) * ky, px = (q.lng - a.lng) * kx, py = (q.lat - a.lat) * ky;
+      const L2 = bx * bx + by * by;
+      const f = L2 ? Math.max(0, Math.min(1, (px * bx + py * by) / L2)) : 0;
+      const d = Math.hypot(px - f * bx, py - f * by);
+      if (!best || d < best.d) best = { d, ch: cum + f * m, pt: { lat: a.lat + (b.lat - a.lat) * f, lng: a.lng + (b.lng - a.lng) * f }, brg: (Math.atan2(bx, by) * 180) / Math.PI };
+      cum += m;
+    }
+  }
+  return best;
+}
+export function chainagesFor(mode, L, o) {
+  const MAXN = 2000;
+  if (mode === "auto") {
+    const n = Math.min(MAXN, Math.round(Number(o.qty) || 0));
+    if (n < 1) return [];
+    if (n === 1) return [L / 2];
+    return Array.from({ length: n }, (_, i) => (L * i) / (n - 1));
+  }
+  const e = Number(o.every_m);
+  if (!(e >= 1)) return [];
+  const s0 = Math.max(0, Math.min(L, Number(o.start_m) || 0));
+  const most = Number(o.cap) >= 1 ? Math.min(MAXN, Math.round(Number(o.cap))) : MAXN;
+  const out = [];
+  for (let c = s0; c <= L + 1 && out.length < most; c += e) out.push(Math.min(c, L));
+  return out;
+}
+// Bagal ki line: sadak ki aadhi chaudai + kinare se chhoot + line ki aadhi chaudai.
+export function sideGeom(pts, gaps, W, gap, w, side) {
+  const off = (Number(W) > 0 ? Number(W) : 7) / 2 + (Number(gap) >= 0 ? Number(gap) : 1) + (Number(w) > 0 ? Number(w) : 0) / 2;
+  const out = [], gs = [];
+  for (const part of linePartsOf(pts, gaps)) {
+    const q = offsetSide(part, off, side);
+    if (q.length < 2) continue;
+    if (out.length) gs.push(out.length);
+    out.push(...q);
+  }
+  return { pts: out, gaps: gs };
+}
+
+// ── Kis field ne banaya (line ki cheez) ──
+// byId: id → item (library / tender list). Cheez ka form = line ke us field
+// ki andar wali detail (sub); purana field (sub nahi) = cheez ke type ka form.
+export function fieldOfItem(it, byId, depth = 0) {
+  if (!it || it.parent_id == null || !byId || depth > 3) return null;
+  const p = byId.get(it.parent_id);
+  if (!p) return null;
+  const key = String(it.child_key || "").split(":")[0];
+  return (formOfItem(p, byId, depth + 1) || []).find((f) => f.key === key && f.child) || null;
+}
+export function formOfItem(it, byId, depth = 0) {
+  const f = fieldOfItem(it, byId, depth);
+  if (f && Array.isArray(f.sub)) return f.sub;
+  return formOf(it.kind, it.atype || "other");
+}
+// Naksha par kaisa: field ka nishaan / rang, warna type ka.
+export function kidLook(it, byId) {
+  const f = fieldOfItem(it, byId);
+  const st = styleOf(it.kind, it.atype || "other");
+  return { f, colour: (f && f.color) || st.colour, mark: f ? (f.type === "side" ? "line" : f.mark || "dot") : null, label: f ? f.label : null };
+}
+// Line ka form — andar ke field bhi (bagal ki line ke) — "Kitne / adhoore" ke liye.
+export function mapFieldsOf(fields) { return (fields || []).filter((f) => (f.type === "child" || f.type === "side") && f.child); }
+
 // ── Taiyar shapes — 24×24 box, beech (12,12) par ─────────────────
 export const SHAPES = {
   circle:   "M12 3a9 9 0 1 0 0.01 0z",
@@ -299,6 +459,8 @@ export const SHAPES = {
   valve:    "M3 5l9 7-9 7zM21 5l-9 7 9 7z",
   // Chamber — chaukor ke andar bindu
   chamber:  "M4 4h16v16H4zM12 9a3 3 0 1 0 0.01 0z",
+  // Plus (Cross nishaan wala type) — 11 Oct 2026
+  cross:    "M10 3h4v7h7v4h-7v7h-4v-7H3v-4h7z",
 };
 export const SHAPE_KEYS = Object.keys(SHAPES);
 const shapeLabel = (s) => t(`map_style.shape_${s}`);
@@ -356,17 +518,18 @@ const C = {
   surface: "#FFFFFF", surfaceB: "#F8F9FB", t1: "#111827", t2: "#374151", t3: "#6B7280", t4: "#9CA3AF",
   b1: "#E5E7EB", ind: "#4B45C4", indL: "#EEF2FF", red: "#DC2626", redL: "#FEF2F2", amb: "#B45309",
 };
-const FIELD_TYPES = [["number", "map_form.ft_number"], ["select", "map_form.ft_select"], ["bool", "map_form.ft_bool"], ["text", "map_form.ft_text"],
-  ["child", "map_form.ft_child"], ["side", "map_form.ft_side"]];
+const FIELD_TYPES = [["number", "map_form.ft_number"], ["select", "map_form.ft_select"], ["bool", "map_form.ft_bool"], ["text", "map_form.ft_text"]];
 const MODES = [["auto", "map_form.mode_auto"], ["interval", "map_form.mode_interval"], ["manual", "map_form.mode_manual"]];
+const isMapField = (f) => !!(f && (f.type === "child" || f.type === "side") && f.child);
+// Field ki ek line ki pehchaan (editor me naam ke neeche).
 const fieldTypeText = (f) => {
   if (f.type === "select") return `${t("map_form.ft_select")}: ${(f.options || []).slice(0, 4).map((o) => o.l).join(", ")}${(f.options || []).length > 4 ? "…" : ""}`;
+  if (f.type === "side" && f.child) return [markLabel("line"), t("map_form.kinare_se_txt", { m: f.offset_m == null ? 1 : f.offset_m })].join(" · ");
   if (f.type === "child" && f.child) {
-    const m = MODES.find((x) => x[0] === f.mode);
-    return [`${t("map_form.ft_child")}: ${f.child.label || typeName("point", f.child.code)}`, m ? t(m[1]) : null,
-      f.every_m ? t("map_form.har_m", { m: f.every_m }) : null].filter(Boolean).join(" · ");
+    const how = f.mode === "interval" && f.every_m ? t("map_form.har_m_shuru", { m: f.every_m, s: f.start_m || 0 })
+      : t((MODES.find((x) => x[0] === f.mode) || MODES[2])[1]);
+    return [markLabel(f.mark || "dot"), how, f.beside ? t("map_form.bagal_me_bhi_short") : null].filter(Boolean).join(" · ");
   }
-  if (f.type === "side" && f.child) return `${t("map_form.ft_side")}: ${f.child.label || typeName("line", f.child.code)}`;
   return t((FIELD_TYPES.find((x) => x[0] === f.type) || FIELD_TYPES[3])[1]);
 };
 // Admin ke naye field ki chaabi — naam se; Hindi naam ho to apni chaabi.
@@ -383,8 +546,6 @@ export function MapLibraryDialog({ onClose }) {
   const [open, setOpen] = useState(null);          // khula row: kind:code
   const [add, setAdd] = useState(null);            // { label, colour, shape, template }
   const [draft, setDraft] = useState(null);        // { key, fields } — form badla, abhi save nahi
-  const [nf, setNf] = useState(null);              // naya field: { label, type, unit, options, required }
-  const [ren, setRen] = useState(null);            // naam badal rahe: { key, label }
   const canEdit = !!(lib && lib.canEdit);
   const canCreate = !!(lib && lib.canCreate);
 
@@ -408,37 +569,8 @@ export function MapLibraryDialog({ onClose }) {
     const r = await api.put("/tenders/alignments/feature-types/style", { kind: row.kind, code: row.code, ...body }).catch(() => null);
     setBusy("");
     if (!r || !r.success) { setErr((r && r.message) || t("map_style.save_nahi_hua")); return; }
-    setDraft(null); setNf(null);
+    setDraft(null);
     await reload();
-  };
-  const addField = (row, fields) => {
-    const label = String(nf.label || "").trim();
-    if (!label) { setErr(t("map_form.field_naam_likho")); return; }
-    let base = slug(label);
-    if (!/^[a-z]/.test(base)) base = `f_${base || Date.now().toString(36)}`.slice(0, 26);
-    const used = new Set(fields.map((f) => f.key));
-    let key = base, n = 2;
-    while (used.has(key)) key = `${base}_${n++}`;
-    const f = { key, label, type: nf.type, required: !!nf.required };
-    if (nf.type === "number" && String(nf.unit || "").trim()) f.unit = String(nf.unit).trim();
-    if (nf.type === "select") {
-      const opts = String(nf.options || "").split(",").map((x) => x.trim()).filter(Boolean);
-      if (!opts.length) { setErr(t("map_form.options_likho")); return; }
-      f.options = opts.map((l, i) => ({ v: slug(l) || `o${i + 1}`, l }));
-    }
-    // Naksha par structure (valve…) / bagal me line (nali…): kis type ki cheez bane.
-    if (nf.type === "child" || nf.type === "side") {
-      const ck = nf.type === "side" ? "line" : "point";
-      if (!nf.code) { setErr(t("map_form.type_chuno")); return; }
-      const tr = typeRow(ck, nf.code);
-      f.child = { kind: ck, code: nf.code, template: (tr && tr.template) || null, label: typeName(ck, nf.code) };
-      if (nf.type === "child") {
-        f.mode = nf.mode || "manual";
-        if (Number(nf.every) > 0) f.every_m = Number(nf.every);
-      } else f.offset_m = Number(nf.offset) >= 0 && nf.offset !== "" ? Number(nf.offset) : 1;
-    }
-    setErr(""); setNf(null);
-    setDraft({ key: `${row.kind}:${row.code}`, fields: [...fields, f] });
   };
   const create = async () => {
     const label = String(add.label || "").trim();
@@ -526,107 +658,11 @@ export function MapLibraryDialog({ onClose }) {
           )}
           {row.fields_custom && <span style={{ fontSize: 10.5, color: C.t4 }}>{t("map_form.form_badla_hua")}</span>}
         </div>
-        {fields.length === 0 && <div style={{ fontSize: 11.5, color: C.t4, paddingLeft: 80 }}>{t("map_form.koi_field_nahi")}</div>}
-        {fields.length > 0 && (
-          <div style={{ border: `1px solid ${C.b1}`, borderRadius: 7, background: C.surface }}>
-            {fields.map((f, i) => (
-              <div key={f.key} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 10px", borderTop: i ? `1px solid ${C.b1}` : "none" }}>
-                <span style={{ flex: 1, minWidth: 0, fontSize: 12, color: C.t1, fontWeight: 600 }}>
-                  {ren && ren.key === f.key ? (
-                    // Naam badalna (11 Oct 2026) — template ka field badla to apna naam ban jaata
-                    // hai (phir bhasha ke saath nahi badalta). Key / value wahi, data nahi chhedta.
-                    <span style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
-                      <input autoFocus value={ren.label} maxLength={60} onChange={(e) => setRen({ ...ren, label: e.target.value })}
-                        onKeyDown={(e) => { if (e.key === "Escape") setRen(null); }} style={{ ...inpS, padding: "4px 7px", width: 180 }} />
-                      <button type="button" style={smallBtn(true)} onClick={() => {
-                        const l = String(ren.label || "").trim();
-                        if (!l) { setErr(t("map_form.field_naam_likho")); return; }
-                        edit(fields.map((x) => (x.key === f.key ? { ...x, label: l, tpl: false } : x))); setRen(null); setErr("");
-                      }}>{t("map_form.theek")}</button>
-                    </span>
-                  ) : (<>
-                    {f.label}{f.unit ? <span style={{ color: C.t4, fontWeight: 400 }}>{` (${f.unit})`}</span> : null}
-                    {canEdit && (
-                      <button type="button" title={t("map_form.naam_badlo")} aria-label={t("map_form.naam_badlo")} disabled={!!busy}
-                        onClick={() => setRen({ key: f.key, label: f.label })}
-                        style={{ background: "none", border: "none", cursor: "pointer", color: C.t4, fontSize: 12, padding: "0 4px" }}>✎</button>
-                    )}
-                  </>)}
-                  <span style={{ display: "block", fontSize: 10.5, color: C.t4, fontWeight: 400, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{fieldTypeText(f)}</span>
-                </span>
-                <label style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, color: C.t3, cursor: canEdit ? "pointer" : "default" }}>
-                  <input type="checkbox" checked={!!f.required} disabled={!canEdit || !!busy}
-                    onChange={(e) => edit(fields.map((x) => (x.key === f.key ? { ...x, required: e.target.checked } : x)))} />
-                  {t("map_form.zaroori")}
-                </label>
-                {canEdit && (
-                  <button type="button" title={t("map_form.field_hatao")} aria-label={t("map_form.field_hatao")} disabled={!!busy}
-                    onClick={() => edit(fields.filter((x) => x.key !== f.key))}
-                    style={{ background: "none", border: "none", cursor: "pointer", color: C.t4, fontSize: 15, lineHeight: 1, padding: "0 2px" }}>×</button>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-        {canEdit && !nf && (
-          <div>
-            <button type="button" onClick={() => setNf({ label: "", type: "number", unit: "", options: "", required: false })} disabled={!!busy}
-              style={{ padding: "5px 10px", borderRadius: 7, border: `1px dashed ${C.ind}`, background: C.surface, color: C.ind, fontSize: 11.5, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
-              + {t("map_form.field_jodo")}
-            </button>
-          </div>
-        )}
-        {canEdit && nf && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: 10, border: `1px dashed ${C.b1}`, borderRadius: 7, background: C.surface }}>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <input autoFocus value={nf.label} maxLength={60} placeholder={t("map_form.field_naam_ph")}
-                onChange={(e) => setNf({ ...nf, label: e.target.value })} style={{ ...inpS, flex: "2 1 160px" }} />
-              <PickSelect value={nf.type} onChange={(e) => setNf({ ...nf, type: e.target.value })} style={{ ...inpS, flex: "1 1 130px" }}>
-                {FIELD_TYPES.map(([v, k]) => <option key={v} value={v}>{t(k)}</option>)}
-              </PickSelect>
-              {nf.type === "number" && (
-                <input value={nf.unit} maxLength={12} placeholder={t("map_form.unit_ph")}
-                  onChange={(e) => setNf({ ...nf, unit: e.target.value })} style={{ ...inpS, flex: "0 1 100px" }} />
-              )}
-            </div>
-            {nf.type === "select" && (
-              <input value={nf.options} maxLength={600} placeholder={t("map_form.options_ph")}
-                onChange={(e) => setNf({ ...nf, options: e.target.value })} style={inpS} />
-            )}
-            {(nf.type === "child" || nf.type === "side") && (
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                <span style={{ fontSize: 11, color: C.t3 }}>{nf.type === "side" ? t("map_form.kaunsi_line") : t("map_form.kaunsa_structure")}</span>
-                <PickSelect value={nf.code || ""} onChange={(e) => setNf({ ...nf, code: e.target.value })} style={{ ...inpS, minWidth: 170 }}>
-                  <option value="" disabled>{t("map_form.type_chuno")}</option>
-                  {typesFor(nf.type === "side" ? "line" : "point").map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-                </PickSelect>
-                {nf.type === "child" && (<>
-                  <PickSelect value={nf.mode || "manual"} onChange={(e) => setNf({ ...nf, mode: e.target.value })} style={{ ...inpS, minWidth: 120 }}>
-                    {MODES.map(([v, k]) => <option key={v} value={v}>{t(k)}</option>)}
-                  </PickSelect>
-                  <input value={nf.every || ""} inputMode="decimal" placeholder={t("map_form.har_kitne_m")} maxLength={6}
-                    onChange={(e) => setNf({ ...nf, every: e.target.value.replace(/[^\d.]/g, "") })} style={{ ...inpS, width: 110 }} />
-                </>)}
-                {nf.type === "side" && (
-                  <input value={nf.offset ?? ""} inputMode="decimal" placeholder={t("map_form.kinare_se_m")} maxLength={5}
-                    onChange={(e) => setNf({ ...nf, offset: e.target.value.replace(/[^\d.]/g, "") })} style={{ ...inpS, width: 140 }} />
-                )}
-              </div>
-            )}
-            <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11.5, color: C.t2, cursor: "pointer" }}>
-              <input type="checkbox" checked={!!nf.required} onChange={(e) => setNf({ ...nf, required: e.target.checked })} />
-              {t("map_form.zaroori_note")}
-            </label>
-            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-              <button type="button" onClick={() => setNf(null)} style={smallBtn(false)}>{t("common.cancel")}</button>
-              <button type="button" onClick={() => addField(row, fields)} style={smallBtn(true)}>{t("map_style.jodo")}</button>
-            </div>
-          </div>
-        )}
+        <FieldsEditor key={key} fields={fields} onChange={edit} canEdit={canEdit} busy={!!busy} setErr={setErr} />
         {canEdit && (dirty || (row.fields_custom && row.template)) && (
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             {dirty && <button type="button" disabled={!!busy} onClick={() => saveForm(row, { fields: draft.fields })} style={smallBtn(true)}>{t("map_form.form_save")}</button>}
-            {dirty && <button type="button" disabled={!!busy} onClick={() => { setDraft(null); setNf(null); }} style={smallBtn(false)}>{t("common.cancel")}</button>}
+            {dirty && <button type="button" disabled={!!busy} onClick={() => setDraft(null)} style={smallBtn(false)}>{t("common.cancel")}</button>}
             {!dirty && row.fields_custom && row.template && (
               <button type="button" disabled={!!busy} onClick={() => saveForm(row, { fields: null })} style={smallBtn(false)}>{t("map_form.template_wapas")}</button>
             )}
@@ -649,7 +685,7 @@ export function MapLibraryDialog({ onClose }) {
         </div>
         <div style={{ display: "flex", gap: 4, padding: "10px 18px 0" }}>
           {[["line", "map_style.tab_line"], ["point", "map_style.tab_point"], ["area", "map_style.tab_area"]].map(([k, l]) => (
-            <button key={k} type="button" onClick={() => { setTab(k); setOpen(null); setAdd(null); setDraft(null); setNf(null); setRen(null); }}
+            <button key={k} type="button" onClick={() => { setTab(k); setOpen(null); setAdd(null); setDraft(null); }}
               style={{ padding: "7px 14px", border: "none", borderBottom: `2px solid ${tab === k ? C.ind : "transparent"}`, background: "none", cursor: "pointer",
                 fontFamily: "inherit", fontSize: 12.5, fontWeight: tab === k ? 700 : 500, color: tab === k ? C.ind : C.t3 }}>{t(l)}</button>
           ))}
@@ -666,7 +702,7 @@ export function MapLibraryDialog({ onClose }) {
               const isOpen = open === key;
               return (
                 <div key={key} style={{ borderTop: i ? `1px solid ${C.b1}` : "none" }}>
-                  <div role="button" tabIndex={0} onClick={() => { setOpen(isOpen ? null : key); setNf(null); setRen(null); }} onKeyDown={(e) => { if (e.key === "Enter") { setOpen(isOpen ? null : key); setNf(null); } }}
+                  <div role="button" tabIndex={0} onClick={() => setOpen(isOpen ? null : key)} onKeyDown={(e) => { if (e.key === "Enter") setOpen(isOpen ? null : key); }}
                     style={{ display: "flex", alignItems: "center", gap: 12, padding: "9px 14px", cursor: "pointer", background: isOpen ? C.indL : C.surface }}>
                     <span style={{ width: 26, display: "flex", justifyContent: "center" }}>
                       {row.kind === "point" ? <ShapeIcon shape={row.shape} colour={row.colour} size={20} />
@@ -746,6 +782,274 @@ export function MapLibraryDialog({ onClose }) {
 // extraHead: tender ke apne column (Site, Chainage, Chaudai…). Type chuno to
 // har field ka column; "Sab type" me ek "Detail" column. CSV wahi table.
 // ══════════════════════════════════════════════════════════════════
+// ── Form ke field (L 10 Oct + N 11 Oct 2026) — ek hi editor har level par:
+// line ka form; uske map wale field ki "andar ki detail" (nali ki chaudai,
+// electrical par light / chamber); point ki detail (valve ka dia).
+// under: null = line ka form, "side" = bagal ki line ke andar (point nishaan
+// chalte hain, line nahi), "child" = point ke andar (sirf saade field).
+const newKeyFor = (label, list) => {
+  let base = slug(label);
+  if (!/^[a-z]/.test(base)) base = `f_${base || Date.now().toString(36)}`.slice(0, 26);
+  const used = new Set((list || []).map((f) => f.key));
+  let key = base, n = 2;
+  while (used.has(key)) key = `${base}_${n++}`;
+  return key;
+};
+// Field ke naam se library ka type (pehle se ho to wahi — "Valve", "Nali"…);
+// na ho to naam se naya (server bana deta hai).
+function pickCode(kind, label) {
+  const want = String(label || "").trim().toLowerCase();
+  const hit = _lib && _lib.list.find((x) => x.kind === kind
+    && (String(x.label || "").toLowerCase() === want || String(typeName(kind, x.code)).toLowerCase() === want || x.code === slug(label)));
+  return hit ? hit.code : (slug(label) || "item").slice(0, 30);
+}
+const mapDraftOf = (f) => ({ mark: f.type === "side" ? "line" : (f.mark || "dot"), color: f.color || "", mode: f.mode || "auto",
+  every: f.every_m == null ? "" : String(f.every_m), start: f.start_m == null ? "" : String(f.start_m), beside: !!f.beside,
+  offset: f.offset_m == null ? "" : String(f.offset_m) });
+const MAP_DRAFT0 = { mark: "dot", color: "", mode: "auto", every: "", start: "", beside: false, offset: "" };
+function applyMapDraft(f, d) {
+  const line = d.mark === "line";
+  const kind = line ? "line" : "point";
+  const same = f.child && f.child.kind === kind;
+  const code = same ? f.child.code : pickCode(kind, f.label);
+  const tr = typeRow(kind, code);
+  const out = { ...f, type: line ? "side" : "child",
+    child: { kind, code, template: (tr && tr.template) || (same && f.child.template) || null, label: (same && f.child.label) || null },
+    sub: Array.isArray(f.sub) ? f.sub : [] };
+  if (d.color) out.color = d.color; else delete out.color;
+  delete out.unit; delete out.min; delete out.max;
+  if (line) {
+    out.offset_m = d.offset === "" || d.offset == null ? 1 : Number(d.offset);
+    out.options = ["none", "left", "right", "both"].map((v) => ({ v, l: v }));
+    ["mark", "mode", "every_m", "start_m", "beside"].forEach((k) => delete out[k]);
+    out.sub = out.sub.filter((x) => x.type !== "side");
+  } else {
+    out.mark = d.mark || "dot"; out.mode = d.mode || "auto";
+    out.every_m = Number(d.every) > 0 ? Number(d.every) : null;
+    out.start_m = d.start === "" || d.start == null ? null : Number(d.start);
+    if (d.beside) out.beside = true; else delete out.beside;
+    delete out.offset_m; delete out.options;
+    out.sub = out.sub.filter((x) => !isMapField(x));
+  }
+  return out;
+}
+function MapSettings({ d, set, allowLine }) {
+  const colour = d.color || (d.mark === "line" ? "#2563EB" : "#475569");
+  const inp = { padding: "5px 8px", borderRadius: 7, border: `1.5px solid ${C.b1}`, fontSize: 12, fontFamily: "inherit", width: 76, boxSizing: "border-box" };
+  const chip = (on) => ({ display: "inline-flex", alignItems: "center", gap: 5, padding: "3px 9px", borderRadius: 20, fontSize: 11.5, fontFamily: "inherit", cursor: "pointer",
+    border: `1px solid ${on ? C.ind : C.b1}`, background: on ? C.indL : C.surface, color: on ? C.ind : C.t2, fontWeight: on ? 700 : 500 });
+  const row = (label, body) => (
+    <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+      <span style={{ fontSize: 11, color: C.t3, width: 84, flexShrink: 0, paddingTop: 4 }}>{label}</span>
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", minWidth: 0 }}>{body}</div>
+    </div>
+  );
+  const marks = allowLine ? [...MARK_KEYS, "line"] : MARK_KEYS;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: "8px 10px", border: `1px solid ${C.b1}`, borderRadius: 7, background: C.surfaceB }}>
+      {row(t("map_form.nishaan"), marks.map((m) => (
+        <button key={m} type="button" onClick={() => set({ ...d, mark: m })} style={chip(d.mark === m)}>
+          <MarkIcon mark={m} colour={colour} size={14} />{markLabel(m)}
+        </button>
+      )))}
+      {row(t("map_style.rang"), MARK_COLOURS.map((c) => (
+        <button key={c} type="button" aria-label={c} onClick={() => set({ ...d, color: d.color === c ? "" : c })}
+          style={{ width: 20, height: 20, borderRadius: "50%", background: c, cursor: "pointer", padding: 0,
+            border: d.color === c ? `2px solid ${C.t1}` : "2px solid #FFFFFF", boxShadow: `0 0 0 1px ${C.b1}` }} />
+      )))}
+      {d.mark === "line" ? row(t("map_form.kinare_se_m"), (<>
+        <input value={d.offset} inputMode="decimal" maxLength={5} placeholder="1" onChange={(e) => set({ ...d, offset: e.target.value.replace(/[^\d.]/g, "") })} style={inp} />
+        <span style={{ fontSize: 11, color: C.t4 }}>{t("map_form.kinare_note")}</span>
+      </>)) : (<>
+        {row(t("map_form.kaise_lagega"), (<>
+          {MODES.map(([v, k]) => <button key={v} type="button" onClick={() => set({ ...d, mode: v })} style={chip(d.mode === v)}>{t(k)}</button>)}
+          {d.mode === "interval" && (<>
+            <span style={{ fontSize: 11.5, color: C.t3 }}>{t("map_form.har")}</span>
+            <input value={d.every} inputMode="decimal" maxLength={6} placeholder="100" onChange={(e) => set({ ...d, every: e.target.value.replace(/[^\d.]/g, "") })} style={inp} />
+            <span style={{ fontSize: 11.5, color: C.t3 }}>{t("map_form.m_shuru")}</span>
+            <input value={d.start} inputMode="decimal" maxLength={6} placeholder="0" onChange={(e) => set({ ...d, start: e.target.value.replace(/[^\d.]/g, "") })} style={inp} />
+            <span style={{ fontSize: 11.5, color: C.t3 }}>m</span>
+          </>)}
+        </>))}
+        <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11.5, color: C.t2, cursor: "pointer", paddingLeft: 94 }}>
+          <input type="checkbox" checked={!!d.beside} onChange={(e) => set({ ...d, beside: e.target.checked })} />
+          {t("map_form.bagal_me_bhi")}
+        </label>
+      </>)}
+    </div>
+  );
+}
+export function FieldsEditor({ fields, onChange, canEdit, busy, setErr, under = null, depth = 0 }) {
+  const [nf, setNf] = useState(null);            // naya field: { label, type, unit, options, required, map, md }
+  const [ren, setRen] = useState(null);          // naam badal rahe: { key, label }
+  const [mapEdit, setMapEdit] = useState(null);  // nishaan badal rahe: { key, d }
+  const [openSub, setOpenSub] = useState(() => new Set());
+  const allowMap = under !== "child";
+  const allowLine = under == null;
+  const edit = onChange;
+  const inpS = { padding: "6px 9px", borderRadius: 7, border: `1.5px solid ${C.b1}`, fontSize: 12.5, fontFamily: "inherit", boxSizing: "border-box", background: C.surface };
+  const btn = (primary) => ({ padding: "5px 11px", borderRadius: 7, fontSize: 12, fontFamily: "inherit", cursor: "pointer", fontWeight: primary ? 700 : 500,
+    border: primary ? "none" : `1px solid ${C.b1}`, background: primary ? C.ind : C.surface, color: primary ? "#fff" : C.t2 });
+  const icon = { background: "none", border: "none", cursor: "pointer", color: C.t4, fontSize: 12, padding: "0 4px", fontFamily: "inherit" };
+  const add = () => {
+    const label = String(nf.label || "").trim();
+    if (!label) { setErr(t("map_form.field_naam_likho")); return; }
+    let f = { key: newKeyFor(label, fields), label, type: nf.type, required: !!nf.required };
+    if (nf.type === "number" && !nf.map && String(nf.unit || "").trim()) f.unit = String(nf.unit).trim();
+    if (nf.type === "select") {
+      const opts = String(nf.options || "").split(",").map((x) => x.trim()).filter(Boolean);
+      if (!opts.length) { setErr(t("map_form.options_likho")); return; }
+      f.options = opts.map((l, i) => ({ v: slug(l) || `o${i + 1}`, l }));
+    }
+    if (nf.type === "number" && nf.map && allowMap) f = applyMapDraft(f, nf.md);
+    setErr(""); setNf(null);
+    edit([...fields, f]);
+    if (isMapField(f)) setOpenSub((o) => new Set([...o, f.key]));
+  };
+  // Bagal ki line ki aam detail — ek click me.
+  const quick = [["chaudai", "map_form.q_chaudai", { type: "number", unit: "m" }], ["gehrai", "map_form.q_gehrai", { type: "number", unit: "m" }],
+    ["kism", "map_form.q_kism", { type: "select", options: [{ v: "khuli", l: t("map_form.o_khuli") }, { v: "dhaki", l: t("map_form.o_dhaki") }] }]];
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      {fields.length === 0 && <div style={{ fontSize: 11.5, color: C.t4, paddingLeft: depth ? 0 : 80 }}>{t("map_form.koi_field_nahi")}</div>}
+      {fields.length > 0 && (
+        <div style={{ border: `1px solid ${C.b1}`, borderRadius: 7, background: C.surface }}>
+          {fields.map((f, i) => {
+            const mf = isMapField(f);
+            const subOpen = openSub.has(f.key);
+            const col = f.color || (mf ? styleOf(f.child.kind, f.child.code).colour : C.t4);
+            return (
+              <div key={f.key} style={{ borderTop: i ? `1px solid ${C.b1}` : "none" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px" }}>
+                  {mf && <MarkIcon mark={f.type === "side" ? "line" : f.mark || "dot"} colour={col} size={15} />}
+                  <span style={{ flex: 1, minWidth: 0, fontSize: 12, color: C.t1, fontWeight: 600 }}>
+                    {ren && ren.key === f.key ? (
+                      // Naam badalna — template ka field badla to apna naam ban jaata hai.
+                      <span style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
+                        <input autoFocus value={ren.label} maxLength={60} onChange={(e) => setRen({ ...ren, label: e.target.value })}
+                          onKeyDown={(e) => { if (e.key === "Escape") setRen(null); }} style={{ ...inpS, padding: "4px 7px", width: 180 }} />
+                        <button type="button" style={btn(true)} onClick={() => {
+                          const l = String(ren.label || "").trim();
+                          if (!l) { setErr(t("map_form.field_naam_likho")); return; }
+                          edit(fields.map((x) => (x.key === f.key ? { ...x, label: l, tpl: false } : x))); setRen(null); setErr("");
+                        }}>{t("map_form.theek")}</button>
+                      </span>
+                    ) : (<>
+                      {f.label}{f.unit ? <span style={{ color: C.t4, fontWeight: 400 }}>{` (${f.unit})`}</span> : null}
+                      {canEdit && (
+                        <button type="button" title={t("map_form.naam_badlo")} aria-label={t("map_form.naam_badlo")} disabled={busy}
+                          onClick={() => setRen({ key: f.key, label: f.label })} style={icon}>✎</button>
+                      )}
+                    </>)}
+                    <span style={{ display: "block", fontSize: 10.5, color: C.t4, fontWeight: 400, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{fieldTypeText(f)}</span>
+                  </span>
+                  {canEdit && allowMap && f.type === "number" && (
+                    <button type="button" disabled={busy} onClick={() => setMapEdit({ key: f.key, d: { ...MAP_DRAFT0 } })} style={{ ...icon, color: C.ind, fontSize: 11.5 }}>
+                      {t("map_form.map_par_dikhao")}
+                    </button>
+                  )}
+                  {canEdit && mf && (
+                    <button type="button" disabled={busy} onClick={() => setMapEdit(mapEdit && mapEdit.key === f.key ? null : { key: f.key, d: mapDraftOf(f) })} style={{ ...icon, color: C.ind, fontSize: 11.5 }}>
+                      {t("map_form.nishaan_badlo")}
+                    </button>
+                  )}
+                  {mf && (
+                    <button type="button" onClick={() => setOpenSub((o) => { const n = new Set(o); if (n.has(f.key)) n.delete(f.key); else n.add(f.key); return n; })}
+                      style={{ ...icon, color: C.t2, fontSize: 11.5 }}>
+                      {t("map_form.andar_detail_n", { n: (f.sub || []).length })} {subOpen ? "▾" : "▸"}
+                    </button>
+                  )}
+                  <label style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, color: C.t3, cursor: canEdit ? "pointer" : "default" }}>
+                    <input type="checkbox" checked={!!f.required} disabled={!canEdit || busy}
+                      onChange={(e) => edit(fields.map((x) => (x.key === f.key ? { ...x, required: e.target.checked } : x)))} />
+                    {t("map_form.zaroori")}
+                  </label>
+                  {canEdit && (
+                    <button type="button" title={t("map_form.field_hatao")} aria-label={t("map_form.field_hatao")} disabled={busy}
+                      onClick={() => edit(fields.filter((x) => x.key !== f.key))}
+                      style={{ ...icon, fontSize: 15, lineHeight: 1, padding: "0 2px" }}>×</button>
+                  )}
+                </div>
+                {mapEdit && mapEdit.key === f.key && (
+                  <div style={{ padding: "0 10px 8px", display: "flex", flexDirection: "column", gap: 6 }}>
+                    <MapSettings d={mapEdit.d} set={(d) => setMapEdit({ key: f.key, d })} allowLine={allowLine} />
+                    <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+                      <button type="button" onClick={() => setMapEdit(null)} style={btn(false)}>{t("common.cancel")}</button>
+                      <button type="button" onClick={() => {
+                        edit(fields.map((x) => (x.key === f.key ? applyMapDraft(x, mapEdit.d) : x)));
+                        setMapEdit(null); setOpenSub((o) => new Set([...o, f.key]));
+                      }} style={btn(true)}>{t("map_form.theek")}</button>
+                    </div>
+                  </div>
+                )}
+                {mf && subOpen && (
+                  <div style={{ padding: "2px 10px 10px 28px", display: "flex", flexDirection: "column", gap: 6 }}>
+                    <span style={{ fontSize: 10.5, color: C.t3 }}>{t(f.type === "side" ? "map_form.andar_note_line" : "map_form.andar_note_point", { name: f.label })}</span>
+                    <FieldsEditor fields={Array.isArray(f.sub) ? f.sub : []} canEdit={canEdit} busy={busy} setErr={setErr} under={f.type} depth={depth + 1}
+                      onChange={(sub) => edit(fields.map((x) => (x.key === f.key ? { ...x, sub } : x)))} />
+                    {canEdit && f.type === "side" && (
+                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                        {quick.filter(([k]) => !(f.sub || []).some((x) => x.key === k || (k === "chaudai" && x.key === "width_m") || (k === "gehrai" && x.key === "depth_m"))).map(([k, lk, extra]) => (
+                          <button key={k} type="button" disabled={busy} onClick={() => edit(fields.map((x) => (x.key === f.key ? { ...x, sub: [...(x.sub || []), { key: k, label: t(lk), required: false, ...extra }] } : x)))}
+                            style={{ padding: "3px 9px", borderRadius: 20, border: `1px dashed ${C.b1}`, background: C.surface, color: C.t2, fontSize: 11, cursor: "pointer", fontFamily: "inherit" }}>
+                            + {t(lk)}{extra.unit ? ` (${extra.unit})` : ""}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {canEdit && !nf && (
+        <div>
+          <button type="button" onClick={() => setNf({ label: "", type: "number", unit: "", options: "", required: false, map: false, md: { ...MAP_DRAFT0 } })} disabled={busy}
+            style={{ padding: "5px 10px", borderRadius: 7, border: `1px dashed ${C.ind}`, background: C.surface, color: C.ind, fontSize: 11.5, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
+            + {t("map_form.field_jodo")}
+          </button>
+        </div>
+      )}
+      {canEdit && nf && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: 10, border: `1px dashed ${C.b1}`, borderRadius: 7, background: C.surface }}>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <input autoFocus value={nf.label} maxLength={60} placeholder={t("map_form.field_naam_ph")}
+              onChange={(e) => setNf({ ...nf, label: e.target.value })} style={{ ...inpS, flex: "2 1 160px" }} />
+            <PickSelect value={nf.type} onChange={(e) => setNf({ ...nf, type: e.target.value })} style={{ ...inpS, flex: "1 1 130px" }}>
+              {FIELD_TYPES.map(([v, k]) => <option key={v} value={v}>{t(k)}</option>)}
+            </PickSelect>
+            {nf.type === "number" && !nf.map && (
+              <input value={nf.unit} maxLength={12} placeholder={t("map_form.unit_ph")}
+                onChange={(e) => setNf({ ...nf, unit: e.target.value })} style={{ ...inpS, flex: "0 1 100px" }} />
+            )}
+          </div>
+          {nf.type === "select" && (
+            <input value={nf.options} maxLength={600} placeholder={t("map_form.options_ph")}
+              onChange={(e) => setNf({ ...nf, options: e.target.value })} style={inpS} />
+          )}
+          {nf.type === "number" && allowMap && (
+            <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, color: C.t1, fontWeight: 600, cursor: "pointer" }}>
+              <input type="checkbox" checked={!!nf.map} onChange={(e) => setNf({ ...nf, map: e.target.checked })} />
+              {t("map_form.map_par_dikhana")}
+            </label>
+          )}
+          {nf.type === "number" && nf.map && allowMap && <MapSettings d={nf.md} set={(md) => setNf({ ...nf, md })} allowLine={allowLine} />}
+          <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11.5, color: C.t2, cursor: "pointer" }}>
+            <input type="checkbox" checked={!!nf.required} onChange={(e) => setNf({ ...nf, required: e.target.checked })} />
+            {t("map_form.zaroori_note")}
+          </label>
+          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+            <button type="button" onClick={() => setNf(null)} style={btn(false)}>{t("common.cancel")}</button>
+            <button type="button" onClick={add} style={btn(true)}>{t("map_style.jodo")}</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function RegisterDialog({ title, rows, extraHead, canExport, onClose }) {
   const [pick, setPick] = useState("");
   useEffect(() => {
@@ -873,60 +1177,207 @@ const partsOfPts = (pts, gaps) => {
 const lineLen = (parts) => parts.reduce((m, p) => m + p.slice(1).reduce((n, q, i) => n + hav(p[i], q), 0), 0);
 const fmtChain = (m) => `${Math.floor(m / 1000)}+${String(Math.round(m % 1000)).padStart(3, "0")}`;
 
-export function ChildEditor({ line, kids, api, loadMaps, canEdit, onChanged, onClose }) {
-  const fields = childFields(line.kind, line.atype || "other");
-  const pts = Array.isArray(line.pts) ? line.pts : [];
-  const parts = partsOfPts(pts, line.gaps);
-  const L = lineLen(parts);
-  const sum = kidsSummary(line, kids);
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState("");
+// ══════════════════════════════════════════════════════════════════════
+// FORM KE SAATH NISHAAN LAGAO (N, 11 Oct 2026) — alag "Line items" dialog
+// nahi: number / Left-Right bharte hi isi form ke naksha par dikhta hai,
+// Manual me usi naksha par click, kisi bhi nishaan ko pakad kar khiskao.
+// Save par ek hi request me (place) — server wahi ganit chalata hai.
+//
+// place (form ki state):
+//   point field → { mode, qty, every, start, cap, points: [{ id?, lat, lng }], props, propsDirty }
+//   line field  → { gap, same, left: { props, place }, right: { props, place } }
+// ══════════════════════════════════════════════════════════════════════
+const numOr = (v, d = null) => (v === "" || v == null || !Number.isFinite(Number(v)) ? d : Number(v));
+const stripPlace = (p) => { const o = { ...(p || {}) }; delete o._place; return o; };
+const numProps = (p) => cleanProps(stripPlace(p)) || {};
+const sameProps = (a, b) => JSON.stringify(numProps(a)) === JSON.stringify(numProps(b));
+// kidsAt(parentId, key) → [{ id, pts, props }] — line ki maujooda cheezein
+// (library / tender list se). parentId null = nayi line.
+export function initPlace(fields, props, parentId, kidsAt) {
+  const p = props || {}, meta = p._place || {};
+  const out = {};
+  const at = (key) => (parentId == null || !kidsAt ? [] : kidsAt(parentId, key) || []);
+  for (const f of mapFieldsOf(fields)) {
+    const m = meta[f.key] || {};
+    if (f.type === "child") {
+      const have = at(f.key).filter((k) => Array.isArray(k.pts) && k.pts[0]);
+      out[f.key] = { mode: m.mode || f.mode || "auto", qty: blank(p[f.key]) ? "" : String(p[f.key]),
+        every: m.every_m != null ? String(m.every_m) : f.every_m != null ? String(f.every_m) : "",
+        start: m.start_m != null ? String(m.start_m) : f.start_m != null ? String(f.start_m) : "0",
+        cap: m.cap != null ? String(m.cap) : "",
+        points: have.map((k) => ({ id: k.id, lat: Number(k.pts[0].lat), lng: Number(k.pts[0].lng) })),
+        props: have.length ? stripPlace(have[0].props) : {}, propsDirty: false };
+    } else {
+      const side = (sd) => {
+        const row = at(`${f.key}:${sd}`)[0] || null;
+        return { id: row ? row.id : null, props: row ? stripPlace(row.props) : {},
+          place: initPlace(Array.isArray(f.sub) ? f.sub : [], row ? row.props : null, row ? row.id : null, kidsAt) };
+      };
+      const left = side("left"), right = side("right");
+      out[f.key] = { gap: m.gap_m != null ? String(m.gap_m) : f.offset_m != null ? String(f.offset_m) : "1",
+        same: sameProps(left.props, right.props), left, right };
+    }
+  }
+  return out;
+}
+// "Dono taraf ek jaisi": Right ki setting Left wali, par uski apni purani row (id).
+const mergeSame = (lp, rp) => {
+  const o = {};
+  for (const k of Object.keys(lp || {})) o[k] = { ...lp[k], points: (rp && rp[k] && rp[k].points) || [] };
+  return o;
+};
+function spotsOf(parts, L, st) {
+  let list;
+  if (st.mode === "manual") list = (st.points || []).map((q) => ({ id: q.id || null, pt: { lat: q.lat, lng: q.lng } }));
+  else {
+    const chs = st.mode === "auto" ? chainagesFor("auto", L, { qty: numOr(st.qty, 0) })
+      : chainagesFor("interval", L, { every_m: numOr(st.every, 0), start_m: numOr(st.start, 0), cap: numOr(st.cap, null) });
+    // Purani row isi kram me khiskti hai (server bhi yahi karta hai) — khiskane par id bachi rahe.
+    const old = (st.points || []).map((q) => ({ ...q, ch: (projectOn(parts, q) || {}).ch || 0 })).sort((a, b) => a.ch - b.ch);
+    list = chs.map((ch, i) => ({ id: old[i] ? old[i].id : null, pt: pointAtCh(parts, ch) })).filter((x) => x.pt);
+  }
+  return list.map((x) => { const h = projectOn(parts, x.pt); return { ...x, brg: h ? h.brg : 0, ch: h ? h.ch : 0, d: h ? h.d : 0 }; });
+}
+export function buildPreview(line, fields, detail, place, W) {
+  const out = { marks: [], lines: [], counts: {}, parts: {}, fields: {} };
+  const walk = (pts, gaps, flds, det, pl, path, width, lock) => {
+    const parts = linePartsOf(pts, gaps);
+    if (!parts.length) return;
+    out.parts[path] = parts;
+    const L = lineLenOf(parts);
+    for (const f of mapFieldsOf(flds)) {
+      const st = pl && pl[f.key];
+      if (!st) continue;
+      const colour = f.color || styleOf(f.child.kind, f.child.code).colour;
+      const fk = path + f.key;
+      if (f.type === "child") {
+        const sp = spotsOf(parts, L, st);
+        out.counts[fk] = sp.length;
+        out.fields[fk] = f;
+        sp.forEach((x, i) => out.marks.push({ fk, f, i, id: x.id, pt: x.pt, brg: x.brg, ch: x.ch, mark: f.mark || "dot", colour, lock }));
+      } else {
+        const v = (det || {})[f.key];
+        const want = v === "both" ? ["left", "right"] : v === "left" || v === "right" ? [v] : [];
+        const same = st.same && v === "both";
+        for (const sd of want) {
+          const src = same ? st.left : st[sd];
+          const w = widthOfProps(numProps(src.props));
+          const g = sideGeom(pts, gaps, width, numOr(st.gap, 1), w, sd);
+          if (g.pts.length < 2) continue;
+          const lk = `${fk}:${sd}`;
+          out.lines.push({ fk: lk, f, colour, pts: g.pts, gaps: g.gaps, w });
+          const subPl = same && sd === "right" ? mergeSame(st.left.place, st.right.place) : src.place;
+          walk(g.pts, g.gaps, f.sub || [], numProps(src.props), subPl, lk + "/", 0, same && sd === "right");
+        }
+      }
+    }
+  };
+  walk((line && line.pts) || [], line && line.gaps, fields, detail || {}, place || {}, "", W);
+  return out;
+}
+// Server ko: { valve_n: { mode, qty | every_m, start_m, cap | points }, nali: { gap_m, left: { props, place }, … } }
+export function placePayload(fields, detail, place) {
+  const out = {};
+  for (const f of mapFieldsOf(fields)) {
+    const st = place && place[f.key];
+    if (!st) continue;
+    if (f.type === "child") {
+      const o = { mode: st.mode };
+      if (st.mode === "auto") o.qty = numOr(st.qty, 0);
+      else if (st.mode === "interval") { o.every_m = numOr(st.every, null); o.start_m = numOr(st.start, 0); o.cap = numOr(st.cap, null); }
+      else { o.qty = numOr(st.qty, (st.points || []).length); o.points = (st.points || []).map((q) => ({ id: q.id || undefined, lat: q.lat, lng: q.lng })); }
+      if (st.propsDirty) o.props = cleanProps(st.props) || {};
+      out[f.key] = o;
+    } else {
+      const v = (detail || {})[f.key];
+      const same = st.same && v === "both";
+      const o = { gap_m: numOr(st.gap, null) };
+      for (const sd of ["left", "right"]) {
+        if (!(v === "both" || v === sd)) continue;
+        const src = same ? st.left : st[sd];
+        const subPl = same && sd === "right" ? mergeSame(st.left.place, st.right.place) : src.place;
+        o[sd] = { props: cleanProps(src.props) || {}, place: placePayload(f.sub || [], numProps(src.props), subPl || {}) };
+      }
+      out[f.key] = o;
+    }
+  }
+  return out;
+}
+// fk = "valve_n" ya "electrical:left/streetlight_n" — us field ki state badlo.
+const updAt = (pl, fk, fn) => {
+  const segs = fk.split("/");
+  if (segs.length === 1) return { ...pl, [fk]: fn(pl[fk]) };
+  const [sk, sd] = segs[0].split(":");
+  const st = pl[sk];
+  const side = st[sd];
+  return { ...pl, [sk]: { ...st, [sd]: { ...side, place: updAt(side.place || {}, segs.slice(1).join("/"), fn) } } };
+};
+const getAt = (pl, fk) => {
+  const segs = fk.split("/");
+  if (segs.length === 1) return pl[fk];
+  const [sk, sd] = segs[0].split(":");
+  const side = pl[sk] && pl[sk][sd];
+  return side ? getAt(side.place || {}, segs.slice(1).join("/")) : null;
+};
+const prefixOf = (fk) => { const i = fk.lastIndexOf("/"); return i < 0 ? "" : fk.slice(0, i + 1); };
+
+export function MapPlacePanel({ fields, detail, setDetail, place, setPlace, line, widthM, loadMaps, canEdit = true, mapHeight = 300, lineType }) {
+  const [clickKey, setClickKey] = useState(null);
   const [msg, setMsg] = useState("");
-  const [clickKey, setClickKey] = useState(null);      // Manual chalu: kis field ke liye
-  const [form, setForm] = useState(() => Object.fromEntries(fields.filter((f) => f.type === "child").map((f) => {
-    const plan = Number((line.props || {})[f.key]);
-    return [f.key, { mode: f.mode || "manual", qty: Number.isFinite(plan) && plan > 0 ? String(plan) : "", every: f.every_m ? String(f.every_m) : "", start: "0" }];
-  })));
+  const [openD, setOpenD] = useState(() => new Set());
+  const W = Number(widthM) > 0 ? Number(widthM) : widthOfProps(numProps(detail)) || 7;
+  const pv = buildPreview(line, fields, numProps(detail), place, W);
   const boxRef = useRef(null), mapRef = useRef(null), layers = useRef([]), fitted = useRef(false);
-  const live = useRef({});
-  live.current = { clickKey, busy, canEdit };
   const [ready, setReady] = useState(false);
+  const live = useRef({});
+  live.current = { clickKey, pv, canEdit, place };
 
-  useEffect(() => {
-    const h = (e) => { if (e.key === "Escape") onClose(); };
-    window.addEventListener("keydown", h);
-    return () => window.removeEventListener("keydown", h);
-  }, [onClose]);
-
-  const run = async (fn, okMsg) => {
-    setBusy(true); setErr(""); setMsg("");
-    const r = await fn().catch(() => null);
-    setBusy(false);
-    if (!r || !r.success) { setErr((r && r.message) || t("map_form.save_nahi_hua")); return null; }
-    if (okMsg) setMsg(okMsg(r.data || {}));
-    if (onChanged) await onChanged();
-    return r;
+  const addAt = (q) => {
+    const { clickKey: fk, pv: p } = live.current;
+    if (!fk) return;
+    const f = p.fields[fk], parts = p.parts[prefixOf(fk)];
+    const hit = parts && projectOn(parts, q);
+    if (!f || !hit || hit.d > (f.beside ? 200 : 50)) { setMsg(t("map_form.line_se_door")); return; }
+    const st = getAt(live.current.place, fk);
+    const qty = numOr(st && st.qty, 0);
+    if (qty > 0 && (st.points || []).length >= qty) { setMsg(t("map_form.poore_lag_gaye", { n: qty })); return; }
+    const pt = f.beside ? { lat: q.lat, lng: q.lng } : hit.pt;
+    setMsg("");
+    setPlace((pl) => updAt(pl, fk, (s0) => {
+      const pts2 = [...(s0.points || []), { lat: pt.lat, lng: pt.lng }];
+      return { ...s0, mode: "manual", points: pts2, qty: String(Math.max(numOr(s0.qty, 0), pts2.length)) };
+    }));
   };
-  const placeAt = async (lat, lng) => {
-    const k = live.current.clickKey;
-    if (!k || live.current.busy) return;
-    await run(() => api.place({ key: k, mode: "manual", points: [{ lat, lng }], qty: form[k] && form[k].qty !== "" ? Number(form[k].qty) : undefined }),
-      (d) => (d.skipped ? t("map_form.line_se_door") : ""));
+  // Khiskaya / hataya → us field ke nishaan ab haath ke (Manual) — baad me apne aap na badlein.
+  const asManual = (fk, change) => setPlace((pl) => updAt(pl, fk, (s0) => {
+    const cur = live.current.pv.marks.filter((m) => m.fk === fk).sort((a, b) => a.i - b.i)
+      .map((m) => ({ id: m.id || undefined, lat: m.pt.lat, lng: m.pt.lng }));
+    const next = change(cur);
+    const keepPlan = s0.mode === "manual" ? numOr(s0.qty, 0) : 0;
+    return { ...s0, mode: "manual", points: next, qty: String(Math.max(keepPlan, next.length)) };
+  }));
+  const moveTo = (m, q) => {
+    const parts = live.current.pv.parts[prefixOf(m.fk)];
+    const hit = parts && projectOn(parts, q);
+    if (!hit || hit.d > (m.f.beside ? 200 : 50)) { setMsg(t("map_form.line_se_door")); setPlace((pl) => ({ ...pl })); return; }
+    const pt = m.f.beside ? q : hit.pt;
+    asManual(m.fk, (cur) => cur.map((x, i) => (i === m.i ? { ...x, lat: pt.lat, lng: pt.lng } : x)));
   };
-  const placeRef = useRef(placeAt);
-  placeRef.current = placeAt;
+  const handlers = useRef({});
+  handlers.current = { addAt, moveTo, remove: (m) => asManual(m.fk, (cur) => cur.filter((_, i) => i !== m.i)) };
 
   useEffect(() => {
     let dead = false;
+    if (!loadMaps) return undefined;
     loadMaps().then((g) => {
       if (dead || !boxRef.current) return;
       mapRef.current = new g.maps.Map(boxRef.current, {
-        center: pts[0] || { lat: 21.25, lng: 81.63 }, zoom: 16, mapTypeId: "hybrid",
-        streetViewControl: false, fullscreenControl: false, clickableIcons: false,
+        center: ((line && line.pts) || [])[0] || { lat: 21.25, lng: 81.63 }, zoom: 16, mapTypeId: "hybrid",
+        streetViewControl: false, fullscreenControl: true, clickableIcons: false,
       });
-      mapRef.current.addListener("click", (e) => placeRef.current(e.latLng.lat(), e.latLng.lng()));
+      mapRef.current.addListener("click", (e) => handlers.current.addAt({ lat: e.latLng.lat(), lng: e.latLng.lng() }));
       setReady(true);
-    }).catch(() => setErr(t("map_form.naksha_nahi_khula")));
+    }).catch(() => setMsg(t("map_form.naksha_nahi_khula")));
     return () => { dead = true; };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -937,147 +1388,170 @@ export function ChildEditor({ line, kids, api, loadMaps, canEdit, onChanged, onC
     layers.current.forEach((l) => l.setMap(null));
     layers.current = [];
     const b = new g.maps.LatLngBounds();
-    parts.forEach((part) => {
-      const pl = new g.maps.Polyline({ map, path: part, ...lineOpts(g, styleOf("line", line.atype || "other")) });
-      pl.addListener("click", (e) => placeRef.current(e.latLng.lat(), e.latLng.lng()));
+    const click = (e) => handlers.current.addAt({ lat: e.latLng.lat(), lng: e.latLng.lng() });
+    linePartsOf((line && line.pts) || [], line && line.gaps).forEach((part) => {
+      const pl = new g.maps.Polyline({ map, path: part, ...lineOpts(g, styleOf("line", lineType || "other")) });
+      pl.addListener("click", click);
       layers.current.push(pl);
-      part.forEach((p) => b.extend(p));
+      part.forEach((q) => b.extend(q));
     });
-    (kids || []).forEach((k) => {
-      const kp = Array.isArray(k.pts) ? k.pts : [];
-      if (k.kind === "line") {
-        partsOfPts(kp, k.gaps).forEach((part) => layers.current.push(new g.maps.Polyline({ map, path: part, clickable: false, ...lineOpts(g, styleOf("line", k.atype)) })));
-        return;
-      }
-      if (!kp[0]) return;
-      const ch = k.chainage_m == null ? null : Number(line.startCh || 0) + Number(k.chainage_m);
-      const mk = new g.maps.Marker({ map, position: kp[0], draggable: !!live.current.canEdit, zIndex: 5,
-        title: [k.name, ch == null ? null : `Ch ${fmtChain(ch)}`].filter(Boolean).join(" · "),
-        icon: markerIcon(g, styleOf("point", k.atype), 22) });
-      mk.addListener("dragend", (e) => { run(() => api.move(k.id, e.latLng.lat(), e.latLng.lng())); });
-      mk.addListener("click", () => {
-        if (!live.current.canEdit || live.current.busy) return;
-        if (window.confirm(t("map_form.hatao_confirm", { name: k.name || "" }))) run(() => api.remove(k.id));
-      });
+    pv.lines.forEach((ln) => linePartsOf(ln.pts, ln.gaps).forEach((part) => {
+      const pl = new g.maps.Polyline({ map, path: part, ...lineOpts(g, { colour: ln.colour, width: 3, dash: "dashed" }) });
+      pl.addListener("click", click);
+      layers.current.push(pl);
+    }));
+    pv.marks.forEach((m) => {
+      const mk = new g.maps.Marker({ map, position: m.pt, zIndex: 5, draggable: !!(canEdit && !m.lock),
+        title: `${m.f.label} ${m.i + 1}`, icon: markIcon(g, m.mark, m.colour, m.brg) });
+      mk.addListener("dragend", (e) => handlers.current.moveTo(m, { lat: e.latLng.lat(), lng: e.latLng.lng() }));
+      mk.addListener("click", () => { if (canEdit && !m.lock && live.current.clickKey === m.fk) handlers.current.remove(m); });
       layers.current.push(mk);
     });
-    if (!fitted.current && !b.isEmpty()) { map.fitBounds(b, 50); fitted.current = true; }
-  }, [ready, kids, line]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (!fitted.current && !b.isEmpty()) { map.fitBounds(b, 40); fitted.current = true; }
+  }); // har badlav par dobara (preview chhota hai)
 
   useEffect(() => {
     if (mapRef.current) mapRef.current.setOptions({ draggableCursor: clickKey ? "crosshair" : null });
   }, [clickKey, ready]);
+  useEffect(() => () => layers.current.forEach((l) => l.setMap(null)), []);
 
-  const set = (key, patch) => setForm((f) => ({ ...f, [key]: { ...f[key], ...patch } }));
-  const preview = (x) => {
-    if (x.mode === "auto") return Math.max(0, Math.round(Number(x.qty) || 0));
-    const e = Number(x.every), st = Math.max(0, Number(x.start) || 0);
-    return e >= 1 && st <= L + 1 ? Math.floor((L + 1 - st) / e) + 1 : 0;
-  };
-  const apply = async (f) => {
-    const x = form[f.key];
-    const done = (sum.find((s) => s.f.key === f.key) || {}).done || 0;
-    if (done && !window.confirm(t("map_form.purane_hatenge", { n: done }))) return;
-    const body = x.mode === "auto"
-      ? { key: f.key, mode: "auto", qty: Number(x.qty) }
-      : { key: f.key, mode: "interval", every_m: Number(x.every), start_m: Number(x.start) || 0 };
-    await run(() => api.place(body), (d) => t("map_form.lag_gaye", { n: d.added || 0 }));
-  };
-  const setSide = (f, v) => run(() => api.saveProps({ ...(line.props || {}), [f.key]: v }));
+  const inpS = { padding: "5px 8px", borderRadius: 7, border: `1.5px solid ${C.b1}`, fontSize: 12.5, fontFamily: "inherit", width: 70, boxSizing: "border-box", background: C.surface };
+  const chip = (on, dis) => ({ padding: "3px 9px", borderRadius: 20, fontSize: 11.5, fontFamily: "inherit", cursor: dis ? "default" : "pointer",
+    border: `1px solid ${on ? C.ind : C.b1}`, background: on ? C.indL : C.surface, color: on ? C.ind : C.t2, fontWeight: on ? 700 : 500, opacity: dis && !on ? 0.6 : 1 });
+  const small = { fontSize: 11.5, color: C.t3 };
+  const toggleD = (k) => setOpenD((o) => { const n = new Set(o); if (n.has(k)) n.delete(k); else n.add(k); return n; });
 
-  const C2 = { card: { border: `1px solid ${C.b1}`, borderRadius: 8, padding: "10px 12px", background: C.surface } };
-  const inpS = { padding: "6px 8px", borderRadius: 7, border: `1.5px solid ${C.b1}`, fontSize: 12.5, fontFamily: "inherit", width: 80, boxSizing: "border-box" };
-  const chip = (on, label, onClick, key, dis) => (
-    <button key={key} type="button" onClick={onClick} disabled={dis || busy || !canEdit}
-      style={{ padding: "4px 10px", borderRadius: 20, fontSize: 11.5, fontFamily: "inherit", cursor: canEdit ? "pointer" : "default",
-        border: `1px solid ${on ? C.ind : C.b1}`, background: on ? C.indL : C.surface, color: on ? C.ind : C.t2, fontWeight: on ? 700 : 500 }}>{label}</button>
-  );
-  return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 9996, background: "rgba(15,23,42,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 12 }}>
-      <div role="dialog" aria-modal="true"
-        style={{ width: 1280, maxWidth: "100%", height: "90vh", background: C.surface, borderRadius: 10, boxShadow: "0 12px 40px rgba(0,0,0,.2)", display: "flex", flexDirection: "column", overflow: "hidden", fontFamily: "'Segoe UI',system-ui,sans-serif" }}>
-        <div style={{ padding: "11px 16px", borderBottom: `1px solid ${C.b1}`, display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: C.t1 }}>{t("map_form.saath_title")} — {line.name || ""}</div>
-            <div style={{ fontSize: 11.5, color: C.t3 }}>{typeName("line", line.atype || "other")} · {L >= 1000 ? `${(L / 1000).toFixed(2)} km` : `${Math.round(L)} m`}</div>
-          </div>
-          <button type="button" onClick={onClose} aria-label={t("common.close")} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 20, color: C.t3, lineHeight: 1 }}>×</button>
+  const childRow = (f, st, fk, lock) => {
+    if (!st) return null;
+    const dis = !canEdit || lock;
+    const set = (patch) => setPlace((pl) => updAt(pl, fk, (s0) => ({ ...s0, ...patch })));
+    const n = pv.counts[fk] || 0;
+    const plan = numOr(st.qty, 0);
+    const colour = f.color || styleOf("point", f.child.code).colour;
+    const plain = (f.sub || []).filter((x) => !isMapField(x));
+    return (
+      <div key={fk} style={{ display: "flex", flexDirection: "column", gap: 6, padding: "8px 0", borderTop: `1px solid ${C.b1}` }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          <MarkIcon mark={f.mark || "dot"} colour={colour} size={15} />
+          <span style={{ fontSize: 12.5, fontWeight: 700, color: C.t1 }}>{f.label}</span>
+          {st.mode !== "interval" && (
+            <input value={st.qty} inputMode="numeric" placeholder="0" disabled={dis} aria-label={t("map_form.kitne")}
+              onChange={(e) => set({ qty: e.target.value.replace(/[^\d]/g, "").slice(0, 4) })} style={inpS} />
+          )}
+          {MODES.map(([v, k]) => (
+            <button key={v} type="button" disabled={dis} onClick={() => { set({ mode: v }); if (v !== "manual" && clickKey === fk) setClickKey(null); }} style={chip(st.mode === v, dis)}>{t(k)}</button>
+          ))}
         </div>
-        <div style={{ flex: 1, display: "grid", gridTemplateColumns: "minmax(300px,380px) 1fr", minHeight: 0 }}>
-          <div style={{ overflowY: "auto", padding: 12, borderRight: `1px solid ${C.b1}`, display: "flex", flexDirection: "column", gap: 10 }}>
-            {!fields.length && <div style={{ fontSize: 12, color: C.t4 }}>{t("map_form.saath_koi_nahi")}</div>}
-            {sum.map(({ f, done, plan, sides }) => {
-              if (f.type === "side") {
-                const cur = (line.props || {})[f.key] || "none";
-                return (
-                  <div key={f.key} style={C2.card}>
-                    <div style={{ fontSize: 12.5, fontWeight: 700, color: C.t1, marginBottom: 6 }}>{f.label}</div>
-                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                      {(f.options || []).map((o) => chip(cur === o.v, o.l, () => setSide(f, o.v), o.v))}
-                    </div>
-                    <div style={{ fontSize: 11, color: C.t4, marginTop: 6 }}>{sides.length ? t("map_form.bani_line", { n: sides.length }) : t("map_form.side_note")}</div>
-                  </div>
-                );
-              }
-              const x = form[f.key] || { mode: "manual", qty: "", every: "", start: "0" };
-              const on = clickKey === f.key;
-              return (
-                <div key={f.key} style={{ ...C2.card, borderColor: on ? C.ind : C.b1 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-                    <StyleSwatch kind="point" code={f.child.code} size={16} />
-                    <span style={{ flex: 1, fontSize: 12.5, fontWeight: 700, color: C.t1 }}>{f.child.label || f.label}</span>
-                    <span style={{ fontSize: 11.5, color: plan && done < plan ? C.amb : C.t3, fontWeight: 600 }}>{plan ? `${done}/${plan}` : t("map_form.lage_n", { n: done })}</span>
-                  </div>
-                  <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
-                    {MODES.map(([m, k]) => chip(x.mode === m, t(k), () => { set(f.key, { mode: m }); if (m !== "manual" && on) setClickKey(null); }, m))}
-                  </div>
-                  {x.mode === "auto" && (
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                      <span style={{ fontSize: 11.5, color: C.t3 }}>{t("map_form.kitne")}</span>
-                      <input value={x.qty} inputMode="numeric" maxLength={4} style={inpS} onChange={(e) => set(f.key, { qty: e.target.value.replace(/[^\d]/g, "") })} />
-                      <button type="button" disabled={busy || !canEdit || !(Number(x.qty) > 0)} onClick={() => apply(f)} style={{ ...smallBtnS(true) }}>{t("map_form.lagao")}</button>
-                    </div>
-                  )}
-                  {x.mode === "interval" && (
-                    <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                      <span style={{ fontSize: 11.5, color: C.t3 }}>{t("map_form.har")}</span>
-                      <input value={x.every} inputMode="decimal" maxLength={6} style={inpS} onChange={(e) => set(f.key, { every: e.target.value.replace(/[^\d.]/g, "") })} />
-                      <span style={{ fontSize: 11.5, color: C.t3 }}>{t("map_form.m_shuru")}</span>
-                      <input value={x.start} inputMode="decimal" maxLength={7} style={inpS} onChange={(e) => set(f.key, { start: e.target.value.replace(/[^\d.]/g, "") })} />
-                      <span style={{ fontSize: 11.5, color: C.t3 }}>m</span>
-                      <div style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
-                        <span style={{ fontSize: 11.5, color: C.t4, flex: 1 }}>{t("map_form.itne_banenge", { n: preview(x) })}</span>
-                        <button type="button" disabled={busy || !canEdit || !(Number(x.every) >= 1)} onClick={() => apply(f)} style={smallBtnS(true)}>{t("map_form.lagao")}</button>
-                      </div>
-                    </div>
-                  )}
-                  {x.mode === "manual" && (
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                      <span style={{ fontSize: 11.5, color: C.t3 }}>{t("map_form.kitne")}</span>
-                      <input value={x.qty} inputMode="numeric" maxLength={4} style={inpS} onChange={(e) => set(f.key, { qty: e.target.value.replace(/[^\d]/g, "") })} />
-                      <button type="button" disabled={busy || !canEdit} onClick={() => setClickKey(on ? null : f.key)} style={smallBtnS(on)}>
-                        {on ? t("map_form.click_band") : t("map_form.naksha_par_lagao")}
-                      </button>
-                      {on && <div style={{ width: "100%", fontSize: 11.5, color: C.ind }}>{t("map_form.click_note")}</div>}
-                    </div>
-                  )}
-                  {x.mode !== "manual" && done > 0 && <div style={{ fontSize: 10.5, color: C.t4, marginTop: 6 }}>{t("map_form.purane_note", { n: done })}</div>}
-                </div>
-              );
-            })}
-            {err && <div style={{ padding: "7px 10px", borderRadius: 7, background: C.redL, color: C.red, fontSize: 12 }}>{err}</div>}
-            {msg && <div style={{ padding: "7px 10px", borderRadius: 7, background: C.indL, color: C.ind, fontSize: 12 }}>{msg}</div>}
-            <div style={{ fontSize: 11, color: C.t4, lineHeight: 1.5 }}>{canEdit ? t("map_form.saath_note") : t("map_form.saath_sirf_dekh")}</div>
+        {st.mode === "interval" && (
+          <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", paddingLeft: 23 }}>
+            <span style={small}>{t("map_form.har")}</span>
+            <input value={st.every} inputMode="decimal" placeholder="100" disabled={dis} onChange={(e) => set({ every: e.target.value.replace(/[^\d.]/g, "") })} style={inpS} />
+            <span style={small}>{t("map_form.m_shuru")}</span>
+            <input value={st.start} inputMode="decimal" placeholder="0" disabled={dis} onChange={(e) => set({ start: e.target.value.replace(/[^\d.]/g, "") })} style={inpS} />
+            <span style={small}>m · {t("map_form.kitne")}</span>
+            <input value={st.cap} inputMode="numeric" placeholder={t("map_form.end_tak")} disabled={dis} onChange={(e) => set({ cap: e.target.value.replace(/[^\d]/g, "") })} style={{ ...inpS, width: 84 }} />
           </div>
-          <div style={{ position: "relative", background: "#EEF1F5" }}>
-            <div ref={boxRef} style={{ position: "absolute", inset: 0 }} />
-            {busy && <div style={{ position: "absolute", top: 10, left: 10, padding: "5px 10px", borderRadius: 6, background: "rgba(255,255,255,.92)", fontSize: 12, color: C.t3 }}>…</div>}
-          </div>
+        )}
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", paddingLeft: 23 }}>
+          <span style={{ fontSize: 11.5, color: st.mode === "manual" && n < plan ? C.amb : C.t3, fontWeight: 600 }}>
+            {st.mode === "manual" ? (plan > n ? t("map_form.lage_x_y", { n, q: plan }) + " — " + t("map_form.jagah_baaki_n", { n: plan - n }) : t("map_form.lage_n", { n }))
+              : t("map_form.n_lagenge", { n })}
+          </span>
+          {st.mode === "manual" && !dis && (
+            <button type="button" onClick={() => { setClickKey(clickKey === fk ? null : fk); setMsg(""); }} style={chip(clickKey === fk, false)}>
+              {clickKey === fk ? t("map_form.click_band") : t("map_form.map_par_lagao")}
+            </button>
+          )}
+          {clickKey === fk && (st.points || []).length > 0 && (
+            <button type="button" onClick={() => set({ points: st.points.slice(0, -1) })} style={chip(false, false)}>↶ {t("map_form.pichhla_hatao")}</button>
+          )}
+          {lock && <span style={{ fontSize: 11, color: C.t4 }}>{t("map_form.left_jaisa")}</span>}
         </div>
+        {clickKey === fk && <div style={{ fontSize: 11, color: C.t3, paddingLeft: 23 }}>{f.beside ? t("map_form.click_note_bagal") : t("map_form.click_note")}</div>}
+        {plain.length > 0 && !lock && (
+          <div style={{ paddingLeft: 23 }}>
+            <button type="button" onClick={() => toggleD(fk)} style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontSize: 11.5, color: C.ind, fontFamily: "inherit" }}>
+              {openD.has(fk) ? "▾" : "▸"} {t("map_form.sab_par_detail", { name: f.label })}
+            </button>
+            {openD.has(fk) && (
+              <div style={{ marginTop: 6 }}>
+                <TypeDetailFields fields={plain} value={st.props} onChange={(v) => set({ props: v, propsDirty: true })} idPrefix={`pl-${fk.replace(/[^a-z0-9]/gi, "-")}`} />
+              </div>
+            )}
+          </div>
+        )}
       </div>
+    );
+  };
+  const sideBlock = (f, st, fk, sd, title, lock) => {
+    const src = st[sd];
+    const setSrc = (patch) => setPlace((pl) => updAt(pl, prefixOf(fk) + f.key, (s0) => ({ ...s0, [sd]: { ...s0[sd], ...patch } })));
+    const plain = (f.sub || []).filter((x) => !isMapField(x));
+    const marks = mapFieldsOf(f.sub || []).filter((x) => x.type === "child");
+    return (
+      <div key={sd} style={{ border: `1px solid ${C.b1}`, borderRadius: 7, padding: "8px 10px", background: C.surfaceB, display: "flex", flexDirection: "column", gap: 6 }}>
+        <span style={{ fontSize: 11, fontWeight: 700, color: C.t3 }}>{title}</span>
+        {plain.length > 0 && <TypeDetailFields fields={plain} value={src.props} onChange={(v) => setSrc({ props: v })} idPrefix={`pl-${fk.replace(/[^a-z0-9]/gi, "-")}-${sd}`} />}
+        {marks.map((mf) => childRow(mf, (src.place || {})[mf.key], `${fk}:${sd}/${mf.key}`, lock))}
+      </div>
+    );
+  };
+  const sideRow = (f, st, fk, det, setDet) => {
+    if (!st) return null;
+    const v = det[f.key] || "none";
+    const set = (patch) => setPlace((pl) => updAt(pl, fk, (s0) => ({ ...s0, ...patch })));
+    const colour = f.color || styleOf("line", f.child.code).colour;
+    return (
+      <div key={fk} style={{ display: "flex", flexDirection: "column", gap: 6, padding: "8px 0", borderTop: `1px solid ${C.b1}` }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          <MarkIcon mark="line" colour={colour} size={15} />
+          <span style={{ fontSize: 12.5, fontWeight: 700, color: C.t1 }}>{f.label}</span>
+          {["none", "left", "right", "both"].map((x) => (
+            <button key={x} type="button" disabled={!canEdit} onClick={() => setDet({ ...det, [f.key]: x })} style={chip(v === x, !canEdit)}>{t(`map_form.side_${x}`)}</button>
+          ))}
+          {v !== "none" && (<>
+            <span style={small}>{t("map_form.kinare_se_m")}</span>
+            <input value={st.gap} inputMode="decimal" disabled={!canEdit} onChange={(e) => set({ gap: e.target.value.replace(/[^\d.]/g, "") })} style={inpS} />
+          </>)}
+        </div>
+        {v === "both" && (
+          <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11.5, color: C.t2, cursor: "pointer", paddingLeft: 23 }}>
+            <input type="checkbox" checked={!!st.same} disabled={!canEdit} onChange={(e) => set({ same: e.target.checked })} />
+            {t("map_form.dono_ek_jaisi")}
+          </label>
+        )}
+        {v !== "none" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 6, paddingLeft: 23 }}>
+            {v === "both" && st.same ? sideBlock(f, st, fk, "left", t("map_form.dono_taraf"), false)
+              : (v === "both" ? ["left", "right"] : [v]).map((sd) => sideBlock(f, st, fk, sd, t(`map_form.side_${sd}`), false))}
+          </div>
+        )}
+      </div>
+    );
+  };
+  const top = mapFieldsOf(fields);
+  if (!top.length) return null;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      <div>
+        {top.map((f) => (f.type === "child" ? childRow(f, place[f.key], f.key, false) : sideRow(f, place[f.key], f.key, detail || {}, setDetail)))}
+      </div>
+      {msg && <div style={{ fontSize: 11.5, color: C.amb }}>{msg}</div>}
+      {loadMaps && (
+        <div style={{ position: "relative", height: mapHeight, borderRadius: 8, overflow: "hidden", border: `1px solid ${C.b1}`, background: "#EEF1F5" }}>
+          <div ref={boxRef} style={{ position: "absolute", inset: 0 }} />
+          {clickKey && (
+            <div style={{ position: "absolute", left: 8, top: 8, padding: "5px 9px", borderRadius: 6, background: "rgba(255,255,255,0.95)", border: `1px solid ${C.b1}`, fontSize: 11.5, color: C.t1, fontWeight: 600 }}>
+              {(pv.fields[clickKey] || {}).label}: {t("map_form.line_par_click")}
+            </div>
+          )}
+        </div>
+      )}
+      {loadMaps && <div style={{ fontSize: 11, color: C.t4 }}>{t("map_form.preview_note")}</div>}
     </div>
   );
 }
+
 const smallBtnS = (primary) => ({ padding: "6px 12px", borderRadius: 7, fontSize: 12, fontFamily: "inherit", cursor: "pointer", fontWeight: primary ? 700 : 500,
   border: primary ? "none" : `1px solid ${C.b1}`, background: primary ? C.ind : C.surface, color: primary ? "#fff" : C.t2 });
 

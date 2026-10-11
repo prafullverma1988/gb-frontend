@@ -26,7 +26,8 @@ import { CreateTransactionModal } from "./FinanceModule";
 import { t, Rich } from "../i18n";
 import { BackClose } from "../utils/backNav";
 import { can, canAny, canEntry } from "../utils/perms";
-import { useMapLibrary, styleOf, lineOpts, markerIcon, MapLibraryDialog, RegisterDialog, ChildEditor, childFields, kidsShort, ToAreaDialog,
+import { useMapLibrary, styleOf, lineOpts, markerIcon, MapLibraryDialog, RegisterDialog, kidsShort, ToAreaDialog,
+  MapPlacePanel, initPlace, placePayload, mapFieldsOf, kidLook, markIcon, projectOn, linePartsOf,
   formOf, propsRows, missingOf, TypeDetailFields, drainPaths, drainLineOpts, polePoints, poleIcon } from "./mapStyles";
 // xlsx (~400 KB) sirf BOQ file kholte waqt chahiye — Tenders khulte hi nahi (PERF-05).
 // loadFile() pehle loadXlsx() await karta hai; baaki helper (sheetToAoa,
@@ -4239,7 +4240,22 @@ function MapTab({tenderId, sites}) {
   const { lib: mapLib } = useMapLibrary();
   const [libOpen, setLibOpen] = useState(false);
   const [regOpen, setRegOpen] = useState(false);   // lines ka register (11 Oct 2026)
-  const [kidsFor, setKidsFor] = useState(null);    // "Saath ki cheezein" — kis line ki (id)
+  // id → marking (line ki cheez ka field / form isi se) — N, 11 Oct 2026.
+  const tByIdRef = useRef(new Map());
+  tByIdRef.current = new Map(items.map(x => [x.id, { ...x, pts: x.geometry || [] }]));
+  const kidsAtT = (pid, key) => items.filter(k => k.parent_id === pid && k.child_key === key).map(k => ({ id: k.id, pts: k.geometry || [], props: k.props }));
+  // Form ke nishaan ki state — type badla to nayi.
+  const placeOf = (p) => {
+    if (!p || p.kind !== "line") return {};
+    if (p.place && p.placeFor === p.atype) return p.place;
+    const fields = formOf("line", p.atype);
+    return initPlace(fields, p.edit ? (items.find(x => x.id === p.id) || {}).props : {}, p.edit ? p.id : null, kidsAtT);
+  };
+  const placeBody = (p) => {
+    if (!p || p.kind !== "line") return undefined;
+    const fields = formOf("line", p.atype);
+    return mapFieldsOf(fields).length ? placePayload(fields, p.props || {}, placeOf(p)) : undefined;
+  };
   const [areaFor, setAreaFor] = useState(null);    // "Rakba banao" — kis line se (item)
   const [sugg, setSugg]       = useState([]);     // search ke suggestions
   const photoMarkersRef = useRef([]);
@@ -4700,8 +4716,12 @@ function MapTab({tenderId, sites}) {
         coords.forEach(c=>bounds.extend(c));
       } else {
         // Structure apne library-shape aur rang me (pehle laal pin + ek akshar tha).
+        // Line ka nishaan (valve / chamber…) — field ka chhota nishaan (N, 11 Oct 2026).
+        const look = it.parent_id != null ? kidLook(it, tByIdRef.current) : null;
+        const par = look && look.mark ? tByIdRef.current.get(it.parent_id) : null;
+        const hit = par ? projectOn(linePartsOf((par.geometry || []).map(c=>({ lat: Number(c.lat), lng: Number(c.lng) })), par.gaps), coords[0]) : null;
         const mk = new g.maps.Marker({ position: coords[0], map: mapRef.current, title: it.name, zIndex: 4,
-          icon: markerIcon(g, styleOf("point", it.atype), 26) });
+          icon: look && look.mark ? markIcon(g, look.mark, look.colour, hit ? hit.brg : 0) : markerIcon(g, styleOf("point", it.atype), 26) });
         // Pin par bhi click = dashboard (pehle sirf line par tha) aur hover = card.
         mk.addListener("click", ()=>openStretch(it.id));
         hoverOn(mk, ()=>cardFor(it));
@@ -4921,6 +4941,7 @@ function MapTab({tenderId, sites}) {
       start_chainage_m: pending.start_chainage_m === "" || pending.start_chainage_m == null
         ? null : Number(pending.start_chainage_m),
       props: cleanPropsOut(pending.props) || {},
+      place: placeBody(pending),
       attrs: (pending.attrs || []).filter(a => String(a[0] || "").trim()),
       notes: pending.notes || "",
     });
@@ -4952,6 +4973,7 @@ function MapTab({tenderId, sites}) {
       // Type ke apne field. Bemani value server chup-chaap gira deta hai —
       // drawing kisi ek galat khaane ki wajah se kabhi nahi khoti.
       props: cleanPropsOut(pending.props),
+      place: placeBody(pending),
       attrs: (pending.attrs || []).filter(a => String(a[0] || "").trim()),
     });
     setBusy(false);
@@ -5993,23 +6015,6 @@ function MapTab({tenderId, sites}) {
         return null;
       }}/>
     )}
-    {kidsFor && (()=> {
-      const ln = items.find(x => x.id === kidsFor);
-      if (!ln) return null;
-      const asLine = (a) => ({ id: a.id, name: a.name, kind: a.kind, atype: a.atype, pts: a.geometry || [], gaps: a.gaps,
-        props: a.props, startCh: a.start_chainage_m, child_key: a.child_key, chainage_m: a.chainage_m });
-      return (
-        <ChildEditor line={asLine(ln)} kids={items.filter(k => k.parent_id === ln.id).map(asLine)}
-          canEdit={canAny(["Tenders","Mapping"], "edit")} loadMaps={()=>loadGoogleMaps(apiKey)}
-          api={{
-            place: (body) => api.post(`/tenders/${tenderId}/alignments/${ln.id}/children`, body),
-            move: (cid, lat, lng) => api.patch(`/tenders/${tenderId}/alignments/children/${cid}`, { lat, lng }),
-            remove: (cid) => api.del(`/tenders/${tenderId}/alignments/children/${cid}`),
-            saveProps: (props) => api.put(`/tenders/${tenderId}/alignments/${ln.id}`, { props }),
-          }}
-          onChanged={()=>load()} onClose={()=>setKidsFor(null)}/>
-      );
-    })()}
     {regOpen && (
       <RegisterDialog title="" canExport={canAny(["Tenders","Mapping"], "export")} onClose={()=>setRegOpen(false)}
         extraHead={[t("common.site"), t("map_form.kis_line_par"), t("tenders.hv_chainage"), t("tenders.hv_chaudai")]}
@@ -6093,10 +6098,6 @@ function MapTab({tenderId, sites}) {
         onClose={()=>setPendingHidden(true)}
         footer={<>
           <SecBtn label={t("common.hatao")} onClick={dropPending}/>
-          {/* Line ke saath ki cheezein — valve / manhole / pole / nali (11 Oct 2026). */}
-          {pending.edit && pending.kind === "line" && childFields("line", pending.atype).length > 0 && (
-            <SecBtn label={t("map_form.saath_btn")} onClick={()=>{ const id = pending.id; setPending(null); setKidsFor(id); }}/>
-          )}
           {pending.edit && pending.kind === "line" && (pending.coords || []).length >= 3 && (
             <SecBtn label={"▱ " + t("map_form.rakba_banao")} onClick={()=>{ const it = items.find(x => x.id === pending.id); setPending(null); setAreaFor(it || null); }}/>
           )}
@@ -6156,10 +6157,23 @@ function MapTab({tenderId, sites}) {
             return (
               <div style={{gridColumn:"1 / -1"}}>
                 <div style={{fontSize:11, fontWeight:700, color:T.t3, marginBottom:8}}>{t("map_form.detail")}</div>
-                <TypeDetailFields fields={fields} value={P} hide={hide} idPrefix="tnd-f"
+                <TypeDetailFields fields={fields} value={P} hide={hide} idPrefix="tnd-f" noMap={pending.kind === "line"}
                   onChange={(next)=>setPending(p=>({...p, props: next}))}/>
                 {miss.length > 0 && (
                   <div style={{fontSize:11.5, color:T.amb, marginTop:8}}>{t("map_form.adhoori_note", { list: miss.join(", ") })}</div>
+                )}
+                {/* Naksha ke nishaan (N, 11 Oct 2026): valve kitne / kaise, bagal ki line apni detail ke saath. */}
+                {pending.kind === "line" && mapFieldsOf(fields.filter(f=>!hide.includes(f.key))).length > 0 && (
+                  <div style={{marginTop:12}}>
+                    <div style={{fontSize:11, fontWeight:700, color:T.t3, marginBottom:2}}>{t("map_form.naksha_ke_nishaan")}</div>
+                    <MapPlacePanel fields={fields.filter(f=>!hide.includes(f.key))} detail={P}
+                      setDetail={(next)=>setPending(p=>({...p, props: next}))}
+                      place={placeOf(pending)}
+                      setPlace={(fn)=>setPending(p=>{ const cur = placeOf(p); return { ...p, place: typeof fn === "function" ? fn(cur) : fn, placeFor: p.atype }; })}
+                      line={{ pts: (pending.coords || []).map(c=>({ lat: Number(c.lat), lng: Number(c.lng) })), gaps: pending.gaps }}
+                      widthM={Number(pending.width_m) > 0 ? Number(pending.width_m) : undefined}
+                      loadMaps={()=>loadGoogleMaps(apiKey)} lineType={pending.atype} mapHeight={260}/>
+                  </div>
                 )}
               </div>
             );

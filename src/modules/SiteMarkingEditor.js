@@ -18,7 +18,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import PickSelect from "../components/PickSelect";
 import api, { API_BASE, getToken } from "../config/api";
 import { t } from "../i18n";
-import { useMapLibrary, styleOf, typesFor, StyleSwatch, formOf, templateOf, missingOf, cleanProps, TypeDetailFields, childFields } from "./mapStyles";
+import { useMapLibrary, styleOf, typesFor, StyleSwatch, formOf, templateOf, missingOf, cleanProps, TypeDetailFields, MapPlacePanel, initPlace, placePayload, mapFieldsOf } from "./mapStyles";
 import { can, canAny, canEntry } from "../utils/perms";
 
 // ── THEME (MapLibraryModule jaisa) ────────────────────────────────
@@ -731,7 +731,15 @@ export default function SiteMarkingEditor({ lib, loadMaps, onClose, onSaved, onO
   // material / dia, electrical HT / LT… Type badla to khaali (doosre type ke
   // field is par nahi chalte).
   const [detail, setDetail] = useState({});
+  // Naksha ke nishaan (N, 11 Oct 2026): valve kitne / kaise, nali Left / Right — save ke saath hi.
+  const [place, setPlace] = useState({});
+  const libForPlace = useMapLibrary().lib;
   useEffect(() => { setDetail({}); }, [kind, atype]);
+  useEffect(() => { setPlace(initPlace(kind === "line" ? formOf("line", atype || "other") : [], {}, null, null)); }, [kind, atype, libForPlace]);
+  const placeOut = () => {
+    const fields = kind === "line" ? formOf("line", atype || "other") : [];
+    return mapFieldsOf(fields).length ? placePayload(fields, detail, place) : undefined;
+  };
 
   // Point aur tod
   const [pts, setPtsS] = useState([]);
@@ -1066,6 +1074,7 @@ export default function SiteMarkingEditor({ lib, loadMaps, onClose, onSaved, onO
       gaps: kind === "line" && brkRef.current.length ? brkRef.current.slice() : undefined,
       file: fileName.trim() || nm,
       startCh: kind === "line" && startChNum > 0 ? startChNum : null,
+      place: placeOut(),
     };
     if (folderSel === "new") body.folder = newFolder.trim();
     else if (folderSel) body.folder_id = Number(folderSel);
@@ -1160,6 +1169,7 @@ export default function SiteMarkingEditor({ lib, loadMaps, onClose, onSaved, onO
         if (atype === "road" && drainSide && Number(drainW) > 0) fp.drain_width_m = Number(drainW);
         return Object.keys(fp).length ? fp : undefined;
       })(),
+      place: placeOut(),
       source: "draw",
       capture_meta: { points_tapped: kept.length, user_qty_m: Number(userQty) > 0 ? Number(userQty) : undefined, via: "web" },
       // Wahi line dobara bheji (jawab raaste me gum hua) = wahi chaabi → server wahi row lautata hai.
@@ -1691,11 +1701,19 @@ export default function SiteMarkingEditor({ lib, loadMaps, onClose, onSaved, onO
     const fields = formOf(kind, atype || "other");
     if (!fields.filter((f) => !(hide || []).includes(f.key)).length) return null;
     const miss = missingOf(fields.filter((f) => !(hide || []).includes(f.key)), detail);
+    const mapF = kind === "line" ? mapFieldsOf(fields).filter((f) => !(hide || []).includes(f.key)) : [];
     return (
       <div style={card}>
         <div style={{ ...lbl, marginBottom: 8 }}>{t("map_form.detail")}</div>
-        <TypeDetailFields fields={fields} value={detail} onChange={setDetail} hide={hide} idPrefix="smk-f" />
+        <TypeDetailFields fields={fields} value={detail} onChange={setDetail} hide={hide} idPrefix="smk-f" noMap={kind === "line"} />
         {miss.length > 0 && <div style={{ ...noteS, color: T.amb }}>{t("map_form.adhoori_note", { list: miss.join(", ") })}</div>}
+        {mapF.length > 0 && (
+          <div style={{ marginTop: 12 }}>
+            <div style={{ ...lbl, marginBottom: 2 }}>{t("map_form.naksha_ke_nishaan")}</div>
+            <MapPlacePanel fields={fields.filter((f) => !(hide || []).includes(f.key))} detail={detail} setDetail={setDetail} place={place} setPlace={setPlace}
+              line={{ pts, gaps: breaks }} widthM={Number(widthM) > 0 ? Number(widthM) : undefined} loadMaps={loadMaps} lineType={atype || "other"} mapHeight={260} />
+          </div>
+        )}
       </div>
     );
   };
@@ -1899,8 +1917,8 @@ export default function SiteMarkingEditor({ lib, loadMaps, onClose, onSaved, onO
         {milaan()}
         {/* Line ke saath ki cheezein (valve / manhole / pole / nali…) — abhi lagao,
             ya baad me library se. (M2, 11 Oct 2026) */}
-        {saved.free && onOpenKids && kind === "line" && saved.item && saved.item.id && childFields("line", atype || "other").length > 0 && (
-          <Btn tone="primary" onClick={() => onOpenKids(saved.item.id)} style={{ width: "100%", marginBottom: 8 }}>{t("map_form.saath_btn")}</Btn>
+        {saved.free && onOpenKids && kind === "line" && saved.item && saved.item.id && mapFieldsOf(formOf("line", atype || "other")).length > 0 && (
+          <Btn tone="primary" onClick={() => onOpenKids(saved.item.id)} style={{ width: "100%", marginBottom: 8 }}>{t("map_form.nishaan_badlo_btn")}</Btn>
         )}
         {(saved.free ? perms.export : canServerKml) && (
           <Btn onClick={downloadKml} style={{ width: "100%", marginBottom: 8 }}>{saved.free ? t("map_draw.is_marking_ki_kml") : selTask ? t("map_draw.kaam_ki_kml") : t("map_draw.site_ki_kml")}</Btn>

@@ -26,7 +26,8 @@ import { useBackClose } from "../utils/backNav";
 import { can, canEntry } from "../utils/perms";
 import SiteMarkingEditor from "./SiteMarkingEditor";
 import { useMapLibrary, styleOf, lineOpts, markerIcon, MapLibraryDialog, typeName, typesFor, StyleSwatch,
-  formOf, propsRows, missingOf, cleanProps, detailPairs, childFields, kidsSummary, kidsShort, ChildEditor, ToAreaDialog, TypeDetailFields, drainPaths, drainLineOpts, polePoints, poleIcon } from "./mapStyles";
+  formOf, missingOf, cleanProps, childFields, kidsSummary, kidsShort, ToAreaDialog, TypeDetailFields, MapPlacePanel, initPlace, placePayload, mapFieldsOf, drainPaths, drainLineOpts, polePoints, poleIcon,
+  kidLook, markIcon, MarkIcon, formOfItem, rowsOf, pairsOf, linePartsOf, lineLenOf, projectOn, pointAtCh, corridor, widthOfProps } from "./mapStyles";
 
 // ── ICONS ─────────────────────────────────────────────────────────
 const Ic = ({ d, size = 16, color = "currentColor", sw = 1.8, fill = "none" }) => (
@@ -163,7 +164,11 @@ const withKids = (items) => {
   for (let i = 0; i < out.length; i++) kidsOf(out[i].id).forEach((k) => { if (!seen.has(k.id)) { seen.add(k.id); out.push(k); } });
   return out;
 };
-const missingIn = (it) => [...missingOf(formOf(it.kind, it.atype || "other"), it.props),
+// Line ki cheez (nali / valve) ka form = line ke field ki andar wali detail.
+const formIt = (it) => formOfItem(it, _byId);
+// Line ki maujooda cheezein — field (child_key) se.
+const kidsAtLib = (pid, key) => kidsOf(pid).filter((k) => k.child_key === key);
+const missingIn = (it) => [...missingOf(formIt(it), it.props),
   ...(it.kind === "line" ? kidsShort(it, kidsOf(it.id)) : [])];
 const formHasDia = (it) => formOf(it.kind, it.atype || "other").some((f) => f.key === "dia_mm");
 const polesIn = (it) => (it.kind === "line" ? polePoints(it.atype || "other", it.props, cleanPts(it)).length : 0);
@@ -211,12 +216,12 @@ function kmlPlacemark(it, folderName) {
     it.by ? `By: ${it.by}` : "",
     partsOfLine(pts, it.gaps).length > 1 ? `Parts: ${partsOfLine(pts, it.gaps).length} (broken line)` : "",
     // Type ka detail (L4) — "Label: value"; ExtendedData me key (GIS column).
-    ...detailPairs(it.kind, it.atype || "other", it.props).map(([, , l, v]) => `${l}: ${v}`),
+    ...pairsOf(formIt(it), it.props).map(([, , l, v]) => `${l}: ${v}`),
     // Line ki cheez (valve…): kis line par, line par kitni doori
     it.parent_id != null && _byId.get(it.parent_id) ? `On line: ${_byId.get(it.parent_id).name || ""}` : "",
     it.chainage_m != null ? `Line chainage: ${fmtCh(it.chainage_m)}` : "",
   ].filter(Boolean).join(" | ");
-  const det = detailPairs(it.kind, it.atype || "other", it.props);
+  const det = pairsOf(formIt(it), it.props);
   const ext = det.length
     ? `<ExtendedData>${det.map(([k, v]) => `<Data name="${xmlEsc(k)}"><value>${xmlEsc(v)}</value></Data>`).join("")}</ExtendedData>`
     : "";
@@ -261,7 +266,7 @@ function buildGeoJson(items, folderName) {
           type: it.atype || "other",
           on_line: it.parent_id != null && _byId.get(it.parent_id) ? _byId.get(it.parent_id).name || null : null,
           line_chainage_m: it.chainage_m == null ? null : round2(it.chainage_m),
-          ...Object.fromEntries(detailPairs(it.kind, it.atype || "other", it.props).map(([k, v]) => [k, v])),
+          ...Object.fromEntries(pairsOf(formIt(it), it.props).map(([k, v]) => [k, v])),
         },
         geometry,
       };
@@ -278,7 +283,7 @@ function buildCsv(items, folderName) {
   const rows = items.map((it) => [
     folderName || "", it.file || "", it.name || "", it.kind || "line", it.atype || "other",
     it.parent_id != null && _byId.get(it.parent_id) ? _byId.get(it.parent_id).name || "" : "", it.chainage_m == null ? "" : round2(it.chainage_m),
-    detailPairs(it.kind, it.atype || "other", it.props).map(([, , l, v]) => `${l}: ${v}`).join("; "),
+    pairsOf(formIt(it), it.props).map(([, , l, v]) => `${l}: ${v}`).join("; "),
     missingIn(it).join("; "),
     round2(it.lenM) ?? "", round2(it.areaSqm) ?? "", round2(it.startCh) ?? "",
     // Tooti line: har tukda " | " se alag, taaki GIS wala saaf dekh sake
@@ -478,7 +483,7 @@ function cardOf(it, where, pi) {
   const parts = partsOfLine(cleanPts(it), it.gaps).length;
   if (it.kind === "line" && parts > 1) rows.push([t("map_library.hv_tukde"), String(parts)]);
   if (Number(it.dia_mm) > 0 && !formHasDia(it)) rows.push([t("map_library.dia"), `${it.dia_mm} mm`]);
-  propsRows(it.kind, it.atype || "other", it.props).forEach((r) => rows.push(r));
+  rowsOf(formIt(it), it.props).forEach((r) => rows.push(r));
   if (polesIn(it)) rows.push([t("map_form.pole_ginti"), String(polesIn(it))]);
   if (missingIn(it).length) rows.push([t("map_form.detail_adhoori"), missingIn(it).join(", ")]);
   if (where) rows.push([t("map_library.hv_kahan"), where]);
@@ -494,6 +499,13 @@ function cardOf(it, where, pi) {
 function MapPreview({ items, onPick, whereOf, height = 380 }) {
   const { lib: mapLib } = useMapLibrary();   // load hote hi dobara rango
   const [hover, setHover] = useState(null);   // {x, y, card}
+  const [legend, setLegend] = useState([]);   // "Is naksha me" — field ke hisaab se
+  const [hidden, setHidden] = useState(() => new Set());
+  const hiddenRef = useRef(hidden);
+  hiddenRef.current = hidden;
+  const applyRef = useRef(null);
+  const zoomL = useRef(null);
+  useEffect(() => { if (applyRef.current) applyRef.current(); }, [hidden]);
   const whereRef = useRef(whereOf);
   whereRef.current = whereOf;
   const boxRef = useRef(null);
@@ -537,27 +549,64 @@ function MapPreview({ items, onPick, whereOf, height = 380 }) {
     };
     const bounds = new g.maps.LatLngBounds();
     let n = 0;
+    // Saaf dikhne ke niyam (N, 11 Oct 2026): har nishaan / bagal ki line apne
+    // field ke rang-roop me; bheed wale (30 se zyada) nishaan paas zoom par hi;
+    // asli chaudai ki patti bahut paas zoom par; lambi line par har km.
+    const zoomed = [];                       // [{ ov, min }] — zoom ke hisaab se
+    const groups = new Map();                // legend: key → { label, mark, colour, n, len, layers: [] }
+    const grp = (key, label, mark, colour) => {
+      if (!groups.has(key)) groups.set(key, { key, label, mark, colour, n: 0, len: 0, layers: [] });
+      return groups.get(key);
+    };
+    const dense = new Map();
+    items.forEach((it) => { if (it.parent_id != null && it.kind === "point") { const k = it.parent_id + ":" + it.child_key; dense.set(k, (dense.get(k) || 0) + 1); } });
     items.forEach((it) => {
       const pts = cleanPts(it);
       if (!pts.length) return;
       pts.forEach((p) => { bounds.extend(p); n++; });
       const shape = shapeOf(it.kind, pts.length);
+      const look = it.parent_id != null ? kidLook(it, _byId) : null;
       let ov;
       if (shape === "point") {
-        // Type ka shape aur rang — Map library se.
-        ov = new g.maps.Marker({ map, position: pts[0], title: it.name || "", icon: markerIcon(g, styleOf("point", it.atype || "other"), 24) });
+        if (look && look.mark) {
+          // Line ka nishaan — chhota, field ke rang me; Cross line ke aar-paar.
+          const par = _byId.get(it.parent_id);
+          const hit = par ? projectOn(linePartsOf(cleanPts(par), par.gaps), pts[0]) : null;
+          ov = new g.maps.Marker({ map, position: pts[0], title: it.name || "", zIndex: 4, icon: markIcon(g, look.mark, look.colour, hit ? hit.brg : 0) });
+          const gk = grp("f:" + (look.label || it.child_key), look.label || it.name, look.mark, look.colour);
+          gk.n++; gk.layers.push(ov);
+          if ((dense.get(it.parent_id + ":" + it.child_key) || 0) > 30) zoomed.push({ ov, min: 16 });
+        } else {
+          // Type ka shape aur rang — Map library se.
+          ov = new g.maps.Marker({ map, position: pts[0], title: it.name || "", icon: markerIcon(g, styleOf("point", it.atype || "other"), 24) });
+        }
       } else if (shape === "area") {
         const ast = styleOf("area", it.atype || "other");
         ov = new g.maps.Polygon({ map, paths: pts, strokeColor: ast.colour, strokeOpacity: 0.9, strokeWeight: 2, fillColor: ast.colour, fillOpacity: ast.fill_opacity ?? 0.22 });
       } else {
         // Tooti hui line: har tukde ki apni lakeer, click sab par ek jaisa (wahi
         // marking khulti hai), hover par card me usi tukde ki lambai.
-        const lst = styleOf("line", it.atype || "other");
+        const tst = styleOf("line", it.atype || "other");
+        const lst = look && look.mark === "line" ? { ...tst, colour: look.colour, width: Math.min(Number(tst.width) || 4, 3) } : tst;
+        const gk = look && look.mark === "line" ? grp("f:" + (look.label || it.child_key), look.label || it.name, "line", look.colour) : null;
+        if (gk) { gk.n++; gk.len += Number(it.lenM) || 0; }
+        // Chaudai: sadak ka "Chaudai" / bagal ki line ki apni.
+        const wM = widthOfProps(it.props);
         partsOfLine(pts, it.gaps).forEach((part, pi) => {
           const ln = new g.maps.Polyline({ map, path: part, ...lineOpts(g, lst) });
           ln.addListener("click", () => { if (pickRef.current) pickRef.current(it.id); });
           hoverOn(ln, it, pi);
           layersRef.current.push(ln);
+          if (gk) gk.layers.push(ln);
+          if (wM >= 0.3) {
+            const band = corridor(part, wM);
+            if (band.length > 2) {
+              const pg = new g.maps.Polygon({ map, paths: band, strokeOpacity: 0, fillColor: lst.colour, fillOpacity: 0.28, clickable: false, zIndex: 0 });
+              layersRef.current.push(pg);
+              zoomed.push({ ov: pg, min: 17 });
+              if (gk) gk.layers.push(pg);
+            }
+          }
           // Sadak ki side nali — bagal me patli dashed (sirf dikhawa).
           drainPaths(it.atype || "other", it.props, part, null, kidsOf(it.id)).forEach((dp) => {
             layersRef.current.push(new g.maps.Polyline({ map, path: dp, ...drainLineOpts(g) }));
@@ -567,19 +616,52 @@ function MapPreview({ items, onPick, whereOf, height = 380 }) {
         polePoints(it.atype || "other", it.props, pts).forEach((pp) => {
           layersRef.current.push(new g.maps.Marker({ map, position: pp, clickable: false, zIndex: 2, icon: poleIcon(g, lst.colour) }));
         });
+        // Har km ka nishaan (0+000, 1+000…) — saath ki cheezon wali lambi line par.
+        const parts = linePartsOf(pts, it.gaps);
+        const L = lineLenOf(parts);
+        if (it.parent_id == null && kidsOf(it.id).length && L >= 1000) {
+          const base = Number(it.startCh) || 0;
+          for (let km = Math.ceil(base / 1000) * 1000 - base; km <= L + 1; km += 1000) {
+            const at = pointAtCh(parts, km);
+            if (!at) continue;
+            const mk = new g.maps.Marker({ map, position: at, clickable: false, zIndex: 5,
+              icon: { path: g.maps.SymbolPath.CIRCLE, scale: 2.5, fillColor: "#111827", fillOpacity: 1, strokeColor: "#FFFFFF", strokeWeight: 1 },
+              label: { text: fmtCh(base + km), fontSize: "10px", fontWeight: "700", color: "#111827" } });
+            layersRef.current.push(mk);
+            zoomed.push({ ov: mk, min: 14 });
+            const kg = grp("km", t("map_library.km_nishaan"), "km", "#111827");
+            kg.layers.push(mk);
+          }
+        }
         return;
       }
       ov.addListener("click", () => { if (pickRef.current) pickRef.current(it.id); });
       hoverOn(ov, it);
       layersRef.current.push(ov);
     });
+    // Zoom par dikhna / chhupna + legend ka "dikhao / chhupao".
+    const apply = () => {
+      const z = map.getZoom() || 0;
+      const off = hiddenRef.current;
+      const gOf = new Map();
+      groups.forEach((gp) => gp.layers.forEach((l) => gOf.set(l, gp.key)));
+      const minOf = new Map(zoomed.map((x) => [x.ov, x.min]));
+      const all = new Set([...gOf.keys(), ...minOf.keys()]);
+      all.forEach((l) => l.setVisible(!off.has(gOf.get(l)) && z >= (minOf.get(l) || 0)));
+    };
+    applyRef.current = apply;
+    if (zoomL.current) zoomL.current.remove();
+    zoomL.current = map.addListener("zoom_changed", apply);
+    setLegend([...groups.values()].filter((gp) => gp.key !== "km" || gp.layers.length).map((gp) => ({ key: gp.key, label: gp.label, mark: gp.mark, colour: gp.colour, n: gp.n, len: gp.len, far: zoomed.some((x) => gp.layers.includes(x.ov) && x.min >= 16) })));
     if (n === 1) { map.setCenter(bounds.getCenter()); map.setZoom(17); }
     else if (n > 1) map.fitBounds(bounds, 48);
+    apply();
   }, [status, items, mapLib]);
 
   useEffect(() => () => {
     layersRef.current.forEach((l) => l.setMap(null));
     layersRef.current = [];
+    if (zoomL.current) zoomL.current.remove();
   }, []);
 
   if (status === "nokey" || status === "err") {
@@ -598,6 +680,27 @@ function MapPreview({ items, onPick, whereOf, height = 380 }) {
       {status === "loading" && <div style={note}>{t("map_library.map_load_ho_raha")}</div>}
       {status === "ok" && !drawable && <div style={note}>{t("map_library.map_par_kuch_nahi")}</div>}
       {hover && <HoverCard x={hover.x} y={hover.y} card={hover.card} />}
+      {status === "ok" && legend.length > 0 && (
+        <div style={{ position: "absolute", left: 10, bottom: 24, maxWidth: 250, maxHeight: "60%", overflowY: "auto", background: "rgba(255,255,255,0.96)",
+          border: `1px solid ${T.b1}`, borderRadius: 8, padding: "6px 8px", fontSize: 11.5, color: T.t2, boxShadow: "0 1px 4px rgba(0,0,0,0.08)" }}>
+          <div style={{ fontSize: 10.5, fontWeight: 700, color: T.t3, marginBottom: 4 }}>{t("map_library.is_naksha_me")}</div>
+          {legend.map((x) => {
+            const off = hidden.has(x.key);
+            return (
+              <button key={x.key} type="button" onClick={() => setHidden((h) => { const nx = new Set(h); if (nx.has(x.key)) nx.delete(x.key); else nx.add(x.key); return nx; })}
+                title={off ? t("map_library.dikhao") : t("map_library.chhupao")}
+                style={{ display: "flex", alignItems: "center", gap: 6, width: "100%", padding: "2px 0", background: "none", border: "none", cursor: "pointer",
+                  fontFamily: "inherit", fontSize: 11.5, color: off ? T.t4 : T.t1, textAlign: "left", opacity: off ? 0.55 : 1 }}>
+                <span style={{ width: 22, display: "inline-flex", justifyContent: "center" }}>
+                  {x.mark === "km" ? <span style={{ fontSize: 9.5, fontWeight: 700 }}>km</span> : <MarkIcon mark={x.mark} colour={x.colour} size={13} />}
+                </span>
+                <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textDecoration: off ? "line-through" : "none" }}>{x.label}</span>
+                <span style={{ color: T.t3, fontSize: 10.5 }}>{x.mark === "km" ? "" : x.mark === "line" ? (fmtLen(x.len) || x.n) : x.n}{x.far ? " · " + t("map_library.zoom_par") : ""}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -1002,7 +1105,7 @@ function MoveDialog({ item, currentTitle, targets, onClose, onSave }) {
 // rang nahi. Purani sab marking "Anya" thi; yahin se sahi type milta hai.
 // Type ka detail form bhi yahin (L, 10 Oct 2026) — "baad me edit" yahi hai.
 // Type badla to detail khaali (purana type wapas chuno to purana detail).
-function TypeDialog({ item, onClose, onSave }) {
+function TypeDialog({ item, onClose, onSave, kidsAt, loadMaps }) {
   const kind = item.kind === "point" || item.kind === "area" ? item.kind : "line";
   const orig = item.atype || "other";
   const [code, setCode] = useState(orig);
@@ -1010,19 +1113,28 @@ function TypeDialog({ item, onClose, onSave }) {
   const [dia, setDia] = useState(item.dia_mm == null ? "" : String(item.dia_mm));
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
-  const fields = formOf(kind, code);
+  // Line ki cheez (nali / valve) ho to form = line ke field ki andar wali detail.
+  const fields = code === orig ? formIt(item) : formOf(kind, code);
+  // Naksha ke nishaan (N): valve kitne / kaise, nali Left / Right apni detail ke saath.
+  const mapF = kind === "line" ? mapFieldsOf(fields) : [];
+  const [place, setPlace] = useState(() => initPlace(fields, item.props, item.id, kidsAt));
   // Purana alag "Dia" — sirf us type par jiske form me dia nahi, aur pehle se bhara ho.
   const oldDia = kind === "line" && !fields.some((f) => f.key === "dia_mm") && item.dia_mm != null;
   const miss = missingOf(fields, detail);
-  const pickCode = (v) => { setCode(v); setDetail(v === orig ? { ...(item.props || {}) } : {}); };
+  const pickCode = (v) => {
+    setCode(v);
+    const p = v === orig ? { ...(item.props || {}) } : {};
+    setDetail(p);
+    setPlace(initPlace(v === orig ? formIt(item) : formOf(kind, v), p, v === orig ? item.id : null, kidsAt));
+  };
   const submit = async () => {
     if (busy) return;
     setBusy(true); setErr("");
-    const msg = await onSave(code, cleanProps(detail) || {}, oldDia ? dia : undefined);
+    const msg = await onSave(code, cleanProps(detail) || {}, oldDia ? dia : undefined, mapF.length ? placePayload(fields, detail, place) : undefined);
     if (msg) { setErr(msg); setBusy(false); }
   };
   return (
-    <Modal title={t("map_library.type_detail_badlo")} onClose={busy ? () => {} : onClose}
+    <Modal title={t("map_library.type_detail_badlo")} onClose={busy ? () => {} : onClose} width={mapF.length ? 720 : 460}
       footer={<>
         <Btn onClick={onClose} disabled={busy}>{t("common.cancel")}</Btn>
         <Btn tone="primary" onClick={submit} disabled={busy}>{t("common.save")}</Btn>
@@ -1038,8 +1150,15 @@ function TypeDialog({ item, onClose, onSave }) {
       {fields.length > 0 && (
         <div style={{ marginTop: 14 }}>
           <div style={{ ...lbl, marginBottom: 8 }}>{t("map_form.detail")}</div>
-          <TypeDetailFields fields={fields} value={detail} onChange={setDetail} idPrefix="mlib-f" />
+          <TypeDetailFields fields={fields} value={detail} onChange={setDetail} idPrefix="mlib-f" noMap />
           {miss.length > 0 && <div style={{ marginTop: 8, fontSize: 11.5, color: T.amb, lineHeight: 1.5 }}>{t("map_form.adhoori_note", { list: miss.join(", ") })}</div>}
+        </div>
+      )}
+      {mapF.length > 0 && (
+        <div style={{ marginTop: 14 }}>
+          <div style={{ ...lbl, marginBottom: 2 }}>{t("map_form.naksha_ke_nishaan")}</div>
+          <MapPlacePanel fields={fields} detail={detail} setDetail={setDetail} place={place} setPlace={setPlace}
+            line={{ pts: cleanPts(item), gaps: item.gaps }} loadMaps={loadMaps} lineType={code} mapHeight={320} />
         </div>
       )}
       {oldDia && (
@@ -1114,7 +1233,7 @@ function RegisterView({ items, folders, canExport }) {
       if (f.type === "side") return x.sides.map((sd) => t("map_form.side_" + sd)).join(", ");
       return x.plan ? `${x.done}/${x.plan}` : x.done ? String(x.done) : "";
     }
-    const d = detailPairs(it.kind, it.atype || "other", it.props).find((x) => x[0] === f.key); return d ? d[3] : "";
+    const d = pairsOf(formIt(it), it.props).find((x) => x[0] === f.key); return d ? d[3] : "";
   };
   // Line ki cheez (valve…) ho to kis line par + chainage.
   const onLine = (it) => {
@@ -1128,7 +1247,7 @@ function RegisterView({ items, folders, canExport }) {
     ...(pick ? fields.map((f) => f.label + (f.unit ? ` (${f.unit})` : "")) : [t("map_form.detail")]),
     ...(poleCol ? [t("map_form.pole_ginti")] : []), t("map_form.detail_adhoori")];
   const cells = (it) => [it.name || "", ...(pick ? [] : [typeName(it.kind, it.atype || "other")]), ...(lineCol ? [onLine(it)] : []), where(it), size(it),
-    ...(pick ? fields.map((f) => valOf(it, f)) : [detailPairs(it.kind, it.atype || "other", it.props).map(([, , l, v]) => `${l}: ${v}`).join(" · ")]),
+    ...(pick ? fields.map((f) => valOf(it, f)) : [pairsOf(formIt(it), it.props).map(([, , l, v]) => `${l}: ${v}`).join(" · ")]),
     ...(poleCol ? [polesIn(it) ? String(polesIn(it)) : ""] : []), missingIn(it).join(", ")];
   const lenSum = rows.reduce((m, it) => m + (it.kind === "line" ? Number(it.lenM) || 0 : 0), 0);
   const csv = () => {
@@ -1418,8 +1537,9 @@ function MapLibraryModule() {
     flash(t("map_library.naam_badal_gaya"));
     return null;
   };
-  const retypeItem = async (it, atype, props, dia) => {
+  const retypeItem = async (it, atype, props, dia, place) => {
     const body = { atype, props };
+    if (place) body.place = place;
     if (dia !== undefined) body.dia_mm = dia === "" ? null : Number(dia);
     const r = await api.patch(`/map-library/${it.id}`, body).catch(() => null);
     if (!r || !r.success) return failMsg(r, t("map_library.save_nahi_hua"));
@@ -1557,7 +1677,7 @@ function MapLibraryModule() {
           {[kindLabel(it.kind), typeName(it.kind, it.atype || "other")].filter(Boolean).join(" · ")}
         </span>)]);
       if (Number(it.dia_mm) > 0 && !formHasDia(it)) facts.push([t("map_library.dia"), `${it.dia_mm} mm`]);
-      propsRows(it.kind, it.atype || "other", it.props).forEach((r) => facts.push(r));
+      rowsOf(formIt(it), it.props).forEach((r) => facts.push(r));
       if (polesIn(it)) facts.push([t("map_form.pole_ginti"), String(polesIn(it))]);
       if (missingIn(it).length) {
         facts.push([t("map_form.detail_adhoori"), <span style={{ color: T.amb, fontWeight: 600 }}>{missingIn(it).join(", ")}</span>]);
@@ -1632,9 +1752,10 @@ function MapLibraryModule() {
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               {itemEdit && <Btn onClick={() => setDialog({ kind: "rename-item", item: it })}>{t("map_library.naam_badlo")}</Btn>}
               {itemEdit && <Btn onClick={() => setDialog({ kind: "move-item", item: it })}>{t("map_library.folder_badlo")}</Btn>}
-              {itemEdit && <Btn onClick={() => setDialog({ kind: "type-item", item: it })}>{t("map_library.type_detail_badlo")}</Btn>}
-              {itemEdit && it.kind === "line" && childFields("line", it.atype || "other").length > 0 && (
-                <Btn tone="primary" onClick={() => setDialog({ kind: "kids", id: it.id })}>{t("map_form.saath_btn")}</Btn>
+              {itemEdit && (
+                <Btn tone={it.kind === "line" && mapFieldsOf(formIt(it)).length ? "primary" : undefined} onClick={() => setDialog({ kind: "type-item", item: it })}>
+                  {t("map_library.type_detail_badlo")}
+                </Btn>
               )}
               {itemEdit && it.kind === "line" && cleanPts(it).length >= 3 && it.parent_id == null && (
                 <Btn onClick={() => setDialog({ kind: "to-area", item: it })}>▱ {t("map_form.rakba_banao")}</Btn>
@@ -1785,7 +1906,8 @@ function MapLibraryModule() {
           onClose={() => setDialog(null)} onSave={(name) => renameItem(dItem, name)} />
       )}
       {dialog && dialog.kind === "type-item" && (
-        <TypeDialog item={dItem} onClose={() => setDialog(null)} onSave={(atype, props, dia) => retypeItem(dItem, atype, props, dia)} />
+        <TypeDialog item={dItem} onClose={() => setDialog(null)} onSave={(atype, props, dia, place) => retypeItem(dItem, atype, props, dia, place)}
+          kidsAt={kidsAtLib} loadMaps={() => loadGmaps(process.env.REACT_APP_GOOGLE_MAPS_KEY)} />
       )}
       {libOpen && <MapLibraryDialog onClose={() => setLibOpen(false)} />}
       {dialog && dialog.kind === "to-area" && (
@@ -1812,18 +1934,12 @@ function MapLibraryModule() {
         }} />
       )}
       {dialog && dialog.kind === "kids" && allData && (() => {
+        // Nayi line save ke baad "Naksha ke nishaan" — wahi Detail dialog.
         const ln = allData.items.find((x) => x.id === dialog.id);
         if (!ln) return null;
         return (
-          <ChildEditor line={ln} kids={kidsOf(ln.id)} canEdit={yes(ln.can_edit)}
-            loadMaps={() => loadGmaps(process.env.REACT_APP_GOOGLE_MAPS_KEY)}
-            api={{
-              place: (body) => api.post(`/map-library/${ln.id}/children`, body),
-              move: (cid, lat, lng) => api.patch(`/map-library/children/${cid}`, { lat, lng }),
-              remove: (cid) => api.del(`/map-library/children/${cid}`),
-              saveProps: (props) => api.patch(`/map-library/${ln.id}`, { props }),
-            }}
-            onChanged={() => loadLib("refresh")} onClose={() => setDialog(null)} />
+          <TypeDialog item={ln} onClose={() => setDialog(null)} onSave={(atype, props, dia, place) => retypeItem(ln, atype, props, dia, place)}
+            kidsAt={kidsAtLib} loadMaps={() => loadGmaps(process.env.REACT_APP_GOOGLE_MAPS_KEY)} />
         );
       })()}
       {dialog && dialog.kind === "move-item" && (
