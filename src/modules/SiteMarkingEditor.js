@@ -18,7 +18,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import PickSelect from "../components/PickSelect";
 import api, { API_BASE, getToken } from "../config/api";
 import { t } from "../i18n";
-import { useMapLibrary, styleOf, typesFor, StyleSwatch, formOf, templateOf, missingOf, cleanProps, TypeDetailFields } from "./mapStyles";
+import { useMapLibrary, styleOf, typesFor, StyleSwatch, formOf, templateOf, missingOf, cleanProps, TypeDetailFields, childFields } from "./mapStyles";
 import { can, canAny, canEntry } from "../utils/perms";
 
 // ── THEME (MapLibraryModule jaisa) ────────────────────────────────
@@ -677,7 +677,7 @@ const normTasks = (list) => (list || []).map((x) => ({ ...x, id: x.task_id }));
 const newKey = () => `web-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 const failMsg = (r, fb) => (!r || r._networkError ? t("map_library.net_error") : (r.message || fb));
 
-export default function SiteMarkingEditor({ lib, loadMaps, onClose, onSaved }) {
+export default function SiteMarkingEditor({ lib, loadMaps, onClose, onSaved, onOpenKids }) {
   const perms = (lib && lib.perms) || {};
   // Library me marking = Mapping ka "Entry" tick (5 Oct 2026; transition me
   // Create bhi) — wahi jo server POST /map-library par maangta hai.
@@ -1890,6 +1890,11 @@ export default function SiteMarkingEditor({ lib, loadMaps, onClose, onSaved }) {
           </div>
         )}
         {milaan()}
+        {/* Line ke saath ki cheezein (valve / manhole / pole / nali…) — abhi lagao,
+            ya baad me library se. (M2, 11 Oct 2026) */}
+        {saved.free && onOpenKids && kind === "line" && saved.item && saved.item.id && childFields("line", atype || "other").length > 0 && (
+          <Btn tone="primary" onClick={() => onOpenKids(saved.item.id)} style={{ width: "100%", marginBottom: 8 }}>{t("map_form.saath_btn")}</Btn>
+        )}
         {(saved.free ? perms.export : canServerKml) && (
           <Btn onClick={downloadKml} style={{ width: "100%", marginBottom: 8 }}>{saved.free ? t("map_draw.is_marking_ki_kml") : selTask ? t("map_draw.kaam_ki_kml") : t("map_draw.site_ki_kml")}</Btn>
         )}

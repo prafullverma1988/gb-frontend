@@ -26,7 +26,7 @@ import { CreateTransactionModal } from "./FinanceModule";
 import { t, Rich } from "../i18n";
 import { BackClose } from "../utils/backNav";
 import { can, canAny, canEntry } from "../utils/perms";
-import { useMapLibrary, styleOf, lineOpts, markerIcon, MapLibraryDialog, RegisterDialog,
+import { useMapLibrary, styleOf, lineOpts, markerIcon, MapLibraryDialog, RegisterDialog, ChildEditor, childFields, kidsShort,
   formOf, propsRows, missingOf, TypeDetailFields, drainPaths, drainLineOpts, polePoints, poleIcon } from "./mapStyles";
 // xlsx (~400 KB) sirf BOQ file kholte waqt chahiye — Tenders khulte hi nahi (PERF-05).
 // loadFile() pehle loadXlsx() await karta hai; baaki helper (sheetToAoa,
@@ -4239,6 +4239,7 @@ function MapTab({tenderId, sites}) {
   const { lib: mapLib } = useMapLibrary();
   const [libOpen, setLibOpen] = useState(false);
   const [regOpen, setRegOpen] = useState(false);   // lines ka register (11 Oct 2026)
+  const [kidsFor, setKidsFor] = useState(null);    // "Saath ki cheezein" — kis line ki (id)
   const [sugg, setSugg]       = useState([]);     // search ke suggestions
   const photoMarkersRef = useRef([]);
   const infoWinRef = useRef(null);
@@ -4278,8 +4279,11 @@ function MapTab({tenderId, sites}) {
     propsRows(it.kind, it.atype, it.props, ["width_m"]).forEach((r) => rows.push(r));
     const poles = it.kind === "line" ? polePoints(it.atype, it.props, it.geometry || []).length : 0;
     if (poles) rows.push([t("map_form.pole_ginti"), String(poles)]);
-    const miss = missingOf(formOf(it.kind, it.atype), it.props);
+    const miss = [...missingOf(formOf(it.kind, it.atype), it.props),
+      ...(it.kind === "line" ? kidsShort({ ...it }, items.filter(k => k.parent_id === it.id)) : [])];
     if (miss.length) rows.push([t("map_form.detail_adhoori"), miss.join(", ")]);
+    const par = it.parent_id ? items.find(x => x.id === it.parent_id) : null;
+    if (par) rows.push([t("map_form.kis_line_par"), `${par.name || "—"}${it.chainage_m != null ? ` · Ch ${chFmt(Number(par.start_chainage_m || 0) + Number(it.chainage_m))}` : ""}`]);
     if (it.source) rows.push([t("tenders.hv_source"), it.source]);
     return {
       title: it.name || alignLabel(it.kind, it.atype),
@@ -4288,7 +4292,7 @@ function MapTab({tenderId, sites}) {
       rows, attrs: Array.isArray(it.attrs) ? it.attrs : [], notes: it.notes || "",
       hint: t("tenders.hv_click_dashboard"),
     };
-  }, [progress, mapLib]);
+  }, [progress, mapLib, items]);
   // Kisi bhi shape par hover = card; mouse ke saath chalta hai; hatte hi gayab.
   const hoverOn = useCallback((shape, card) => {
     const pos = (e) => (e && e.domEvent ? { x: e.domEvent.clientX, y: e.domEvent.clientY } : null);
@@ -4617,7 +4621,7 @@ function MapTab({tenderId, sites}) {
           hoverOn(pl, ()=>cardFor(it, pi));
           shapesRef.current.push(pl);
           // Sadak ki side nali (detail me bhari ho) — bagal me patli dashed, sirf dikhawa.
-          drainPaths(it.atype, it.props, part, it.width_m).forEach((dp) => {
+          drainPaths(it.atype, it.props, part, it.width_m, items.filter(k => k.parent_id === it.id)).forEach((dp) => {
             shapesRef.current.push(new g.maps.Polyline({ path: dp, ...drainLineOpts(g), map: mapRef.current }));
           });
         });
@@ -5980,6 +5984,23 @@ function MapTab({tenderId, sites}) {
     {/* Naya drawn feature — type ke hisaab se apne field */}
     {hover && hover.card && <HoverCard x={hover.x} y={hover.y} card={hover.card}/>}
     {libOpen && <MapLibraryDialog onClose={()=>setLibOpen(false)}/>}
+    {kidsFor && (()=> {
+      const ln = items.find(x => x.id === kidsFor);
+      if (!ln) return null;
+      const asLine = (a) => ({ id: a.id, name: a.name, kind: a.kind, atype: a.atype, pts: a.geometry || [], gaps: a.gaps,
+        props: a.props, startCh: a.start_chainage_m, child_key: a.child_key, chainage_m: a.chainage_m });
+      return (
+        <ChildEditor line={asLine(ln)} kids={items.filter(k => k.parent_id === ln.id).map(asLine)}
+          canEdit={canAny(["Tenders","Mapping"], "edit")} loadMaps={()=>loadGoogleMaps(apiKey)}
+          api={{
+            place: (body) => api.post(`/tenders/${tenderId}/alignments/${ln.id}/children`, body),
+            move: (cid, lat, lng) => api.patch(`/tenders/${tenderId}/alignments/children/${cid}`, { lat, lng }),
+            remove: (cid) => api.del(`/tenders/${tenderId}/alignments/children/${cid}`),
+            saveProps: (props) => api.put(`/tenders/${tenderId}/alignments/${ln.id}`, { props }),
+          }}
+          onChanged={()=>load()} onClose={()=>setKidsFor(null)}/>
+      );
+    })()}
     {regOpen && (
       <RegisterDialog title="" canExport={canAny(["Tenders","Mapping"], "export")} onClose={()=>setRegOpen(false)}
         extraHead={[t("common.site"), t("tenders.hv_chainage"), t("tenders.hv_chaudai")]}
@@ -6060,6 +6081,10 @@ function MapTab({tenderId, sites}) {
         onClose={()=>setPendingHidden(true)}
         footer={<>
           <SecBtn label={t("common.hatao")} onClick={dropPending}/>
+          {/* Line ke saath ki cheezein — valve / manhole / pole / nali (11 Oct 2026). */}
+          {pending.edit && pending.kind === "line" && childFields("line", pending.atype).length > 0 && (
+            <SecBtn label={t("map_form.saath_btn")} onClick={()=>{ const id = pending.id; setPending(null); setKidsFor(id); }}/>
+          )}
           <PrimBtn label={busy?t("tenders.save_ho_raha_hai"):t("common.save")} Icon={IcChk} onClick={savePending} disabled={busy}/>
         </>}>
         <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:13}}>
@@ -6308,7 +6333,7 @@ function MapTab({tenderId, sites}) {
       )}
       {!loading && !!items.length && (
         <div style={{padding:"4px 0"}}>
-          {items.map(it=>(
+          {items.filter(it => !it.parent_id).map(it=>(
             <div key={it.id} style={{display:"flex", alignItems:"center", gap:10, padding:"9px 14px",
               borderBottom:`1px solid ${T.b1}`}}>
               <div style={{width:10, height:10, flexShrink:0,

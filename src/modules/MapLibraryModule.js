@@ -26,7 +26,7 @@ import { useBackClose } from "../utils/backNav";
 import { can, canEntry } from "../utils/perms";
 import SiteMarkingEditor from "./SiteMarkingEditor";
 import { useMapLibrary, styleOf, lineOpts, markerIcon, MapLibraryDialog, typeName, typesFor, StyleSwatch,
-  formOf, propsRows, missingOf, cleanProps, detailPairs, TypeDetailFields, drainPaths, drainLineOpts, polePoints, poleIcon } from "./mapStyles";
+  formOf, propsRows, missingOf, cleanProps, detailPairs, childFields, kidsSummary, kidsShort, ChildEditor, TypeDetailFields, drainPaths, drainLineOpts, polePoints, poleIcon } from "./mapStyles";
 
 // ── ICONS ─────────────────────────────────────────────────────────
 const Ic = ({ d, size = 16, color = "currentColor", sw = 1.8, fill = "none" }) => (
@@ -146,7 +146,25 @@ const ATYPE = {
 const atypeLabel = (a) => (a ? (ATYPE[a] ? ATYPE[a]() : String(a)) : null);
 // Type ka detail (L, 10 Oct 2026): jo zaroori field khaali hain unke naam,
 // aur pipe ka dia form me hai ya nahi (hai to alag "Dia" nahi dikhate).
-const missingIn = (it) => missingOf(formOf(it.kind, it.atype || "other"), it.props);
+// Line ke saath ki cheezein (M2, 11 Oct 2026): library load hote hi parent → cheezein
+// aur id → marking ka index (ped, card, register sab yahi padhte hain).
+let _kids = new Map(), _byId = new Map();
+const indexKids = (items) => {
+  _kids = new Map(); _byId = new Map();
+  (items || []).forEach((x) => {
+    _byId.set(x.id, x);
+    if (x.parent_id != null) { if (!_kids.has(x.parent_id)) _kids.set(x.parent_id, []); _kids.get(x.parent_id).push(x); }
+  });
+};
+const kidsOf = (id) => _kids.get(id) || [];
+// Dikhai gayi marking + unki cheezein (aur cheezon ki cheezein — nali ke manhole).
+const withKids = (items) => {
+  const out = [...items], seen = new Set(items.map((x) => x.id));
+  for (let i = 0; i < out.length; i++) kidsOf(out[i].id).forEach((k) => { if (!seen.has(k.id)) { seen.add(k.id); out.push(k); } });
+  return out;
+};
+const missingIn = (it) => [...missingOf(formOf(it.kind, it.atype || "other"), it.props),
+  ...(it.kind === "line" ? kidsShort(it, kidsOf(it.id)) : [])];
 const formHasDia = (it) => formOf(it.kind, it.atype || "other").some((f) => f.key === "dia_mm");
 const polesIn = (it) => (it.kind === "line" ? polePoints(it.atype || "other", it.props, cleanPts(it)).length : 0);
 
@@ -435,6 +453,11 @@ function HoverCard({ x, y, card }) {
 // ek hi hai — naam, file, folder wahi; sirf lambai us tukde ki aur poori ki.
 function cardOf(it, where, pi) {
   const rows = [];
+  const par = it.parent_id != null ? _byId.get(it.parent_id) : null;
+  if (par) {
+    rows.push([t("map_form.kis_line_par"), par.name || "—"]);
+    if (it.chainage_m != null) rows.push([t("map_library.chainage"), fmtCh(Number(par.startCh || 0) + Number(it.chainage_m))]);
+  }
   const len = Number(it.lenM) || 0;
   const pl = it.kind === "line" && pi != null ? partLengths(cleanPts(it), it.gaps) : [];
   if (it.kind === "area") { const a = fmtArea(it.areaSqm); if (a) rows.push([t("map_library.rakba"), a]); }
@@ -530,7 +553,7 @@ function MapPreview({ items, onPick, whereOf, height = 380 }) {
           hoverOn(ln, it, pi);
           layersRef.current.push(ln);
           // Sadak ki side nali — bagal me patli dashed (sirf dikhawa).
-          drainPaths(it.atype || "other", it.props, part).forEach((dp) => {
+          drainPaths(it.atype || "other", it.props, part, null, kidsOf(it.id)).forEach((dp) => {
             layersRef.current.push(new g.maps.Polyline({ map, path: dp, ...drainLineOpts(g) }));
           });
         });
@@ -586,6 +609,7 @@ function buildTree(data) {
   const groups = new Map();
   data.folders.forEach((f) => groups.set(String(f.id), { fk: String(f.id), id: f.id, folder: f, items: [], files: new Map() }));
   data.items.forEach((it) => {
+    if (it.parent_id != null) return;          // line ki cheez — line ke andar dikhti hai
     const fk = fkOf(it.folder_id);
     if (!groups.has(fk)) groups.set(fk, { fk, id: it.folder_id == null ? null : it.folder_id, folder: null, items: [], files: new Map() });
     const g = groups.get(fk);
@@ -1087,6 +1111,7 @@ function MapLibraryModule() {
   useEffect(() => { if (view === "deleted") loadDeleted(); }, [view, loadDeleted]);
 
   const allData = lib.data;
+  useMemo(() => indexKids(allData ? allData.items : []), [allData]);
   // "Detail adhoori" — zaroori field khaali wali marking (form library se aata
   // hai, isliye mapLib bhi deps me). Filter chalu ho to ped me sirf wahi.
   const adhooriCount = useMemo(() => (allData && mapLib ? allData.items.filter((it) => missingIn(it).length).length : 0), [allData, mapLib]);
@@ -1320,6 +1345,8 @@ function MapLibraryModule() {
         facts.push([t("map_library.chainage"), len > 0 ? `${fmtCh(it.startCh)} – ${fmtCh(Number(it.startCh) + len)}` : fmtCh(it.startCh)]);
       }
       facts.push([t("map_library.gps_point"), String(pts)]);
+      const par = it.parent_id != null ? _byId.get(it.parent_id) : null;
+      if (par) facts.push([t("map_form.kis_line_par"), `${par.name || "—"}${it.chainage_m != null ? ` · Ch ${fmtCh(Number(par.startCh || 0) + Number(it.chainage_m))}` : ""}`]);
       facts.push([t("map_library.banayi"), [canSeeAll ? it.by : null, fmtDT(it.at)].filter(Boolean).join(" · ") || "—"]);
     }
 
@@ -1369,6 +1396,9 @@ function MapLibraryModule() {
               {itemEdit && <Btn onClick={() => setDialog({ kind: "rename-item", item: it })}>{t("map_library.naam_badlo")}</Btn>}
               {itemEdit && <Btn onClick={() => setDialog({ kind: "move-item", item: it })}>{t("map_library.folder_badlo")}</Btn>}
               {itemEdit && <Btn onClick={() => setDialog({ kind: "type-item", item: it })}>{t("map_library.type_detail_badlo")}</Btn>}
+              {itemEdit && it.kind === "line" && childFields("line", it.atype || "other").length > 0 && (
+                <Btn tone="primary" onClick={() => setDialog({ kind: "kids", id: it.id })}>{t("map_form.saath_btn")}</Btn>
+              )}
               {folderEdit && <Btn onClick={() => setDialog({ kind: "rename-folder", group: g })}>{t("map_library.naam_badlo")}</Btn>}
             </div>
           </div>
@@ -1430,7 +1460,7 @@ function MapLibraryModule() {
         <div style={{ background: T.surface, border: `1px solid ${T.b1}`, borderRadius: 10, overflow: "hidden" }}>
           <div style={{ padding: "11px 14px", borderBottom: `1px solid ${T.b1}`, background: T.surfaceB }}>
             <div style={{ fontSize: 12.5, fontWeight: 700, color: T.t1 }}>
-              {t("map_library.summary", { folders: folderCount, files: fileCount, n: data.items.length })}
+              {t("map_library.summary", { folders: folderCount, files: fileCount, n: data.items.filter((x) => x.parent_id == null).length })}
             </div>
             {canSeeAll && <div style={{ fontSize: 11.5, color: T.t3, marginTop: 2 }}>{t("map_library.poori_company_ki_library")}</div>}
             {(adhooriCount > 0 || adhooriOnly) && (
@@ -1446,7 +1476,7 @@ function MapLibraryModule() {
           </div>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 14, minWidth: 0 }}>
-          <MapPreview items={info ? info.items : EMPTY} onPick={reveal}
+          <MapPreview items={info ? withKids(info.items) : EMPTY} onPick={reveal}
             whereOf={(it) => {
               const g = tree.find((x) => x.fk === fkOf(it.folder_id));
               return [g ? folderTitle(g) : t("map_library.bina_folder"), fileTitle(String(it.file || "").trim())].join(" › ");
@@ -1503,6 +1533,21 @@ function MapLibraryModule() {
         <TypeDialog item={dItem} onClose={() => setDialog(null)} onSave={(atype, props, dia) => retypeItem(dItem, atype, props, dia)} />
       )}
       {libOpen && <MapLibraryDialog onClose={() => setLibOpen(false)} />}
+      {dialog && dialog.kind === "kids" && allData && (() => {
+        const ln = allData.items.find((x) => x.id === dialog.id);
+        if (!ln) return null;
+        return (
+          <ChildEditor line={ln} kids={kidsOf(ln.id)} canEdit={yes(ln.can_edit)}
+            loadMaps={() => loadGmaps(process.env.REACT_APP_GOOGLE_MAPS_KEY)}
+            api={{
+              place: (body) => api.post(`/map-library/${ln.id}/children`, body),
+              move: (cid, lat, lng) => api.patch(`/map-library/children/${cid}`, { lat, lng }),
+              remove: (cid) => api.del(`/map-library/children/${cid}`),
+              saveProps: (props) => api.patch(`/map-library/${ln.id}`, { props }),
+            }}
+            onChanged={() => loadLib("refresh")} onClose={() => setDialog(null)} />
+        );
+      })()}
       {dialog && dialog.kind === "move-item" && (
         <MoveDialog item={dItem} targets={moveTargets(dItem)}
           currentTitle={dItem.folder_id == null ? t("map_library.bina_folder") : folderTitle(tree.find((g) => g.fk === fkOf(dItem.folder_id)) || { fk: fkOf(dItem.folder_id), id: dItem.folder_id })}
@@ -1532,7 +1577,8 @@ function MapLibraryModule() {
           onSaved={(id) => {
             // Nayi marking library me turant dikhe — editor band hone par wahi chuni hui milegi.
             loadLib("refresh").then(() => { if (id) setTimeout(() => reveal(id), 0); });
-          }} />
+          }}
+          onOpenKids={(id) => { setDrawing(false); loadLib("refresh").then(() => setDialog({ kind: "kids", id })); }} />
       )}
       <Toast toast={toast} />
     </div>
