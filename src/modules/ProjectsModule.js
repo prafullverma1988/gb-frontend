@@ -2218,7 +2218,7 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
   // ── Warehouse splits ──
   const whPendingMRs   = data.whmrs.filter(m=>!m.status||m.status==="Pending");
   const whApprovedMRs  = data.whmrs.filter(m=>m.status==="Approved"||m.status==="Issued");
-  const recentGRNs     = data.grns.slice(0,20);
+  const recentGRNs     = data.grns.filter(g=>!g.cancelled_at).slice(0,20);   // hatayi gayi store GRN (12 Oct 2026) nahi
   const recentTransfers= data.transfers.slice(0,20);
 
   // ── Engine-driven approvability (materials mode) ──
