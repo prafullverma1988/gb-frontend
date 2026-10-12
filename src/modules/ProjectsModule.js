@@ -192,6 +192,72 @@ function SitePulseDrawer({onClose,onSelectProject}){
   const [feed,setFeed]=useState([]);
   const [projects,setProjects]=useState([]);
   const [loading,setLoading]=useState(true);
+  // ── Chat (12 Oct 2026): tareekh ka daayra, khoj, comment, Dekh liya, Issue / To-do ──
+  const [range,setRange]=useState({preset:"all",from:"",to:""});
+  const [search,setSearch]=useState("");
+  const [q,setQ]=useState("");
+  useEffect(()=>{ const h=setTimeout(()=>setQ(search.trim()),400); return ()=>clearTimeout(h); },[search]);
+  const [threads,setThreads]=useState({});
+  const [openKey,setOpenKey]=useState(null);
+  const [draftC,setDraftC]=useState("");
+  const [sending,setSending]=useState(false);
+  const [sheet,setSheet]=useState(null);       // { kind, item, title }
+  const [sheetBusy,setSheetBusy]=useState(false);
+  const [sheetErr,setSheetErr]=useState("");
+  const [toast,setToast]=useState("");
+  const flash=(m)=>{ setToast(m); setTimeout(()=>setToast(""),2400); };
+  const me=(()=>{ try{ return JSON.parse(localStorage.getItem("gb_user"))||{}; }catch{ return {}; } })();
+  const istDay=(off=0)=>new Date(Date.now()+5.5*3600*1000-off*86400000).toISOString().slice(0,10);
+  const rangeQ=range.preset==="today"?{from:istDay(),to:istDay()}:range.preset==="7"?{from:istDay(6),to:istDay()}:range.preset==="30"?{from:istDay(29),to:istDay()}:range.preset==="custom"?{from:range.from,to:range.to}:{};
+  const refKey=(f)=>f.feed_type+"/"+f.id;
+  const patchItem=(f,fn)=>setFeed(l=>l.map(x=>(x.feed_type===f.feed_type&&x.id===f.id?fn(x):x)));
+  const toggleSeen=(f)=>{
+    const on=!f.seen_by_me, name=me.name||t("pulse_chat.aap");
+    patchItem(f,x=>({...x,seen_by_me:on,seen_count:Math.max(0,(Number(x.seen_count)||0)+(on?1:-1)),
+      seen_by:on?[name,...(x.seen_by||[]).filter(n=>n!==name)].slice(0,3):(x.seen_by||[]).filter(n=>n!==name)}));
+    api.post(`/projects/pulse/${f.feed_type}/${f.id}/seen`,{on}).catch(()=>{});
+  };
+  const loadThread=(f)=>{
+    const k=refKey(f);
+    setThreads(p=>({...p,[k]:{list:(p[k]&&p[k].list)||[],loading:true}}));
+    api.get(`/projects/pulse/${f.feed_type}/${f.id}/comments`)
+      .then(r=>setThreads(p=>({...p,[k]:{list:(r&&r.success&&Array.isArray(r.data))?r.data:[],loading:false}})))
+      .catch(()=>setThreads(p=>({...p,[k]:{list:(p[k]&&p[k].list)||[],loading:false}})));
+  };
+  const toggleThread=(f)=>{ const k=refKey(f); if(openKey===k){setOpenKey(null);return;} setOpenKey(k); setDraftC(""); if(!threads[k])loadThread(f); };
+  const sendComment=async(f)=>{
+    const text=draftC.trim(); if(!text||sending)return;
+    const k=refKey(f); setSending(true);
+    const r=await api.post(`/projects/pulse/${f.feed_type}/${f.id}/comments`,{text,project_id:f.project_id||undefined,author_id:f.user_id||undefined,about:String(f.text||"").slice(0,60)}).catch(()=>null);
+    setSending(false);
+    if(!r||!r.success){ flash((r&&r.message)||t("pulse_chat.bheja_nahi")); return; }
+    setThreads(p=>({...p,[k]:{list:[...((p[k]&&p[k].list)||[]),r.data],loading:false}}));
+    patchItem(f,x=>({...x,comment_count:(Number(x.comment_count)||0)+1}));
+    setDraftC("");
+  };
+  const startSheet=(kind,f)=>{ setSheetErr(""); setSheet({kind,item:f,title:String(f.text||"").slice(0,120)}); };
+  const createFromSheet=async()=>{
+    if(!sheet||sheetBusy)return;
+    const title=String(sheet.title||"").trim(); const f=sheet.item; const pid=Number(f.project_id);
+    if(!title){setSheetErr(t("pulse_chat.title_likho"));return;}
+    if(!pid){setSheetErr(t("pulse_chat.project_nahi"));return;}
+    setSheetBusy(true); setSheetErr("");
+    const desc=t("pulse_chat.pulse_se_desc",{text:f.text,who:f.user_name||"",when:timeAgo(f.activity_date||f.created_at)});
+    const photos=Array.isArray(f.photos)?f.photos:(f.photo_url?[f.photo_url]:[]);
+    const r=sheet.kind==="issue"
+      ?await api.post(`/tasks/project/${pid}/issues`,{title,description:desc,priority:"Medium",photo_url:photos[0]||undefined,photo_urls:photos.length?photos:undefined}).catch(()=>null)
+      :await api.post("/projects/company-todos",{title,description:desc,project_id:pid,category:"Site"}).catch(()=>null);
+    if(!r||!r.success||!r.data||!r.data.id){ setSheetBusy(false); setSheetErr((r&&r.message)||t("pulse_chat.bheja_nahi")); return; }
+    const l=await api.post(`/projects/pulse/${f.feed_type}/${f.id}/link`,{kind:sheet.kind,target_id:r.data.id}).catch(()=>null);
+    if(l&&l.success&&l.data) patchItem(f,x=>({...x,links:[...(x.links||[]),l.data]}));
+    setSheetBusy(false); setSheet(null);
+    flash(sheet.kind==="issue"?t("pulse_chat.issue_ban_gaya",{n:r.data.id}):t("pulse_chat.todo_ban_gaya"));
+  };
+  const share=(f)=>{
+    const photos=Array.isArray(f.photos)?f.photos:(f.photo_url?[f.photo_url]:[]);
+    const lines=[f.project_name||"",(tagMeta[f.feed_type]||{}).label+": "+(f.text||""),f.amount?`₹${Number(f.amount).toLocaleString("en-IN")}`:"",(f.user_name||"")+" · "+timeAgo(f.activity_date||f.created_at),photos[0]||""].filter(Boolean);
+    window.open("https://wa.me/?text="+encodeURIComponent(lines.join("\n")),"_blank","noopener");
+  };
   // ── Actionable approvals (P3) ──────────────────────────────────────────
   // Straight from /approvals/pending?scope=my — the approval engine's OWN
   // whose-turn gating. We never re-derive "can I act?" here; scope=my already
@@ -214,13 +280,16 @@ function SitePulseDrawer({onClose,onSelectProject}){
     // "kya gadbad lagti hai" kahin nahi aata tha — aur admin ko sabse pehle
     // wahi chahiye. Isliye chip sabse aage.
     "flag":{c:"#DC2626",b:"#FEE2E2",icon:"⚠️",label:t("projects.flag")},
+    // Project ka Note — app ke Chat ke message bar se likha (12 Oct 2026).
+    "note":{c:"#3730A3",b:"#EEF2FF",icon:"💬",label:t("pulse_chat.note")},
   };
   const avatarColors=["#1565C0","#2E7D32","#6A1B9A","#AD1457","#E65100","#00838F","#4527A0","#C62828"];
   const getAC=(name)=>avatarColors[Math.abs([...name].reduce((a,c)=>a+c.charCodeAt(0),0))%avatarColors.length];
 
   useEffect(()=>{
     setLoading(true);
-    api.get("/projects/site-pulse?limit=60").then(r=>{
+    const qs=(rangeQ.from?"&from="+rangeQ.from:"")+(rangeQ.to?"&to="+rangeQ.to:"")+(q?"&q="+encodeURIComponent(q):"");
+    api.get("/projects/site-pulse?limit="+(rangeQ.from||q?200:60)+qs).then(r=>{
       if(r.success&&r.data){
         setFeed(r.data.feed||[]);
         setProjects(r.data.projects||[]);
@@ -232,7 +301,7 @@ function SitePulseDrawer({onClose,onSelectProject}){
       const list=(r&&r.success&&Array.isArray(r.data))?r.data:[];
       setPending(list.filter(i=>i._canActNow!==false&&(i._request_id||i.id)));
     }).catch(()=>{});
-  },[]);
+  },[rangeQ.from,rangeQ.to,q]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const timeAgo=(d)=>{
     if(!d) return "";
@@ -299,6 +368,23 @@ function SitePulseDrawer({onClose,onSelectProject}){
           </div>
           <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:C.tl,display:"flex"}}><IcX size={15}/></button>
         </div>
+        {/* Tareekh ka daayra + khoj (12 Oct 2026) */}
+        <div style={{display:"flex",gap:5,alignItems:"center",marginBottom:6,flexWrap:"wrap"}}>
+          {[["all",t("pulse_chat.range_sab")],["today",t("pulse_chat.aaj")],["7",t("pulse_chat.range_7")],["30",t("pulse_chat.range_30")],["custom",t("pulse_chat.range_custom")]].map(([k,l])=>{
+            const on=range.preset===k;
+            return <button key={k} onClick={()=>setRange(r=>({...r,preset:k,from:k==="custom"?(r.from||istDay(6)):r.from,to:k==="custom"?(r.to||istDay()):r.to}))}
+              style={{height:24,padding:"0 9px",borderRadius:12,border:`1px solid ${on?C.p:C.b}`,background:on?C.bl:C.w,color:on?C.p:C.tl,fontSize:10.5,fontWeight:on?700:500,cursor:"pointer",fontFamily:"inherit"}}>{l}</button>;
+          })}
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder={t("pulse_chat.khoj_ph")} aria-label={t("pulse_chat.khoj")}
+            style={{flex:"1 1 120px",minWidth:0,height:24,padding:"0 8px",borderRadius:12,border:`1px solid ${q?C.p:C.b}`,fontSize:11,fontFamily:"inherit",outline:"none",color:C.t,background:C.w}}/>
+        </div>
+        {range.preset==="custom"&&(
+          <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:6}}>
+            <input type="date" value={range.from} max={range.to||undefined} onChange={e=>setRange(r=>({...r,from:e.target.value}))} aria-label={t("pulse_chat.se")} style={{flex:1,padding:"4px 6px",borderRadius:7,border:`1.5px solid ${C.b}`,fontSize:11,fontFamily:"inherit"}}/>
+            <span style={{fontSize:11,color:C.tl}}>{t("pulse_chat.tak")}</span>
+            <input type="date" value={range.to} min={range.from||undefined} onChange={e=>setRange(r=>({...r,to:e.target.value}))} aria-label={t("pulse_chat.tak")} style={{flex:1,padding:"4px 6px",borderRadius:7,border:`1.5px solid ${C.b}`,fontSize:11,fontFamily:"inherit"}}/>
+          </div>
+        )}
         <div style={{display:"flex",gap:6}}>
           <PickSelect value={site} onChange={e=>setSite(e.target.value)} style={{flex:1,padding:"6px 8px",borderRadius:7,border:`1.5px solid ${C.b}`,fontSize:11.5,background:C.bg,outline:"none",fontFamily:"inherit",color:C.t}}>
             <option value="All">{t("common.all_projects")}</option>
@@ -476,12 +562,48 @@ function SitePulseDrawer({onClose,onSelectProject}){
               <div style={{padding:"5px 12px 4px"}}><span style={{fontSize:12,color:C.t,lineHeight:1.45}}><strong>{f.user_name}</strong> {f.text}</span></div>
 
               {/* Footer */}
-              <div style={{padding:"5px 12px 10px",display:"flex",alignItems:"center",gap:6}}>
+              <div style={{padding:"5px 12px 6px",display:"flex",alignItems:"center",gap:6}}>
                 <span style={{fontSize:10,color:C.tl,fontStyle:"italic"}}>{f.module}</span>
                 <div style={{flex:1}}/>
                 <span style={{fontSize:9.5,color:C.tl}}>{time}</span>
                 {canGo&&<span style={{fontSize:10,color:C.p,fontWeight:700}}>→</span>}
               </div>
+              {(f.links||[]).length>0&&(
+                <div style={{display:"flex",gap:5,flexWrap:"wrap",padding:"0 12px 6px"}}>
+                  {f.links.map((l,i)=><span key={i} style={{fontSize:10,fontWeight:700,color:C.p,background:C.bl,padding:"2px 7px",borderRadius:9}}>{l.kind==="issue"?t("pulse_chat.link_issue",{n:l.target_id}):t("pulse_chat.link_todo")}{l.title?": "+String(l.title).slice(0,40):""}</span>)}
+                </div>
+              )}
+              {/* Dekh liya · Comment · Issue · To-do · WhatsApp (12 Oct 2026) — card ka click rokte hain */}
+              {(()=>{ const k=refKey(f); const seen=!!f.seen_by_me; const th=threads[k];
+                const ab={height:30,padding:"0 8px",border:"none",background:"none",display:"inline-flex",alignItems:"center",gap:4,fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit",color:C.tl};
+                return (<div onClick={e=>e.stopPropagation()} style={{borderTop:`1px solid ${C.b}`,background:"#FAFAF8"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:2,padding:"0 4px",flexWrap:"wrap"}}>
+                    <button onClick={()=>toggleSeen(f)} title={t("pulse_chat.dekh_liya")} style={{...ab,color:seen?C.g:C.tl}}>✓ {seen?t("pulse_chat.dekh_liya_by",{who:(f.seen_by||[]).slice(0,2).join(", ")||t("pulse_chat.aap")}):t("pulse_chat.dekh_liya")}{!seen&&f.seen_count>0?" · "+f.seen_count:""}</button>
+                    <button onClick={()=>toggleThread(f)} style={{...ab,color:openKey===k?C.p:C.tl}}>💬 {f.comment_count>0?t("pulse_chat.comment_n",{n:f.comment_count}):t("pulse_chat.comment")}</button>
+                    <div style={{flex:1}}/>
+                    <button onClick={()=>startSheet("issue",f)} title={t("pulse_chat.issue_banao")} style={ab}>⚠ {t("pulse_chat.issue")}</button>
+                    <button onClick={()=>startSheet("todo",f)} title={t("pulse_chat.todo_banao")} style={ab}>☑ {t("pulse_chat.todo")}</button>
+                    <button onClick={()=>share(f)} title={t("pulse_chat.wa_bhejo")} aria-label={t("pulse_chat.wa_bhejo")} style={{...ab,color:C.g}}>⤴</button>
+                  </div>
+                  {openKey===k&&(
+                    <div style={{padding:"4px 12px 10px",display:"flex",flexDirection:"column",gap:4}}>
+                      {th&&th.loading&&<div style={{fontSize:11,color:C.tl}}>{t("pulse_chat.loading_comments")}</div>}
+                      {th&&!th.loading&&th.list.length===0&&<div style={{fontSize:11,color:C.tl}}>{t("pulse_chat.koi_comment_nahi")}</div>}
+                      {(th?th.list:[]).map(c=>{ const mine=Number(c.user_id)===Number(me.id); return (
+                        <div key={c.id} style={{display:"flex",justifyContent:mine?"flex-end":"flex-start"}}>
+                          <div style={{maxWidth:"88%",background:mine?"#E4E6FA":C.w,border:`1px solid ${mine?"#C7CBF2":C.b}`,borderRadius:9,padding:"5px 9px"}}>
+                            <div style={{fontSize:10,fontWeight:700,color:C.tl}}>{mine?t("pulse_chat.aap"):(c.user_name||t("pulse_chat.team"))} · {timeAgo(c.created_at)}</div>
+                            <div style={{fontSize:12,color:C.t,lineHeight:1.4,whiteSpace:"pre-wrap",overflowWrap:"anywhere"}}>{c.text}</div>
+                          </div>
+                        </div>); })}
+                      <div style={{display:"flex",gap:6,alignItems:"center",marginTop:2}}>
+                        <input value={draftC} onChange={e=>setDraftC(e.target.value)} onKeyDown={e=>{ if(e.key==="Enter")sendComment(f); }} placeholder={t("pulse_chat.jawab_likho")}
+                          style={{flex:1,minWidth:0,height:30,borderRadius:15,border:`1px solid ${C.b}`,padding:"0 10px",fontSize:12,fontFamily:"inherit",outline:"none",color:C.t,background:C.w}}/>
+                        <button onClick={()=>sendComment(f)} disabled={sending} style={{height:30,padding:"0 12px",borderRadius:15,border:"none",background:C.p,color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",opacity:sending?.6:1}}>{t("pulse_chat.bhejo")}</button>
+                      </div>
+                    </div>
+                  )}
+                </div>); })()}
             </div>
           );
         })}
@@ -493,6 +615,24 @@ function SitePulseDrawer({onClose,onSelectProject}){
           <span style={{fontSize:11,color:C.tl,fontWeight:500}}>{t("projects.real_time_feed_from_all_projects")}</span>
         </div>
       </div>
+      {toast&&<div style={{position:"absolute",left:12,right:12,bottom:52,display:"flex",justifyContent:"center",pointerEvents:"none"}}><span style={{background:"#1F1F23",color:"#fff",fontSize:11.5,fontWeight:600,padding:"7px 12px",borderRadius:9}}>{toast}</span></div>}
+      {/* Issue / To-do ki chhoti sheet — khabar se (12 Oct 2026) */}
+      {sheet&&(
+        <div onClick={()=>!sheetBusy&&setSheet(null)} style={{position:"absolute",inset:0,background:"rgba(15,23,42,.35)",display:"flex",alignItems:"flex-end",zIndex:5}}>
+          <div onClick={e=>e.stopPropagation()} style={{width:"100%",background:C.w,borderRadius:"14px 14px 0 16px",padding:"12px 14px 14px",display:"flex",flexDirection:"column",gap:8,boxSizing:"border-box"}}>
+            <div style={{fontSize:13.5,fontWeight:800,color:C.t}}>{sheet.kind==="issue"?t("pulse_chat.issue_banao"):t("pulse_chat.todo_banao")}</div>
+            <div style={{fontSize:11,color:C.tl,background:C.bg,borderRadius:7,padding:"5px 9px",borderLeft:`3px solid ${C.p}`,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t("pulse_chat.is_khabar_se")}: {sheet.item.text}</div>
+            <label style={{fontSize:10.5,fontWeight:700,color:C.tl}}>{t("pulse_chat.title")}</label>
+            <input value={sheet.title} onChange={e=>setSheet({...sheet,title:e.target.value})} maxLength={200} style={{height:36,borderRadius:8,border:`1.5px solid ${C.b}`,padding:"0 10px",fontSize:12.5,fontFamily:"inherit",color:C.t}}/>
+            <div style={{fontSize:11,color:C.tl}}>{t("pulse_chat.project")}: <strong style={{color:C.t}}>{sheet.item.project_name||"—"}</strong>{(sheet.item.photo_url||(sheet.item.photos||[]).length)?" · "+t("pulse_chat.photo_saath"):""}</div>
+            {sheetErr&&<div style={{fontSize:11,color:C.r}}>{sheetErr}</div>}
+            <div style={{display:"flex",gap:8}}>
+              <button onClick={()=>setSheet(null)} disabled={sheetBusy} style={{flex:1,height:36,borderRadius:8,border:`1px solid ${C.b}`,background:C.w,color:C.t,fontSize:12.5,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>{t("common.cancel")}</button>
+              <button onClick={createFromSheet} disabled={sheetBusy} style={{flex:1,height:36,borderRadius:8,border:"none",background:C.p,color:"#fff",fontSize:12.5,fontWeight:700,cursor:"pointer",fontFamily:"inherit",opacity:sheetBusy?.6:1}}>{sheet.kind==="issue"?t("pulse_chat.issue_banao"):t("pulse_chat.todo_banao")}</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   </>);
 }
