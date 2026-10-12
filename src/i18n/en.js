@@ -7048,6 +7048,7 @@ const dict = {
   "procurement.split_save":                                    "Save split",
   "procurement.split_saving":                                  "Saving…",
   "procurement.split_failed":                                  "Split was not saved — try again",
+  "procurement.split_open_trucks_hint":                        "{n} truck(s) already weighed (GRN pending) — keep at least {qty} {unit} here",
   "procurement.split_no_line":                                 "This PO has no line that can be split (all fully received)",
   "procurement.split_dest_change_hint":                        "Whole order to the new place — destination change",
   "procurement.split_dest_change_save":                        "Change place",

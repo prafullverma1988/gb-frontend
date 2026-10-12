@@ -1888,6 +1888,20 @@ function useSplitStores(){
   },[]);
   return stores;
 }
+// Kaante par tuli khadi gadi (GRN baaki) — utna maal pehli row me rehna zaroori
+// (server bhi rokta hai: SPLIT_OPEN_TRUCK). q = "po_item_id=12" / "mr_id=8".
+function useSplitTrucks(q){
+  const [trk,setTrk]=useState({n:0,qty:0});
+  useEffect(()=>{
+    let alive=true;
+    setTrk({n:0,qty:0});
+    if(q) api.get("/procurement/split-trucks?"+q)
+      .then(r=>{ if(alive&&r?.success&&r.data) setTrk({n:(r.data.trucks||[]).length,qty:Number(r.data.open_qty)||0}); })
+      .catch(()=>{});
+    return ()=>{ alive=false; };
+  },[q]);
+  return trk;
+}
 // Rows ki haalat ek jagah — dono modal isi se Save band / chalu karte hain
 const splitStateOf=({total,recv,origKey,first,rows,withContacts})=>{
   const firstQty=parseFloat(first)||0;
@@ -1907,7 +1921,8 @@ const splitStateOf=({total,recv,origKey,first,rows,withContacts})=>{
 // Rows ka UI — pehli row (abhi ki jagah), nayi rows, "+ Aur jagah", jod.
 // withContacts (manual order): har nayi row ke neeche receiving person (asli
 // order ke contacts pehle se bhare, badal sakte ho).
-function SplitRows({total,unit,recv,origName,first,setFirst,rows,setRows,st,opts,storeOnly,withContacts,contactsDefault,onTouch}){
+function SplitRows({total,unit,recv,trk,origName,first,setFirst,rows,setRows,st,opts,storeOnly,withContacts,contactsDefault,onTouch}){
+  const floor=splitR3(recv+(trk&&trk.n?trk.qty:0));
   const restOf=(list)=>splitR3(total-list.reduce((s,r)=>s+(parseFloat(r.qty)||0),0));
   const setRow=(i,patch)=>{
     const next=rows.map((r,j)=>j===i?{...r,...patch}:r);
@@ -1923,9 +1938,12 @@ function SplitRows({total,unit,recv,origName,first,setFirst,rows,setRows,st,opts
     {/* Row 1 — abhi ki jagah */}
     <div style={{display:"grid",gridTemplateColumns:"1fr 110px 28px",gap:6,alignItems:"center",marginBottom:4}}>
       <div style={destBox} title={origName}>{origName} <span style={{fontSize:10,fontWeight:500,color:T.t4}}>· {t("procurement.split_current")}</span></div>
-      <input type="number" min={recv||0} value={first} onChange={e=>{setFirst(e.target.value);onTouch();}} style={{...qtyInp,borderColor:st.belowRecv?T.red:T.b1}}/>
+      <input type="number" min={floor||0} value={first} onChange={e=>{setFirst(e.target.value);onTouch();}} style={{...qtyInp,borderColor:st.belowRecv?T.red:T.b1}}/>
       <span/>
     </div>
+    {trk&&trk.n>0&&(
+      <div style={{fontSize:10.5,fontWeight:600,color:st.belowRecv?T.red:T.amb,marginBottom:6}}>{t("procurement.split_open_trucks_hint",{n:trk.n,qty:floor,unit})}</div>
+    )}
     {recv>0&&(
       <div style={{fontSize:10.5,color:st.belowRecv?T.red:T.amb,marginBottom:6}}>{t("procurement.split_received",{qty:recv,unit})}</div>
     )}
@@ -1976,7 +1994,7 @@ function SplitRows({total,unit,recv,origName,first,setFirst,rows,setRows,st,opts
       {st.match?t("procurement.split_sum_ok",{sum:st.sum,total,unit}):t("procurement.split_sum_bad",{sum:st.sum,total,unit})}
     </div>
     {st.dup&&<div style={{marginTop:6,fontSize:11.5,color:T.red}}>{t("procurement.split_dup")}</div>}
-    {st.belowRecv&&<div style={{marginTop:6,fontSize:11.5,color:T.red}}>{t("procurement.split_below_recv",{qty:recv,unit})}</div>}
+    {st.belowRecv&&!(trk&&trk.n>0)&&<div style={{marginTop:6,fontSize:11.5,color:T.red}}>{t("procurement.split_below_recv",{qty:floor,unit})}</div>}
   </>);
 }
 
@@ -2007,7 +2025,8 @@ function SplitPOModal({po,mrs,dbProjects,initLineId,onClose,onDone}){
   const total=line?line.qty:0;
   const unit=line?line.unit||"":"";
   const recv=line?line.receivedQty||0:0;
-  const st=splitStateOf({total,recv,origKey,first,rows,withContacts:false});
+  const trk=useSplitTrucks(line?"po_item_id="+line.id:"");
+  const st=splitStateOf({total,recv:splitR3(recv+(trk.n?trk.qty:0)),origKey,first,rows,withContacts:false});
   const canSave=!!line&&poCanSplit(po)&&st.ok&&!saving;
 
   const pickLine=(id)=>{
@@ -2054,7 +2073,7 @@ function SplitPOModal({po,mrs,dbProjects,initLineId,onClose,onDone}){
             <span style={{fontSize:13,fontWeight:600,color:T.t1}}>{line.desc}</span>
             <span style={{fontSize:13,fontWeight:700,color:T.t1}}>{t("procurement.split_total",{qty:total,unit})}</span>
           </div>
-          <SplitRows total={total} unit={unit} recv={recv} origName={origName} first={first} setFirst={setFirst}
+          <SplitRows total={total} unit={unit} recv={recv} trk={trk} origName={origName} first={first} setFirst={setFirst}
             rows={rows} setRows={setRows} st={st} opts={splitOpts(dbProjects,stores,isAsset)} storeOnly={isAsset}
             withContacts={false} onTouch={()=>setErr("")}/>
           {err&&<div style={{marginTop:8,padding:"8px 11px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,fontSize:11.5,color:T.red}}>{err}</div>}
@@ -2089,7 +2108,8 @@ function SplitMRModal({mr,dbProjects,onClose,onDone}){
   const [rows,setRows]=useState([]);
   const [saving,setSaving]=useState(false);
   const [err,setErr]=useState("");
-  const st=splitStateOf({total,recv,origKey,first,rows,withContacts:true});
+  const trk=useSplitTrucks("mr_id="+mr.id);
+  const st=splitStateOf({total,recv:splitR3(recv+(trk.n?trk.qty:0)),origKey,first,rows,withContacts:true});
   const canSave=st.ok&&!saving;
 
   const save=async()=>{
@@ -2118,7 +2138,7 @@ function SplitMRModal({mr,dbProjects,onClose,onDone}){
           <span style={{fontSize:13,fontWeight:600,color:T.t1}}>{mr.item}</span>
           <span style={{fontSize:13,fontWeight:700,color:T.t1}}>{t("procurement.split_total",{qty:total,unit})}</span>
         </div>
-        <SplitRows total={total} unit={unit} recv={recv} origName={origName} first={first} setFirst={setFirst}
+        <SplitRows total={total} unit={unit} recv={recv} trk={trk} origName={origName} first={first} setFirst={setFirst}
           rows={rows} setRows={setRows} st={st} opts={splitOpts(dbProjects,stores,isAsset)} storeOnly={isAsset}
           withContacts contactsDefault={contactsDefault} onTouch={()=>setErr("")}/>
         {err&&<div style={{marginTop:8,padding:"8px 11px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,fontSize:11.5,color:T.red}}>{err}</div>}

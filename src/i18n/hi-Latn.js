@@ -7050,6 +7050,7 @@ const dict = {
   "procurement.split_save":                                    "Split save karo",
   "procurement.split_saving":                                  "Save ho raha hai…",
   "procurement.split_failed":                                  "Split save nahi hua — dobara try karo",
+  "procurement.split_open_trucks_hint":                        "{n} gadi kaante par tul chuki (GRN baaki) — yahan kam se kam {qty} {unit} rakhna zaroori",
   "procurement.split_no_line":                                 "Is PO me split karne layak line nahi hai (sab poori aa chuki)",
   "procurement.split_dest_change_hint":                        "Poora order nayi jagah — destination change",
   "procurement.split_dest_change_save":                        "Jagah badlo",

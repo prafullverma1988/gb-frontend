@@ -7047,6 +7047,7 @@ const dict = {
   "procurement.split_save":                                    "स्प्लिट सेव करें",
   "procurement.split_saving":                                  "सेव हो रहा है…",
   "procurement.split_failed":                                  "स्प्लिट सेव नहीं हुआ — दोबारा कोशिश करें",
+  "procurement.split_open_trucks_hint":                        "{n} गाड़ी कांटे पर तुल चुकी (GRN बाकी) — यहां कम से कम {qty} {unit} रखना ज़रूरी",
   "procurement.split_no_line":                                 "इस PO में स्प्लिट करने लायक लाइन नहीं है (सब पूरी आ चुकी)",
   "procurement.split_dest_change_hint":                        "पूरा ऑर्डर नई जगह — डेस्टिनेशन चेंज",
   "procurement.split_dest_change_save":                        "जगह बदलें",
