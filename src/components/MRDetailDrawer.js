@@ -55,7 +55,7 @@ const isoDate = (d) => {
   try { const dt = new Date(d); if (isNaN(dt)) return ""; return dt.toISOString().slice(0, 10); } catch { return ""; }
 };
 
-export default function MRDetailDrawer({ mr, onClose, onChanged, isAdmin: allowEdit = true, vendors = [] }) {
+export default function MRDetailDrawer({ mr, onClose, onChanged, isAdmin: allowEdit = true, vendors = [], onSplit = null }) {
   const open = !!mr;
   // Sudhaar / band karna = Procurement Edit (Roles & Access, 5 Oct 2026) —
   // pehle har kisi ko button dikhta tha aur server 403 deta tha.
@@ -401,6 +401,13 @@ export default function MRDetailDrawer({ mr, onClose, onChanged, isAdmin: allowE
                 </button>
               )}
               <div style={{ flex: 1 }}/>
+              {/* "Order split karo" — sirf Procurement screen deti hai (order par khadi MR, Edit wale ko) */}
+              {onSplit && !showCloseForm && (
+                <button onClick={onSplit}
+                  style={{ padding: "9px 14px", borderRadius: 7, background: T.surface, border: `1px solid ${T.b1}`, color: T.t2, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                 {t("procurement.split_title")}
+                </button>
+              )}
               {isAdmin && (
                 <button onClick={() => setEditing(true)}
                   style={{ padding: "9px 18px", borderRadius: 7, background: T.blu, border: "none", color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
