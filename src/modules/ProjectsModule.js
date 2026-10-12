@@ -139,7 +139,7 @@ const UNBILLED_PARTIES=[];
 const PAY_REQS_DATA=[];
 const PEND_PMTS_DATA=[];
 
-const PULSE_ALL_TYPES=["flag","progress","material","material_request","approval","payment","photo","document"];
+const PULSE_ALL_TYPES=["flag","progress","material","material_request","approval","payment","photo","document","note"];
 
 // Which project tab a pulse activity belongs to, so clicking a feed card lands
 // the user exactly where the activity happened instead of a generic overview.
@@ -187,7 +187,8 @@ function SitePulseDrawer({onClose,onSelectProject}){
   // Multi-select type filter — user tick-marks the activity types they care
   // about and Saves; the choice persists (per-device) and is applied on every
   // future open. Default = all types until the user saves a custom set.
-  const [selTypes,setSelTypes]=useState(()=>{ try{const s=JSON.parse(localStorage.getItem("gb_pulse_types_v2"));return Array.isArray(s)&&s.length?s:PULSE_ALL_TYPES;}catch{return PULSE_ALL_TYPES;} });
+  // 'note' (12 Oct 2026) purani saved list me nahi — jod do, warna Note kabhi na dikhe.
+  const [selTypes,setSelTypes]=useState(()=>{ try{const s=JSON.parse(localStorage.getItem("gb_pulse_types_v2"));if(!Array.isArray(s)||!s.length)return PULSE_ALL_TYPES;return s.includes("note")?s:[...s,"note"];}catch{return PULSE_ALL_TYPES;} });
   const [showTypeMenu,setShowTypeMenu]=useState(false);
   const [feed,setFeed]=useState([]);
   const [projects,setProjects]=useState([]);
@@ -209,18 +210,18 @@ function SitePulseDrawer({onClose,onSelectProject}){
   const me=(()=>{ try{ return JSON.parse(localStorage.getItem("gb_user"))||{}; }catch{ return {}; } })();
   const istDay=(off=0)=>new Date(Date.now()+5.5*3600*1000-off*86400000).toISOString().slice(0,10);
   const rangeQ=range.preset==="today"?{from:istDay(),to:istDay()}:range.preset==="7"?{from:istDay(6),to:istDay()}:range.preset==="30"?{from:istDay(29),to:istDay()}:range.preset==="custom"?{from:range.from,to:range.to}:{};
-  const refKey=(f)=>f.feed_type+"/"+f.id;
+  const refKey=(f)=>(f.ref_type||f.feed_type)+"/"+f.id;
   const patchItem=(f,fn)=>setFeed(l=>l.map(x=>(x.feed_type===f.feed_type&&x.id===f.id?fn(x):x)));
   const toggleSeen=(f)=>{
     const on=!f.seen_by_me, name=me.name||t("pulse_chat.aap");
     patchItem(f,x=>({...x,seen_by_me:on,seen_count:Math.max(0,(Number(x.seen_count)||0)+(on?1:-1)),
       seen_by:on?[name,...(x.seen_by||[]).filter(n=>n!==name)].slice(0,3):(x.seen_by||[]).filter(n=>n!==name)}));
-    api.post(`/projects/pulse/${f.feed_type}/${f.id}/seen`,{on}).catch(()=>{});
+    api.post(`/projects/pulse/${f.ref_type||f.feed_type}/${f.id}/seen`,{on}).catch(()=>{});
   };
   const loadThread=(f)=>{
     const k=refKey(f);
     setThreads(p=>({...p,[k]:{list:(p[k]&&p[k].list)||[],loading:true}}));
-    api.get(`/projects/pulse/${f.feed_type}/${f.id}/comments`)
+    api.get(`/projects/pulse/${f.ref_type||f.feed_type}/${f.id}/comments`)
       .then(r=>setThreads(p=>({...p,[k]:{list:(r&&r.success&&Array.isArray(r.data))?r.data:[],loading:false}})))
       .catch(()=>setThreads(p=>({...p,[k]:{list:(p[k]&&p[k].list)||[],loading:false}})));
   };
@@ -228,7 +229,7 @@ function SitePulseDrawer({onClose,onSelectProject}){
   const sendComment=async(f)=>{
     const text=draftC.trim(); if(!text||sending)return;
     const k=refKey(f); setSending(true);
-    const r=await api.post(`/projects/pulse/${f.feed_type}/${f.id}/comments`,{text,project_id:f.project_id||undefined,author_id:f.user_id||undefined,about:String(f.text||"").slice(0,60)}).catch(()=>null);
+    const r=await api.post(`/projects/pulse/${f.ref_type||f.feed_type}/${f.id}/comments`,{text,about:String(f.text||"").slice(0,60)}).catch(()=>null);
     setSending(false);
     if(!r||!r.success){ flash((r&&r.message)||t("pulse_chat.bheja_nahi")); return; }
     setThreads(p=>({...p,[k]:{list:[...((p[k]&&p[k].list)||[]),r.data],loading:false}}));
@@ -248,7 +249,7 @@ function SitePulseDrawer({onClose,onSelectProject}){
       ?await api.post(`/tasks/project/${pid}/issues`,{title,description:desc,priority:"Medium",photo_url:photos[0]||undefined,photo_urls:photos.length?photos:undefined}).catch(()=>null)
       :await api.post("/projects/company-todos",{title,description:desc,project_id:pid,category:"Site"}).catch(()=>null);
     if(!r||!r.success||!r.data||!r.data.id){ setSheetBusy(false); setSheetErr((r&&r.message)||t("pulse_chat.bheja_nahi")); return; }
-    const l=await api.post(`/projects/pulse/${f.feed_type}/${f.id}/link`,{kind:sheet.kind,target_id:r.data.id}).catch(()=>null);
+    const l=await api.post(`/projects/pulse/${f.ref_type||f.feed_type}/${f.id}/link`,{kind:sheet.kind,target_id:r.data.id}).catch(()=>null);
     if(l&&l.success&&l.data) patchItem(f,x=>({...x,links:[...(x.links||[]),l.data]}));
     setSheetBusy(false); setSheet(null);
     flash(sheet.kind==="issue"?t("pulse_chat.issue_ban_gaya",{n:r.data.id}):t("pulse_chat.todo_ban_gaya"));
