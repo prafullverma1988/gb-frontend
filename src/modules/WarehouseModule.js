@@ -58,7 +58,6 @@ const fmtDate=(d)=>{if(!d)return"—";const dt=new Date(d);return isNaN(dt)?"—
 
 // ── CATALOG ───────────────────────────────────────────────────────
 const CATEGORIES=["Cement & Concrete","Steel & Iron","Bricks & Blocks","Sand & Aggregate","Tiles & Flooring","Electrical","Plumbing","Paint & Finishing","Wood & Carpentry","Safety & Tools","Other"];
-const CATEGORIES_ALL=["All",...CATEGORIES];
 const UNITS=["Bags","MT","CuM","SqM","SqFt","Nos","Ltrs","Rft","Kg","Box","Set","Bundle","Roll","Pcs"];
 const PRIORITIES=["Low","Medium","High"];
 
@@ -2122,6 +2121,14 @@ function StockTab({stock,grns,issues,onSelect,onAddMaterial,onAddStock,onIssue,o
     return{pct,minPct,color,cap};
   };
 
+  // Filter ki category stock ki rows se hi — server Library wali category deta hai
+  // (12 Oct 2026); pehle ye pakki list thi, Library ki category ("Steel") usme nahi thi.
+  const catOptions=useMemo(()=>{
+    const s=new Set((stock||[]).map(m=>m.category).filter(Boolean));
+    if(cat!=="All") s.add(cat);
+    return ["All",...[...s].sort((a,b)=>a.localeCompare(b))];
+  },[stock,cat]);
+
   const filtered=stock
     .filter(m=>{
       if(cat!=="All"&&m.category!==cat) return false;
@@ -2176,7 +2183,7 @@ function StockTab({stock,grns,issues,onSelect,onAddMaterial,onAddStock,onIssue,o
         </div>
         <PickSelect value={cat} onChange={e=>setCat(e.target.value)}
           style={{height:33,padding:"0 10px",borderRadius:7,border:`1.5px solid ${cat!=="All"?T.blu:T.b1}`,background:cat!=="All"?T.bluL:T.surface,fontSize:12,color:cat!=="All"?T.blu:T.t2,outline:"none",cursor:"pointer",fontFamily:"inherit"}}>
-          {CATEGORIES_ALL.map(c=><option key={c}>{c}</option>)}
+          {catOptions.map(c=><option key={c}>{c}</option>)}
         </PickSelect>
         <button onClick={()=>setShowLow(s=>!s)}
           style={{height:33,padding:"0 11px",borderRadius:7,border:`1.5px solid ${showLow?"#EF4444":T.b1}`,background:showLow?"#FEF2F2":T.surface,color:showLow?"#EF4444":T.t3,fontSize:12,fontWeight:showLow?700:400,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
