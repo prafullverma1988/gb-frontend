@@ -1864,26 +1864,21 @@ function SendToVendorModal({po,onClose,onSent,srcMr,vendorPhone:vPhone=""}){
 }
 
 // ── ORDER SPLIT (11 Oct 2026) ─────────────────────────────────────────
-// PO ki ek line ka hissa doosre project / store ko — POST /procurement/pos/:id/split.
-// Pehli row = line ki abhi wali jagah; nayi row ki qty bharte hi pehli row
-// apne aap ghat-ti hai (pehli = kul − baaki). Save tabhi jab jod = line ki qty,
-// har qty 0 se zyada, koi jagah do baar nahi, aur pehli row aaye hue se kam nahi.
-// Server yahi sab dobara jaanchta hai. PO ka total wahi — dobara approval nahi.
+// Order ka hissa doosre project / store ko — PO ki line (POST /procurement/pos/:id/split)
+// ya manual order ki MR (POST /procurement/mrs/:id/split, 12 Oct 2026).
+// Pehli row = abhi ki jagah; nayi row ki qty bharte hi pehli row apne aap
+// ghat-ti hai (pehli = kul − baaki). Pehli row 0 tak ja sakti hai (kuch aaya na
+// ho) = poora order nayi jagah ("Jagah badlo"); aaya ho to usse kam nahi.
+// Save tabhi jab jod = kul, nayi row ki qty 0 se zyada, koi jagah do baar nahi.
+// Asset ki kharid sirf store me receive hoti hai — wahan sirf store. Server
+// yahi sab dobara jaanchta hai. PO ka total wahi — dobara approval nahi.
 const poCanSplit=(p)=>p.approval==="Approved"&&p.poStatus==="Open"&&p.orderStatus!=="Received";
-const splitLinesOf=(p)=>(p.items||[]).filter(it=>it.id&&!it.asset_item_id&&!it.asset_warehouse_id&&it.qty>0&&(it.receivedQty||0)<it.qty-0.001);
+const splitLinesOf=(p)=>(p.items||[]).filter(it=>it.id&&it.qty>0&&(it.receivedQty||0)<it.qty-0.001);
 const splitR3=(n)=>Math.round((Number(n)||0)*1000)/1000;
 const splitDest=(k)=>k.startsWith("w:")?{warehouse_id:Number(k.slice(2))}:{project_id:Number(k.slice(2))};
-
-function SplitPOModal({po,mrs,dbProjects,onClose,onDone}){
-  const lines=splitLinesOf(po);
-  const [lineId,setLineId]=useState(lines[0]?.id||null);
-  const line=lines.find(l=>String(l.id)===String(lineId))||null;
-  const [first,setFirst]=useState(lines[0]?String(lines[0].qty):"");
-  const [rows,setRows]=useState([]);           // nayi jagah: {key:"p:12"|"w:3"|"", qty:""}
+// Store "chunne" wali list (?scope=all) — store ka access na ho tab bhi wahan maal bheja ja sakta hai
+function useSplitStores(){
   const [stores,setStores]=useState([]);
-  const [saving,setSaving]=useState(false);
-  const [err,setErr]=useState("");
-  // Store "chunne" wali list (?scope=all) — store ka access na ho tab bhi wahan maal bheja ja sakta hai
   useEffect(()=>{
     let alive=true;
     api.get("/warehouse/warehouses?scope=all")
@@ -1891,49 +1886,158 @@ function SplitPOModal({po,mrs,dbProjects,onClose,onDone}){
       .catch(()=>{});
     return ()=>{ alive=false; };
   },[]);
-
-  // Line ki abhi wali jagah: store ki apni MR ("Procurement ko bhejo") ho to wo store, warna line ka project
-  const srcMr=line&&line.linked_mr_id?(mrs||[]).find(m=>String(m.id)===String(line.linked_mr_id))||null:null;
-  const origWh=srcMr&&!srcMr.project_id&&srcMr.restock_warehouse_id?srcMr.restock_warehouse_id:null;
-  const origKey=origWh?"w:"+origWh:(line&&line.project_id?"p:"+line.project_id:"");
-  const origName=origWh?(srcMr.store_warehouse_name||line.delivery_site||"—"):(line?(line.project_name||line.delivery_site||po.project||"—"):"—");
-  const total=line?line.qty:0;
-  const unit=line?line.unit||"":"";
-  const recv=line?line.receivedQty||0:0;
-
-  const restOf=(list)=>splitR3(total-list.reduce((s,r)=>s+(parseFloat(r.qty)||0),0));
-  const pickLine=(id)=>{
-    const l=lines.find(x=>String(x.id)===String(id));
-    setLineId(id); setRows([]); setFirst(l?String(l.qty):""); setErr("");
-  };
-  const setRow=(i,patch)=>{
-    const next=rows.map((r,j)=>j===i?{...r,...patch}:r);
-    setRows(next); setErr("");
-    if("qty" in patch) setFirst(String(restOf(next)));
-  };
-  const addRow=()=>{ setRows([...rows,{key:"",qty:""}]); setErr(""); };
-  const removeRow=(i)=>{ const next=rows.filter((_,j)=>j!==i); setRows(next); setFirst(String(restOf(next))); setErr(""); };
-
+  return stores;
+}
+// Kaante par tuli khadi gadi (GRN baaki) — utna maal pehli row me rehna zaroori
+// (server bhi rokta hai: SPLIT_OPEN_TRUCK). q = "po_item_id=12" / "mr_id=8".
+function useSplitTrucks(q){
+  const [trk,setTrk]=useState({n:0,qty:0});
+  useEffect(()=>{
+    let alive=true;
+    setTrk({n:0,qty:0});
+    if(q) api.get("/procurement/split-trucks?"+q)
+      .then(r=>{ if(alive&&r?.success&&r.data) setTrk({n:(r.data.trucks||[]).length,qty:Number(r.data.open_qty)||0}); })
+      .catch(()=>{});
+    return ()=>{ alive=false; };
+  },[q]);
+  return trk;
+}
+// Rows ki haalat ek jagah — dono modal isi se Save band / chalu karte hain
+const splitStateOf=({total,recv,origKey,first,rows,withContacts})=>{
   const firstQty=parseFloat(first)||0;
   const sum=splitR3(firstQty+rows.reduce((s,r)=>s+(parseFloat(r.qty)||0),0));
   const keys=[origKey,...rows.map(r=>r.key)].filter(Boolean);
   const dup=keys.length!==new Set(keys).size;
   const belowRecv=firstQty<recv-0.001;
-  const allPos=firstQty>0&&rows.every(r=>(parseFloat(r.qty)||0)>0);
+  const allPos=firstQty>=0&&rows.every(r=>(parseFloat(r.qty)||0)>0);
   const allDest=rows.every(r=>r.key);
+  const contactsOk=!withContacts||rows.every(r=>hasReceivingContact(r.contacts));
   const match=Math.abs(sum-total)<=0.001;
-  const canSave=!!line&&rows.length>0&&allPos&&allDest&&!dup&&!belowRecv&&match&&!saving;
+  const destChange=firstQty<=0.0005&&rows.length>0;
+  const ok=rows.length>0&&allPos&&allDest&&!dup&&!belowRecv&&match&&contactsOk;
+  return {firstQty,sum,keys,dup,belowRecv,match,destChange,contactsOk,ok};
+};
 
-  const opts=[
-    {grp:t("procurement.split_group_projects"),items:(dbProjects||[]).map(p=>({key:"p:"+p.id,label:p.name}))},
-    {grp:t("procurement.split_group_stores"),items:stores.map(w=>({key:"w:"+w.id,label:w.name}))},
-  ];
+// Rows ka UI — pehli row (abhi ki jagah), nayi rows, "+ Aur jagah", jod.
+// withContacts (manual order): har nayi row ke neeche receiving person (asli
+// order ke contacts pehle se bhare, badal sakte ho).
+function SplitRows({total,unit,recv,trk,origName,first,setFirst,rows,setRows,st,opts,storeOnly,withContacts,contactsDefault,onTouch}){
+  const floor=splitR3(recv+(trk&&trk.n?trk.qty:0));
+  const restOf=(list)=>splitR3(total-list.reduce((s,r)=>s+(parseFloat(r.qty)||0),0));
+  const setRow=(i,patch)=>{
+    const next=rows.map((r,j)=>j===i?{...r,...patch}:r);
+    setRows(next); onTouch();
+    if("qty" in patch) setFirst(String(Math.max(0,restOf(next))));
+  };
+  const addRow=()=>{ setRows([...rows,{key:"",qty:"",contacts:(contactsDefault||[]).map(c=>({...c}))}]); onTouch(); };
+  const removeRow=(i)=>{ const next=rows.filter((_,j)=>j!==i); setRows(next); setFirst(String(Math.max(0,restOf(next)))); onTouch(); };
+  const qtyInp={width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",textAlign:"right"};
+  const destBox={padding:"8px 11px",borderRadius:7,border:`1px solid ${T.b1}`,background:T.surfaceB,fontSize:12.5,color:T.t1,fontWeight:600,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"};
+  return(<>
+    {storeOnly&&<div style={{fontSize:11,color:T.t3,marginBottom:8}}>{t("procurement.split_asset_store_only")}</div>}
+    {/* Row 1 — abhi ki jagah */}
+    <div style={{display:"grid",gridTemplateColumns:"1fr 110px 28px",gap:6,alignItems:"center",marginBottom:4}}>
+      <div style={destBox} title={origName}>{origName} <span style={{fontSize:10,fontWeight:500,color:T.t4}}>· {t("procurement.split_current")}</span></div>
+      <input type="number" min={floor||0} value={first} onChange={e=>{setFirst(e.target.value);onTouch();}} style={{...qtyInp,borderColor:st.belowRecv?T.red:T.b1}}/>
+      <span/>
+    </div>
+    {trk&&trk.n>0&&(
+      <div style={{fontSize:10.5,fontWeight:600,color:st.belowRecv?T.red:T.amb,marginBottom:6}}>{t("procurement.split_open_trucks_hint",{n:trk.n,qty:floor,unit})}</div>
+    )}
+    {recv>0&&(
+      <div style={{fontSize:10.5,color:st.belowRecv?T.red:T.amb,marginBottom:6}}>{t("procurement.split_received",{qty:recv,unit})}</div>
+    )}
+    {st.destChange&&(
+      <div style={{fontSize:11,fontWeight:700,color:T.pur,marginBottom:6}}>{t("procurement.split_dest_change_hint")}</div>
+    )}
 
+    {/* Nayi jagah */}
+    {rows.map((r,i)=>{
+      const taken=new Set(st.keys.filter(k=>k!==r.key));
+      const rowDest=r.key?splitDest(r.key):null;
+      return(
+        <div key={i} style={{marginTop:6,...(withContacts?{padding:8,border:`1px solid ${T.b1}`,borderRadius:8}:{})}}>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 110px 28px",gap:6,alignItems:"center"}}>
+            <Sel value={r.key} onChange={e=>setRow(i,{key:e.target.value})}>
+              <option value="">{storeOnly?t("procurement.split_pick_store"):t("procurement.split_pick_dest")}</option>
+              {opts.map(g=>g.items.length>0&&(
+                <optgroup key={g.grp} label={g.grp}>
+                  {g.items.map(o=><option key={o.key} value={o.key} disabled={taken.has(o.key)}>{o.label}</option>)}
+                </optgroup>
+              ))}
+            </Sel>
+            <input type="number" min={0} value={r.qty} placeholder="0" onChange={e=>setRow(i,{qty:e.target.value})} style={qtyInp}/>
+            <button onClick={()=>removeRow(i)} title={t("procurement.split_remove_row")}
+              style={{width:28,height:28,borderRadius:6,border:`1px solid ${T.b1}`,background:T.surface,color:T.t3,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
+              <IcX size={12} color={T.t3}/>
+            </button>
+          </div>
+          {withContacts&&(
+            <div style={{marginTop:6}}>
+              <div style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:".4px",marginBottom:4}}>{t("procurement.split_contacts")}</div>
+              <ReceivingContacts theme={T} compact value={r.contacts||[]} onChange={v=>setRow(i,{contacts:v})}
+                projectIds={rowDest&&rowDest.project_id?[rowDest.project_id]:[]}
+                warehouseIds={rowDest&&rowDest.warehouse_id?[rowDest.warehouse_id]:[]}/>
+              {!hasReceivingContact(r.contacts)&&<div style={{fontSize:10.5,color:T.red,marginTop:3}}>{t("procurement.split_need_contact")}</div>}
+            </div>
+          )}
+        </div>
+      );
+    })}
+    <button onClick={addRow}
+      style={{marginTop:10,display:"inline-flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:6,background:T.bluL,border:`1px dashed ${T.blu}`,color:T.blu,fontSize:11.5,fontWeight:700,cursor:"pointer"}}>
+      <IcAdd size={12} color={T.blu}/> {t("procurement.split_add_row")}
+    </button>
+
+    <div style={{marginTop:14,padding:"9px 12px",borderRadius:7,fontSize:12,fontWeight:700,
+      background:st.match?T.grnL:T.redL,border:`1px solid ${st.match?T.grnM:T.redM}`,color:st.match?T.grn:T.red}}>
+      {st.match?t("procurement.split_sum_ok",{sum:st.sum,total,unit}):t("procurement.split_sum_bad",{sum:st.sum,total,unit})}
+    </div>
+    {st.dup&&<div style={{marginTop:6,fontSize:11.5,color:T.red}}>{t("procurement.split_dup")}</div>}
+    {st.belowRecv&&!(trk&&trk.n>0)&&<div style={{marginTop:6,fontSize:11.5,color:T.red}}>{t("procurement.split_below_recv",{qty:floor,unit})}</div>}
+  </>);
+}
+
+const splitOpts=(dbProjects,stores,storeOnly)=>[
+  ...(storeOnly?[]:[{grp:t("procurement.split_group_projects"),items:(dbProjects||[]).map(p=>({key:"p:"+p.id,label:p.name}))}]),
+  {grp:t("procurement.split_group_stores"),items:stores.map(w=>({key:"w:"+w.id,label:w.name}))},
+];
+const splitSaveLbl=(saving,st)=>saving?t("procurement.split_saving"):st.destChange?t("procurement.split_dest_change_save"):t("procurement.split_save");
+
+function SplitPOModal({po,mrs,dbProjects,initLineId,onClose,onDone}){
+  const lines=splitLinesOf(po);
+  const line0=lines.find(l=>String(l.id)===String(initLineId))||lines[0]||null;
+  const [lineId,setLineId]=useState(line0?line0.id:null);
+  const line=lines.find(l=>String(l.id)===String(lineId))||null;
+  const [first,setFirst]=useState(line0?String(line0.qty):"");
+  const [rows,setRows]=useState([]);           // nayi jagah: {key:"p:12"|"w:3"|"", qty:""}
+  const stores=useSplitStores();
+  const [saving,setSaving]=useState(false);
+  const [err,setErr]=useState("");
+
+  // Line ki abhi wali jagah: asset → uska store; store ki apni MR ("Procurement ko bhejo") → wo store; warna line ka project
+  const srcMr=line&&line.linked_mr_id?(mrs||[]).find(m=>String(m.id)===String(line.linked_mr_id))||null:null;
+  const isAsset=!!(line&&(line.asset_item_id||line.asset_warehouse_id));
+  const origWh=isAsset?line.asset_warehouse_id:(srcMr&&!srcMr.project_id&&srcMr.restock_warehouse_id?srcMr.restock_warehouse_id:null);
+  const origKey=origWh?"w:"+origWh:(line&&line.project_id?"p:"+line.project_id:"");
+  const whName=(id)=>(stores.find(w=>String(w.id)===String(id))||{}).name;
+  const origName=origWh?(whName(origWh)||srcMr?.store_warehouse_name||line.delivery_site||"—"):(line?(line.project_name||line.delivery_site||po.project||"—"):"—");
+  const total=line?line.qty:0;
+  const unit=line?line.unit||"":"";
+  const recv=line?line.receivedQty||0:0;
+  const trk=useSplitTrucks(line?"po_item_id="+line.id:"");
+  const st=splitStateOf({total,recv:splitR3(recv+(trk.n?trk.qty:0)),origKey,first,rows,withContacts:false});
+  const canSave=!!line&&poCanSplit(po)&&st.ok&&!saving;
+
+  const pickLine=(id)=>{
+    const l=lines.find(x=>String(x.id)===String(id));
+    setLineId(id); setRows([]); setFirst(l?String(l.qty):""); setErr("");
+  };
   const save=async()=>{
     if(!canSave) return;
     setSaving(true); setErr("");
     const parts=[
-      {...(origKey?splitDest(origKey):{}),qty:splitR3(firstQty)},
+      {...(origKey?splitDest(origKey):{}),qty:splitR3(st.firstQty)},
       ...rows.map(r=>({...splitDest(r.key),qty:splitR3(parseFloat(r.qty))})),
     ];
     try{
@@ -1944,8 +2048,6 @@ function SplitPOModal({po,mrs,dbProjects,onClose,onDone}){
     setSaving(false);
   };
 
-  const qtyInp={width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",textAlign:"right"};
-  const destBox={padding:"8px 11px",borderRadius:7,border:`1px solid ${T.b1}`,background:T.surfaceB,fontSize:12.5,color:T.t1,fontWeight:600,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"};
   return(
     <Modal onClose={onClose} width={540}>
       <MHead title={t("procurement.split_title")} sub={`${po.poNum||"PO-"+po.id} · ${po.vendor||"—"}`} onClose={onClose}/>
@@ -1953,7 +2055,9 @@ function SplitPOModal({po,mrs,dbProjects,onClose,onDone}){
         <div style={{background:T.bluL,border:`1px solid ${T.bluM}`,borderRadius:7,padding:"9px 12px",marginBottom:12,fontSize:11.5,color:T.blu,lineHeight:1.5}}>
           {t("procurement.split_hint")}
         </div>
-        {!line?(
+        {!poCanSplit(po)?(
+          <div style={{padding:"18px",textAlign:"center",color:T.t3,fontSize:12.5}}>{t("procurement.split_po_not_open",{status:displayPOStatus(po)})}</div>
+        ):!line?(
           <div style={{padding:"18px",textAlign:"center",color:T.t3,fontSize:12.5}}>{t("procurement.split_no_line")}</div>
         ):(<>
           {lines.length>1&&(
@@ -1969,57 +2073,79 @@ function SplitPOModal({po,mrs,dbProjects,onClose,onDone}){
             <span style={{fontSize:13,fontWeight:600,color:T.t1}}>{line.desc}</span>
             <span style={{fontSize:13,fontWeight:700,color:T.t1}}>{t("procurement.split_total",{qty:total,unit})}</span>
           </div>
-
-          {/* Row 1 — abhi ki jagah */}
-          <div style={{display:"grid",gridTemplateColumns:"1fr 110px 28px",gap:6,alignItems:"center",marginBottom:4}}>
-            <div style={destBox} title={origName}>{origName} <span style={{fontSize:10,fontWeight:500,color:T.t4}}>· {t("procurement.split_current")}</span></div>
-            <input type="number" min={0} value={first} onChange={e=>{setFirst(e.target.value);setErr("");}} style={{...qtyInp,borderColor:belowRecv?T.red:T.b1}}/>
-            <span/>
-          </div>
-          {recv>0&&(
-            <div style={{fontSize:10.5,color:belowRecv?T.red:T.amb,marginBottom:6}}>{t("procurement.split_received",{qty:recv,unit})}</div>
-          )}
-
-          {/* Nayi jagah */}
-          {rows.map((r,i)=>{
-            const taken=new Set(keys.filter(k=>k!==r.key));
-            return(
-              <div key={i} style={{display:"grid",gridTemplateColumns:"1fr 110px 28px",gap:6,alignItems:"center",marginTop:6}}>
-                <Sel value={r.key} onChange={e=>setRow(i,{key:e.target.value})}>
-                  <option value="">{t("procurement.split_pick_dest")}</option>
-                  {opts.map(g=>g.items.length>0&&(
-                    <optgroup key={g.grp} label={g.grp}>
-                      {g.items.map(o=><option key={o.key} value={o.key} disabled={taken.has(o.key)}>{o.label}</option>)}
-                    </optgroup>
-                  ))}
-                </Sel>
-                <input type="number" min={0} value={r.qty} placeholder="0" onChange={e=>setRow(i,{qty:e.target.value})} style={qtyInp}/>
-                <button onClick={()=>removeRow(i)} title={t("procurement.split_remove_row")}
-                  style={{width:28,height:28,borderRadius:6,border:`1px solid ${T.b1}`,background:T.surface,color:T.t3,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
-                  <IcX size={12} color={T.t3}/>
-                </button>
-              </div>
-            );
-          })}
-          <button onClick={addRow}
-            style={{marginTop:10,display:"inline-flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:6,background:T.bluL,border:`1px dashed ${T.blu}`,color:T.blu,fontSize:11.5,fontWeight:700,cursor:"pointer"}}>
-            <IcAdd size={12} color={T.blu}/> {t("procurement.split_add_row")}
-          </button>
-
-          <div style={{marginTop:14,padding:"9px 12px",borderRadius:7,fontSize:12,fontWeight:700,
-            background:match?T.grnL:T.redL,border:`1px solid ${match?T.grnM:T.redM}`,color:match?T.grn:T.red}}>
-            {match?t("procurement.split_sum_ok",{sum,total,unit}):t("procurement.split_sum_bad",{sum,total,unit})}
-          </div>
-          {dup&&<div style={{marginTop:6,fontSize:11.5,color:T.red}}>{t("procurement.split_dup")}</div>}
-          {belowRecv&&<div style={{marginTop:6,fontSize:11.5,color:T.red}}>{t("procurement.split_below_recv",{qty:recv,unit})}</div>}
+          <SplitRows total={total} unit={unit} recv={recv} trk={trk} origName={origName} first={first} setFirst={setFirst}
+            rows={rows} setRows={setRows} st={st} opts={splitOpts(dbProjects,stores,isAsset)} storeOnly={isAsset}
+            withContacts={false} onTouch={()=>setErr("")}/>
           {err&&<div style={{marginTop:8,padding:"8px 11px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,fontSize:11.5,color:T.red}}>{err}</div>}
         </>)}
       </MBody>
       <MFoot>
         <Btn onClick={onClose} outline color={T.slt} full>{t("common.cancel")}</Btn>
-        <Btn onClick={save} disabled={!canSave} color={T.blu} full>
-          {saving?t("procurement.split_saving"):t("procurement.split_save")}
-        </Btn>
+        <Btn onClick={save} disabled={!canSave} color={T.blu} full>{splitSaveLbl(saving,st)}</Btn>
+      </MFoot>
+    </Modal>
+  );
+}
+
+// Manual order (MR seedha "Ordered", PO nahi) ka split — POST /procurement/mrs/:id/split.
+// Har nayi jagah ka apna receiving person (asli MR ke contacts pehle se bhare).
+// Kitna aa chuka = MR list ka received_qty (+ godown se aane wala hissa).
+const mrCanSplit=(m)=>m&&m.mrStatus!=="Closed"&&m.mrStatus!=="Rejected"
+  &&(m.matStatus==="Ordered"||(m.matStatus==="PartialReceived"&&!(m.pending_qty!=null&&Number(m.pending_qty)<=0.0005)));
+
+function SplitMRModal({mr,dbProjects,onClose,onDone}){
+  const stores=useSplitStores();
+  const total=Number(mr.qty)||0;
+  const unit=mr.unit||"";
+  const recv=splitR3((Number(mr.received_qty)||0)+(Number(mr.warehouse_routed_qty)||0));
+  const isAsset=!!(mr.asset_item_id||mr.asset_warehouse_id);
+  const origWh=isAsset?mr.asset_warehouse_id:(!mr.project_id&&mr.restock_warehouse_id?mr.restock_warehouse_id:null);
+  const origKey=origWh?"w:"+origWh:(mr.project_id?"p:"+mr.project_id:"");
+  const whName=(id)=>(stores.find(w=>String(w.id)===String(id))||{}).name;
+  const origName=origWh?(whName(origWh)||mr.store_warehouse_name||mr.asset_warehouse_name||"—"):(mr.project_name||"—");
+  const contactsDefault=Array.isArray(mr.receiving_contacts)?mr.receiving_contacts:[];
+  const [first,setFirst]=useState(String(total));
+  const [rows,setRows]=useState([]);
+  const [saving,setSaving]=useState(false);
+  const [err,setErr]=useState("");
+  const trk=useSplitTrucks("mr_id="+mr.id);
+  const st=splitStateOf({total,recv:splitR3(recv+(trk.n?trk.qty:0)),origKey,first,rows,withContacts:true});
+  const canSave=st.ok&&!saving;
+
+  const save=async()=>{
+    if(!canSave) return;
+    setSaving(true); setErr("");
+    const parts=[
+      {...(origKey?splitDest(origKey):{}),qty:splitR3(st.firstQty)},
+      ...rows.map(r=>({...splitDest(r.key),qty:splitR3(parseFloat(r.qty)),receiving_contacts:r.contacts||[]})),
+    ];
+    try{
+      const res=await api.post(`/procurement/mrs/${mr.id}/split`,{parts});
+      if(res?.success){ onDone(res); return; }
+      setErr(res?.message||t("procurement.split_failed"));
+    }catch(e){ setErr(e?.message||t("procurement.split_failed")); }
+    setSaving(false);
+  };
+
+  return(
+    <Modal onClose={onClose} width={560}>
+      <MHead title={t("procurement.split_title")} sub={`${mr.mrNum||mr.mr_number||"MR-"+mr.id} · ${mr.vendor||"—"}`} onClose={onClose}/>
+      <MBody>
+        <div style={{background:T.bluL,border:`1px solid ${T.bluM}`,borderRadius:7,padding:"9px 12px",marginBottom:12,fontSize:11.5,color:T.blu,lineHeight:1.5}}>
+          {t("procurement.split_mr_hint")}
+        </div>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:8}}>
+          <span style={{fontSize:13,fontWeight:600,color:T.t1}}>{mr.item}</span>
+          <span style={{fontSize:13,fontWeight:700,color:T.t1}}>{t("procurement.split_total",{qty:total,unit})}</span>
+        </div>
+        <SplitRows total={total} unit={unit} recv={recv} trk={trk} origName={origName} first={first} setFirst={setFirst}
+          rows={rows} setRows={setRows} st={st} opts={splitOpts(dbProjects,stores,isAsset)} storeOnly={isAsset}
+          withContacts contactsDefault={contactsDefault} onTouch={()=>setErr("")}/>
+        {err&&<div style={{marginTop:8,padding:"8px 11px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,fontSize:11.5,color:T.red}}>{err}</div>}
+      </MBody>
+      <MFoot>
+        <Btn onClick={onClose} outline color={T.slt} full>{t("common.cancel")}</Btn>
+        <Btn onClick={save} disabled={!canSave} color={T.blu} full>{splitSaveLbl(saving,st)}</Btn>
       </MFoot>
     </Modal>
   );
@@ -2303,6 +2429,8 @@ function ProcurementModule(){
   const [sendToVendorTarget,setSendToVendorTarget]=useState(null);
   const [grnTarget,setGrnTarget]=useState(null);
   const [splitTarget,setSplitTarget]=useState(null);   // "Order split karo" ka PO
+  const [splitLine,setSplitLine]=useState(null);       // PO split me pehle se chuni line (MR se aaye to)
+  const [mrSplitTarget,setMrSplitTarget]=useState(null); // manual order (bina PO) ki MR ka split
   const [poMenu,setPoMenu]=useState(null);             // PO row ka ⋮ menu (PO id)
   const [showCreatePO,setShowCreatePO]=useState(false);
   const [createPOPrefill,setCreatePOPrefill]=useState(null);
@@ -2559,6 +2687,18 @@ function ProcurementModule(){
         receivedQty:d.received_qty!=null?d.received_qty:x.receivedQty, received_qty:d.received_qty!=null?d.received_qty:x.received_qty,
         balance_closed_qty:d.closed_qty!=null?d.closed_qty:left, balance_closed_reason:reason.trim()}:x));
     }catch(e){ window.alert(e?.message||"Network error"); }
+  };
+  // MR ka "Order split karo": PO se judi ho (line ka linked_mr_id / PO ka MR) to
+  // wahi PO ka split, wo line pehle se chuni; warna manual order ka split.
+  const openMrSplit=(m)=>{
+    const sid=String(m.id), key=(x)=>String(x||"").trim().toLowerCase();
+    const po=pos.find(p=>p.poStatus!=="Cancelled"&&p.approval!=="Rejected"&&(
+      (p.items||[]).some(it=>String(it.linked_mr_id)===sid)||String(p.id)===String(m.linked_po_id||"")||(p.linked_mr_ids||[]).map(String).includes(sid)));
+    if(po){
+      const ln=(po.items||[]).find(it=>String(it.linked_mr_id)===sid)||(po.items||[]).find(it=>key(it.desc)===key(m.item));
+      setSplitLine(ln?ln.id:null); setSplitTarget(po); return;
+    }
+    setMrSplitTarget(m);
   };
   const saveGRN=async(poId,challan,rows,vendorOverride,issues,ph)=>{
     const po=pos.find(p=>p.id===poId);
@@ -2976,6 +3116,11 @@ function ProcurementModule(){
                               onMouseEnter={e=>e.currentTarget.style.background=T.grnL} onMouseLeave={e=>e.currentTarget.style.background="none"}>
                               <IcChk size={14} color={T.grn}/> {t("procurement.mark_received")}
                             </button>}
+                            {pEdit&&mrCanSplit(m)&&<button onClick={(e)=>{e.stopPropagation();setRowMenu(null);openMrSplit(m);}}
+                              style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"10px 13px",border:"none",background:"none",color:T.t1,fontSize:12.5,fontWeight:600,cursor:"pointer",textAlign:"left"}}
+                              onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB} onMouseLeave={e=>e.currentTarget.style.background="none"}>
+                              <IcFlow size={13} color={T.t2}/> {t("procurement.split_title")}
+                            </button>}
                             {pReceive&&pEdit&&<div style={{height:1,background:T.b1}}/>}
                             {!pEdit?null:isPartialOpen(m)?(
                               <button onClick={(e)=>{e.stopPropagation();closeBalance(m);}}
@@ -3262,11 +3407,17 @@ function ProcurementModule(){
           setSelPO(p=>p&&p.id===sendToVendorTarget.id?{...p,orderStatus:"Ordered"}:p);
         }}/>}
       {grnTarget&&<GRNModal po={grnTarget} onClose={()=>setGrnTarget(null)} onSave={saveGRN}/>}
-      {splitTarget&&<SplitPOModal po={splitTarget} mrs={mrs} dbProjects={dbProjects} onClose={()=>setSplitTarget(null)}
+      {splitTarget&&<SplitPOModal po={splitTarget} mrs={mrs} dbProjects={dbProjects} initLineId={splitLine} onClose={()=>{setSplitTarget(null);setSplitLine(null);}}
         onDone={(res)=>{
           // PO ki lines + nayi MR dono badle — poori list taaza
-          setSplitTarget(null);
+          setSplitTarget(null); setSplitLine(null);
           if(res?.data) setPOs(p=>p.map(x=>x.id===res.data.id?mapPO(res.data):x));
+          loadAll();
+          if(res?.message) window.alert(res.message);
+        }}/>}
+      {mrSplitTarget&&<SplitMRModal mr={mrSplitTarget} dbProjects={dbProjects} onClose={()=>setMrSplitTarget(null)}
+        onDone={(res)=>{
+          setMrSplitTarget(null);
           loadAll();
           if(res?.message) window.alert(res.message);
         }}/>}
@@ -3294,6 +3445,7 @@ function ProcurementModule(){
         mr={selMR}
         vendors={dbVendors}
         onClose={()=>setSelMR(null)}
+        onSplit={pEdit&&selMR&&mrCanSplit(selMR)?()=>{const m=selMR;setSelMR(null);openMrSplit(m);}:null}
         onChanged={async()=>{
           // Reload MRs from server so the row reflects changes
           try{

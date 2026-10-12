@@ -58,7 +58,6 @@ const fmtDate=(d)=>{if(!d)return"—";const dt=new Date(d);return isNaN(dt)?"—
 
 // ── CATALOG ───────────────────────────────────────────────────────
 const CATEGORIES=["Cement & Concrete","Steel & Iron","Bricks & Blocks","Sand & Aggregate","Tiles & Flooring","Electrical","Plumbing","Paint & Finishing","Wood & Carpentry","Safety & Tools","Other"];
-const CATEGORIES_ALL=["All",...CATEGORIES];
 const UNITS=["Bags","MT","CuM","SqM","SqFt","Nos","Ltrs","Rft","Kg","Box","Set","Bundle","Roll","Pcs"];
 const PRIORITIES=["Low","Medium","High"];
 
@@ -2122,6 +2121,14 @@ function StockTab({stock,grns,issues,onSelect,onAddMaterial,onAddStock,onIssue,o
     return{pct,minPct,color,cap};
   };
 
+  // Filter ki category stock ki rows se hi — server Library wali category deta hai
+  // (12 Oct 2026); pehle ye pakki list thi, Library ki category ("Steel") usme nahi thi.
+  const catOptions=useMemo(()=>{
+    const s=new Set((stock||[]).map(m=>m.category).filter(Boolean));
+    if(cat!=="All") s.add(cat);
+    return ["All",...[...s].sort((a,b)=>a.localeCompare(b))];
+  },[stock,cat]);
+
   const filtered=stock
     .filter(m=>{
       if(cat!=="All"&&m.category!==cat) return false;
@@ -2176,7 +2183,7 @@ function StockTab({stock,grns,issues,onSelect,onAddMaterial,onAddStock,onIssue,o
         </div>
         <PickSelect value={cat} onChange={e=>setCat(e.target.value)}
           style={{height:33,padding:"0 10px",borderRadius:7,border:`1.5px solid ${cat!=="All"?T.blu:T.b1}`,background:cat!=="All"?T.bluL:T.surface,fontSize:12,color:cat!=="All"?T.blu:T.t2,outline:"none",cursor:"pointer",fontFamily:"inherit"}}>
-          {CATEGORIES_ALL.map(c=><option key={c}>{c}</option>)}
+          {catOptions.map(c=><option key={c}>{c}</option>)}
         </PickSelect>
         <button onClick={()=>setShowLow(s=>!s)}
           style={{height:33,padding:"0 11px",borderRadius:7,border:`1.5px solid ${showLow?"#EF4444":T.b1}`,background:showLow?"#FEF2F2":T.surface,color:showLow?"#EF4444":T.t3,fontSize:12,fontWeight:showLow?700:400,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
@@ -2471,7 +2478,7 @@ function StockTab({stock,grns,issues,onSelect,onAddMaterial,onAddStock,onIssue,o
 // ── GRN TAB ────────────────────────────────────────────────────────
 function GrnTab({grns,onNew,onVerify}){
   const [sel,setSel]=useState(null);
-  const STATUS_S={"Verified":{c:T.grn,bg:T.grnL,brd:T.grnM},"Partial":{c:T.amb,bg:T.ambL,brd:T.ambM},"Pending":{c:T.slt,bg:T.sltL,brd:T.b2}};
+  const STATUS_S={"Verified":{c:T.grn,bg:T.grnL,brd:T.grnM},"Partial":{c:T.amb,bg:T.ambL,brd:T.ambM},"Pending":{c:T.slt,bg:T.sltL,brd:T.b2},"Cancelled":{c:T.red,bg:T.redL,brd:T.red}};
   return(
     <div>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
@@ -2501,7 +2508,7 @@ function GrnTab({grns,onNew,onVerify}){
                 </div>
                 <span style={{fontSize:11,color:T.t4,fontFamily:"monospace"}}>{g.poNo}</span>
                 <span style={{fontSize:12.5,fontWeight:600,color:T.t1}}>₹{fmt(g.total)}</span>
-                <Pill label={g.status} c={ss.c} bg={ss.bg} brd={ss.brd}/>
+                <Pill label={g.cancelled_at?t("warehouse.grnc_cancelled_tag"):g.status} c={ss.c} bg={ss.bg} brd={ss.brd}/>
               </div>
             );
           })}
@@ -2514,7 +2521,7 @@ function GrnTab({grns,onNew,onVerify}){
 
 // ── GRN DETAIL DRAWER ─────────────────────────────────────────────
 function GRNDetailDrawer({grn,onClose,onVerify}){
-  const STATUS_S={"Verified":{c:T.grn,bg:T.grnL,brd:T.grnM},"Partial":{c:T.amb,bg:T.ambL,brd:T.ambM},"Pending":{c:T.slt,bg:T.sltL,brd:T.b2}};
+  const STATUS_S={"Verified":{c:T.grn,bg:T.grnL,brd:T.grnM},"Partial":{c:T.amb,bg:T.ambL,brd:T.ambM},"Pending":{c:T.slt,bg:T.sltL,brd:T.b2},"Cancelled":{c:T.red,bg:T.redL,brd:T.red}};
   const ss=STATUS_S[grn.status]||STATUS_S["Pending"];
   const isReturn=grn.source==="Return";
   const totalOrd=(grn.items||[]).reduce((s,it)=>s+Number(it.ordQty||0),0);
@@ -2547,7 +2554,7 @@ function GRNDetailDrawer({grn,onClose,onVerify}){
             <div style={{flex:1}}>
               <div style={{fontSize:12.5,fontWeight:700,color:ss.c}}>{t("warehouse.status_status", { status: grn.status })}</div>
               <div style={{fontSize:11,color:ss.c,marginTop:2}}>
-                {isReturn?`Return GRN — material project se warehouse me wapas aaya`:`Vendor receipt — material warehouse stock me add ho gaya`}
+                {grn.cancelled_at?t("warehouse.grnc_cancelled_line",{reason:grn.cancel_reason||"—"}):isReturn?`Return GRN — material project se warehouse me wapas aaya`:`Vendor receipt — material warehouse stock me add ho gaya`}
               </div>
             </div>
           </div>
@@ -2627,7 +2634,7 @@ function GRNDetailDrawer({grn,onClose,onVerify}){
           <span style={{fontSize:10.5,color:T.t4}}>{isReturn?t("warehouse.project_se_return"):t("warehouse.vendor_delivery")}</span>
           <div style={{display:"flex",gap:8}}>
             <GhostBtn onClick={onClose}>{t("common.close")}</GhostBtn>
-            {grn.status!=="Verified"&&!isReturn&&onVerify&&(
+            {grn.status!=="Verified"&&!grn.cancelled_at&&!isReturn&&onVerify&&(
               <Btn onClick={()=>{onVerify(grn.dbId);onClose();}} c={T.grn} icon={IcChk} size="sm">{t("warehouse.verify_accept")}</Btn>
             )}
           </div>
@@ -3834,7 +3841,8 @@ function WarehouseModule(){
       ]);
       if(settRes.success&&settRes.data) setProcMode(settRes.data.warehouse_procurement_mode||"direct");
       if(sRes.success) setStock((sRes.data||[]).map(m=>({...m,value:m.stock_value!=null?Number(m.stock_value)||0:(Number(m.qty)||0)*(Number(m.rate)||0),qty:Number(m.qty)||0,min_qty:Number(m.min_qty)||0,max_qty:Number(m.max_qty)||0,rate:Number(m.rate)||0,minQty:Number(m.min_qty)||0,maxQty:Number(m.max_qty)||0,qty_damaged:Number(m.qty_damaged)||0,qty_scrap:Number(m.qty_scrap)||0,qty_repair:Number(m.qty_repair)||0})));
-      if(gRes.success) setGrns((gRes.data||[]).map(g=>({...g,id:g.grn_no||`GRN-${g.id}`,dbId:g.id,date:fmtDate(g.date),poNo:g.po_no||"—",vendor:g.vendor||"—",by:g.received_by_name||"—",total:Number(g.total)||0,items:(g.items||[]).map(it=>({...it,name:it.material_name||it.name||"—",matId:it.material_id,ordQty:Number(it.ordered_qty)||0,recQty:Number(it.received_qty)||0,rate:Number(it.rate)||0,amount:Number(it.amount)||0,unit:it.unit||""}))})));
+      // Hatayi gayi GRN (12 Oct 2026, khaate se "GRN hatao") — status "Cancelled" dikhe.
+      if(gRes.success) setGrns((gRes.data||[]).map(g=>({...g,status:g.cancelled_at?"Cancelled":g.status,id:g.grn_no||`GRN-${g.id}`,dbId:g.id,date:fmtDate(g.date),poNo:g.po_no||"—",vendor:g.vendor||"—",by:g.received_by_name||"—",total:Number(g.total)||0,items:(g.items||[]).map(it=>({...it,name:it.material_name||it.name||"—",matId:it.material_id,ordQty:Number(it.ordered_qty)||0,recQty:Number(it.received_qty)||0,rate:Number(it.rate)||0,amount:Number(it.amount)||0,unit:it.unit||""}))})));
       if(iRes.success) setIssues((iRes.data||[]).map(i=>({...i,id:i.issue_no||`ISS-${i.id}`,dbId:i.id,date:fmtDate(i.date),project:i.project_name||"—",issuedTo:i.issued_to_name||"—",by:i.issued_by_name||"—",total:Number(i.total)||0,remarks:i.remarks||"",status:i.status||"Pending",items:(i.items||[]).map(it=>({...it,name:it.material_name||it.name||"—",matId:it.material_id,qty:Number(it.qty)||0,rate:Number(it.rate)||0,unit:it.unit||""}))})));
       if(mRes.success) setMrs((mRes.data||[]).map(m=>({...m,project:m.project_name||(m.project_id?"—":(m.warehouse_name?`${m.warehouse_name} ${t("warehouse.internal_request")}`:"Warehouse (internal)")),requestedBy:m.requested_by_name||"—",id:m.mr_no||`MR-${m.id}`,dbId:m.id,date:fmtDate(m.date),items:m.items||[]})));
       if(tRes.success) setTransfers((tRes.data||[]).map(t=>({...t,from:t.from_warehouse_name||t.from_project_name||t.from_location||"—",to:t.to_warehouse_name||t.to_project_name||t.to_location||"—",by:t.transferred_by_name||"—",id:t.transfer_no||`TRF-${t.id}`,dbId:t.id,date:fmtDate(t.date),items:t.items||[],total_value:Number(t.total_value)||0})));

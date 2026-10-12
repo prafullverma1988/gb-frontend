@@ -161,6 +161,8 @@ export function WarehouseLedgerTab({ onOpen }) {
                 <div style={{ fontSize: 12.5, fontWeight: 700, color: T.t1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{m.material_name}</div>
                 <div style={{ fontSize: 10.5, color: T.t4 }}>
                   {m.unit}{m.entries ? " · " + t("warehouse.ledger_entries", { n: m.entries }) : " · " + t("warehouse.ledger_no_entry")}
+                  {/* GRN hatane ki khuli request (12 Oct 2026) — approver ko yahin dikhe */}
+                  {m.cancel_pending > 0 && <span style={{ marginLeft: 6, color: T.amb, fontWeight: 700 }}>· {t("warehouse.grnc_list_pending", { n: m.cancel_pending })}</span>}
                 </div>
               </div>
               <div style={{ fontSize: 12.5, fontWeight: 700, color: m.total_in ? T.grn : T.b2, textAlign: "right" }}>{m.total_in ? "+" + fmtQ(m.total_in) : "—"}</div>
@@ -202,7 +204,8 @@ export function WarehouseLedgerDrawer({ material, godownName, onClose, isAdmin, 
     let bal = Number(d.opening) || 0;
     if (bal !== 0) out.push({ kind: "before", type: bal > 0 ? "in" : "out", qty: Math.abs(bal), date: null, ref: "", party: t("warehouse.ledger_opening"), bal, _before: true });
     for (const e of d.rows) {
-      bal += e.type === "in" ? e.qty : -e.qty;
+      // Hatayi gayi GRN (12 Oct 2026) — line dikhti hai, balance nahi badalti.
+      if (!e.cancelled) bal += e.type === "in" ? e.qty : -e.qty;
       out.push({ ...e, bal });
     }
     return sortNew ? out.slice().reverse() : out;
@@ -302,6 +305,9 @@ export function WarehouseLedgerDrawer({ material, godownName, onClose, isAdmin, 
                     {who ? (e._before ? who : " · " + who) : ""}
                   </div>
                   {reach && <div style={{ fontSize: 9.5, color: reach.c, fontWeight: 600 }}>{reach.txt}</div>}
+                  {/* GRN hatana (12 Oct 2026) — hatayi gayi / request approval me */}
+                  {e.cancelled && <div title={e.cancel_reason} style={{ fontSize: 9.5, color: T.red, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t("warehouse.grnc_cancelled_tag")} · {t("warehouse.grnc_cancelled_line", { reason: e.cancel_reason || "—" })}</div>}
+                  {!e.cancelled && e.cancel_req && e.cancel_req.status === "pending" && <div title={e.cancel_req.reason} style={{ fontSize: 9.5, color: T.amb, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t("warehouse.grnc_pending_tag")} · {e.cancel_req.reason}</div>}
                   {/* Issue ka note (11 Oct 2026, O) */}
                   {e.kind === "issue" && e.note && <div title={e.note} style={{ fontSize: 9.5, color: T.t4, fontStyle: "italic", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t("material.issue_note", { note: e.note })}</div>}
                   {/* Qty badli thi — aakhri badlav line par hi (11 Oct 2026, AA) */}
@@ -310,7 +316,7 @@ export function WarehouseLedgerDrawer({ material, godownName, onClose, isAdmin, 
                       ✎ {t("warehouse.ledger_row_edited", { old: fmtQ(x.old_qty), new: fmtQ(x.new_qty), note: x.note })}
                     </div>); })()}
                 </div>
-                <div style={{ fontSize: 12, fontWeight: 800, color: isIn ? T.grn : T.b2, textAlign: "right" }}>{isIn ? fmtQ(e.qty) : "—"}</div>
+                <div style={{ fontSize: 12, fontWeight: 800, color: e.cancelled ? T.t4 : isIn ? T.grn : T.b2, textAlign: "right", textDecoration: e.cancelled ? "line-through" : "none" }}>{isIn ? fmtQ(e.qty) : "—"}</div>
                 <div style={{ fontSize: 12, fontWeight: 800, color: !isIn ? T.red : T.b2, textAlign: "right" }}>{!isIn ? fmtQ(e.qty) : "—"}</div>
                 <div style={{ fontSize: 12, fontWeight: 800, color: e.bal < 0 ? T.red : T.t1, textAlign: "right" }}>{fmtQ(e.bal)}</div>
               </div>
@@ -326,9 +332,125 @@ export function WarehouseLedgerDrawer({ material, godownName, onClose, isAdmin, 
           )}
         </div>
       </div>
-      {sel && <LedgerRowDrawer e={sel} unit={material.unit} isAdmin={isAdmin}
+      {sel && <LedgerRowDrawer e={sel} unit={material.unit} isAdmin={isAdmin} grnCancel={(d && d.grn_cancel) || {}}
         onClose={() => setSelKey(null)} onSaved={() => { setReload(x => x + 1); onChanged && onChanged(); }}/>}
     </>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════
+// GRN hatana (12 Oct 2026) — vendor se aayi store GRN. "GRN hatao" → wajah ke
+// saath request (stock nahi hilta); Admin / Warehouse Approve tick wala Admin
+// password se approve kare tabhi stock ghatta hai. Bhejne wala request wapas le
+// sakta hai. Button server ke flag (grn_cancel, cancel_req.mine) se.
+// ════════════════════════════════════════════════════════════════
+function GrnCancelBox({ e, perms, onDone }) {
+  const rq = e.cancel_req && e.cancel_req.status === "pending" ? e.cancel_req : null;
+  const last = e.cancel_req && !rq ? e.cancel_req : null;
+  const [open, setOpen] = useState(false);       // request ka modal
+  const [reason, setReason] = useState("");
+  const [pw, setPw] = useState("");
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState(null);          // { ok, txt }
+  useEffect(() => { setOpen(false); setReason(""); setPw(""); setNote(""); setMsg(null); }, [e.grn_id]);
+
+  const run = async (url, body) => {
+    if (busy) return;
+    setBusy(true); setMsg(null);
+    const r = await api.post(url, body).catch(() => ({ success: false }));
+    setBusy(false);
+    if (r && r.success) { setOpen(false); setReason(""); setPw(""); setNote(""); setMsg({ ok: true, txt: r.message || "" }); onDone && onDone(); }
+    else setMsg({ ok: false, txt: (r && r.message) || t("warehouse.ledger_row_fail") });
+  };
+  const send = () => {
+    if (!reason.trim()) { setMsg({ ok: false, txt: t("warehouse.grnc_need_reason") }); return; }
+    run(`/warehouse/grn/${e.grn_id}/cancel-request`, { reason: reason.trim() });
+  };
+  const approve = () => {
+    if (!pw) { setMsg({ ok: false, txt: t("warehouse.ledger_row_need_pw") }); return; }
+    run(`/warehouse/grn-cancel-requests/${rq.id}/approve`, { password: pw });
+  };
+  const reject = () => {
+    if (!note.trim()) { setMsg({ ok: false, txt: t("warehouse.grnc_need_note") }); return; }
+    run(`/warehouse/grn-cancel-requests/${rq.id}/reject`, { note: note.trim() });
+  };
+
+  const inp = { width: "100%", boxSizing: "border-box", padding: "8px 10px", borderRadius: 7, border: `1.5px solid ${T.b1}`, fontSize: 12.5, outline: "none", fontFamily: "inherit" };
+  const lbl = { fontSize: 10.5, fontWeight: 700, color: T.t3, textTransform: "uppercase", letterSpacing: ".4px", margin: "10px 0 4px" };
+  const btn = (bg, fg, bd) => ({ padding: "8px 14px", borderRadius: 7, border: bd ? `1.5px solid ${bd}` : "none", background: bg, color: fg || "#fff", fontSize: 12.5, fontWeight: 700, cursor: busy ? "default" : "pointer", opacity: busy ? 0.6 : 1 });
+  const Msg = () => msg ? <div style={{ marginTop: 9, fontSize: 11.5, fontWeight: 600, color: msg.ok ? T.grn : T.red }}>{msg.txt}</div> : null;
+
+  if (e.cancelled) {
+    return (
+      <div style={{ marginTop: 14, padding: "10px 12px", background: T.redL, borderRadius: 8, borderLeft: `3px solid ${T.red}` }}>
+        <div style={{ fontSize: 12.5, fontWeight: 700, color: T.red }}>{t("warehouse.grnc_cancelled_tag")} · {t("warehouse.grnc_cancelled_box")}</div>
+        <div style={{ fontSize: 11.5, color: T.t2, marginTop: 4 }}>{t("warehouse.grnc_cancelled_line", { reason: e.cancel_reason || "—" })}</div>
+        <div style={{ fontSize: 11, color: T.t3, marginTop: 2 }}>{t("warehouse.grnc_cancelled_by", { name: e.cancelled_by || "—", date: fmtDate(e.cancelled_at) })}</div>
+      </div>
+    );
+  }
+  if (rq) {
+    return (
+      <div style={{ marginTop: 14, padding: "10px 12px", background: T.ambL, borderRadius: 8, borderLeft: `3px solid ${T.amb}` }}>
+        <div style={{ fontSize: 12.5, fontWeight: 700, color: T.amb }}>{t("warehouse.grnc_pending_tag")}</div>
+        <div style={{ fontSize: 11.5, color: T.t2, marginTop: 4 }}>{t("warehouse.grnc_req_reason", { reason: rq.reason })}</div>
+        <div style={{ fontSize: 11, color: T.t3, marginTop: 2 }}>{t("warehouse.grnc_req_by", { name: rq.by || "—", date: fmtDate(rq.at) })}</div>
+        {perms.can_approve && (
+          <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px dashed ${T.b2}` }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: T.t1 }}>{t("warehouse.grnc_approve_title")}</div>
+            <div style={{ fontSize: 11, color: T.t3, marginTop: 3 }}>{t("warehouse.grnc_hint")}</div>
+            <div style={lbl}>{t("warehouse.ledger_row_pw")}</div>
+            <input type="password" autoComplete="new-password" aria-label={t("warehouse.ledger_row_pw")} value={pw} onChange={ev => setPw(ev.target.value)} style={inp}/>
+            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 9 }}>
+              <button onClick={approve} disabled={busy} style={btn(T.red)}>{t("warehouse.grnc_approve_btn")}</button>
+            </div>
+            <div style={lbl}>{t("warehouse.grnc_reject_note")}</div>
+            <textarea rows={2} value={note} onChange={ev => setNote(ev.target.value)} style={{ ...inp, resize: "vertical" }}/>
+            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 9 }}>
+              <button onClick={reject} disabled={busy} style={btn(T.surface, T.t2, T.b2)}>{t("warehouse.grnc_reject_btn")}</button>
+            </div>
+          </div>
+        )}
+        {rq.mine && (
+          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 10 }}>
+            <button onClick={() => run(`/warehouse/grn-cancel-requests/${rq.id}/withdraw`, {})} disabled={busy} style={btn(T.surface, T.amb, T.amb)}>{t("warehouse.grnc_withdraw")}</button>
+          </div>
+        )}
+        <Msg/>
+      </div>
+    );
+  }
+  return (
+    <div style={{ marginTop: 14 }}>
+      {last && last.status === "rejected" && (
+        <div style={{ fontSize: 11.5, color: T.t3, padding: "8px 10px", background: T.surfaceB, borderRadius: 7, marginBottom: 8 }}>
+          {t("warehouse.grnc_rejected_line", { note: last.note || "—", name: last.decided_by || "—" })}
+        </div>
+      )}
+      {perms.can_request && (
+        <div style={{ display: "flex", justifyContent: "flex-end" }}>
+          <button onClick={() => { setOpen(true); setMsg(null); }} style={btn(T.surface, T.red, T.red)}>{t("warehouse.grnc_btn")}</button>
+        </div>
+      )}
+      {!open && <Msg/>}
+      {open && (
+        <>
+          <div onClick={() => !busy && setOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.45)", zIndex: 1404 }}/>
+          <div style={{ position: "fixed", top: "50%", left: "50%", transform: "translate(-50%,-50%)", width: "min(420px,92vw)", background: T.surface, borderRadius: 12, zIndex: 1405, padding: "16px 18px", boxShadow: "0 20px 50px rgba(0,0,0,0.3)", fontFamily: "'Segoe UI',system-ui,sans-serif" }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: T.t1 }}>{t("warehouse.grnc_title", { no: e.ref })}</div>
+            <div style={{ fontSize: 11.5, color: T.t3, marginTop: 5 }}>{t("warehouse.grnc_hint")}</div>
+            <div style={lbl}>{t("warehouse.grnc_reason")}</div>
+            <textarea rows={3} autoFocus value={reason} onChange={ev => setReason(ev.target.value)} placeholder={t("warehouse.grnc_reason_ph")} style={{ ...inp, resize: "vertical" }}/>
+            <Msg/>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 12 }}>
+              <button onClick={() => setOpen(false)} disabled={busy} style={btn(T.surface, T.t2, T.b2)}>{t("common.cancel")}</button>
+              <button onClick={send} disabled={busy} style={btn(T.red)}>{t("warehouse.grnc_send")}</button>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 
@@ -342,7 +464,7 @@ const rowKey = (e) => (e._before ? "before" : e.kind + ":" + (e.row_id ?? e.ref)
 // Qty sirf store me bani "aaya" line (Opening / Stock add / Site se wapas) ki,
 // sirf Admin, company ke delete-password ke saath. Baaki line par wajah.
 // ════════════════════════════════════════════════════════════════
-function LedgerRowDrawer({ e, unit, isAdmin, onClose, onSaved }) {
+function LedgerRowDrawer({ e, unit, isAdmin, grnCancel, onClose, onSaved }) {
   const km = kindMeta(e.kind);
   const [qty, setQty] = useState(String(e.qty ?? ""));
   const [note, setNote] = useState("");
@@ -417,7 +539,9 @@ function LedgerRowDrawer({ e, unit, isAdmin, onClose, onSaved }) {
             </div>
           )}
 
-          {why && <div style={{ marginTop: 14, padding: "9px 11px", background: T.surfaceB, border: `1px solid ${T.b1}`, borderRadius: 7, fontSize: 11.5, color: T.t3 }}>{why}</div>}
+          {why && !e.cancelled && <div style={{ marginTop: 14, padding: "9px 11px", background: T.surfaceB, border: `1px solid ${T.b1}`, borderRadius: 7, fontSize: 11.5, color: T.t3 }}>{why}</div>}
+
+          {(e.cancellable || e.cancelled) && <GrnCancelBox e={e} perms={grnCancel} onDone={onSaved}/>}
 
           {canEdit && (
             <div style={{ marginTop: 16, padding: "12px 14px", border: `1.5px solid ${T.b2}`, borderRadius: 9, background: T.surfaceB }}>
