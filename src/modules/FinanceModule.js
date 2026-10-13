@@ -13,6 +13,7 @@ import { downloadLedgerExcel, downloadLedgerPdf, fromScreenRow } from "../utils/
 import { canSeeFinancials, can, canAny, canEntry } from "../utils/perms";
 import { canApproveAction } from "../utils/approvalAuthority";
 import TabAccounts from "./tabs/TabAccounts";
+import TabWallet from "./tabs/TabWallet";
 import { isoDate, todayISO, daysAgoISO } from "../utils/today";
 import { cashMoveOf, isTransferIn, round2, partyTypeBucket, PARTY_TYPE_BUCKETS } from "../utils/moneyRules";
 import { BackClose } from "../utils/backNav";
@@ -5294,6 +5295,11 @@ Status: ${ledgerRow.status||"unpaid"}`;
     {key:"equipment",label:t("common.equipment"),tabs:[
       {id:"equipment_review",l:`Equipment Review${equipReviewCount>0?` (${equipReviewCount})`:""}`},
     ]},
+    // Mera wallet — mobile ka wallet kharch form PC par (material table,
+    // keyboard). Wahi POST /wallets/expense, isliye wahi ENTRY gate.
+    ...(canEntry("Finance") ? [{key:"wallet",label:t("wallet_web.tab_group"),tabs:[
+      {id:"wallet",l:t("wallet_web.tab")},
+    ]}] : []),
     // P&L "Financial Reports" permission ke peeche hai — rozana ka Finance kaam
     // (ledger, payment, material) accountant ke paas rehta hai, par "kisme kitna
     // paisa laga" wala vishleshan alag se dena padta hai.
@@ -6151,6 +6157,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
 
         {/* ACCOUNTS TAB — har khaate ka ledger, alag aur milakar */}
         {tab==="accounts"&&<TabAccounts/>}
+        {tab==="wallet"&&<TabWallet/>}
 
         {/* CASH BOOK + DAY BOOK TAB */}
         {(tab==="cashbook"||tab==="daybook")&&(
