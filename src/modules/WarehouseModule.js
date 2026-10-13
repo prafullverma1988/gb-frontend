@@ -12,7 +12,7 @@ import { cld } from "../utils/cloudinary";
 import { canApproveAction } from "../utils/approvalAuthority";
 import { t, Rich } from "../i18n";
 import { BackClose } from "../utils/backNav";
-import { WarehouseLedgerTab, WarehouseLedgerDrawer } from "./WarehouseLedger";
+import { MaterialLedgerHistory } from "./WarehouseLedger";
 import { AllGodownsView } from "./WarehouseConsolidated";
 import { WarehouseGintiTab, DisposalModal, DisposalsPanel } from "./WarehouseGinti";
 import { ConversionTab } from "./WarehouseConversion";
@@ -1868,19 +1868,15 @@ function QuickIssueModal({material,projects,users,onClose,onSaved}){
 }
 
 // ── MATERIAL DETAIL DRAWER (movement history) ─────────────────────
-function MaterialDetailDrawer({material,onClose,onEdit,onDelete,onIssue,onAddStock}){
-  const [history,setHistory]=useState([]);
-  const [loading,setLoading]=useState(true);
-  useEffect(()=>{
-    if(!material)return;
-    setLoading(true);
-    api.get(`/warehouse/materials/${material.id}/history`).then(r=>{
-      if(r.success) setHistory(r.data||[]);
-      setLoading(false);
-    }).catch(()=>setLoading(false));
-  },[material]);
-  const totalIn=history.filter(h=>h.type==="in").reduce((s,h)=>s+Number(h.qty||0),0);
-  const totalOut=history.filter(h=>h.type==="out").reduce((s,h)=>s+Number(h.qty||0),0);
+// Movement History = store ka poora khaata (13 Oct 2026 — alag Ledger tab hata):
+// chalta balance, Sab / Aaya / Gaya, line par click → detail (GRN hatao, Admin qty
+// theek …). WarehouseLedger.js MaterialLedgerHistory. focusGrnId = ghanti se aaye.
+function MaterialDetailDrawer({material,onClose,onEdit,onDelete,onIssue,onAddStock,isAdmin,focusGrnId,onChanged}){
+  const [led,setLed]=useState(null);   // khaate ka jawab — Aaya / Gaya / entry ki ginti
+  const totalIn=led?Number(led.total_in)||0:0;
+  const totalOut=led?Number(led.total_out)||0:0;
+  // Qty theek / GRN hatane ke baad stock khaate se taaza (list wala object purana rehta).
+  const stockNow=led&&!led._err&&led.stock!=null?Number(led.stock)||0:material.qty;
   return (
     <>
       <BackClose onClose={onClose}/>
@@ -1900,7 +1896,7 @@ function MaterialDetailDrawer({material,onClose,onEdit,onDelete,onIssue,onAddSto
         <div style={{padding:"14px 18px",borderBottom:`1px solid ${T.b1}`,flexShrink:0,background:T.surfaceB}}>
           <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
             <div><div style={{fontSize:9.5,color:T.t4,fontWeight:600,textTransform:"uppercase",marginBottom:2}}>{t("common.stock")}</div>
-              <div style={{fontSize:18,fontWeight:800,color:material.qty<=0?T.red:material.qty<material.minQty?T.amb:T.t1}}>{fmtN(material.qty)} <span style={{fontSize:10.5,fontWeight:400,color:T.t4}}>{material.unit}</span></div></div>
+              <div style={{fontSize:18,fontWeight:800,color:stockNow<=0?T.red:stockNow<material.minQty?T.amb:T.t1}}>{fmtN(stockNow)} <span style={{fontSize:10.5,fontWeight:400,color:T.t4}}>{material.unit}</span></div></div>
             <div><div style={{fontSize:9.5,color:T.t4,fontWeight:600,textTransform:"uppercase",marginBottom:2}}>{t("warehouse.total_in")}</div>
               <div style={{fontSize:18,fontWeight:700,color:T.grn}}>{fmtN(totalIn)}</div></div>
             <div><div style={{fontSize:9.5,color:T.t4,fontWeight:600,textTransform:"uppercase",marginBottom:2}}>{t("warehouse.total_out")}</div>
@@ -1911,7 +1907,7 @@ function MaterialDetailDrawer({material,onClose,onEdit,onDelete,onIssue,onAddSto
           {/* Teen alag ginti (3 Oct 2026): Theek = upar wala stock (issue isi se),
               Kharab / Kabad store me pade par kaam ke nahi, Repair me = vendor ke paas. */}
           <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10,marginTop:10,paddingTop:10,borderTop:`1px dashed ${T.b1}`}}>
-            {[[t("warehouse.gt_b_good"),material.qty,T.grn],[t("warehouse.gt_b_damaged"),material.qty_damaged,T.amb],
+            {[[t("warehouse.gt_b_good"),stockNow,T.grn],[t("warehouse.gt_b_damaged"),material.qty_damaged,T.amb],
               [t("warehouse.gt_b_scrap"),material.qty_scrap,T.slt],[t("warehouse.gt_b_repair_in"),material.qty_repair,T.pur]].map(([l,v,c])=>(
               <div key={l}><div style={{fontSize:9.5,color:T.t4,fontWeight:600,textTransform:"uppercase",marginBottom:2}}>{l}</div>
                 <div style={{fontSize:14,fontWeight:700,color:Number(v)>0?c:T.t4}}>{fmtN(Number(v)||0)} <span style={{fontSize:10,fontWeight:400,color:T.t4}}>{material.unit}</span></div></div>
@@ -1928,30 +1924,9 @@ function MaterialDetailDrawer({material,onClose,onEdit,onDelete,onIssue,onAddSto
 
         <div style={{flex:1,overflowY:"auto",padding:"12px 18px"}}>
           <div style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".4px",marginBottom:8,display:"flex",alignItems:"center",gap:5}}>
-            <IcHist size={12} color={T.t3}/>{t("warehouse.movement_history_history", { history: history.length })}</div>
-          {loading&&<div style={{textAlign:"center",padding:"30px 0",color:T.t4,fontSize:12}}>{t("common.loading")}</div>}
-          {!loading&&history.length===0&&<Empty label={t("warehouse.koi_movement_nahi")} sub={t("warehouse.iss_material_par_grn_ya_issue")}/>}
-          {!loading&&history.map((h,i)=>(
-            <div key={i} style={{padding:"10px 13px",background:T.surfaceB,borderRadius:8,border:`1px solid ${T.b1}`,marginBottom:7,borderLeft:`3px solid ${h.type==="in"?T.grn:T.amb}`}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
-                <div style={{display:"flex",alignItems:"center",gap:6}}>
-                  <Pill label={h.type==="in"?"GRN":t("mom.issue")} c={h.type==="in"?T.grn:T.amb} bg={h.type==="in"?T.grnL:T.ambL} brd={h.type==="in"?T.grnM:T.ambM}/>
-                  <span style={{fontSize:11,fontWeight:700,color:h.type==="in"?T.grn:T.amb,fontFamily:"monospace"}}>{h.doc_no}</span>
-                  <span style={{fontSize:10.5,color:T.t4}}>{fmtDate(h.date)}</span>
-                </div>
-                <span style={{fontSize:14,fontWeight:800,color:h.type==="in"?T.grn:T.amb}}>{h.type==="in"?"+":"-"}{fmtN(h.qty)} {material.unit}</span>
-              </div>
-              <div style={{fontSize:11,color:T.t3,display:"flex",gap:10,flexWrap:"wrap"}}>
-                {h.project_name&&<span>📁 {h.project_name}</span>}
-                {h.vendor&&<span>🏢 {h.vendor}</span>}
-                {h.po_no&&<span>{t("warehouse.po_po_no", { po_no: h.po_no })}</span>}
-                {h.to_name&&<span>➡ {h.to_name}</span>}
-                {h.by_name&&<span>by {h.by_name}</span>}
-                {h.rate>0&&<span>@ ₹{fmtN(h.rate)}</span>}
-              </div>
-              {h.remarks&&<div style={{marginTop:4,fontSize:11,color:T.t4,fontStyle:"italic"}}>"{h.remarks}"</div>}
-            </div>
-          ))}
+            <IcHist size={12} color={T.t3}/>{t("warehouse.movement_history_history", { history: led&&led.rows?led.rows.length:0 })}</div>
+          <MaterialLedgerHistory material={{name:material.name,unit:material.unit,min_qty:material.minQty}} isAdmin={isAdmin}
+            focusGrnId={focusGrnId} onData={setLed} onChanged={onChanged}/>
         </div>
       </div>
     </>
@@ -3643,7 +3618,9 @@ export function TransferDetailDrawer({transfer,onClose,canDelete,canReceive,onDe
 }
 
 // ── WAREHOUSE MODULE ──────────────────────────────────────────────
-function WarehouseModule(){
+// deepLink (13 Oct 2026): ghanti "GRN hatani hai" → { grn, wh, mat } — wahi store,
+// Stock tab, us material ka drawer aur khaate me wo GRN line (App.js parseNotifLink).
+function WarehouseModule({deepLink,onDeepLinkDone}={}){
   const [tab,setTab]=useState("stock");
   const [stock,setStock]=useState([]);
   const [grns,setGrns]=useState([]);
@@ -3667,8 +3644,7 @@ function WarehouseModule(){
   const [transferNewOpen,setTransferNewOpen]=useState(false);
   const [issueFromMR,setIssueFromMR]=useState(null);    // {mr} when issuing against MR
   const [matDetail,setMatDetail]=useState(null);
-  const [ledgerMat,setLedgerMat]=useState(null);  // Ledger tab — khula hua material ka khaata
-  const [ledgerSeq,setLedgerSeq]=useState(0);     // khaate se qty badli → Ledger list dobara (11 Oct 2026, AA)
+  const [grncPending,setGrncPending]=useState([]);   // [{material_name, cancel_pending}] — GRN hatane ki khuli request
   const [transferDetail,setTransferDetail]=useState(null);
   const [orderMR,setOrderMR]=useState(null);       // Tab 1: place order modal target
   const [grnMR,setGrnMR]=useState(null);           // Tab 1: receive GRN modal target
@@ -3850,11 +3826,14 @@ function WarehouseModule(){
       if(uRes.success) setUsers((uRes.data||[]).map(u=>({id:u.id,name:u.name})));
       if(libRes.success) setLibrary((libRes.data||[]).map(m=>({id:m.id,name:m.name,unit:m.unit||"Nos",category:m.category_name||"",rate:Number(m.last_rate||m.base_rate||0)})));
       api.get("/warehouse/counts?status=pending").then(r=>setGintiPending(r.success?(r.data||[]).length:0)).catch(()=>{});
+      // GRN hatane ki khuli request (13 Oct 2026) — Ledger tab hata, to Stock tab ke upar patti.
+      api.get("/warehouse/material-ledger").then(r=>setGrncPending(r.success?(r.data||[]).filter(x=>Number(x.cancel_pending)>0):[])).catch(()=>{});
     }catch(e){console.error("Warehouse load error:",e);}
     setLoading(false);
   },[loadWarehouses]);
 
   useEffect(()=>{loadAll();loadOverview();},[loadAll,loadOverview]);
+
 
   const handleVerifyGRN=async(dbId)=>{
     const res=await api.patch(`/warehouse/grn/${dbId}`,{status:"Verified"});
@@ -3894,14 +3873,27 @@ function WarehouseModule(){
   // taki refresh ke baad bhi wahi godown khule.
   const switchWarehouse=useCallback((id)=>{
     if(String(id)===String(whId)) return;
-    setWarehouseId(id); setWhId(String(id)); setLoading(true); setLedgerMat(null);
+    setWarehouseId(id); setWhId(String(id)); setLoading(true); setMatDetail(null);
     loadAll(); loadOverview();
   },[whId,loadAll,loadOverview]);
+
+  // Ghanti se aaye (GRN hatane ki request) — pehle sahi store, phir uska stock
+  // aate hi material ka drawer; material na mile to bas Stock tab.
+  useEffect(()=>{
+    if(!deepLink||!whLoaded) return;
+    const want=deepLink.wh?String(deepLink.wh):null;
+    if(want&&want!==String(whId)&&warehouses.some(w=>String(w.id)===want)){ switchWarehouse(want); return; }
+    if(loading) return;
+    const nm=String(deepLink.mat||"").trim().toLowerCase();
+    const m=nm?stock.find(x=>String(x.name||"").trim().toLowerCase()===nm):null;
+    setTab("stock");
+    if(m) setMatDetail({...m,_focusGrn:deepLink.grn||null});
+    onDeepLinkDone&&onDeepLinkDone();
+  },[deepLink,whLoaded,whId,warehouses,loading,stock,switchWarehouse,onDeepLinkDone]);
 
   const TABS=[
     ...(warehouses.length>1?[{id:"godown", l:t("warehouse.warehouses_tab"), I:IcIn, badge:null, bc:T.blu}]:[]),
     {id:"stock",  l:t("common.stock"),         I:IcBox,  badge:lowStock.length>0?lowStock.length:null, bc:T.red},
-    {id:"ledger", l:t("warehouse.ledger_tab"), I:IcHist, badge:null},
     {id:"ginti",  l:t("warehouse.gt_tab"),     I:IcChk,  badge:gintiPending>0?gintiPending:null, bc:T.amb},
     {id:"grn",    l:t("material.material_in"),   I:IcIn,   badge:pendingInMRs>0?pendingInMRs:null, bc:T.pur},
     {id:"issue",  l:t("warehouse.material_out"),  I:IcOut,  badge:pendingOutMRs>0?pendingOutMRs:null, bc:T.cyn},
@@ -3987,6 +3979,23 @@ function WarehouseModule(){
         </div>
       )}
 
+      {tab==="stock"&&grncPending.length>0&&(
+        <div style={{margin:"0 18px 6px",padding:"8px 13px",background:T.ambL,border:`1px solid ${T.ambM}`,borderRadius:7,display:"flex",alignItems:"center",gap:10,flexShrink:0,flexWrap:"wrap"}}>
+          <span style={{fontSize:12,fontWeight:700,color:T.amb}}>{t("warehouse.grnc_banner")}</span>
+          <div style={{display:"flex",gap:6,flex:1,flexWrap:"wrap"}}>
+            {grncPending.map(x=>{
+              const m=stock.find(s=>String(s.name||"").trim().toLowerCase()===String(x.material_name||"").trim().toLowerCase());
+              return(
+                <button key={x.material_name} disabled={!m} onClick={()=>m&&setMatDetail(m)}
+                  style={{background:T.amb,color:"white",fontSize:10.5,fontWeight:600,padding:"2px 9px",borderRadius:20,border:"none",cursor:m?"pointer":"default",whiteSpace:"nowrap"}}>
+                  {x.material_name} ({x.cancel_pending})
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       <div style={{margin:"0 18px",flexShrink:0}}>
         <div style={{background:T.sb,borderRadius:10,padding:"0 10px",display:"flex",alignItems:"center",gap:4,boxShadow:"0 2px 10px rgba(0,0,0,0.2)"}}>
           {TABS.map(t=>(
@@ -4010,7 +4019,6 @@ function WarehouseModule(){
           isAdmin={["admin","super_admin"].includes((meUser?.role||"").toLowerCase())} onChanged={()=>loadAll()}/>}
         {tab==="ginti"&&<WarehouseGintiTab key={whId} stock={stock} canCreate={canGintiCreate} canApprove={canGintiApprove} onStockChanged={()=>loadAll()}/>}
         {/* key=whId: godown badla to khaata usi godown ka dobara aaye */}
-        {tab==="ledger"&&<WarehouseLedgerTab key={whId+":"+ledgerSeq} onOpen={m=>setLedgerMat(m)}/>}
         {tab==="grn"&&<MaterialInTab grns={grns} mrs={mrs} projects={projects} users={users} library={library}
           procMode={procMode}
           onNewGRN={whEntry?()=>setGrnNewOpen(true):undefined} onVerifyGRN={whEdit?handleVerifyGRN:undefined}
@@ -4071,21 +4079,20 @@ function WarehouseModule(){
             },
           }}/>}
         {tab==="conversion"&&<ConversionTab key={whId} whId={whId} whName={activeWh?.name} stock={stock} library={library}
-          canEntry={whEntry} isAdmin={isAdmin} onStockChanged={()=>{loadAll();setLedgerSeq(n=>n+1);}}/>}
+          canEntry={whEntry} isAdmin={isAdmin} onStockChanged={()=>loadAll()}/>}
         {tab==="jobwork"&&<JobWorkTab key={whId} whId={whId} whName={activeWh?.name} stock={stock} library={library}
-          canEntry={whEntry} isAdmin={isAdmin} onStockChanged={()=>{loadAll();setLedgerSeq(n=>n+1);}}/>}
+          canEntry={whEntry} isAdmin={isAdmin} onStockChanged={()=>loadAll()}/>}
         {tab==="transfer"&&<TransfersTab transfers={transfers} onNew={whRecv?()=>setTransferNewOpen(true):undefined} onSelect={t=>setTransferDetail(t)}/>}
       </div>
 
-      {ledgerMat&&<WarehouseLedgerDrawer material={ledgerMat} godownName={activeWh?.name} isAdmin={isAdmin} onClose={()=>setLedgerMat(null)}
-        onChanged={()=>{setLedgerSeq(x=>x+1);loadAll();}}/>}
       {matDetail&&(
         <MaterialDetailDrawer material={matDetail}
           onClose={()=>setMatDetail(null)}
           onEdit={whEdit?(m)=>{setMatDetail(null);setMatModalOpen({material:m});}:undefined}
           onDelete={whDelete?handleDeleteMaterial:undefined}
           onIssue={whEntry?(m)=>{setMatDetail(null);setIssueTarget(m);}:undefined}
-          onAddStock={whCreate?(m)=>{setMatDetail(null);setAddStockTarget(m);}:undefined}/>
+          onAddStock={whCreate?(m)=>{setMatDetail(null);setAddStockTarget(m);}:undefined}
+          isAdmin={isAdmin} focusGrnId={matDetail._focusGrn||null} onChanged={()=>loadAll()}/>
       )}
       {matModalOpen&&(
         <MaterialFormModal material={matModalOpen.material} library={library} onClose={()=>setMatModalOpen(null)} onSaved={()=>loadAll()}/>

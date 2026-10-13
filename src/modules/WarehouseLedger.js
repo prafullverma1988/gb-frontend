@@ -5,17 +5,17 @@
 // challan), godown me kisne liya; kaun le gaya, kisne issue kiya, site par
 // pahucha ki nahi.
 //
-// Data: GET /warehouse/material-ledger (list) aur ?name= (ek material) —
-// api.js chuna hua godown khud jod deta hai.
+// Data: GET /warehouse/material-ledger?name= (ek material) — api.js chuna hua
+// godown khud jod deta hai. 13 Oct 2026 se alag "Ledger" tab nahi — ye khaata
+// Stock tab → material drawer → "Movement History" me hai (MaterialLedgerHistory).
 //
 // Zyadatar purana stock kisi entry se nahi aaya (seed / haath se qty) — server
 // use `opening` deta hai; wo "Pehle ka stock" ki pehli line banta hai, taaki
 // chalta balance hamesha asli stock par khatam ho.
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import api from "../config/api";
 import { t } from "../i18n";
-import { BackClose } from "../utils/backNav";
 
 const T = {
   surface: "#FFFFFF", surfaceB: "#F8F9FB",
@@ -36,7 +36,6 @@ const fmtDate = (d) => {
   return isNaN(x) ? "—" : x.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "2-digit" });
 };
 const fmtQ = (n) => Number(n || 0).toLocaleString("en-IN", { maximumFractionDigits: 3 });
-const ts = (d) => { const x = d ? new Date(d).getTime() : 0; return isNaN(x) ? 0 : x; };
 
 // Har tarah ki entry ka rang + naam.
 const kindMeta = (k) => ({
@@ -114,88 +113,37 @@ const reachLine = (e) => {
 };
 
 // ════════════════════════════════════════════════════════════════
-// Tab — har material ka Aaya / Gaya / Stock
+// Material ka poora khaata — Stock tab → material drawer → "Movement History"
+// (13 Oct 2026, Prafull: "Ledger tab aur Movement History ek hi cheez dikhate
+// hain — Ledger tab hatao, sab Stock me"). Data /warehouse/material-ledger?name=
+// — wahi jo pehle Ledger tab ka drawer padhta tha: chalta balance, Sab / Aaya /
+// Gaya, Newest / Oldest, jod; har line par click → LedgerRowDrawer (GRN hatao,
+// Admin qty theek, issue / transfer / ginti ki wajah).
+//   material  { name, unit, min_qty }
+//   focusGrnId  ghanti se aaye (GRN hatane ki request) — wo line upar laao,
+//               chamkao aur uska detail khol do
+//   onData(d)   drawer upar Aaya / Gaya isi se dikhata hai
 // ════════════════════════════════════════════════════════════════
-export function WarehouseLedgerTab({ onOpen }) {
-  const [list, setList] = useState(null);
-  const [err, setErr] = useState("");
-  const [q, setQ] = useState("");
-
-  useEffect(() => {
-    let alive = true;
-    api.get("/warehouse/material-ledger").then(r => {
-      if (!alive) return;
-      if (r.success) setList(r.data || []); else { setErr(r.message || ""); setList([]); }
-    }).catch(() => { if (alive) setList([]); });
-    return () => { alive = false; };
-  }, []);
-
-  const ql = q.trim().toLowerCase();
-  const rows = (list || []).filter(m => !ql || String(m.material_name || "").toLowerCase().includes(ql));
-
-  return (
-    <div>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10, flexWrap: "wrap" }}>
-        <input value={q} onChange={e => setQ(e.target.value)} placeholder={t("warehouse.ledger_search")}
-          style={{ flex: "1 1 240px", maxWidth: 360, padding: "8px 11px", borderRadius: 7, border: `1.5px solid ${T.b1}`, fontSize: 12.5, outline: "none", fontFamily: "inherit" }}/>
-        <span style={{ fontSize: 11.5, color: T.t3 }}>{t("warehouse.ledger_list_hint")}</span>
-      </div>
-      {err && <div style={{ padding: "8px 11px", background: T.redL, borderRadius: 6, color: T.red, fontSize: 12, marginBottom: 10 }}>{err}</div>}
-      <div style={{ border: `1px solid ${T.b1}`, borderRadius: 10, overflow: "hidden", background: T.surface }}>
-        <div style={{ display: "grid", gridTemplateColumns: "1.6fr 90px 90px 100px 110px", gap: 8, padding: "9px 14px", background: "#1E293B" }}>
-          {[[t("warehouse.ledger_col_material"), 0], [t("warehouse.ledger_in"), 1], [t("warehouse.ledger_out"), 1], [t("warehouse.ledger_stock"), 1], [t("warehouse.ledger_last"), 1]].map(([h, r], i) => (
-            <div key={i} style={{ fontSize: 9.5, fontWeight: 700, color: "rgba(255,255,255,.55)", textTransform: "uppercase", letterSpacing: ".4px", textAlign: r ? "right" : "left" }}>{h}</div>
-          ))}
-        </div>
-        {list === null && <div style={{ padding: 24, textAlign: "center", fontSize: 12, color: T.t4 }}>{t("warehouse.ledger_loading")}</div>}
-        {list && rows.length === 0 && <div style={{ padding: 24, textAlign: "center", fontSize: 12.5, color: T.t3 }}>{t("warehouse.ledger_empty")}</div>}
-        {rows.map((m, i) => {
-          const last = [m.last_in, m.last_out].filter(Boolean).sort((a, b) => ts(b) - ts(a))[0];
-          const low = m.stock <= 0 || (m.min_qty > 0 && m.stock < m.min_qty);
-          return (
-            <div key={m.material_name + i} onClick={() => onOpen(m)}
-              style={{ display: "grid", gridTemplateColumns: "1.6fr 90px 90px 100px 110px", gap: 8, padding: "10px 14px", borderTop: `1px solid ${T.b1}`, cursor: "pointer", alignItems: "center", background: i % 2 ? T.surfaceB : T.surface }}
-              onMouseEnter={ev => { ev.currentTarget.style.background = T.bluL; }}
-              onMouseLeave={ev => { ev.currentTarget.style.background = i % 2 ? T.surfaceB : T.surface; }}>
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 12.5, fontWeight: 700, color: T.t1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{m.material_name}</div>
-                <div style={{ fontSize: 10.5, color: T.t4 }}>
-                  {m.unit}{m.entries ? " · " + t("warehouse.ledger_entries", { n: m.entries }) : " · " + t("warehouse.ledger_no_entry")}
-                  {/* GRN hatane ki khuli request (12 Oct 2026) — approver ko yahin dikhe */}
-                  {m.cancel_pending > 0 && <span style={{ marginLeft: 6, color: T.amb, fontWeight: 700 }}>· {t("warehouse.grnc_list_pending", { n: m.cancel_pending })}</span>}
-                </div>
-              </div>
-              <div style={{ fontSize: 12.5, fontWeight: 700, color: m.total_in ? T.grn : T.b2, textAlign: "right" }}>{m.total_in ? "+" + fmtQ(m.total_in) : "—"}</div>
-              <div style={{ fontSize: 12.5, fontWeight: 700, color: m.total_out ? T.red : T.b2, textAlign: "right" }}>{m.total_out ? "−" + fmtQ(m.total_out) : "—"}</div>
-              <div style={{ fontSize: 13, fontWeight: 800, color: low ? T.red : T.t1, textAlign: "right" }}>{fmtQ(m.stock)}</div>
-              <div style={{ fontSize: 11, color: T.t3, textAlign: "right" }}>{fmtDate(last)}</div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-// ════════════════════════════════════════════════════════════════
-// Drawer — ek material ka poora khaata
-// ════════════════════════════════════════════════════════════════
-// isAdmin — khaate ki line se qty theek karna sirf Admin (11 Oct 2026, AA).
-export function WarehouseLedgerDrawer({ material, godownName, onClose, isAdmin, onChanged }) {
+export function MaterialLedgerHistory({ material, isAdmin, focusGrnId, onData, onChanged }) {
   const [d, setD] = useState(null);
   const [tab, setTab] = useState("all");        // all | in | out
   const [sortNew, setSortNew] = useState(true);
   const [selKey, setSelKey] = useState(null);   // khuli line — rowKey
-  const [reload, setReload] = useState(0);      // qty save ke baad khaata dobara
+  const [reload, setReload] = useState(0);      // save / GRN hatane ke baad khaata dobara
+  const [hot, setHot] = useState(null);         // ghanti wali line (rowKey) — chamakti hai
+  const focusDone = useRef(false);
+  const rowRefs = useRef({});
 
-  useEffect(() => { setD(null); setTab("all"); setSortNew(true); setSelKey(null); }, [material]);
+  useEffect(() => { setD(null); setTab("all"); setSortNew(true); setSelKey(null); focusDone.current = false; }, [material.name]);
   useEffect(() => {
     let alive = true;
-    api.get("/warehouse/material-ledger?name=" + encodeURIComponent(material.material_name)).then(r => {
-      if (alive) setD(r.success && r.data ? r.data : { _err: r.message || "", rows: [] });
+    api.get("/warehouse/material-ledger?name=" + encodeURIComponent(material.name)).then(r => {
+      const x = r.success && r.data ? r.data : { _err: r.message || "", rows: [] };
+      if (alive) { setD(x); onData && onData(x); }
     }).catch(() => { if (alive) setD({ _err: "", rows: [] }); });
     return () => { alive = false; };
-  }, [material, reload]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [material.name, reload]);
 
   // Chalta balance hamesha purane se naye ki taraf, "pehle ka" se shuru.
   const rows = useMemo(() => {
@@ -211,12 +159,20 @@ export function WarehouseLedgerDrawer({ material, godownName, onClose, isAdmin, 
     return sortNew ? out.slice().reverse() : out;
   }, [d, sortNew]);
 
+  // Ghanti se aaye: us GRN ki line dikhao + detail kholo (ek hi baar).
+  useEffect(() => {
+    if (!d || focusDone.current || !focusGrnId) return;
+    const e = rows.find(x => Number(x.grn_id) === Number(focusGrnId));
+    focusDone.current = true;
+    if (!e) return;
+    const k = rowKey(e);
+    setHot(k); setSelKey(k);
+    setTimeout(() => { const el = rowRefs.current[k]; if (el && el.scrollIntoView) el.scrollIntoView({ block: "center" }); }, 50);
+  }, [d, rows, focusGrnId]);
+
   const visible = tab === "all" ? rows : rows.filter(e => e.type === tab && !e._before);
   // Khuli line naye data se — save ke baad wahi line taaza dikhe.
   const sel = selKey ? rows.find(e => rowKey(e) === selKey) : null;
-  const stock = d ? d.stock : material.stock;
-  // Min se neeche ya khatam = laal (mobile aur Stock tab jaisa hi niyam).
-  const stockColor = stock <= 0 || (material.min_qty > 0 && stock < material.min_qty) ? T.red : T.grn;
   const TABS = [
     { id: "all", l: t("warehouse.ledger_all"), n: rows.length },
     { id: "in",  l: t("warehouse.ledger_in"),  n: rows.filter(e => e.type === "in" && !e._before).length },
@@ -225,115 +181,79 @@ export function WarehouseLedgerDrawer({ material, godownName, onClose, isAdmin, 
 
   return (
     <>
-      <BackClose onClose={onClose}/>
-      <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.5)", zIndex: 1400, backdropFilter: "blur(2px)" }}/>
-      <div style={{
-        position: "fixed", top: 0, right: 0, height: "100vh", width: "min(640px,100vw)",
-        background: T.surface, zIndex: 1401, display: "flex", flexDirection: "column",
-        boxShadow: "-12px 0 40px rgba(0,0,0,0.18)", fontFamily: "'Segoe UI',system-ui,sans-serif",
-      }}>
-        <div style={{ background: "#0D1B2A", padding: "14px 20px", flexShrink: 0, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
-          <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 16, fontWeight: 700, color: "#fff", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{material.material_name}</div>
-            <div style={{ fontSize: 10.5, color: "rgba(255,255,255,0.5)", fontWeight: 600, letterSpacing: ".3px", textTransform: "uppercase", marginTop: 2 }}>
-              {t("warehouse.ledger_title_unit", { unit: material.unit || "" })}{godownName ? " · " + godownName : ""}
-            </div>
-          </div>
-          <button onClick={onClose}
-            style={{ width: 30, height: 30, borderRadius: 8, border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.07)", color: "#fff", fontSize: 16, cursor: "pointer", flexShrink: 0 }}>×</button>
-        </div>
-        <div style={{ height: 3, background: T.pur, flexShrink: 0 }}/>
-
-        <div style={{ padding: "18px 20px 12px", textAlign: "center", flexShrink: 0 }}>
-          <div style={{ fontSize: 10.5, color: T.t3, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".6px" }}>{t("warehouse.ledger_stock_now")}</div>
-          <div style={{ fontSize: 40, fontWeight: 800, color: stockColor, lineHeight: 1.05, marginTop: 3 }}>
-            {fmtQ(stock)}<span style={{ fontSize: 15, fontWeight: 600, color: T.t4, marginLeft: 5 }}>{material.unit}</span>
-          </div>
-        </div>
-        <div style={{ margin: "0 20px 14px", display: "flex", border: `1px solid ${T.b1}`, borderRadius: 12, overflow: "hidden", flexShrink: 0 }}>
-          {[[t("warehouse.ledger_in"), d ? d.total_in : material.total_in, T.grn],
-            [t("warehouse.ledger_out"), d ? d.total_out : material.total_out, T.red],
-            [t("warehouse.ledger_stock"), stock, stockColor]].map(([l, v, c], i) => (
-            <div key={i} style={{ flex: 1, padding: "10px 8px", textAlign: "center", borderLeft: i ? `1px solid ${T.b1}` : "none", background: T.surfaceB }}>
-              <div style={{ fontSize: 9.5, color: T.t4, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".3px" }}>{l}</div>
-              <div style={{ fontSize: 18, fontWeight: 800, color: c, marginTop: 2 }}>{fmtQ(v)}</div>
-            </div>
-          ))}
-        </div>
-
-        <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "8px 14px", borderBottom: `1px solid ${T.b1}`, flexShrink: 0 }}>
-          {TABS.map(x => (
-            <button key={x.id} onClick={() => setTab(x.id)}
-              style={{ padding: "6px 13px", borderRadius: 7, border: "none", cursor: "pointer", fontSize: 12, fontWeight: 700,
-                background: tab === x.id ? T.blu : "transparent", color: tab === x.id ? "#fff" : T.t3 }}>
-              {x.l} <span style={{ opacity: 0.7, fontSize: 10.5 }}>{x.n}</span>
-            </button>
-          ))}
-          <div style={{ flex: 1 }}/>
-          <button onClick={() => setSortNew(s => !s)}
-            style={{ padding: "5px 10px", borderRadius: 6, border: `1px solid ${T.b1}`, background: T.surfaceB, color: T.t2, fontSize: 10.5, fontWeight: 600, cursor: "pointer" }}>
-            {sortNew ? t("material_ledger.newest") : t("material_ledger.oldest")}
+      <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "0 0 8px", flexWrap: "wrap" }}>
+        {TABS.map(x => (
+          <button key={x.id} onClick={() => setTab(x.id)}
+            style={{ padding: "5px 12px", borderRadius: 7, border: "none", cursor: "pointer", fontSize: 11.5, fontWeight: 700,
+              background: tab === x.id ? T.blu : T.surfaceB, color: tab === x.id ? "#fff" : T.t3 }}>
+            {x.l} <span style={{ opacity: 0.7, fontSize: 10.5 }}>{x.n}</span>
           </button>
-        </div>
+        ))}
+        <div style={{ flex: 1 }}/>
+        <button onClick={() => setSortNew(s => !s)}
+          style={{ padding: "5px 10px", borderRadius: 6, border: `1px solid ${T.b1}`, background: T.surfaceB, color: T.t2, fontSize: 10.5, fontWeight: 600, cursor: "pointer" }}>
+          {sortNew ? t("material_ledger.newest") : t("material_ledger.oldest")}
+        </button>
+      </div>
 
-        <div style={{ flex: 1, overflowY: "auto" }}>
-          <div style={{ display: "grid", gridTemplateColumns: GRID, gap: 6, padding: "7px 16px", background: "#1E293B", position: "sticky", top: 0, zIndex: 1 }}>
-            {[[t("warehouse.ledger_col_date"), 0], [t("warehouse.ledger_col_details"), 0], [t("warehouse.ledger_in"), 1], [t("warehouse.ledger_out"), 1], [t("warehouse.ledger_col_bal"), 1]].map(([h, r], i) => (
-              <div key={i} style={{ fontSize: 8.5, fontWeight: 700, color: "rgba(255,255,255,.5)", textTransform: "uppercase", letterSpacing: ".4px", textAlign: r ? "right" : "left" }}>{h}</div>
-            ))}
-          </div>
-          {!d && <div style={{ padding: 24, textAlign: "center", fontSize: 12, color: T.t4 }}>{t("warehouse.ledger_loading")}</div>}
-          {d && d._err && <div style={{ margin: 14, padding: "8px 11px", background: T.redL, borderRadius: 6, color: T.red, fontSize: 12 }}>{d._err || t("warehouse.ledger_load_fail")}</div>}
-          {d && visible.length === 0 && <div style={{ padding: 24, textAlign: "center", fontSize: 12, color: T.t3 }}>{t("warehouse.ledger_no_entry")}</div>}
-          {visible.map((e, i) => {
-            const km = kindMeta(e.kind);
-            const isIn = e.type === "in";
-            const who = e._before ? t("warehouse.ledger_opening_hint") : whoLine(e);
-            const reach = reachLine(e);
-            const bg = i % 2 ? T.surfaceB : T.surface;
-            return (
-              <div key={i} onClick={() => setSelKey(rowKey(e))}
-                onMouseEnter={ev => { ev.currentTarget.style.background = T.bluL; }}
-                onMouseLeave={ev => { ev.currentTarget.style.background = bg; }}
-                style={{ display: "grid", gridTemplateColumns: GRID, gap: 6, padding: "8px 16px", borderBottom: `1px solid ${T.b1}`, alignItems: "center", borderLeft: `3px solid ${km.c}`, background: bg, cursor: "pointer" }}>
-                <div style={{ fontSize: 10.5, color: T.t3 }}>{e._before ? "—" : fmtDate(e.date)}</div>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 11.5, fontWeight: 600, color: T.t1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{e._before ? (e.party || "—") : partyLine(e)}</div>
-                  <div style={{ fontSize: 9.5, color: T.t4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                    {!e._before && <span style={{ fontFamily: "monospace", color: km.c, fontWeight: 700 }}>{e.ref}</span>}
-                    {!e._before && <span style={{ color: km.c }}> · {km.label}</span>}
-                    {who ? (e._before ? who : " · " + who) : ""}
-                  </div>
-                  {reach && <div style={{ fontSize: 9.5, color: reach.c, fontWeight: 600 }}>{reach.txt}</div>}
-                  {/* GRN hatana (12 Oct 2026) — hatayi gayi / request approval me */}
-                  {e.cancelled && <div title={e.cancel_reason} style={{ fontSize: 9.5, color: T.red, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t("warehouse.grnc_cancelled_tag")} · {t("warehouse.grnc_cancelled_line", { reason: e.cancel_reason || "—" })}</div>}
-                  {!e.cancelled && e.cancel_req && e.cancel_req.status === "pending" && <div title={e.cancel_req.reason} style={{ fontSize: 9.5, color: T.amb, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t("warehouse.grnc_pending_tag")} · {e.cancel_req.reason}</div>}
-                  {/* Issue ka note (11 Oct 2026, O) */}
-                  {e.kind === "issue" && e.note && <div title={e.note} style={{ fontSize: 9.5, color: T.t4, fontStyle: "italic", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t("material.issue_note", { note: e.note })}</div>}
-                  {/* Qty badli thi — aakhri badlav line par hi (11 Oct 2026, AA) */}
-                  {(e.edits || []).length > 0 && (() => { const x = e.edits[e.edits.length - 1]; return (
-                    <div title={x.note} style={{ fontSize: 9.5, color: T.pur, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                      ✎ {t("warehouse.ledger_row_edited", { old: fmtQ(x.old_qty), new: fmtQ(x.new_qty), note: x.note })}
-                    </div>); })()}
-                </div>
-                <div style={{ fontSize: 12, fontWeight: 800, color: e.cancelled ? T.t4 : isIn ? T.grn : T.b2, textAlign: "right", textDecoration: e.cancelled ? "line-through" : "none" }}>{isIn ? fmtQ(e.qty) : "—"}</div>
-                <div style={{ fontSize: 12, fontWeight: 800, color: !isIn ? T.red : T.b2, textAlign: "right" }}>{!isIn ? fmtQ(e.qty) : "—"}</div>
-                <div style={{ fontSize: 12, fontWeight: 800, color: e.bal < 0 ? T.red : T.t1, textAlign: "right" }}>{fmtQ(e.bal)}</div>
-              </div>
-            );
-          })}
-          {d && !d._err && rows.length > 0 && (
-            <div style={{ display: "grid", gridTemplateColumns: GRID, gap: 6, padding: "9px 16px", background: "#0F172A" }}>
-              <div style={{ gridColumn: "1 / 3", fontSize: 9.5, fontWeight: 700, color: "rgba(255,255,255,.5)", textTransform: "uppercase", letterSpacing: ".4px" }}>{t("common.total")}</div>
-              <div style={{ fontSize: 12, fontWeight: 800, color: "#4ADE80", textAlign: "right" }}>{fmtQ(d.total_in)}</div>
-              <div style={{ fontSize: 12, fontWeight: 800, color: "#F87171", textAlign: "right" }}>{fmtQ(d.total_out)}</div>
-              <div style={{ fontSize: 12, fontWeight: 800, color: "#fff", textAlign: "right" }}>{fmtQ(d.stock)}</div>
-            </div>
-          )}
+      <div style={{ border: `1px solid ${T.b1}`, borderRadius: 8 }}>
+        <div style={{ display: "grid", gridTemplateColumns: GRID, gap: 6, padding: "7px 12px", background: "#1E293B", position: "sticky", top: -12, zIndex: 1, borderRadius: "8px 8px 0 0" }}>
+          {[[t("warehouse.ledger_col_date"), 0], [t("warehouse.ledger_col_details"), 0], [t("warehouse.ledger_in"), 1], [t("warehouse.ledger_out"), 1], [t("warehouse.ledger_col_bal"), 1]].map(([h, r], i) => (
+            <div key={i} style={{ fontSize: 8.5, fontWeight: 700, color: "rgba(255,255,255,.5)", textTransform: "uppercase", letterSpacing: ".4px", textAlign: r ? "right" : "left" }}>{h}</div>
+          ))}
         </div>
+        {!d && <div style={{ padding: 24, textAlign: "center", fontSize: 12, color: T.t4 }}>{t("warehouse.ledger_loading")}</div>}
+        {d && d._err && <div style={{ margin: 12, padding: "8px 11px", background: T.redL, borderRadius: 6, color: T.red, fontSize: 12 }}>{d._err || t("warehouse.ledger_load_fail")}</div>}
+        {d && !d._err && visible.length === 0 && <div style={{ padding: 24, textAlign: "center", fontSize: 12, color: T.t3 }}>{t("warehouse.ledger_no_entry")}</div>}
+        {visible.map((e, i) => {
+          const km = kindMeta(e.kind);
+          const isIn = e.type === "in";
+          const who = e._before ? t("warehouse.ledger_opening_hint") : whoLine(e);
+          const reach = reachLine(e);
+          const k = rowKey(e);
+          const bg = hot === k ? T.ambL : i % 2 ? T.surfaceB : T.surface;
+          return (
+            <div key={k + ":" + i} ref={el => { rowRefs.current[k] = el; }} onClick={() => setSelKey(k)}
+              onMouseEnter={ev => { ev.currentTarget.style.background = T.bluL; }}
+              onMouseLeave={ev => { ev.currentTarget.style.background = bg; }}
+              style={{ display: "grid", gridTemplateColumns: GRID, gap: 6, padding: "8px 12px", borderBottom: `1px solid ${T.b1}`, alignItems: "center", borderLeft: `3px solid ${km.c}`, background: bg, cursor: "pointer" }}>
+              <div style={{ fontSize: 10.5, color: T.t3 }}>{e._before ? "—" : fmtDate(e.date)}</div>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 11.5, fontWeight: 600, color: T.t1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{e._before ? (e.party || "—") : partyLine(e)}</div>
+                <div style={{ fontSize: 9.5, color: T.t4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  {!e._before && <span style={{ fontFamily: "monospace", color: km.c, fontWeight: 700 }}>{e.ref}</span>}
+                  {!e._before && <span style={{ color: km.c }}> · {km.label}</span>}
+                  {who ? (e._before ? who : " · " + who) : ""}
+                </div>
+                {reach && <div style={{ fontSize: 9.5, color: reach.c, fontWeight: 600 }}>{reach.txt}</div>}
+                {/* GRN hatana (12 Oct 2026) — hatayi gayi / request approval me */}
+                {e.cancelled && <div title={e.cancel_reason} style={{ fontSize: 9.5, color: T.red, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t("warehouse.grnc_cancelled_tag")} · {t("warehouse.grnc_cancelled_line", { reason: e.cancel_reason || "—" })}</div>}
+                {!e.cancelled && e.cancel_req && e.cancel_req.status === "pending" && <div title={e.cancel_req.reason} style={{ fontSize: 9.5, color: T.amb, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t("warehouse.grnc_pending_tag")} · {e.cancel_req.reason}</div>}
+                {/* Issue ka note (11 Oct 2026, O) */}
+                {e.kind === "issue" && e.note && <div title={e.note} style={{ fontSize: 9.5, color: T.t4, fontStyle: "italic", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t("material.issue_note", { note: e.note })}</div>}
+                {/* Qty badli thi — aakhri badlav line par hi (11 Oct 2026, AA) */}
+                {(e.edits || []).length > 0 && (() => { const x = e.edits[e.edits.length - 1]; return (
+                  <div title={x.note} style={{ fontSize: 9.5, color: T.pur, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    ✎ {t("warehouse.ledger_row_edited", { old: fmtQ(x.old_qty), new: fmtQ(x.new_qty), note: x.note })}
+                  </div>); })()}
+              </div>
+              <div style={{ fontSize: 12, fontWeight: 800, color: e.cancelled ? T.t4 : isIn ? T.grn : T.b2, textAlign: "right", textDecoration: e.cancelled ? "line-through" : "none" }}>{isIn ? fmtQ(e.qty) : "—"}</div>
+              <div style={{ fontSize: 12, fontWeight: 800, color: !isIn ? T.red : T.b2, textAlign: "right" }}>{!isIn ? fmtQ(e.qty) : "—"}</div>
+              <div style={{ fontSize: 12, fontWeight: 800, color: e.bal < 0 ? T.red : T.t1, textAlign: "right" }}>{fmtQ(e.bal)}</div>
+            </div>
+          );
+        })}
+        {d && !d._err && rows.length > 0 && (
+          <div style={{ display: "grid", gridTemplateColumns: GRID, gap: 6, padding: "9px 12px", background: "#0F172A", borderRadius: "0 0 8px 8px" }}>
+            <div style={{ gridColumn: "1 / 3", fontSize: 9.5, fontWeight: 700, color: "rgba(255,255,255,.5)", textTransform: "uppercase", letterSpacing: ".4px" }}>{t("common.total")}</div>
+            <div style={{ fontSize: 12, fontWeight: 800, color: "#4ADE80", textAlign: "right" }}>{fmtQ(d.total_in)}</div>
+            <div style={{ fontSize: 12, fontWeight: 800, color: "#F87171", textAlign: "right" }}>{fmtQ(d.total_out)}</div>
+            <div style={{ fontSize: 12, fontWeight: 800, color: "#fff", textAlign: "right" }}>{fmtQ(d.stock)}</div>
+          </div>
+        )}
       </div>
       {sel && <LedgerRowDrawer e={sel} unit={material.unit} isAdmin={isAdmin} grnCancel={(d && d.grn_cancel) || {}}
-        onClose={() => setSelKey(null)} onSaved={() => { setReload(x => x + 1); onChanged && onChanged(); }}/>}
+        onClose={() => { setSelKey(null); setHot(null); }} onSaved={() => { setReload(x => x + 1); onChanged && onChanged(); }}/>}
     </>
   );
 }

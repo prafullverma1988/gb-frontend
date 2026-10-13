@@ -1853,11 +1853,19 @@ function parseNotifLink(link){
   if(query){ const m=/(?:^|&)id=(\d+)/.exec(query); if(m) refId=parseInt(m[1],10); }
   // Asset gum/kabad report ("/assets?incident=12") — Nuksan tab ka drawer.
   if(query){ const m=/(?:^|&)incident=(\d+)/.exec(query); if(m) incidentId=parseInt(m[1],10); }
+  // Store GRN hatane ki ghanti ("/warehouse?grn=13&wh=9&mat=Cement", 13 Oct 2026) —
+  // Stock tab, us material ka drawer, khaate me wo GRN line.
+  let whLink=null;
+  if(module==="warehouse"&&query){
+    const q=new URLSearchParams(query);
+    const grn=parseInt(q.get("grn"),10);
+    if(grn) whLink={grn,wh:q.get("wh")||null,mat:q.get("mat")||""};
+  }
   if(module==="projects"){
     if(parts[1]&&/^\d+$/.test(parts[1])){ projectId=parseInt(parts[1],10); tab=parts[2]||null; }
     else if(refId){ projectId=refId; }
   }
-  return {module,projectId,tab,refId,incidentId};
+  return {module,projectId,tab,refId,incidentId,whLink};
 }
 
 function ProjectsWrapper({deepLink,onDeepLinkDone}){
@@ -1953,6 +1961,8 @@ function App(){
   // and clears it (same shape as projDeepLink).
   const [assetDeepLink,setAssetDeepLink]=useState(null);
   const clearAssetDeepLink=useCallback(()=>setAssetDeepLink(null),[]);
+  const [whDeepLink,setWhDeepLink]=useState(null);   // Store GRN hatane ki ghanti (13 Oct 2026)
+  const clearWhDeepLink=useCallback(()=>setWhDeepLink(null),[]);
   const [collapsed,setCollapsed]=useState(()=>window.innerWidth<768);
   const [isMobile,setIsMobile]=useState(()=>window.innerWidth<768);
   const [showSearch,setShowSearch]=useState(false);
@@ -2215,6 +2225,7 @@ function App(){
     // Asset voucher notification ("/assets?id=12") → module opens that voucher.
     if(parsed&&parsed.module==="assets"&&parsed.incidentId) setAssetDeepLink({incident:parsed.incidentId});
     else if(parsed&&parsed.module==="assets"&&parsed.refId) setAssetDeepLink(parsed.refId);
+    if(parsed&&parsed.whLink) setWhDeepLink(parsed.whLink);
     if(mod) setNav(mod);
   };
 
@@ -2302,7 +2313,7 @@ function App(){
     team:      guard("team",     "My Team",  <TeamScheduleModule/>),
     mom:       guard("mom",      "MOM",            <MOMModule/>),
     library:   guard("library",  "Library",        <MasterLibraryModule/>),
-    warehouse: guard("warehouse","Warehouse",      <WarehouseModule/>),
+    warehouse: guard("warehouse","Warehouse",      <WarehouseModule deepLink={whDeepLink} onDeepLinkDone={clearWhDeepLink}/>),
     fuel:      guard("fuel","Fuel",                <FuelModule/>),
     machinery: guard("machinery","Machinery",      <MachineryModule/>),
     assets:    guard("assets",   "Assets",         <AssetsModule deepLink={assetDeepLink} onDeepLinkDone={clearAssetDeepLink}/>),
