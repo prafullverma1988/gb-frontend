@@ -13718,7 +13718,7 @@ const dict = {
   "acctaccess.n_users": "{n} user(s)",
   "acctaccess.sirf_admin": "Admin only",
   "acctaccess.kis_ko": "Who can operate \"{name}\"",
-  "acctaccess.hint": "Ticked users can pay / receive from this account and see its Cash Book, Day Book and ledger.",
+  "acctaccess.hint": "Ticked users can pay / receive from this account and see its Cash Book, Day Book and ledger. Only users whose role has Finance → CREATE are listed.",
   "acctaccess.saved": "Saved",
   "acctaccess.saving": "Saving…",
   "acctaccess.admin_always": "Admin always has every account",

@@ -13717,7 +13717,7 @@ const dict = {
   "acctaccess.n_users": "{n} यूज़र",
   "acctaccess.sirf_admin": "सिर्फ़ एडमिन",
   "acctaccess.kis_ko": "\"{name}\" कौन चला सकता है",
-  "acctaccess.hint": "टिक वाले यूज़र इस खाते से पैसा दे / ले सकते हैं और इसका कैश बुक, डे बुक, लेजर देख सकते हैं।",
+  "acctaccess.hint": "टिक वाले यूज़र इस खाते से पैसा दे / ले सकते हैं और इसका कैश बुक, डे बुक, लेजर देख सकते हैं। सूची में सिर्फ़ वे जिनके रोल पर Finance → CREATE है।",
   "acctaccess.saved": "सेव हो गया",
   "acctaccess.saving": "सेव हो रहा है…",
   "acctaccess.admin_always": "एडमिन के पास हमेशा सारे खाते",

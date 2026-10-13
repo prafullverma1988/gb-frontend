@@ -13720,7 +13720,7 @@ const dict = {
   "acctaccess.n_users": "{n} user",
   "acctaccess.sirf_admin": "Sirf admin",
   "acctaccess.kis_ko": "\"{name}\" kaun chala sakta hai",
-  "acctaccess.hint": "Tick wale user is khaate se paisa de / le sakte hain aur iska Cash Book, Day Book, ledger dekh sakte hain.",
+  "acctaccess.hint": "Tick wale user is khaate se paisa de / le sakte hain aur iska Cash Book, Day Book, ledger dekh sakte hain. List me sirf wo jinke role par Finance → CREATE hai.",
   "acctaccess.saved": "Save ho gaya",
   "acctaccess.saving": "Save ho raha hai…",
   "acctaccess.admin_always": "Admin ke paas hamesha saare khaate",
