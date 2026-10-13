@@ -142,9 +142,9 @@ export default function TabWallet() {
   const pol = { mode: "optional", source: "both", ...((photoSettings && photoSettings[photoKey]) || {}) };
   const photoRequired = pol.mode === "required";
   const photoOff = pol.mode === "off";
-  // "Sirf camera" PC par pura nahi ho sakta — file hi chadhti hai. Niyam todte
-  // nahi: aisi category me PC se photo nahi lagti, phone se lagegi.
-  const cameraOnly = pol.source === "camera";
+  // "Sirf camera" phone ka niyam hai (gallery ka button hatao). PC par camera
+  // hota hi nahi, isliye yahan file hamesha chalti hai (Prafull, 14 Oct 2026).
+  const cameraOnly = false;
 
   const linesTotal = lines.reduce((s, l) => s + lineAmount(l), 0);
   const slipActive = isMaterial && lines.some((l) => l.slip);
