@@ -10,10 +10,11 @@ import useDebounce from "../utils/useDebounce";
 import { t, Rich } from "../i18n";
 import { companyName, companyNameHtml } from "../utils/companyName";
 import { downloadLedgerExcel, downloadLedgerPdf, fromScreenRow } from "../utils/partyLedgerDownload";
-import { canSeeFinancials, can, canAny, canEntry } from "../utils/perms";
+import { canSeeFinancials, can, canAny, canEntry, currentUser } from "../utils/perms";
 import { canApproveAction } from "../utils/approvalAuthority";
 import TabAccounts from "./tabs/TabAccounts";
 import TabWallet from "./tabs/TabWallet";
+import TabAccountAccess from "./tabs/TabAccountAccess";
 import { isoDate, todayISO, daysAgoISO } from "../utils/today";
 import { cashMoveOf, isTransferIn, round2, partyTypeBucket, PARTY_TYPE_BUCKETS } from "../utils/moneyRules";
 import { BackClose } from "../utils/backNav";
@@ -5300,6 +5301,10 @@ Status: ${ledgerRow.status||"unpaid"}`;
     ...(canEntry("Finance") ? [{key:"wallet",label:t("wallet_web.tab_group"),tabs:[
       {id:"wallet",l:t("wallet_web.tab")},
     ]}] : []),
+    // Khaata kis user ko + us khaate ka hisaab (kisne kya daala) — sirf admin
+    ...(["admin","super_admin"].includes(currentUser()?.role) ? [{key:"acctaccess",label:t("acctaccess.tab"),tabs:[
+      {id:"acctaccess",l:t("acctaccess.tab")},
+    ]}] : []),
     // P&L "Financial Reports" permission ke peeche hai — rozana ka Finance kaam
     // (ledger, payment, material) accountant ke paas rehta hai, par "kisme kitna
     // paisa laga" wala vishleshan alag se dena padta hai.
@@ -6158,6 +6163,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
         {/* ACCOUNTS TAB — har khaate ka ledger, alag aur milakar */}
         {tab==="accounts"&&<TabAccounts/>}
         {tab==="wallet"&&<TabWallet/>}
+        {tab==="acctaccess"&&<TabAccountAccess/>}
 
         {/* CASH BOOK + DAY BOOK TAB */}
         {(tab==="cashbook"||tab==="daybook")&&(
