@@ -14,7 +14,7 @@ import { canSeeFinancials, can, canAny, canEntry, currentUser } from "../utils/p
 import { canApproveAction } from "../utils/approvalAuthority";
 import TabAccounts from "./tabs/TabAccounts";
 import TabWallet from "./tabs/TabWallet";
-import TabAccountAccess from "./tabs/TabAccountAccess";
+import AccountAccessModal from "./tabs/AccountAccessModal";
 import { isoDate, todayISO, daysAgoISO } from "../utils/today";
 import { cashMoveOf, isTransferIn, round2, partyTypeBucket, PARTY_TYPE_BUCKETS } from "../utils/moneyRules";
 import { BackClose } from "../utils/backNav";
@@ -37,6 +37,8 @@ const equipHasRole = (p, wanted) => {
 };
 
 // ── ICON BASE ────────────────────────────────────────────────────────
+// Accounts menu ke andar `t` map me shadow hota hai — label yahan se
+const accessBtnLabel=()=>t("acctaccess.menu_btn");
 const Ic=({d,size=18,color="currentColor",sw=1.8,fill="none",style})=>(
   <svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke={color} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" style={style}><path d={d}/></svg>
 );
@@ -3700,158 +3702,6 @@ function ModalW({title,onClose,children}){
     </div>, document.body);
 }
 
-// ══════════════════════════════════════════════════════════════
-// PROJECT-WISE P&L (accrual)  — Reports group
-// Revenue = project invoices (earned billing); Cost = material + subcon +
-// site + equipment + transfer-in − material-return − transfer-out.
-// Payment/receipt are cash flow, NOT counted (they settle the bills above).
-// Numbers come from GET /finance/project-pnl, which shares its formula with
-// the Sahayak `project_pnl` bot tool (backend utils/projectPnl.js) so the
-// screen and the bot can never disagree. Self-contained per module-independence.
-// ══════════════════════════════════════════════════════════════
-function ProjectPnlView(){
-  const [data,setData]     = useState(null);
-  const [loading,setLoading]=useState(true);
-  const [err,setErr]       = useState(false);
-  const [openId,setOpenId] = useState(null); // project_id whose cost breakup is expanded
-
-  useEffect(()=>{
-    let alive=true; setLoading(true); setErr(false);
-    api.get("/finance/project-pnl")
-      .then(r=>{ if(!alive) return; if(r?.success&&r.data) setData(r.data); else setErr(true); })
-      .catch(()=>{ if(alive) setErr(true); })
-      .finally(()=>{ if(alive) setLoading(false); });
-    return ()=>{ alive=false; };
-  },[]);
-
-  const items = data?.items||[];
-  const totals = data?.totals||{revenue:0,cost:0,pnl:0};
-  const pnlCol=(n)=> Number(n)>=0 ? T.grn : T.red;
-
-  const dlExcel=()=>{
-    downloadCSV(`Project_PnL_${todayISO()}.csv`,[
-      ["Company — Project-wise P&L (accrual, invoice-basis)"],
-      [`Generated: ${new Date().toLocaleDateString("en-IN")}`],[],
-      ["Project","Status","Revenue (Invoiced)","Cost","P&L",
-       "Material Purchase","Sub-Con","Site Expense","Equipment",t("finance.pnl_machine_oil_store"),"Material Return","Transfer In","Transfer Out"],
-      ...items.map(i=>[i.project,i.status||"",i.revenue,i.cost,i.pnl,
-        i.cost_breakup.material_purchase,i.cost_breakup.subcon_expense,i.cost_breakup.site_expense,
-        i.cost_breakup.equipment,i.cost_breakup.machine_oil_store||0,i.cost_breakup.material_return,i.cost_breakup.transfer_in,i.cost_breakup.transfer_out]),
-      [],["TOTAL","",totals.revenue,totals.cost,totals.pnl],
-    ]);
-  };
-  const dlPdf=()=>{
-    const rows=items.map(i=>`<tr><td style="font-weight:600">${i.project}</td>`
-      +`<td class="r">₹${fmtN(i.revenue)}</td><td class="r">₹${fmtN(i.cost)}</td>`
-      +`<td class="r" style="font-weight:700;color:${Number(i.pnl)>=0?"#059669":"#DC2626"}">${fmtS(i.pnl)}</td></tr>`).join("");
-    printHTML("Project-wise P&L",
-      `<h2>Project-wise P&L</h2><p>Accrual (invoice-basis) · Generated ${new Date().toLocaleDateString("en-IN")}</p>`
-      +`<table><thead><tr><th>Project</th><th class="r">Revenue</th><th class="r">Cost</th><th class="r">P&L</th></tr></thead><tbody>${rows}`
-      +`<tr style="background:#F0F4FF;font-weight:700"><td>TOTAL</td><td class="r">₹${fmtN(totals.revenue)}</td><td class="r">₹${fmtN(totals.cost)}</td><td class="r" style="color:${Number(totals.pnl)>=0?"#059669":"#DC2626"}">${fmtS(totals.pnl)}</td></tr>`
-      +`</tbody></table>`);
-  };
-
-  const Tile=({label,val,sub,col})=>(
-    <div style={{flex:1,background:T.surface,borderRadius:10,border:`1px solid ${T.b1}`,borderTop:`3px solid ${col||T.slt}`,padding:"12px 15px"}}>
-      <div style={{fontSize:10.5,color:T.t4,fontWeight:600,letterSpacing:0.4,textTransform:"uppercase"}}>{label}</div>
-      <div style={{fontSize:20,fontWeight:800,color:col||T.t1,marginTop:5}}>{val}</div>
-      {sub&&<div style={{fontSize:10.5,color:T.t4,marginTop:2}}>{sub}</div>}
-    </div>
-  );
-
-  if(loading) return <div style={{padding:40,textAlign:"center",color:T.t4,fontSize:13}}>{t("finance.loading_project_p_l")}</div>;
-  if(err)     return <div style={{padding:40,textAlign:"center",color:T.red,fontSize:13}}>{t("finance.p_l_load_nahi_ho_paaya")}</div>;
-  if(!items.length) return <div style={{padding:40,textAlign:"center",color:T.t4,fontSize:13}}>{t("finance.abhi_koi_project_p_l_data")}</div>;
-
-  const cell={padding:"10px 12px",fontSize:12.5,textAlign:"right",whiteSpace:"nowrap"};
-  const head={padding:"9px 12px",fontSize:10.5,color:T.t3,fontWeight:700,textTransform:"uppercase",letterSpacing:0.4,textAlign:"right",background:T.surfaceB,borderBottom:`1px solid ${T.b1}`,position:"sticky",top:0};
-  const brk=[
-    ["Material Purchase","material_purchase",false],["Sub-Con","subcon_expense",false],
-    ["Site Expense","site_expense",false],["Equipment","equipment",false],
-    // Store se machine me daala oil (backend utils/projectPnl) — machine kharcha ka hissa
-    [t("finance.pnl_machine_oil_store"),"machine_oil_store",false],
-    ["Material Return","material_return",true],["Transfer In","transfer_in",false],["Transfer Out","transfer_out",true],
-  ];
-
-  return (
-    <div style={{display:"flex",flexDirection:"column",flex:1,overflow:"auto",gap:12,paddingBottom:14}}>
-      {/* summary tiles */}
-      <div style={{display:"flex",gap:10}}>
-        <Tile label={t("finance.total_revenue")} val={`₹${fmtN(totals.revenue)}`} sub={t("finance.invoiced_earned_billing")} col={T.grn}/>
-        <Tile label={t("finance.total_cost")} val={`₹${fmtN(totals.cost)}`} sub={t("finance.material_subcon_site_equip_transfers")} col={T.amb}/>
-        <Tile label={t("finance.net_p_l")} val={fmtS(totals.pnl)} sub={Number(totals.pnl)>=0?t("finance.profit_labh"):t("finance.loss_haani")} col={pnlCol(totals.pnl)}/>
-        {/* P&L ka Excel / PDF = Financial Reports EXPORT (5 Oct 2026) */}
-        {can("Financial Reports","export")&&<div style={{display:"flex",alignItems:"flex-end",gap:7}}>
-          <button onClick={dlExcel} style={{padding:"7px 12px",borderRadius:7,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:11.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}><IcDown size={13} color={T.grn}/> {t("common.excel")}</button>
-          <button onClick={dlPdf}   style={{padding:"7px 12px",borderRadius:7,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:11.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}><IcDown size={13} color={T.red}/> PDF</button>
-        </div>}
-      </div>
-
-      {/* basis banner */}
-      <div style={{background:T.bluL,border:`1px solid ${T.bluM}`,borderRadius:8,padding:"9px 13px",fontSize:11.5,color:T.t2,lineHeight:1.5}}><Rich k="finance.t_revenue_project_ki_invoice_jitna" params={{ t: t("finance.accrual_invoice_basis_p_l") }} />{data?.transfers_unvalued && <div style={{marginTop:5,color:T.amb,fontWeight:600}}>{t("finance.kuch_material_transfer_bina_rate_ke")}</div>}
-      </div>
-
-      {/* table */}
-      <div style={{background:T.surface,borderRadius:10,border:`1px solid ${T.b1}`,overflow:"hidden"}}>
-        <table style={{width:"100%",borderCollapse:"collapse"}}>
-          <thead><tr>
-            <th style={{...head,textAlign:"left"}}>{t("common.project")}</th>
-            <th style={head}>{t("app.revenue")}</th><th style={head}>{t("finance.cost")}</th><th style={head}>P&L</th>
-            <th style={{...head,width:34}}></th>
-          </tr></thead>
-          <tbody>
-            {items.map((i,ix)=>{
-              const open=openId===i.project_id;
-              return (
-                <Fragment key={i.project_id||ix}>
-                  <tr onClick={()=>setOpenId(open?null:i.project_id)}
-                      style={{cursor:"pointer",background:open?T.surfaceB:"transparent",borderBottom:`1px solid ${T.b1}`}}>
-                    <td style={{padding:"10px 12px",fontSize:12.5}}>
-                      <span style={{fontWeight:600,color:T.t1}}>{i.project}</span>
-                      {i.status&&<span style={{marginLeft:7,fontSize:10,color:T.t4}}>{i.status}</span>}
-                      {i.no_activity&&<span style={{marginLeft:7,fontSize:10,color:T.t4,fontStyle:"italic"}}>{t("finance.no_activity")}</span>}
-                    </td>
-                    <td style={{...cell,color:T.grn}}>₹{fmtN(i.revenue)}</td>
-                    <td style={{...cell,color:T.amb}}>₹{fmtN(i.cost)}</td>
-                    <td style={{...cell,fontWeight:700,color:pnlCol(i.pnl)}}>{fmtS(i.pnl)}
-                      <span style={{marginLeft:6,fontSize:9.5,padding:"1px 6px",borderRadius:20,background:Number(i.pnl)>=0?T.grnL:T.redL,color:pnlCol(i.pnl),fontWeight:700,textTransform:"uppercase"}}>{i.verdict==="profit"?t("finance.labh"):i.verdict==="loss"?t("finance.haani"):"—"}</span>
-                    </td>
-                    <td style={{...cell,color:T.t4}}>{open?"▲":"▼"}</td>
-                  </tr>
-                  {open&&(
-                    <tr style={{background:T.surfaceB}}>
-                      <td colSpan={5} style={{padding:"4px 12px 12px 12px"}}>
-                        <div style={{fontSize:10.5,color:T.t4,fontWeight:600,margin:"6px 0 5px",textTransform:"uppercase",letterSpacing:0.4}}>{t("finance.cost_breakup")}</div>
-                        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))",gap:7}}>
-                          {brk.map(([lbl,key,minus])=>{
-                            const v=i.cost_breakup[key]||0;
-                            return (
-                              <div key={key} style={{display:"flex",justifyContent:"space-between",background:T.surface,border:`1px solid ${T.b1}`,borderRadius:7,padding:"6px 10px"}}>
-                                <span style={{fontSize:11,color:T.t3}}>{minus?"− ":""}{lbl}</span>
-                                <span style={{fontSize:11.5,fontWeight:600,color:v?(minus?T.grn:T.t2):T.t4}}>{v?`₹${fmtN(v)}`:"—"}</span>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </td>
-                    </tr>
-                  )}
-                </Fragment>
-              );
-            })}
-            <tr style={{background:T.bluL,fontWeight:800}}>
-              <td style={{padding:"11px 12px",fontSize:12.5,color:T.t1}}>TOTAL</td>
-              <td style={{...cell,color:T.grn,fontWeight:800}}>₹{fmtN(totals.revenue)}</td>
-              <td style={{...cell,color:T.amb,fontWeight:800}}>₹{fmtN(totals.cost)}</td>
-              <td style={{...cell,color:pnlCol(totals.pnl),fontWeight:800}}>{fmtS(totals.pnl)}</td>
-              <td/>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
 
 // ── Khaate (bank/cash) par asli asar — cashMoveOf (utils/moneyRules) ──
 // FIN-10: Cash Book, Day Book aur unke tiles wahi niyam lagate hain jo Accounts
@@ -4152,6 +4002,9 @@ function CashDayBook({ accounts=[], view="cashbook", mapRow, reloadKey=0 }){ // 
 
 function FinanceModule(){
   const [tab,setTab]=useState("party");
+  // Mera wallet (PC se wallet kharch) aur Account Access — tab nahi, upar ke button se khulte hain
+  const [showWallet,setShowWallet]=useState(false);
+  const [showAcctAccess,setShowAcctAccess]=useState(false);
   // Roles & Access (5 Oct 2026): Create = transaction (role ke naam ki shart
   // nahi), Entry = payment request, Edit = Extend/Close, Approve = PR manzoori,
   // Export = har Excel / PDF / CSV.
@@ -5296,21 +5149,6 @@ Status: ${ledgerRow.status||"unpaid"}`;
     {key:"equipment",label:t("common.equipment"),tabs:[
       {id:"equipment_review",l:`Equipment Review${equipReviewCount>0?` (${equipReviewCount})`:""}`},
     ]},
-    // Mera wallet — mobile ka wallet kharch form PC par (material table,
-    // keyboard). Wahi POST /wallets/expense, isliye wahi ENTRY gate.
-    ...(canEntry("Finance") ? [{key:"wallet",label:t("wallet_web.tab_group"),tabs:[
-      {id:"wallet",l:t("wallet_web.tab")},
-    ]}] : []),
-    // Khaata kis user ko + us khaate ka hisaab (kisne kya daala) — sirf admin
-    ...(["admin","super_admin"].includes(currentUser()?.role) ? [{key:"acctaccess",label:t("acctaccess.tab"),tabs:[
-      {id:"acctaccess",l:t("acctaccess.tab")},
-    ]}] : []),
-    // P&L "Financial Reports" permission ke peeche hai — rozana ka Finance kaam
-    // (ledger, payment, material) accountant ke paas rehta hai, par "kisme kitna
-    // paisa laga" wala vishleshan alag se dena padta hai.
-    ...(canSeeFinancials() ? [{key:"reports",label:t("common.reports"),tabs:[
-      {id:"pnl",l:t("finance.p_l_project_wise")},
-    ]}] : []),
   ];
   const TABS=TAB_GROUPS.flatMap(g=>g.tabs);
   // Which group is currently open (derived from the active tab)
@@ -5360,18 +5198,18 @@ Status: ${ledgerRow.status||"unpaid"}`;
             })}
           </div>
           <div style={{display:"flex",gap:6,padding:"2px 0",alignItems:"center",flexShrink:0}}>
-            {/* Manual refresh */}
-            <button onClick={refreshAll} title={t("finance.refresh_all_data")}
-              style={{display:"flex",alignItems:"center",gap:4,padding:"6px 11px",borderRadius:6,
-                border:"1px solid #CBD5E1",background:"#FFFFFF",
-                fontSize:11,color:"#475569",cursor:"pointer",fontFamily:"inherit",fontWeight:500,
-                opacity:(loading.txns||loading.payreqs||loading.pendpmts)?0.5:1}}>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"
-                style={{animation:(loading.txns||loading.payreqs||loading.pendpmts)?"spin 1s linear infinite":"none"}}>
-                <path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
-              </svg>
-             {t("common.refresh")}
-            </button>
+            {/* Mera wallet — PC se wallet kharch. Refresh upar header me pehle se hai. */}
+            {canEntry("Finance")&&(
+              <button onClick={()=>setShowWallet(true)} title={t("wallet_web.btn_tip")}
+                style={{display:"flex",alignItems:"center",gap:5,padding:"6px 11px",borderRadius:6,
+                  border:"1px solid #CBD5E1",background:"#FFFFFF",
+                  fontSize:11,color:"#475569",cursor:"pointer",fontFamily:"inherit",fontWeight:500}}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M20 12V8H6a2 2 0 010-4h12v4M4 6v12a2 2 0 002 2h14v-4M18 12a2 2 0 000 4h4v-4z"/>
+                </svg>
+                {t("wallet_web.tab")}
+              </button>
+            )}
             {/* Accounts dropdown */}
             <div style={{position:"relative"}}>
               <button onClick={()=>setShowAccPanel(!showAccPanel)} style={{display:"flex",alignItems:"center",gap:5,padding:"6px 11px",borderRadius:6,border:`1px solid ${showAccPanel?"#1E40AF":"#CBD5E1"}`,background:"#FFFFFF",fontSize:11.5,fontWeight:600,color:"#475569",cursor:"pointer"}}>
@@ -5389,6 +5227,12 @@ Status: ${ledgerRow.status||"unpaid"}`;
                   <div style={{padding:"8px 10px"}}>
                     {accTab==="accounts"?(
                       <>
+                        {["admin","super_admin"].includes(currentUser()?.role)&&(
+                          <button onClick={()=>{setShowAccPanel(false);setShowAcctAccess(true);}}
+                            style={{width:"100%",display:"flex",alignItems:"center",gap:7,padding:"7px 10px",marginBottom:6,borderRadius:7,border:`1px dashed ${T.bluM}`,background:T.bluL,color:T.blu,fontSize:11.5,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
+                            <IcBank size={13} color="currentColor"/> {accessBtnLabel()}
+                          </button>
+                        )}
                         {activeAccounts.map(a=>(
                           <div key={a.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 10px",borderRadius:7,marginBottom:3,background:T.surfaceB,border:`1px solid ${T.b1}`,borderLeft:`3px solid ${a.color}`}}>
                             <IcBank size={14} color={a.color}/>
@@ -6162,8 +6006,6 @@ Status: ${ledgerRow.status||"unpaid"}`;
 
         {/* ACCOUNTS TAB — har khaate ka ledger, alag aur milakar */}
         {tab==="accounts"&&<TabAccounts/>}
-        {tab==="wallet"&&<TabWallet/>}
-        {tab==="acctaccess"&&<TabAccountAccess/>}
 
         {/* CASH BOOK + DAY BOOK TAB */}
         {(tab==="cashbook"||tab==="daybook")&&(
@@ -6171,7 +6013,6 @@ Status: ${ledgerRow.status||"unpaid"}`;
         )}
 
         {/* PROJECT-WISE P&L TAB (Reports) */}
-        {tab==="pnl"&&<ProjectPnlView/>}
 
         {/* PAYMENT REQUESTS TAB */}
         {tab==="payreq"&&(
@@ -7264,6 +7105,19 @@ Status: ${ledgerRow.status||"unpaid"}`;
         />
       )}
 
+      {showAcctAccess&&<AccountAccessModal onClose={()=>setShowAcctAccess(false)}/>}
+      {showWallet&&(
+        <div style={{position:"fixed",inset:0,zIndex:300,background:"rgba(15,23,42,.45)",display:"flex",padding:"28px 36px"}}
+          onClick={()=>{setShowWallet(false);refreshAll();}}>
+          <div onClick={e=>e.stopPropagation()} style={{flex:1,display:"flex",flexDirection:"column",background:T.bg,borderRadius:12,overflow:"hidden",boxShadow:"0 20px 60px rgba(0,0,0,.3)"}}>
+            <div style={{display:"flex",alignItems:"center",padding:"11px 16px",background:T.surface,borderBottom:`1px solid ${T.b1}`,flexShrink:0}}>
+              <span style={{fontSize:14,fontWeight:700,color:T.t1,flex:1}}>{t("wallet_web.tab")}</span>
+              <button onClick={()=>{setShowWallet(false);refreshAll();}} style={{border:"none",background:"none",fontSize:20,color:T.t4,cursor:"pointer",lineHeight:1}}>×</button>
+            </div>
+            <div style={{flex:1,display:"flex",overflow:"hidden",padding:14}}><TabWallet/></div>
+          </div>
+        </div>
+      )}
       {/* ══ Create Transaction Modal ══ */}
       {createTxnType&&(
         <CreateTransactionModal
