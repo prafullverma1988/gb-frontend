@@ -1618,25 +1618,10 @@ function TabTasks({ projectId, isAdmin }) {
               null,
               {icon:"M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2",label:t("tasks.delete_task"),action:async()=>{
                 const task=contextMenu.task;
-                // A clean task hard-deletes; one with sub-tasks / recorded work /
-                // issues / photos / links is archived instead (TSK-14). Backend
-                // decides — the confirm text just sets expectations from what's
-                // visible in the tree (children, % / qty already recorded).
-                const willArchive=(task.children?.length>0);
-                const hasWork=Number(task.progress)>0||Number(task.done_qty)>0;
-                const msg=willArchive ? t("tasks.del_confirm_kids",{name:task.name})
-                  : hasWork ? t("tasks.del_confirm_work",{name:task.name})
-                  : t("tasks.del_confirm",{name:task.name});
                 setContextMenu(null);
-                if(!await window.confirmAsync(msg)) return;
-                const r=await api.del("/tasks/"+task.id);
-                if(!r.success){ if(window.toast) window.toast.error(r.message||t("tasks.del_fail")); else alert(r.message||t("tasks.del_fail")); return; }
-                const d=r.data||{};
-                if(d.mode==="archived") window.toast?.success(
-                  (d.reasons?.length?t("tasks.del_toast_archived",{reasons:d.reasons.join(", ")}):t("tasks.del_toast_archived_plain"))
-                  +(d.affected>1?" "+t("tasks.del_toast_rows",{n:d.affected}):""));
-                else window.toast?.success(t("tasks.del_toast_deleted"));
-                await refetchTasks();
+                // Poora faisla aur saare message runTaskDelete me — drawer ka
+                // button bhi wahi bulata hai, isliye dono jagah ek hi baat.
+                if(await runTaskDelete(task,{hasKids:(task.children?.length>0)})) await refetchTasks();
               },color:"#EF4444",ok:canDelTask},
             ].filter(item=>item===null||(!item.hide&&item.ok!==false)).map((item,i)=>
               item === null
@@ -1655,6 +1640,7 @@ function TabTasks({ projectId, isAdmin }) {
 
       {/* Task Detail drawer */}
       {openTask&&<PTTaskDetail task={openTask} allTasks={allFlat} onClose={()=>setOpenTask(null)} projectId={projectId}
+        canDelete={canDelTask} onDeleted={refetchTasks}
         onUpdate={(id,u)=>{
           // A leaf's progress moves its whole ancestor chain — pull the tree
           // again so the phases above it don't sit on stale numbers.
@@ -3606,6 +3592,56 @@ function TaskIssueDrawer({issues, loading, filter, setFilter, onClose, onStatusC
 }
 
 // ── Issue Chat Component ─────────────────────────────────────────────
+// ── Task hatane ka ek hi raasta ────────────────────────────────────────
+// Niyam (14 Oct 2026): qty, billing, material used (stock) aur payment —
+// jab tak ye ZERO na hon, task mitta nahi. Bina zero kiye hatana hai to
+// sirf archive, aur wo bhi admin ki manzoori se. Faisla SERVER karta hai;
+// yahan sirf poochhna aur batana hai.
+const IMPACT_LABEL = {
+  qty:      () => t("tasks.impact_qty"),
+  material: () => t("tasks.impact_material"),
+  billing:  () => t("tasks.impact_billing"),
+  payment:  () => t("tasks.impact_payment"),
+  unsure:   () => t("tasks.impact_unsure"),
+};
+const impactLine = (impact) => (impact?.blocks || []).map(k => (IMPACT_LABEL[k] || (() => k))()).join(", ");
+
+// Lautata hai: true = list dobara padho (kuch badla).
+async function runTaskDelete(task, { hasKids } = {}) {
+  const ask = window.confirmAsync || (async (m) => window.confirm(m));
+  const msg = hasKids ? t("tasks.del_confirm_kids", { name: task.name })
+    : (Number(task.progress) > 0 || Number(task.done_qty) > 0) ? t("tasks.del_confirm_work", { name: task.name })
+    : t("tasks.del_confirm", { name: task.name });
+  if (!await ask(msg)) return false;
+
+  const r = await api.del("/tasks/" + task.id);
+
+  // Server ne rok lagayi — asar abhi zero nahi hai. Saaf batao ki KYA zero
+  // karna hai, warna aadmi ko sirf "nahi hua" dikhta hai.
+  if (!r.success) {
+    const line = impactLine(r.impact);
+    const text = r.code === "DELETE_NEEDS_APPROVAL"
+      ? t("tasks.del_blocked", { what: line }) : (r.message || t("tasks.del_fail"));
+    if (window.toast) window.toast.error(text); else alert(text);
+    return false;
+  }
+
+  const d = r.data || {};
+  if (d.mode === "pending_approval") {
+    window.toast?.success(d.already ? t("tasks.del_approval_already") : t("tasks.del_approval_bheja"));
+    return true;   // task par "faisla baaki" ka nishaan lagta hai
+  }
+  if (d.mode === "archived") {
+    const why = impactLine(d.impact) || (d.reasons || []).join(", ");
+    window.toast?.success(
+      (why ? t("tasks.del_toast_archived", { reasons: why }) : t("tasks.del_toast_archived_plain"))
+      + (d.affected > 1 ? " " + t("tasks.del_toast_rows", { n: d.affected }) : ""));
+  } else {
+    window.toast?.success(t("tasks.del_toast_deleted"));
+  }
+  return true;
+}
+
 function TaskIssueChat({issueId}){
   const [comments,setComments]=useState([]);
   const [text,setText]=useState("");
@@ -3910,7 +3946,7 @@ function QtyProgressBox({task,meIsPriv,onProgress,projectId,showMic=true,showNot
   </div>);
 }
 
-function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
+function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile,canDelete,onDeleted}){
   // ── Scrollspy: active nav section ───────────────────────────────────
   const [activeSection,setActiveSection]=useState("progress");
   const scrollRef=useRef(null);
@@ -4158,6 +4194,13 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
               <div style={{fontSize:15,fontWeight:700,color:"white",lineHeight:1.3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{task.name}</div>
               <div style={{fontSize:10,color:"rgba(255,255,255,0.4)",marginTop:3}}>{task.category}{task.assignee?" · "+task.assignee:""}</div>
             </div>
+            {/* Galti se bana task yahin se hat sake — pehle sirf list par
+                right-click se hatta tha, jo drawer khole hue dikhta hi nahi. */}
+            {canDelete&&<button title={t("tasks.delete_task")}
+              onClick={async()=>{ if(await runTaskDelete(task,{hasKids:(task.children?.length>0)})){ onDeleted&&onDeleted(); onClose(); } }}
+              style={{background:"rgba(239,68,68,0.15)",border:"none",cursor:"pointer",color:"#FCA5A5",padding:8,display:"flex",borderRadius:8,flexShrink:0}}>
+              <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+            </button>}
             <button onClick={onClose} style={{background:"rgba(255,255,255,0.1)",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.8)",padding:8,display:"flex",borderRadius:8,flexShrink:0}}>
               <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg>
             </button>
