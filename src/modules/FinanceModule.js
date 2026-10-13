@@ -5454,14 +5454,15 @@ Status: ${ledgerRow.status||"unpaid"}`;
                     <IcAdd size={12} color="white"/> {t("common.party")}
                   </button>}
                 </div>
-                <div style={{display:"flex",gap:6,alignItems:"center"}}>
-                  <div style={{position:"relative",flex:1}}>
+                {/* Party khuli ho to list patli (290px) ho jaati hai — tab khoj apni poori line par, category + sort neeche */}
+                <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
+                  <div style={{position:"relative",flex:selParty?"1 1 100%":"1 1 140px",minWidth:0}}>
                     <span style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",lineHeight:0,pointerEvents:"none"}}><IcSrch size={13} color={T.t4}/></span>
                     <input value={partySearch} onChange={e=>setPartySearch(e.target.value)} placeholder={t("finance.search_parties")}
                       style={{width:"100%",height:30,padding:"0 8px 0 26px",borderRadius:6,border:`1.5px solid ${partySearch?T.blu:T.b1}`,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit",background:partySearch?T.bluL:T.surface}}/>
                   </div>
                   <PickSelect value={chipParty} onChange={e=>setChipParty(e.target.value)} title={t("finance.filter_by_type")}
-                    style={{height:30,padding:"0 7px",borderRadius:6,border:`1.5px solid ${chipParty!=="All"?T.blu:T.b1}`,fontSize:11.5,color:chipParty!=="All"?T.blu:T.t2,background:chipParty!=="All"?T.bluL:T.surface,outline:"none",cursor:"pointer",fontFamily:"inherit",flexShrink:0}}>
+                    style={{height:30,padding:"0 7px",borderRadius:6,border:`1.5px solid ${chipParty!=="All"?T.blu:T.b1}`,fontSize:11.5,color:chipParty!=="All"?T.blu:T.t2,background:chipParty!=="All"?T.bluL:T.surface,outline:"none",cursor:"pointer",fontFamily:"inherit",flex:selParty?"1 1 0":"0 0 auto",minWidth:0,maxWidth:selParty?"none":150}}>
                     {pCatsOk
                       ? [<option key="All" value="All">{t("finance.all_types")}</option>,
                          ...pCats.filter(c=>c.is_active).map(c=><option key={c.key} value={c.key}>{c.label}</option>),
