@@ -2104,14 +2104,17 @@ function StockTab({stock,grns,issues,onSelect,onAddMaterial,onAddStock,onIssue,o
   // Filter ki category stock ki rows se hi — server Library wali category deta hai
   // (12 Oct 2026); pehle ye pakki list thi, Library ki category ("Steel") usme nahi thi.
   const catOptions=useMemo(()=>{
-    const s=new Set((stock||[]).map(m=>m.category).filter(Boolean));
-    if(cat!=="All") s.add(cat);
+    // Ek category ek hi baar ("Other" / "OTHER" / "Pipe ") — server bhi ek naam deta hai (13 Oct 2026)
+    const seen=new Map();
+    (stock||[]).forEach(m=>{const l=String(m.category||"").trim();const k=l.toLowerCase();if(l&&!seen.has(k))seen.set(k,l);});
+    if(cat!=="All"&&!seen.has(String(cat).trim().toLowerCase())) seen.set(String(cat).trim().toLowerCase(),cat);
+    const s=new Set(seen.values());
     return ["All",...[...s].sort((a,b)=>a.localeCompare(b))];
   },[stock,cat]);
 
   const filtered=stock
     .filter(m=>{
-      if(cat!=="All"&&m.category!==cat) return false;
+      if(cat!=="All"&&String(m.category||"").trim().toLowerCase()!==String(cat).trim().toLowerCase()) return false;
       if(showLow&&m.qty>=m.minQty) return false;
       if(search&&!m.name.toLowerCase().includes(search.toLowerCase())) return false;
       return true;
