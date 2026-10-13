@@ -16,6 +16,8 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import api from "../config/api";
 import { t } from "../i18n";
+import { loadLibUnits, unitOptions, sameStockUnit, kgPerUnit } from "../components/grn/weigh";
+import PickSelect from "../components/PickSelect";
 
 const T = {
   surface: "#FFFFFF", surfaceB: "#F8F9FB",
@@ -482,6 +484,126 @@ function LedgerRowDrawer({ e, unit, isAdmin, grnCancel, onClose, onSaved }) {
               </div>
             </div>
           )}
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════
+// "Stock ki unit theek karo" (13 Oct 2026) — sirf Admin. Store me material ki
+// unit galat lagi ho (pehli entry Nos me, asal me Kg) to nayi unit + factor
+// ("1 {purani} = [__] {nayi}"). Hamnaam (Bag/Bags) par factor 1, wazan se
+// wazan (Ton → Kg) apne aap — dono par khaana nahi. "Aage" = server se
+// dry_run (kya badlega + chetavni), phir note + Admin password se "Unit badlo".
+// Server: POST /warehouse/materials/:id/unit-fix (utils/stockUnitFix.js).
+// material = { id, name, unit } (wh_materials row).
+// ════════════════════════════════════════════════════════════════
+const fmtF = (n) => String(Math.round(Number(n || 0) * 1e6) / 1e6);
+export function StockUnitFixModal({ material, onClose, onDone }) {
+  const [uoms, setUoms] = useState([]);
+  const [nu, setNu] = useState("");
+  const [factor, setFactor] = useState("");
+  const [plan, setPlan] = useState(null);       // dry_run ka jawab
+  const [note, setNote] = useState("");
+  const [pw, setPw] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const [done, setDone] = useState("");          // safal message
+  useEffect(() => { let alive = true; loadLibUnits().then(u => { if (alive) setUoms(u || []); }); return () => { alive = false; }; }, []);
+  const old = String(material.unit || "").trim();
+  const opts = unitOptions(uoms, []).filter(o => String(o.value).trim() !== old);
+  const kind = !nu ? null : sameStockUnit(old, nu) ? "alias" : (kgPerUnit(old) && kgPerUnit(nu)) ? "weight" : "factor";
+  const autoF = kind === "alias" ? 1 : kind === "weight" ? kgPerUnit(old) / kgPerUnit(nu) : null;
+  const body = () => ({ new_unit: nu, factor: kind === "factor" ? Number(factor) : undefined, old_unit: old });
+
+  const check = async () => {
+    if (busy) return;
+    if (!nu) { setErr(t("unit_fix.need_unit")); return; }
+    if (kind === "factor" && !(Number(factor) > 0)) { setErr(t("unit_fix.need_factor", { old, new: nu })); return; }
+    setBusy(true); setErr("");
+    const r = await api.post(`/warehouse/materials/${material.id}/unit-fix`, { ...body(), dry_run: true }).catch(() => null);
+    setBusy(false);
+    if (r && r.success) setPlan(r.data); else setErr((r && r.message) || t("unit_fix.fail"));
+  };
+  const save = async () => {
+    if (busy) return;
+    if (!note.trim()) { setErr(t("unit_fix.need_note")); return; }
+    if (!pw) { setErr(t("unit_fix.need_pw")); return; }
+    setBusy(true); setErr("");
+    const r = await api.post(`/warehouse/materials/${material.id}/unit-fix`, { ...body(), note: note.trim(), password: pw }).catch(() => null);
+    setBusy(false);
+    if (r && r.success) { setPw(""); setDone(r.message || ""); }
+    else setErr((r && r.message) || t("unit_fix.fail"));
+  };
+  const close = () => { if (busy) return; if (done) { onDone && onDone(); } onClose && onClose(); };
+
+  const inp = { width: "100%", boxSizing: "border-box", padding: "8px 10px", borderRadius: 7, border: `1.5px solid ${T.b1}`, fontSize: 12.5, outline: "none", fontFamily: "inherit" };
+  const lbl = { fontSize: 10.5, fontWeight: 700, color: T.t3, textTransform: "uppercase", letterSpacing: ".4px", margin: "10px 0 4px" };
+  const warn = (txt, k) => <div key={k} style={{ fontSize: 11.5, color: "#92400E", background: T.ambL, borderRadius: 7, padding: "7px 10px", marginTop: 6, lineHeight: 1.45 }}>{txt}</div>;
+  const warns = [];
+  if (plan) {
+    if (plan.third_unit && plan.third_unit.rows > 0) warns.push(warn(t("unit_fix.warn_third", { n: plan.third_unit.rows, units: (plan.third_unit.units || []).join(", ") }), "th"));
+    if (plan.billed && plan.billed.lines > 0) warns.push(warn(t("unit_fix.warn_billed", { n: plan.billed.lines }), "bl"));
+    if (plan.linked > 0) warns.push(warn(t("unit_fix.warn_linked", { n: plan.linked }), "ln"));
+    if (plan.pending_out > 0) warns.push(warn(t("unit_fix.warn_pending_out", { n: plan.pending_out, new: plan.new_unit }), "po"));
+  }
+  const btnS = (bg, c, b) => ({ padding: "8px 16px", borderRadius: 7, border: b ? `1px solid ${b}` : "none", background: bg, color: c, fontSize: 12.5, fontWeight: 700, cursor: busy ? "default" : "pointer", opacity: busy ? 0.6 : 1 });
+
+  return (
+    <>
+      <div onClick={close} style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.45)", zIndex: 1500 }}/>
+      <div role="dialog" style={{ position: "fixed", top: "50%", left: "50%", transform: "translate(-50%,-50%)", width: "min(460px,94vw)", maxHeight: "90vh", overflowY: "auto",
+        background: T.surface, borderRadius: 12, zIndex: 1501, boxShadow: "0 20px 50px rgba(0,0,0,0.25)", fontFamily: "'Segoe UI',system-ui,sans-serif" }}>
+        <div style={{ padding: "14px 18px", borderBottom: `1px solid ${T.b1}`, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 14.5, fontWeight: 700, color: T.t1 }}>{t("unit_fix.title")}</div>
+            <div style={{ fontSize: 11, color: T.t3, marginTop: 2 }}>{t("unit_fix.sub_store", { material: material.name })}</div>
+          </div>
+          <button onClick={close} aria-label={t("common.close")} style={{ border: "none", background: "none", fontSize: 18, color: T.t3, cursor: "pointer" }}>×</button>
+        </div>
+        <div style={{ padding: "12px 18px 16px" }}>
+          {done ? (
+            <div style={{ fontSize: 12.5, fontWeight: 600, color: T.grn, padding: "10px 0" }}>{done}</div>
+          ) : !plan ? (<>
+            <div style={{ fontSize: 11.5, color: T.t3, lineHeight: 1.5 }}>{t("unit_fix.what")}</div>
+            <div style={lbl}>{t("unit_fix.current")}</div>
+            <div style={{ fontSize: 14, fontWeight: 800, color: T.t1 }}>{old || "—"}</div>
+            <div style={lbl}>{t("unit_fix.new_unit")}</div>
+            <PickSelect value={nu} onChange={e => { setNu(e.target.value); setFactor(""); setErr(""); }} style={inp}>
+              <option value="">{t("unit_fix.new_unit_ph")}</option>
+              {opts.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </PickSelect>
+            {kind === "factor" && (
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: T.t2 }}>{t("unit_fix.factor_eq", { old })}</span>
+                <input type="number" min="0" step="any" value={factor} onChange={e => setFactor(e.target.value)} aria-label={t("unit_fix.factor_aria", { old, new: nu })}
+                  style={{ ...inp, width: 110, textAlign: "right", fontWeight: 700 }}/>
+                <span style={{ fontSize: 13, fontWeight: 700, color: T.t2 }}>{nu}</span>
+              </div>
+            )}
+            {kind === "alias" && <div style={{ fontSize: 11.5, color: T.t3, marginTop: 8 }}>{t("unit_fix.alias", { old, new: nu })}</div>}
+            {kind === "weight" && <div style={{ fontSize: 11.5, color: T.t3, marginTop: 8 }}>{t("unit_fix.weight", { old, new: nu, f: fmtF(autoF) })}</div>}
+          </>) : (<>
+            <div style={{ fontSize: 12.5, fontWeight: 700, color: T.t1, lineHeight: 1.5 }}>{t("unit_fix.will_change", { n: plan.total, old: plan.old_unit, new: plan.new_unit, f: fmtF(plan.factor) })}</div>
+            {plan.stock && plan.stock.new_qty != null && (
+              <div style={{ fontSize: 12, color: T.t2, marginTop: 4 }}>{t("unit_fix.stock_line", { old_qty: fmtQ(plan.stock.old_qty), old: plan.old_unit, new_qty: fmtQ(plan.stock.new_qty), new: plan.new_unit })}</div>
+            )}
+            {warns}
+            <div style={lbl}>{t("unit_fix.note")}</div>
+            <textarea rows={2} value={note} onChange={e => setNote(e.target.value)} placeholder={t("unit_fix.note_ph")} style={{ ...inp, resize: "vertical" }}/>
+            <div style={lbl}>{t("unit_fix.pw")}</div>
+            <input type="password" autoComplete="new-password" aria-label={t("unit_fix.pw")} value={pw} onChange={e => setPw(e.target.value)} style={inp}/>
+          </>)}
+          {err && <div style={{ marginTop: 9, fontSize: 11.5, fontWeight: 600, color: T.red }}>{err}</div>}
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 14 }}>
+            {done ? <button onClick={close} style={btnS(T.blu, "#fff")}>{t("common.close")}</button>
+              : !plan ? <button onClick={check} disabled={busy} style={btnS(T.blu, "#fff")}>{busy ? t("unit_fix.checking") : t("unit_fix.check")}</button>
+              : (<>
+                <button onClick={() => { setPlan(null); setErr(""); }} disabled={busy} style={btnS(T.surface, T.t2, T.b1)}>{t("unit_fix.back")}</button>
+                <button onClick={save} disabled={busy} style={btnS(T.red, "#fff")}>{busy ? t("common.saving") : t("unit_fix.save")}</button>
+              </>)}
+          </div>
         </div>
       </div>
     </>

@@ -12,7 +12,7 @@ import { cld } from "../utils/cloudinary";
 import { canApproveAction } from "../utils/approvalAuthority";
 import { t, Rich } from "../i18n";
 import { BackClose } from "../utils/backNav";
-import { MaterialLedgerHistory } from "./WarehouseLedger";
+import { MaterialLedgerHistory, StockUnitFixModal } from "./WarehouseLedger";
 import { AllGodownsView } from "./WarehouseConsolidated";
 import { WarehouseGintiTab, DisposalModal, DisposalsPanel } from "./WarehouseGinti";
 import { ConversionTab } from "./WarehouseConversion";
@@ -1873,6 +1873,7 @@ function QuickIssueModal({material,projects,users,onClose,onSaved}){
 // theek …). WarehouseLedger.js MaterialLedgerHistory. focusGrnId = ghanti se aaye.
 function MaterialDetailDrawer({material,onClose,onEdit,onDelete,onIssue,onAddStock,isAdmin,focusGrnId,onChanged}){
   const [led,setLed]=useState(null);   // khaate ka jawab — Aaya / Gaya / entry ki ginti
+  const [unitFix,setUnitFix]=useState(false);   // "Stock ki unit theek karo" (Admin, 13 Oct 2026)
   const totalIn=led?Number(led.total_in)||0:0;
   const totalOut=led?Number(led.total_out)||0:0;
   // Qty theek / GRN hatane ke baad stock khaate se taaza (list wala object purana rehta).
@@ -1920,6 +1921,7 @@ function MaterialDetailDrawer({material,onClose,onEdit,onDelete,onIssue,onAddSto
           {onAddStock&&<Btn onClick={()=>onAddStock(material)} c={T.grn} icon={IcIn} size="sm">{t("warehouse.add_stock")}</Btn>}
           {onEdit&&<GhostBtn onClick={()=>onEdit(material)} icon={IcEdit} c={T.blu}>{t("common.edit_2")}</GhostBtn>}
           {onDelete&&<GhostBtn onClick={()=>onDelete(material)} icon={IcTrash} c={T.red}>{t("warehouse.hatao")}</GhostBtn>}
+          {isAdmin&&<GhostBtn onClick={()=>setUnitFix(true)} icon={IcEdit} c={T.pur}>{t("unit_fix.btn")}</GhostBtn>}
         </div>
 
         <div style={{flex:1,overflowY:"auto",padding:"12px 18px"}}>
@@ -1929,6 +1931,9 @@ function MaterialDetailDrawer({material,onClose,onEdit,onDelete,onIssue,onAddSto
             focusGrnId={focusGrnId} onData={setLed} onChanged={onChanged}/>
         </div>
       </div>
+      {/* Unit badli to drawer ka material (unit, qty) purana — band karke list taaza */}
+      {unitFix&&<StockUnitFixModal material={{id:material.id,name:material.name,unit:material.unit}}
+        onClose={()=>setUnitFix(false)} onDone={()=>{onChanged&&onChanged();onClose&&onClose();}}/>}
     </>
   );
 }
