@@ -12850,6 +12850,7 @@ const dict = {
   "grn_ph.uploading":                                         "{n} फ़ोटो अपलोड हो रही है",
   "grn_ph.rec_slip_dup":                                      "Rec slip {no} पहले {grn} पर आ चुकी",
   "grn_ph.receiving_issue":                                   "GRN पर \"Receiving\" इश्यू बना — फ़ाइनेंस को बिल पर दिखेगा",
+  "warehouse.transfer_rec_photos":                           "रिसीव की फ़ोटो",
   "weigh.add_more":                                           "+ और मटेरियल इसी गाड़ी में",
   "weigh.ago_h":                                              "{h} घंटे पहले",
   "weigh.ago_m":                                              "{m} मिनट पहले",

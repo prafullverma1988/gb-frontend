@@ -12851,6 +12851,7 @@ const dict = {
   "grn_ph.uploading":                                         "{n} photo(s) uploading",
   "grn_ph.rec_slip_dup":                                      "Rec slip {no} already used on {grn}",
   "grn_ph.receiving_issue":                                   "A \"Receiving\" issue was raised on the GRN — Finance will see it on the bill",
+  "warehouse.transfer_rec_photos":                           "Receive photos",
   "weigh.add_more":                                           "+ More material in this truck",
   "weigh.ago_h":                                              "{h} h ago",
   "weigh.ago_m":                                              "{m} min ago",

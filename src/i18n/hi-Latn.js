@@ -12853,6 +12853,7 @@ const dict = {
   "grn_ph.uploading":                                         "{n} photo upload ho rahi hai",
   "grn_ph.rec_slip_dup":                                      "Rec slip {no} pehle {grn} par aa chuki",
   "grn_ph.receiving_issue":                                   "GRN par \"Receiving\" issue bana — Finance ko bill par dikhega",
+  "warehouse.transfer_rec_photos":                           "Receive ki photo",
   "weigh.add_more":                                           "+ Aur material isi gadi me",
   "weigh.ago_h":                                              "{h} ghante pehle",
   "weigh.ago_m":                                              "{m} min pehle",

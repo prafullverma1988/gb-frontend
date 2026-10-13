@@ -3561,6 +3561,28 @@ export function TransferDetailDrawer({transfer,onClose,canDelete,canReceive,onDe
               })}
             </div>
 
+            {/* Receive ki photo — store me receive par GRN nahi banti, isliye transfer par hi (13 Oct 2026) */}
+            {(detail?.rec_slip_url||detail?.rec_slip_no||(detail?.site_photo_urls||[]).length>0)&&(
+              <div style={{marginBottom:14}}>
+                <div style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".4px",marginBottom:7}}>{t("warehouse.transfer_rec_photos")}</div>
+                {[
+                  {title:t("grn_ph.rec_slip")+(detail.rec_slip_no?" · "+t("grn_ph.rec_slip_no")+" "+detail.rec_slip_no:""),urls:detail.rec_slip_url?[detail.rec_slip_url]:[],show:!!(detail.rec_slip_url||detail.rec_slip_no)},
+                  {title:t("grn_ph.material"),urls:detail.site_photo_urls||[],show:(detail.site_photo_urls||[]).length>0},
+                ].filter(g=>g.show).map((g,gi)=>(
+                  <div key={gi} style={{padding:"8px 11px",background:T.surfaceB,borderRadius:7,border:`1px solid ${T.b1}`,marginBottom:6}}>
+                    <div style={{fontSize:11.5,fontWeight:700,color:T.t1}}>{g.title}</div>
+                    <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:6}}>
+                      {g.urls.map((u,i)=>(
+                        <a key={i} href={cld(u,"view")} target="_blank" rel="noopener noreferrer">
+                          <img src={cld(u,"thumb")} alt="" style={{width:56,height:56,objectFit:"cover",borderRadius:6,border:`1px solid ${T.b1}`,display:"block"}}/>
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
             {/* Receive editor */}
             {receiveOpen&&isPending&&(
               <div style={{padding:"12px 14px",background:T.grnL,border:`2px solid ${T.grnM}`,borderRadius:9,marginBottom:14}}>
