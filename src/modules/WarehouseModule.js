@@ -1768,7 +1768,7 @@ function AddStockModal({material,onClose,onSaved}){
         rate:Number(f.rate)||material?.rate||0,
       });
       if(res.success){onSaved&&onSaved(res.data);onClose();}
-      else alert(res.message||"Failed");
+      else{alert(res.message||"Failed");if(res.code==="OPENING_EXISTS"){onSaved&&onSaved();onClose();}}   // opening ban chuka — list taaza, "+" hat jaaye
     }catch(e){alert(e.message);}
     setSaving(false);
   };
@@ -1918,7 +1918,7 @@ function MaterialDetailDrawer({material,onClose,onEdit,onDelete,onIssue,onAddSto
 
         <div style={{padding:"10px 18px",borderBottom:`1px solid ${T.b1}`,flexShrink:0,display:"flex",gap:7,flexWrap:"wrap"}}>
           {onIssue&&<Btn onClick={()=>onIssue(material)} c={T.amb} icon={IcOut} size="sm">{t("mom.issue")}</Btn>}
-          {onAddStock&&<Btn onClick={()=>onAddStock(material)} c={T.grn} icon={IcIn} size="sm">{t("warehouse.add_stock")}</Btn>}
+          {onAddStock&&!material.has_opening&&<Btn onClick={()=>onAddStock(material)} c={T.grn} icon={IcIn} size="sm">{t("warehouse.add_stock")}</Btn>}
           {onEdit&&<GhostBtn onClick={()=>onEdit(material)} icon={IcEdit} c={T.blu}>{t("common.edit_2")}</GhostBtn>}
           {onDelete&&<GhostBtn onClick={()=>onDelete(material)} icon={IcTrash} c={T.red}>{t("warehouse.hatao")}</GhostBtn>}
           {isAdmin&&<GhostBtn onClick={()=>setUnitFix(true)} icon={IcEdit} c={T.pur}>{t("unit_fix.btn")}</GhostBtn>}
@@ -2293,7 +2293,7 @@ function StockTab({stock,grns,issues,onSelect,onAddMaterial,onAddStock,onIssue,o
 
                       {/* Quick actions */}
                       <div style={{display:"flex",gap:5,paddingRight:12,justifyContent:"flex-end"}} onClick={e=>e.stopPropagation()}>
-                        {onAddStock&&(
+                        {onAddStock&&!m.has_opening&&(
                           <button onClick={()=>onAddStock(m)} title={t("warehouse.add_stock")}
                             style={{width:28,height:28,borderRadius:7,background:T.grnL,border:`1px solid ${T.grnM}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:15,color:T.grn,fontWeight:700}}>+</button>
                         )}
@@ -2383,7 +2383,7 @@ function StockTab({stock,grns,issues,onSelect,onAddMaterial,onAddStock,onIssue,o
                           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",paddingTop:7,borderTop:`1px solid ${T.b1}`}}>
                             <span style={{fontSize:11.5,fontWeight:600,color:T.blu}}>₹{fmt(val)}</span>
                             <div style={{display:"flex",gap:4}} onClick={e=>e.stopPropagation()}>
-                              {onAddStock&&(
+                              {onAddStock&&!m.has_opening&&(
                                 <button onClick={()=>onAddStock(m)} title={t("warehouse.add_stock")}
                                   style={{width:23,height:23,borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,color:T.grn,fontWeight:700}}>+</button>
                               )}
