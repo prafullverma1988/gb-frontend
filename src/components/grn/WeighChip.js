@@ -24,10 +24,18 @@ export default function WeighChip({ hit, unit, onUseNet, more, onMore }) {
   const cQty = Number(line.challan_qty);
   const canUseChallan = !canUseNet && cQty > 0 && String(cUnit || "") === String(unit || "")
     && typeof onUseNet === "function";
+  // Har khaane ki doosri / teesri photo (photo_extra, 14 Oct 2026) usi naam se.
+  const ex = (() => {
+    const v = trip.photo_extra;
+    if (v && typeof v === "object") return v;
+    try { return JSON.parse(v || "{}") || {}; } catch (_) { return {}; }
+  })();
+  const morePh = (k, label) => (Array.isArray(ex[k]) ? ex[k] : []).map((u) => [u, label]);
   const photos = [
-    [trip.gross_slip_url, t("weigh.loaded_slip")],
-    [trip.tare_slip_url, t("weigh.empty_slip")],
-    [trip.vehicle_photo_url, t("weigh.vehicle_photo")],
+    [trip.gross_slip_url, t("weigh.loaded_slip")], ...morePh("gross_slip", t("weigh.loaded_slip")),
+    [trip.tare_slip_url, t("weigh.empty_slip")], ...morePh("tare_slip", t("weigh.empty_slip")),
+    [trip.vehicle_photo_url, t("weigh.vehicle_photo")], ...morePh("vehicle", t("weigh.vehicle_photo")),
+    ...morePh("vehicle2", t("weigh.vehicle_photo")),
   ].filter(([u]) => !!u);
 
   return (

@@ -31,7 +31,7 @@ import { cld } from "../../utils/cloudinary";
 
 // Tile → Photo Settings key, kitni photo, naam / hint (bhasha render ke waqt).
 const TILES = {
-  challan: { key: "grn",          max: 6, title: () => t("grn_ph.vendor_challan"), hint: () => t("grn_ph.vendor_challan_hint") },
+  challan: { key: "grn",          max: 3, title: () => t("grn_ph.vendor_challan"), hint: () => t("grn_ph.vendor_challan_hint") },
   rec:     { key: "grn_rec_slip", max: 1, title: () => t("grn_ph.rec_slip"),       hint: () => t("grn_ph.rec_slip_hint") },
   site:    { key: "grn_vehicle",  max: 3, title: () => t("grn_ph.site"),           hint: () => t("grn_ph.site_hint") },
 };

@@ -3795,6 +3795,8 @@ const tbDT = (raw) => {
 const tbYmd = (raw) => { const d = tbParse(raw); return d ? d.toLocaleDateString("en-CA") : ""; };
 const tbToday = () => new Date().toLocaleDateString("en-CA");
 const tbMoney = (v) => (v == null || v === "" ? "—" : "₹" + (Number(v) || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 }));
+// Trip ka maal site par aaya (In) / gaya (Out) — 14 Oct 2026; purani trip par kuch nahi.
+const tbDir = (x) => (x && x.direction === "in" ? t("tripbill.dir_in_short") : x && x.direction === "out" ? t("tripbill.dir_out_short") : "");
 const tbNum = (v) => (v == null || v === "" ? "—" : (Number(v) || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 }));
 // Naye endpoint ka jawab { success, data } ya seedha body — dono chalte hain.
 const tbBody = (r) => (r && r.success !== false ? (r.data !== undefined ? r.data : r) : null);
@@ -3992,6 +3994,9 @@ function TbTripDetail({ id, onClose, onOverride, onBill }) {
               {fld(t("common.vendor"), d.vendor_name)}
               {fld(t("tripbill.td_vehicle"), [d.registration_no, d.vehicle_name && d.vehicle_name !== d.registration_no ? d.vehicle_name : ""].filter(Boolean).join(" · "))}
               {fld(t("tripbill.td_material"), [d.material_name, d.qty != null ? tbNum(d.qty) + (d.qty_unit ? " " + d.qty_unit : "") : ""].filter(Boolean).join(" · "))}
+              {/* Maal site par aaya (In) / gaya (Out) aur In ka site stock GRN — 14 Oct 2026 */}
+              {fld(t("tripbill.td_direction"), d.direction ? [d.direction === "in" ? t("tripbill.dir_in") : t("tripbill.dir_out"),
+                d.stock ? (d.stock.active ? t("tripbill.stock_grn", { no: d.stock.grn_no }) : t("tripbill.stock_hata", { no: d.stock.grn_no })) : ""].filter(Boolean).join(" · ") : null)}
               {fld(t("tripbill.td_challan"), d.challan_no)}
               {fld(t("tripbill.td_party"), d.party_name)}
               {fld(t("tripbill.td_driver"), d.driver_name)}
@@ -4289,7 +4294,7 @@ function TbVehiclePage({ vehicle, projectId, from: f0, to: t0, showBills, onClos
                         <span style={{ whiteSpace: "nowrap" }}>{tbDate(tr.trip_date)}<span style={{ display: "block", fontSize: 10, color: T.t4 }}>#{tr.trip_no}</span></span>
                         <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={tr.project_name || ""}>{tr.project_name || "—"}</span>
                         <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={tr.route_name || ""}>{tr.route_name || "—"}</span>
-                        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{[tr.material_name, tr.qty != null ? tbNum(tr.qty) + (tr.qty_unit ? " " + tr.qty_unit : "") : ""].filter(Boolean).join(" · ") || "—"}</span>
+                        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{[tbDir(tr), tr.material_name, tr.qty != null ? tbNum(tr.qty) + (tr.qty_unit ? " " + tr.qty_unit : "") : ""].filter(Boolean).join(" · ") || "—"}</span>
                         <span style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{tr.km_billed != null ? tbNum(tr.km_billed) : "—"}</span>
                         <span style={{ textAlign: "right", fontWeight: 700, color: T.t1, fontVariantNumeric: "tabular-nums" }}>{tr.status === "in_transit" ? "—" : tbMoney(tr.amount)}</span>
                         <span style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}><TbChip trip={tr} /><OverrideChip trip={tr} /></span>
@@ -4718,7 +4723,7 @@ function BillingView({ onBills, canSeeBillList, vendorPre }) {
                     <span style={{ fontWeight: 700, color: T.t1 }}>{x.registration_no || x.vehicle_name || "—"}</span>
                     <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{x.project_name || "—"}</span>
                     <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{x.route_name || "—"}</span>
-                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{[x.material_name, x.qty != null ? tbNum(x.qty) + (x.qty_unit ? " " + x.qty_unit : "") : ""].filter(Boolean).join(" · ") || "—"}</span>
+                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{[tbDir(x), x.material_name, x.qty != null ? tbNum(x.qty) + (x.qty_unit ? " " + x.qty_unit : "") : ""].filter(Boolean).join(" · ") || "—"}</span>
                     <span style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{x.km_billed != null ? tbNum(x.km_billed) : "—"}</span>
                     <span style={{ textAlign: "right", fontWeight: 700, color: T.t1, fontVariantNumeric: "tabular-nums" }}>{tbMoney(x.amount)}</span>
                   </label>
@@ -4956,7 +4961,7 @@ function ReportView({ projects }) {
       <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontWeight: 700, color: T.t1 }}>{x.registration_no || x.vehicle_name || "—"}</span>
       <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{x.project_name || "—"}</span>
       <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{x.route_name || "—"}</span>
-      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{[x.material_name, x.qty != null ? tbNum(x.qty) + (x.qty_unit ? " " + x.qty_unit : "") : ""].filter(Boolean).join(" · ") || "—"}</span>
+      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{[tbDir(x), x.material_name, x.qty != null ? tbNum(x.qty) + (x.qty_unit ? " " + x.qty_unit : "") : ""].filter(Boolean).join(" · ") || "—"}</span>
       <span style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{x.km_billed != null ? tbNum(x.km_billed) : "—"}</span>
       <span style={{ textAlign: "right", fontWeight: 700, color: T.t1, fontVariantNumeric: "tabular-nums" }}>{x.status === "in_transit" ? "—" : tbMoney(x.amount)}</span>
       <span><TbChip trip={x} /></span>

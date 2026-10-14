@@ -292,8 +292,9 @@ export default function WeighbridgePanel({ dest, onChanged }) {
     // Khali gadi ki pehchaan sirf number hai — bina number bhari gadi is
     // entry se kabhi nahi milegi.
     if (!isG && !nf.vehicle.trim()) { alert(t("weigh.vehicle_required")); return; }
-    if (photoMissing("weigh_slip", nf.slipUrl)) { alert(t("weigh.photo_required", { label: t("weigh.slip_photo") })); return; }
-    if (photoMissing("weigh_vehicle", nf.vehUrl)) { alert(t("weigh.photo_required", { label: t("weigh.vehicle_photo") })); return; }
+    // Bhari / khali tol ki apni-apni Photo Setting (14 Oct 2026).
+    if (photoMissing(isG ? "weigh_slip" : "weigh_slip_tare", nf.slipUrl)) { alert(t("weigh.photo_required", { label: t("weigh.slip_photo") })); return; }
+    if (photoMissing(isG ? "weigh_vehicle" : "weigh_vehicle_tare", nf.vehUrl)) { alert(t("weigh.photo_required", { label: t("weigh.vehicle_photo") })); return; }
     setBusy(true);
     const lockedVendor = lockedVendorOf(nf);
     const body = {
@@ -343,8 +344,9 @@ export default function WeighbridgePanel({ dest, onChanged }) {
     if (!(Number(sf.kg) > 0)) { alert(t(needGross ? "weigh.need_gross" : "weigh.need_tare")); return; }
     if (!needGross && Number(sf.kg) >= Number(secondTrip.gross_kg)) { alert(t("weigh.tare_gt_gross")); return; }
     if (needGross && Number(sf.kg) <= Number(secondTrip.tare_kg)) { alert(t("weigh.tare_gt_gross")); return; }
-    if (photoMissing("weigh_slip", sf.slipUrl)) { alert(t("weigh.photo_required", { label: t("weigh.slip_photo") })); return; }
-    if (needGross && photoMissing("weigh_vehicle", sf.vehUrl)) { alert(t("weigh.photo_required", { label: t("weigh.vehicle_photo") })); return; }
+    if (photoMissing(needGross ? "weigh_slip" : "weigh_slip_tare", sf.slipUrl)) { alert(t("weigh.photo_required", { label: t("weigh.slip_photo") })); return; }
+    // 14 Oct 2026: khali tol par bhi truck ki photo — setting "Weighbridge par truck — khali gadi" (server bhi yahi rokta hai).
+    if (photoMissing(needGross ? "weigh_vehicle" : "weigh_vehicle_tare", sf.vehUrl)) { alert(t("weigh.photo_required", { label: t("weigh.vehicle_photo") })); return; }
     setBusy(true);
     const lockedVendor = lockedVendorOf(sf);
     const r = await api.post(`/weighments/${secondFor}/${needGross ? "gross" : "tare"}`, {
@@ -352,7 +354,8 @@ export default function WeighbridgePanel({ dest, onChanged }) {
         ? { gross_kg: Number(sf.kg), gross_slip_no: sf.slipNo || null, gross_slip_url: sf.slipUrl || null,
             vehicle_photo_url: sf.vehUrl || null, lines: payloadLines,
             vendor_name: lockedVendor || sf.vendor || null, challan_no: sf.challan || null }
-        : { tare_kg: Number(sf.kg), tare_slip_no: sf.slipNo || null, tare_slip_url: sf.slipUrl || null }),
+        : { tare_kg: Number(sf.kg), tare_slip_no: sf.slipNo || null, tare_slip_url: sf.slipUrl || null,
+            vehicle_photo_url: sf.vehUrl || null }),
       slip_read: sf.read || null,
     }).catch(e => ({ success: false, message: e.message }));
     setBusy(false);
@@ -747,9 +750,9 @@ export default function WeighbridgePanel({ dest, onChanged }) {
             {blockH(t("weigh.block_scale"), t("weigh.block_scale_hint"))}
           </>
         )}
-        <div style={{ display: "grid", gridTemplateColumns: needGross ? "1fr 1fr" : "1fr", gap: 10, marginBottom: 8 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 8 }}>
           <PhotoPick label={t(needGross ? "weigh.loaded_slip" : "weigh.empty_slip")} url={sf.slipUrl} onUrl={u => setS({ slipUrl: u })} onRead={onSecondSlip} reading={reading} />
-          {needGross && <PhotoPick label={t("weigh.vehicle_photo")} url={sf.vehUrl} onUrl={u => setS({ vehUrl: u })} />}
+          <PhotoPick label={t("weigh.vehicle_photo")} url={sf.vehUrl} onUrl={u => setS({ vehUrl: u })} />
         </div>
         {sf.readMsg && <div style={{ fontSize: 11, color: sf.read ? T.grn : T.amb, margin: "6px 0" }}>{sf.read ? "✓ " : "⚠ "}{sf.readMsg}</div>}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 8 }}>
