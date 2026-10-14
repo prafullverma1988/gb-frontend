@@ -35,7 +35,7 @@ export default function WeighChip({ hit, unit, onUseNet, more, onMore }) {
     [trip.gross_slip_url, t("weigh.loaded_slip")], ...morePh("gross_slip", t("weigh.loaded_slip")),
     [trip.tare_slip_url, t("weigh.empty_slip")], ...morePh("tare_slip", t("weigh.empty_slip")),
     [trip.vehicle_photo_url, t("weigh.vehicle_photo")], ...morePh("vehicle", t("weigh.vehicle_photo")),
-    ...morePh("vehicle2", t("weigh.vehicle_photo")),
+    [trip.vehicle_photo2_url, t("weigh.vehicle_photo")], ...morePh("vehicle2", t("weigh.vehicle_photo")),
   ].filter(([u]) => !!u);
 
   return (
