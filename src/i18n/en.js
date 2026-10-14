@@ -13774,6 +13774,7 @@ const dict = {
   "acctstmt.q_30": "30 days",
   "acctstmt.q_month": "This month",
   "acctstmt.q_last_month": "Last month",
+  "acctstmt.excel": "Excel",
   "acctstmt.ty_receipt": "Payment received",
   "acctstmt.ty_payment": "Payment made",
   "acctstmt.ty_party_payment": "Party payment",

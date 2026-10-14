@@ -13773,6 +13773,7 @@ const dict = {
   "acctstmt.q_30": "30 दिन",
   "acctstmt.q_month": "इस महीने",
   "acctstmt.q_last_month": "पिछला महीना",
+  "acctstmt.excel": "Excel",
   "acctstmt.ty_receipt": "पेमेंट आया",
   "acctstmt.ty_payment": "पेमेंट दिया",
   "acctstmt.ty_party_payment": "पार्टी पेमेंट",

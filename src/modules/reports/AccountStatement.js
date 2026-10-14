@@ -109,7 +109,7 @@ export default function AccountStatement() {
         {quick(t("acctstmt.q_30"), daysAgoISO(30), todayISO())}
         {quick(t("acctstmt.q_month"), m0a, m0b > todayISO() ? todayISO() : m0b)}
         {quick(t("acctstmt.q_last_month"), m1a, m1b)}
-        <button onClick={exportCsv} disabled={!rows.length} style={{ ...sel2, marginLeft: "auto", fontWeight: 700, color: rows.length ? T.grn : T.t4, borderColor: rows.length ? T.grnM : T.b1 }}>Excel</button>
+        <button onClick={exportCsv} disabled={!rows.length} style={{ ...sel2, marginLeft: "auto", fontWeight: 700, color: rows.length ? T.grn : T.t4, borderColor: rows.length ? T.grnM : T.b1 }}>{t("acctstmt.excel")}</button>
       </div>
       <div style={{ fontSize: 11.5, color: T.t3, marginBottom: 10 }}>
         {t("acctstmt.chalane_wale")}: <b style={{ color: T.t1 }}>{holders.length ? holders.join(", ") : t("acctstmt.sirf_admin")}</b>
