@@ -15,6 +15,7 @@ import { isoDate, todayISO } from "../../utils/today";
 import { cld } from "../../utils/cloudinary";
 import { GrnPhotoTiles } from "../../components/grn/GrnPhotoBox";
 import { can, canAny, canEntry, currentUser, can as canPerm, canEntry as canPermEntry } from "../../utils/perms";
+import { CustodyLinePick } from "./MaterialCustodyTab";
 
 // Tasks ka CSV/Excel import — common sudhaar screen (components/ImportFileModal),
 // jaanch server par (POST /tasks/import/rows). Column NAAM se pehchane jaate hain,
@@ -4489,6 +4490,11 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile,canDele
               </div>
               <input value={usedLogForm.remark} onChange={e=>setUsedLogForm(f=>({...f,remark:e.target.value}))} placeholder={t("common.remark_optional")}
                 style={{width:"100%",padding:"9px 10px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"inherit",marginBottom:10}}/>
+              {/* Material Zimmedari — kis store issue (zimmedar) se laga; pehli khuli line default */}
+              <div style={{marginTop:-4,marginBottom:10}}>
+                <CustodyLinePick projectId={task.project_id||projectId} material={usedLogForm.material_name}
+                  value={usedLogForm.custody_line_id} onChange={v=>setUsedLogForm(f=>({...f,custody_line_id:v}))}/>
+              </div>
               <button disabled={usedLogSaving||!usedLogForm.material_name||!usedLogForm.used_qty} onClick={async()=>{
                 if(!usedLogForm.material_name||!usedLogForm.used_qty) return;
                 setUsedLogSaving(true);

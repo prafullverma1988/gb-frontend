@@ -5145,6 +5145,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
     {key:"materials",label:t("common.materials"),tabs:[
       {id:"unbilled_grn",l:t("finance.unbilled_grn")},
       {id:"billed_mat",l:t("finance.billed_material")},
+      {id:"subcon_mat",l:t("custody.fin_tab")},
     ]},
     {key:"equipment",label:t("common.equipment"),tabs:[
       {id:"equipment_review",l:`Equipment Review${equipReviewCount>0?` (${equipReviewCount})`:""}`},
@@ -6951,6 +6952,8 @@ Status: ${ledgerRow.status||"unpaid"}`;
           })()}
         </div>
         )}
+        {/* SUBCONTRACTOR KE PAAS MATERIAL (Material Zimmedari, 14 Oct 2026) — sirf record */}
+        {tab==="subcon_mat"&&<SubconMaterialPanel/>}
         {/* BILLED MATERIAL TAB ─────────────────────────────────────── */}
         {tab==="billed_mat"&&(
           <div style={{display:"flex",flexDirection:"column",flex:1,overflow:"hidden"}}>
@@ -7271,3 +7274,64 @@ export default FinanceModule;
 // + lockProject to keep those fields read-only when invoked from
 // inside a specific project's context.
 export { CreateTransactionModal };
+
+// ── Subcontractor ke paas material (14 Oct 2026, Material Zimmedari) ──
+// Store issue jahan party (subcontractor) + zimmedar laga: abhi kitna Baaki
+// aur Kami / Kharab (approve hua), issue rate se kitne ka. SIRF RECORD — bill
+// me apne aap kuch nahi katta (Prafull). Finance module ka apna panel.
+function SubconMaterialPanel(){
+  const [rows,setRows]=useState(null);
+  const [all,setAll]=useState(false);
+  const [err,setErr]=useState("");
+  useEffect(()=>{
+    setRows(null);
+    api.get("/material-custody?party_only=1"+(all?"&status=all":""))
+      .then(r=>{ if(r.success){setRows(r.data||[]);setErr("");} else {setRows([]);setErr(r.message||"");} })
+      .catch(e=>{setRows([]);setErr(e.message);});
+  },[all]);
+  const byParty={};
+  for(const r of rows||[]){
+    const k=r.custody_party_id; const g=byParty[k]||(byParty[k]={name:r.party_name,baaki:0,kami:0,lines:[]});
+    g.baaki+=Number(r.baaki_value)||0; g.kami+=Number(r.kami_value)||0;
+    for(const l of r.lines) if(l.baaki>0||l.kami>0) g.lines.push({...l,issue_no:r.issue_no,project:r.project_name,who:r.custodian_name,days:r.days});
+  }
+  const groups=Object.values(byParty).sort((a,b)=>(b.baaki+b.kami)-(a.baaki+a.kami));
+  const inr=(n)=>"₹"+Math.round(Number(n)||0).toLocaleString("en-IN");
+  return (
+    <div style={{flex:1,overflowY:"auto",padding:"14px 18px"}}>
+      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
+        <div style={{fontSize:12,color:"#6B7280",flex:1}}>{t("custody.fin_hint")}</div>
+        <label style={{fontSize:12,display:"flex",gap:5,alignItems:"center",cursor:"pointer"}}>
+          <input type="checkbox" checked={all} onChange={e=>setAll(e.target.checked)}/>{t("custody.show_closed")}
+        </label>
+      </div>
+      {err&&<div style={{color:"#DC2626",fontSize:12,marginBottom:8}}>{err}</div>}
+      {rows===null&&<div style={{color:"#9CA3AF",fontSize:12}}>{t("common.loading")}</div>}
+      {rows&&groups.length===0&&!err&&<div style={{color:"#9CA3AF",fontSize:12,textAlign:"center",padding:24}}>{t("custody.fin_empty")}</div>}
+      {groups.map(g=>(
+        <div key={g.name} style={{border:"1px solid #E5E7EB",borderRadius:10,marginBottom:12,overflow:"hidden",background:"white"}}>
+          <div style={{display:"flex",gap:12,alignItems:"center",padding:"10px 12px",background:"#F8F9FB",borderBottom:"1px solid #E5E7EB"}}>
+            <b style={{fontSize:13,color:"#111827",flex:1}}>{g.name}</b>
+            <span style={{fontSize:12,color:"#D97706",fontWeight:700}}>{t("custody.fin_baaki",{amt:inr(g.baaki)})}</span>
+            <span style={{fontSize:12,color:"#DC2626",fontWeight:700}}>{t("custody.fin_kami",{amt:inr(g.kami)})}</span>
+          </div>
+          <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+            <thead><tr style={{color:"#9CA3AF",textAlign:"left"}}>
+              {["custody.col_issue","common.material","custody.col_baaki","custody.col_kami","custody.col_rate","custody.zimmedar","custody.col_since"].map(k=><th key={k} style={{padding:"6px 10px",fontWeight:600}}>{t(k)}</th>)}
+            </tr></thead>
+            <tbody>{g.lines.map(l=>(
+              <tr key={l.id} style={{borderTop:"1px solid #F1F5F9"}}>
+                <td style={{padding:"6px 10px"}}>{l.issue_no}<div style={{fontSize:10.5,color:"#9CA3AF"}}>{l.project}</div></td>
+                <td style={{padding:"6px 10px"}}>{l.material_name}</td>
+                <td style={{padding:"6px 10px"}}>{l.baaki} {l.unit} <span style={{color:"#9CA3AF"}}>{inr(l.value_baaki)}</span></td>
+                <td style={{padding:"6px 10px"}}>{l.kami} {l.unit} <span style={{color:"#9CA3AF"}}>{inr(l.value_kami)}</span></td>
+                <td style={{padding:"6px 10px"}}>{inr(l.rate)}</td>
+                <td style={{padding:"6px 10px"}}>{l.who}</td>
+                <td style={{padding:"6px 10px"}}>{t("custody.days_n",{n:l.days})}</td>
+              </tr>))}</tbody>
+          </table>
+        </div>
+      ))}
+    </div>
+  );
+}

@@ -710,7 +710,14 @@ function ChallanPhotoField({pol,photos,setPhotos}){
 //   Issued To = person (preserved)
 // Source debit immediate, dest pending until site Receive (creates GRN at project)
 function NewIssueModal({stock,projects,users,onClose,onSaved,prefill,fromMR}){
-  const [f,setF]=useState({date:today(),project_id:prefill?.project_id||null,issued_to:null,remarks:prefill?.remarks||""});
+  const [f,setF]=useState({date:today(),project_id:prefill?.project_id||null,issued_to:null,remarks:prefill?.remarks||"",custodian_user_id:null,custody_party_id:null});
+  // Material Zimmedari (14 Oct 2026) — zimmedar (login user) + subcontractor;
+  // subcontractor chuna to zimmedar zaroori (backend bhi rokta hai).
+  const [subcons,setSubcons]=useState([]);
+  useEffect(()=>{ if(fromMR) return;
+    api.get("/finance/parties?type=subcontractor").then(r=>{ if(r.success) setSubcons((r.data||[]).map(p=>({id:p.id,name:p.name}))); }).catch(()=>{});
+  },[fromMR]);
+  const zimMissing=!!f.custody_party_id&&!f.custodian_user_id;
   const initial=()=> (prefill?.items&&prefill.items.length>0)
     ?prefill.items.map(it=>{
       const m=stock.find(s=>s.name?.toLowerCase()===String(it.material_name||it.name||"").toLowerCase());
@@ -865,7 +872,7 @@ function NewIssueModal({stock,projects,users,onClose,onSaved,prefill,fromMR}){
     const m=stock.find(s=>s.id===it.material_id);
     return m&&wantByMat[it.material_id]>Number(m.qty);
   });
-  const valid=!stockErr&&f.project_id&&items.some(it=>it.material_id&&Number(it.qty)>0);
+  const valid=!stockErr&&f.project_id&&!zimMissing&&items.some(it=>it.material_id&&Number(it.qty)>0);
   const total=items.reduce((s,it)=>s+(Number(it.qty)||0)*(Number(it.rate)||0),0);
   const toName=projects.find(p=>p.id===f.project_id)?.name;
 
@@ -943,6 +950,19 @@ function NewIssueModal({stock,projects,users,onClose,onSaved,prefill,fromMR}){
           <Input value={f.remarks} onChange={e=>upd("remarks",e.target.value)} placeholder={t("warehouse.e_g_gf_slab_casting")}/>
         </Field>
       </div>
+      {!fromMR&&(
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:11,marginBottom:13}}>
+          <Field label={t("custody.zimmedar")}>
+            <SearchSelect compact value={f.custodian_user_id} options={users} onChange={v=>upd("custodian_user_id",v)} placeholder={t("custody.zimmedar_ph")}/>
+          </Field>
+          <Field label={t("custody.subcon_optional")}>
+            <SearchSelect compact value={f.custody_party_id} options={subcons} onChange={v=>upd("custody_party_id",v)} placeholder={t("custody.subcon_ph")}/>
+          </Field>
+          <div style={{gridColumn:"1 / -1",fontSize:11,color:zimMissing?T.red:T.t4,fontWeight:zimMissing?700:500,marginTop:-4}}>
+            {zimMissing?t("custody.zimmedar_required"):t("custody.zimmedar_hint")}
+          </div>
+        </div>
+      )}
       {toName&&(
         <div style={{padding:"7px 11px",borderRadius:6,background:T.bluL,border:`1px solid ${T.bluM}`,fontSize:11.5,color:T.blu,marginBottom:13,lineHeight:1.5}}>
          {t("warehouse.warehouse_stock_turant_minus_hoga")} <b>{toName}</b> {t("warehouse.me_material_physically_pohonchne_par_site")}
@@ -2885,6 +2905,32 @@ function IssueDetailDrawer({issue,onClose,canCancel,canReceive,onDeleted,onRecei
               </div>
             </div>
 
+            {/* Material Zimmedari (14 Oct 2026) — sirf dikhana; kaam Project → Material me */}
+            {detail?.custody&&(()=>{const c=detail.custody;
+              const st=c.custody_status==="closed"?{l:t("custody.st_closed"),c:T.t3}:c.custody_status==="accept_pending"?{l:t("custody.st_accept_pending"),c:T.amb}:{l:t("custody.st_open"),c:T.blu};
+              return(
+              <div style={{padding:"10px 12px",background:T.surfaceB,borderRadius:7,border:`1px solid ${T.b1}`,marginBottom:14}}>
+                <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:6}}>
+                  <span style={{fontSize:9,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px"}}>{t("custody.zimmedar")}</span>
+                  <span style={{fontSize:12,fontWeight:700,color:T.t1}}>{c.custodian_name||"—"}</span>
+                  {c.party_name&&<span style={{fontSize:11,color:T.t3}}>· {c.party_name}</span>}
+                  <span style={{marginLeft:"auto",fontSize:10.5,fontWeight:700,color:st.c}}>{st.l}</span>
+                </div>
+                <table style={{width:"100%",borderCollapse:"collapse",fontSize:11.5}}>
+                  <thead><tr style={{color:T.t4,textAlign:"right"}}>
+                    <th style={{textAlign:"left",fontWeight:600,padding:"3px 0"}}>{t("common.material")}</th>
+                    {["custody.col_diya","custody.col_lag","custody.col_wapas","custody.col_kami","custody.col_baaki"].map(k=><th key={k} style={{fontWeight:600,padding:"3px 4px"}}>{t(k)}</th>)}
+                  </tr></thead>
+                  <tbody>{(c.lines||[]).map(l=>(
+                    <tr key={l.id} style={{borderTop:`1px solid ${T.b1}`,textAlign:"right",color:T.t2}}>
+                      <td style={{textAlign:"left",padding:"4px 0",fontWeight:600,color:T.t1}}>{l.material_name} <span style={{color:T.t4,fontWeight:400}}>{l.unit}</span></td>
+                      <td style={{padding:"4px"}}>{fmtN(l.diya)}</td><td style={{padding:"4px"}}>{fmtN(l.lag_gaya)}</td>
+                      <td style={{padding:"4px"}}>{fmtN(l.wapas)}</td><td style={{padding:"4px"}}>{fmtN(l.kami)}</td>
+                      <td style={{padding:"4px",fontWeight:700,color:l.baaki>0?T.amb:T.t3}}>{fmtN(l.baaki)}</td>
+                    </tr>))}</tbody>
+                </table>
+                <div style={{fontSize:10.5,color:T.t4,marginTop:6}}>{t("custody.store_detail_hint")}</div>
+              </div>);})()}
             <div style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".4px",marginBottom:7,display:"flex",justifyContent:"space-between"}}>
               <span>{t("warehouse.items_items", { items: items.length })}</span>
               <span style={{textTransform:"none",letterSpacing:0,color:T.t1,fontWeight:700}}>{t("warehouse.qty_fmtn_value_fmtn2", { fmtN: fmtN(totalQty), fmtN2: fmtN(totalValue) })}</span>
