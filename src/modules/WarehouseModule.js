@@ -710,7 +710,7 @@ function ChallanPhotoField({pol,photos,setPhotos}){
 //   Issued To = person (preserved)
 // Source debit immediate, dest pending until site Receive (creates GRN at project)
 function NewIssueModal({stock,projects,users,onClose,onSaved,prefill,fromMR}){
-  const [f,setF]=useState({date:today(),project_id:prefill?.project_id||null,issued_to:null,remarks:prefill?.remarks||"",custodian_user_id:null,custody_party_id:null});
+  const [f,setF]=useState({date:today(),project_id:prefill?.project_id||null,issued_to:"",remarks:prefill?.remarks||"",custodian_user_id:null,custody_party_id:null});
   // Material Zimmedari (14 Oct 2026) — zimmedar (login user) + subcontractor;
   // subcontractor chuna to zimmedar zaroori (backend bhi rokta hai).
   const [subcons,setSubcons]=useState([]);
@@ -944,7 +944,7 @@ function NewIssueModal({stock,projects,users,onClose,onSaved,prefill,fromMR}){
       <div style={{display:"grid",gridTemplateColumns:"140px 1fr 1fr",gap:11,marginBottom:13}}>
         <Field label={t("common.date")}><Input type="date" value={f.date} onChange={e=>upd("date",e.target.value)}/></Field>
         <Field label={t("warehouse.issued_to")}>
-          <SearchSelect compact value={f.issued_to} options={users} onChange={v=>upd("issued_to",v)} placeholder={t("warehouse.person_who_collected")}/>
+          <Input value={f.issued_to} maxLength={100} onChange={e=>upd("issued_to",e.target.value)} placeholder={t("warehouse.issued_to_ph")}/>
         </Field>
         <Field label={t("common.remarks")}>
           <Input value={f.remarks} onChange={e=>upd("remarks",e.target.value)} placeholder={t("warehouse.e_g_gf_slab_casting")}/>
@@ -1820,8 +1820,8 @@ function AddStockModal({material,onClose,onSaved}){
 }
 
 // ── QUICK ISSUE MODAL (single material from stock) ────────────────
-function QuickIssueModal({material,projects,users,onClose,onSaved}){
-  const [f,setF]=useState({project_id:null,issued_to:null,qty:"",remarks:""});
+function QuickIssueModal({material,projects,onClose,onSaved}){
+  const [f,setF]=useState({project_id:null,issued_to:"",qty:"",remarks:""});
   const [saving,setSaving]=useState(false);
   const chPol=useChallanPol();
   const [chPhotos,setChPhotos]=useState([]);
@@ -1836,7 +1836,7 @@ function QuickIssueModal({material,projects,users,onClose,onSaved}){
       const res=await api.post("/warehouse/issues",{
         date:today(),
         project_id:f.project_id||null,
-        issued_to:f.issued_to||null,
+        issued_to:f.issued_to.trim()||null,
         items:[{material_id:material.id,qty:Number(f.qty),rate:material.rate}],
         remarks:f.remarks||null,
         photo_urls:chPhotos.length?chPhotos:null,
@@ -1869,7 +1869,7 @@ function QuickIssueModal({material,projects,users,onClose,onSaved}){
           <SearchSelect compact value={f.project_id} options={projects} onChange={v=>setF(p=>({...p,project_id:v}))} placeholder={t("warehouse.select_project")}/>
         </Field>
         <Field label={t("warehouse.issued_to")}>
-          <SearchSelect compact value={f.issued_to} options={users} onChange={v=>setF(p=>({...p,issued_to:v}))} placeholder={t("warehouse.person_on_site")}/>
+          <Input value={f.issued_to} maxLength={100} onChange={e=>setF(p=>({...p,issued_to:e.target.value}))} placeholder={t("warehouse.issued_to_ph")}/>
         </Field>
       </div>
       <Field label={`Quantity (${material?.unit}) *`} style={{marginBottom:11}}>
@@ -4184,7 +4184,7 @@ function WarehouseModule({deepLink,onDeepLinkDone}={}){
         <AddStockModal material={addStockTarget} onClose={()=>setAddStockTarget(null)} onSaved={()=>loadAll()}/>
       )}
       {issueTarget&&(
-        <QuickIssueModal material={issueTarget} projects={projects} users={users}
+        <QuickIssueModal material={issueTarget} projects={projects}
           onClose={()=>setIssueTarget(null)} onSaved={()=>loadAll()}/>
       )}
       {grnNewOpen&&(

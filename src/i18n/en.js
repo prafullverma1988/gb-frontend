@@ -12620,6 +12620,7 @@ const dict = {
   "warehouse.issue_to_project":                                "Issue to project",
   "warehouse.issued":                                          "Issued",
   "warehouse.issued_to":                                       "Issued To",
+  "warehouse.issued_to_ph":                                    "Type a name (e.g. driver)",
   "warehouse.issuing":                                         "Issuing...",
   "warehouse.item_rates":                                      "Item rates",
   "warehouse.items_items":                                     "Items ({items})",
