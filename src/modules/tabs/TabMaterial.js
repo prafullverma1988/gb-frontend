@@ -7,6 +7,7 @@ import LibrarySelect from "../../components/LibrarySelect";
 import MaterialFlowDrawer from "../../components/MaterialFlowDrawer";
 import MRDetailDrawer from "../../components/MRDetailDrawer";
 import MaterialTransferTab from "../../components/MaterialTransferTab";
+import MaterialCustodyTab, { CustodyLinePick } from "./MaterialCustodyTab";
 import MaterialLedgerDrawer from "../../components/MaterialLedgerDrawer";
 import GrnReceive from "../../components/grn/GrnReceive";
 import WeighbridgePanel from "../../components/grn/WeighbridgePanel";
@@ -599,7 +600,7 @@ function TabMaterial({ project }) {
   // Inventory tab merged into Material Inventory — the ledger accordion
   // already shows per-material Received/Used/Balance + GRN/Used entries,
   // plus an inline Mark-Used form. Separate Inventory tab dropped.
-  const TABS = [{id:"requests",l:t("common.requests")},{id:"ledger",l:t("material.material_inventory")},{id:"transfer",l:t("projects.transfer")}];
+  const TABS = [{id:"requests",l:t("common.requests")},{id:"ledger",l:t("material.material_inventory")},{id:"transfer",l:t("projects.transfer")},{id:"custody",l:t("custody.title")}];
 
   return (
     <div style={{padding:"14px 18px"}}>
@@ -1469,6 +1470,7 @@ function TabMaterial({ project }) {
                                     unit:mat.unit,
                                     remark:uForm.remark||null,
                                     used_date:uForm.used_date,
+                                    custody_line_id:uForm.custody_line_id,
                                   });
                                   if(res.success){
                                     setLedgerMarkUsedFor(null);
@@ -1482,6 +1484,9 @@ function TabMaterial({ project }) {
                                 {invUsedSaving===mat.material_name?t("common.saving"):t("material.save_used")}
                               </button>
                             </div>
+                            {/* Material Zimmedari — kis store issue se laga (14 Oct 2026) */}
+                            <CustodyLinePick projectId={projectId} material={mat.material_name} value={uForm.custody_line_id}
+                              onChange={v=>setInvUsedForm(p=>({...p,[mat.material_name]:{...(p[mat.material_name]||{}),custody_line_id:v}}))}/>
                           </div>
                         )}
 
@@ -1733,6 +1738,11 @@ function TabMaterial({ project }) {
       ══════════════════════════════════════════════════════ */}
       {activeTab==="transfer"&&(
         <MaterialTransferTab projectId={projectId} projectName={projectName}/>
+      )}
+
+      {/* TAB 5: MATERIAL ZIMMEDARI — store issue kiske zimme, kitna baaki (14 Oct 2026) */}
+      {activeTab==="custody"&&(
+        <MaterialCustodyTab projectId={projectId}/>
       )}
 
       {/* ── MATERIAL LEDGER DRAWER (material click → GRN/Used/MR tabs) ── */}

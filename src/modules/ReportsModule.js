@@ -7,6 +7,8 @@ import { companyName, companyNameHtml } from "../utils/companyName";
 import { can, canAny, canSeeFinancials, currentUser } from "../utils/perms";
 import CompanyDay from "./reports/CompanyDay";
 import PartyLedger from "./reports/PartyLedger";
+import ProjectPnl from "./reports/ProjectPnl";
+import AccountStatement from "./reports/AccountStatement";
 import { daysAgoISO } from "../utils/today";
 
 
@@ -1306,6 +1308,10 @@ export default function ReportsModule(){
       ? [{id:"coday",l:t("coday.title"),desc:t("coday.desc"),icon:IcCalc}] : []),
     // Party ka statement (Excel / PDF) — wahi rok jo Finance ke party ledger par hai.
     ...(can("Finance","view") ? [{id:"pledger",l:t("reports.party_ledger"),desc:t("reports.party_ledger_desc"),icon:IcXLS}] : []),
+    // Finance ke "Reports" tab se yahan (14 Oct 2026). P&L = Financial Reports ki ijazat.
+    ...(canSeeFinancials() ? [{id:"pnl",l:t("reports.pnl_tab"),desc:t("reports.pnl_desc"),icon:IcBar}] : []),
+    // Khaate ka hisaab (kisne kya daala) — sirf admin; khaata-access wala hisaab yahin se
+    ...(["admin","super_admin"].includes(currentUser()?.role) ? [{id:"acctstmt",l:t("acctstmt.title"),desc:t("acctstmt.desc"),icon:IcSheet}] : []),
   ];
   const [tabPick,setTab]=useState(null);
   const tab = TABS.some(x=>x.id===tabPick) ? tabPick : (TABS[0]?.id || null);
@@ -1342,6 +1348,8 @@ export default function ReportsModule(){
         {tab==="progress" && <ProgressReportModule/>}
         {tab==="coday"    && <CompanyDay/>}
         {tab==="pledger"  && <PartyLedger/>}
+        {tab==="pnl"      && <ProjectPnl/>}
+        {tab==="acctstmt" && <AccountStatement/>}
         {!tab && <div style={{padding:"60px 20px",textAlign:"center",color:T.t4,fontSize:13}}>{t("reports.no_report_access")}</div>}
       </div>
 

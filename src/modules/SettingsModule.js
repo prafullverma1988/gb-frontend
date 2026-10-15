@@ -2671,6 +2671,12 @@ function ApprovalSettings() {
     // approve hoti hai. Chalu karne par supervisor ke "Bhej do" ke baad level-wise
     // approve — approver ko ye DPR apne DPR tab me dikhti hai (Approvals inbox me nahi).
     { id: 0,  module: "DPR",                         cat: "SITE",      enabled: false, levels: [{ role: "Project Manager", limit: null }] },
+    // Task hatane ki manzoori (14 Oct 2026). Default BAND: jab tak admin
+    // yahan chalu na kare, jis task par qty / bill / maal / payment ka asar
+    // hai use sirf admin/PM hi archive kar sakte hain (seedhe, bina request
+    // ke). Chalu karne par wahi kaam ek approval request banta hai, aur
+    // manzoori milne par task archive hota hai.
+    { id: 0,  module: "Task Delete",                 cat: "SITE",      enabled: false, levels: [{ role: "Admin", limit: null }] },
   ];
 
   const [approvals, setApprovals] = useState(DEFAULTS);
