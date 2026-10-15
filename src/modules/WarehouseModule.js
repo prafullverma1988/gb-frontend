@@ -328,6 +328,8 @@ function MaterialFormModal({material,library=[],onClose,onSaved}){
       // Ginti / nikasi) se badalta hai; form khulne ke waqt ki purani qty wapas
       // likhna beech ki entry mita deta (server bhi ab qty nahi leta).
       if(editing) delete body.qty;
+      // Naya item sirf Library se (15 Oct 2026) — server Library ka id maangta hai.
+      else body.material_master_id=libPick?Number(libPick)||libPick:null;
       const res=editing
         ?await api.patch(`/warehouse/materials/${material.id}`,body)
         :await api.post("/warehouse/materials",body);
