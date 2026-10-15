@@ -255,7 +255,7 @@ function MaterialFormModal({material,library=[],onClose,onSaved}){
   // user reloads the whole page.
   const [localLib,setLocalLib]=useState([]);
   useEffect(()=>{
-    if (editing) return;
+    if (editing && material?.material_master_id) return;
     if (library.length > 0) return;
     let cancelled = false;
     api.get("/library/materials").then(r=>{
@@ -271,8 +271,43 @@ function MaterialFormModal({material,library=[],onClose,onSaved}){
       }
     }).catch(()=>{});
     return () => { cancelled = true; };
-  }, [editing, library.length]);
+  }, [editing, library.length, material?.material_master_id]);
   const effectiveLib = library.length > 0 ? library : localLib;
+  // "Library se link karo" (15 Oct 2026) — Store item ka naam Library se alag ho to judta nahi;
+  // yahan se Library material chun kar jodo, server naam + category Library jaisi kar deta hai.
+  const [linked,setLinked]=useState(material?.material_master_id?{id:material.material_master_id}:null);
+  const [linkPick,setLinkPick]=useState(null);
+  const [linkTouched,setLinkTouched]=useState(false);
+  const [linking,setLinking]=useState(false);
+  useEffect(()=>{
+    // Sabse milta naam pehle se select: barabar > shuru/andar > bigram milaan (>=0.6)
+    if(!editing||linked||linkTouched||linkPick||!effectiveLib.length) return;
+    const nz=x=>String(x||"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim();
+    const bg=x=>{const o=new Map();for(let i=0;i<x.length-1;i++){const g=x.slice(i,i+2);o.set(g,(o.get(g)||0)+1);}return o;};
+    const dice=(a,b)=>{if(a.length<2||b.length<2)return 0;const A=bg(a),B=bg(b);let n=0;A.forEach((c,g)=>{n+=Math.min(c,B.get(g)||0);});return 2*n/(a.length+b.length-2);};
+    const me=nz(f.name);
+    if(!me) return;
+    let best=null,bs=0;
+    for(const l of effectiveLib){
+      const ln=nz(l.name);
+      const sc=ln===me?3:(ln.startsWith(me)||me.startsWith(ln)?2:(ln.includes(me)||me.includes(ln)?1.5:dice(me,ln)));
+      if(sc>bs){bs=sc;best=l;}
+    }
+    if(best&&bs>=0.6) setLinkPick(best.id);
+  },[editing,linked,linkTouched,linkPick,effectiveLib,f.name]);
+  const doLink=async()=>{
+    if(!linkPick||linking) return;
+    setLinking(true);
+    try{
+      const res=await api.post(`/warehouse/materials/${material.id}/link-library`,{material_master_id:Number(linkPick)});
+      if(res.success){
+        setLinked({id:linkPick,name:res.data?.name});
+        setF(p=>({...p,name:res.data?.name||p.name,category:res.data?.category||p.category}));
+        onSaved&&onSaved(res.data);
+      } else alert(res.message||"Link failed");
+    }catch(e){alert(e.message);}
+    setLinking(false);
+  };
   const [libPick,setLibPick]=useState(null);
   const [saving,setSaving]=useState(false);
   const upd=(k,v)=>setF(p=>({...p,[k]:v}));
@@ -335,6 +370,20 @@ function MaterialFormModal({material,library=[],onClose,onSaved}){
             style={{background:T.surfaceB,color:T.t2,cursor:"not-allowed"}}/>
         </Field>
       )}
+      {editing&&(linked?(
+        <div style={{marginTop:-4,marginBottom:11,padding:"6px 10px",background:T.grnL,border:`1px solid ${T.grnM}`,borderRadius:6,fontSize:11.5,color:T.grn,fontWeight:700}}>
+          {t("warehouse.link_library_linked",{name:linked.name||f.name})}
+          <div style={{color:T.t4,fontWeight:500,fontSize:10.5,marginTop:2}}>{t("warehouse.link_library_linked_hint")}</div>
+        </div>
+      ):(
+        <Field label={t("warehouse.link_library_label")} style={{marginBottom:11}}>
+          <div style={{display:"flex",gap:8,alignItems:"flex-start"}}>
+            <div style={{flex:1}}><SearchSelect value={linkPick} options={libOpts} onChange={v=>{setLinkTouched(true);setLinkPick(v);}} placeholder={t("warehouse.library_se_material_chunein")}/></div>
+            <Btn onClick={doLink} disabled={!linkPick||linking} c={T.grn}>{linking?t("common.saving"):t("warehouse.link_library_btn")}</Btn>
+          </div>
+          <div style={{fontSize:10.5,color:T.t4,marginTop:3}}>{t("warehouse.link_library_hint")}</div>
+        </Field>
+      ))}
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:11,marginBottom:11}}>
         <Field label={t("common.category")}>
           <PickSelect value={f.category} onChange={e=>upd("category",e.target.value)} disabled={fromLibrary}
