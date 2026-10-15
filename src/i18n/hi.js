@@ -13869,6 +13869,11 @@ const dict = {
   "custody.fin_empty": "किसी subcontractor के पास material बाकी नहीं।",
   "custody.fin_baaki": "बाकी {amt}",
   "custody.fin_kami": "कमी / खराब {amt}",
+  "custody.btn_mark_used": "Used mark करें",
+  "custody.task_pick": "Task चुनें",
+  "custody.used_note_ph": "कहाँ लगा? (optional)",
+  "custody.qty_exceeds_left": "बाकी सिर्फ़ {n} {unit} है — उससे ज़्यादा नहीं।",
+  "custody.used_saved": "Used दर्ज हो गया — बाकी घट गया।",
 };
 
 export default dict;

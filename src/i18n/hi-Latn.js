@@ -13872,6 +13872,11 @@ const dict = {
   "custody.fin_empty": "Kisi subcontractor ke paas material baaki nahi.",
   "custody.fin_baaki": "Baaki {amt}",
   "custody.fin_kami": "Kami / Kharab {amt}",
+  "custody.btn_mark_used": "Used mark karo",
+  "custody.task_pick": "Task select karo",
+  "custody.used_note_ph": "Kahan laga? (optional)",
+  "custody.qty_exceeds_left": "Baaki sirf {n} {unit} hai — usse zyada nahi.",
+  "custody.used_saved": "Used darj ho gaya — Baaki ghat gaya.",
 };
 
 export default dict;

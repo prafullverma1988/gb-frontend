@@ -13870,6 +13870,11 @@ const dict = {
   "custody.fin_empty": "No material pending with any subcontractor.",
   "custody.fin_baaki": "Pending {amt}",
   "custody.fin_kami": "Short / damaged {amt}",
+  "custody.btn_mark_used": "Mark used",
+  "custody.task_pick": "Select task",
+  "custody.used_note_ph": "Where was it used? (optional)",
+  "custody.qty_exceeds_left": "Only {n} {unit} is pending — not more.",
+  "custody.used_saved": "Usage recorded — Baaki reduced.",
 };
 
 export default dict;

@@ -83,6 +83,67 @@ function MoveForm({ line, kind, onDone, onCancel }) {
   );
 }
 
+// "Used mark karo" (15 Oct 2026) — isi line se task me used. Wahi task used-log
+// endpoint (task_used_log me custody_line_id ke saath); qty Baaki (khula) tak,
+// unit line ki. Zimmedar hamesha; baaki Material Entry wale (server tay karta hai).
+function UsedForm({ line, projectId, onDone, onCancel }) {
+  const [tasks, setTasks] = useState(null);
+  const [taskId, setTaskId] = useState("");
+  const [qty, setQty] = useState("");
+  const [note, setNote] = useState("");
+  const [photos, setPhotos] = useState([]);
+  const [busy, setBusy] = useState(0);
+  const [err, setErr] = useState("");
+  const [saving, setSaving] = useState(false);
+  useEffect(() => {
+    api.get("/tasks?project_id=" + projectId).then((r) => setTasks(r.success ? r.data || [] : [])).catch(() => setTasks([]));
+  }, [projectId]);
+  const pick = (e) => {
+    Array.from(e.target.files || []).forEach((file) => {
+      setBusy((b) => b + 1);
+      uploadManager.add({ file, folder: "gb_buildcon/tasks", label: t("custody.title") + ": " + file.name,
+        onDone: (url) => { setPhotos((p) => [...p, url]); setBusy((b) => b - 1); },
+        onError: () => setBusy((b) => b - 1) });
+    });
+    e.target.value = "";
+  };
+  const over = Number(qty) > Number(line.khula) + 0.0005;
+  const save = async () => {
+    setSaving(true); setErr("");
+    const r = await api.post(`/tasks/${taskId}/used-log`, { material_name: line.material_name, used_qty: Number(qty), unit: line.unit,
+      remark: note, project_id: projectId, custody_line_id: line.id, photo_urls: photos }).catch((e) => ({ message: e.message }));
+    setSaving(false);
+    if (r && r.success) onDone(t("custody.used_saved")); else setErr((r && r.message) || t("custody.save_fail"));
+  };
+  const ok = taskId && Number(qty) > 0 && !over && !busy;
+  return (
+    <div style={{ padding: 10, background: T.surfaceB, border: `1px solid ${T.b1}`, borderRadius: 8, marginTop: 6 }}>
+      <div style={{ fontSize: 12, fontWeight: 700, color: T.t1, marginBottom: 6 }}>
+        {t("custody.btn_mark_used")} — {line.material_name} ({t("custody.khula_n", { n: n3(line.khula), unit: line.unit || "" })})
+      </div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+        <select value={taskId} onChange={(e) => setTaskId(e.target.value)} style={{ ...inp, minWidth: 200, flex: 1 }}>
+          <option value="">{tasks === null ? t("common.loading") : t("custody.task_pick")}</option>
+          {(tasks || []).map((tk) => <option key={tk.id} value={tk.id}>{[tk.task_no, tk.name].filter(Boolean).join(" · ")}</option>)}
+        </select>
+        <input type="number" min="0" max={line.khula} value={qty} onChange={(e) => setQty(e.target.value)} placeholder={t("custody.qty")} style={{ ...inp, width: 90, borderColor: over ? T.red : T.b2 }} />
+        <span style={{ fontSize: 12, color: T.t3, fontWeight: 700 }}>🔒 {line.unit}</span>
+        <input value={note} onChange={(e) => setNote(e.target.value)} placeholder={t("custody.used_note_ph")} style={{ ...inp, flex: 1, minWidth: 160 }} />
+        <label style={{ ...btn(T.blu), display: "inline-flex", alignItems: "center", gap: 4 }}>
+          📷 {photos.length ? t("custody.n_photos", { n: photos.length }) : t("custody.photo")}{busy ? " …" : ""}
+          <input type="file" accept="image/*" capture="environment" multiple style={{ display: "none" }} onChange={pick} />
+        </label>
+      </div>
+      {over && <div style={{ color: T.red, fontSize: 11.5, marginTop: 6 }}>{t("custody.qty_exceeds_left", { n: n3(line.khula), unit: line.unit || "" })}</div>}
+      {err && <div style={{ color: T.red, fontSize: 11.5, marginTop: 6 }}>{err}</div>}
+      <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+        <button style={btn(T.ind, true)} disabled={!ok || saving} onClick={save}>{saving ? t("common.saving") : t("common.save")}</button>
+        <button style={btn(T.slt)} onClick={onCancel}>{t("common.cancel")}</button>
+      </div>
+    </div>
+  );
+}
+
 function UsedRow({ u, canFlag, onChanged }) {
   const [mode, setMode] = useState(null);     // flag | ask | reply:<id>
   const [note, setNote] = useState("");
@@ -195,6 +256,9 @@ function CustodyDrawer({ issueId, onClose, onChanged }) {
                   <td style={{ padding: 4, fontWeight: 800, color: l.baaki > 0 ? T.amb : T.t3 }}>{n3(l.baaki)}
                     {l.pending > 0 && <div style={{ fontSize: 10, color: T.t4, fontWeight: 500 }}>{t("custody.pending_n", { n: n3(l.pending) })}</div>}</td>
                   <td style={{ padding: 4, whiteSpace: "nowrap" }}>
+                    {d.can_mark_used && l.khula > 0 && (<>
+                      <button style={btn(T.grn)} onClick={() => setForm({ line: l, kind: "used" })}>{t("custody.btn_mark_used")}</button>{" "}
+                    </>)}
                     {d.can_act && l.khula > 0 && (<>
                       <button style={btn(T.blu)} onClick={() => setForm({ line: l, kind: "return" })}>{t("custody.btn_return")}</button>{" "}
                       <button style={btn(T.red)} onClick={() => setForm({ line: l, kind: "short" })}>{t("custody.btn_short")}</button>
@@ -202,7 +266,9 @@ function CustodyDrawer({ issueId, onClose, onChanged }) {
                   </td>
                 </tr>
                 {form && form.line.id === l.id && (
-                  <tr><td colSpan={7}><MoveForm line={l} kind={form.kind} onDone={after} onCancel={() => setForm(null)} /></td></tr>
+                  <tr><td colSpan={7}>{form.kind === "used"
+                    ? <UsedForm line={l} projectId={d.project_id} onDone={after} onCancel={() => setForm(null)} />
+                    : <MoveForm line={l} kind={form.kind} onDone={after} onCancel={() => setForm(null)} />}</td></tr>
                 )}
               </React.Fragment>
             ))}</tbody>
