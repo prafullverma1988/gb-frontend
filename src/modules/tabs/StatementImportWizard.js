@@ -194,9 +194,24 @@ function PreviewTable({ rows }) {
   );
 }
 
-export default function StatementImportWizard({ accounts, defaultAccountId, onClose }) {
+// Statement kis khaate ka — account number ke aakhri 4 ank file ke naam ya
+// statement ke upar ke hisse me dikhe to wahi khaata. Ek se zyada / koi nahi = null.
+function guessAccount(accounts, text) {
+  const runs = (String(text || "").match(/\d{4,}/g) || []);
+  if (!runs.length) return null;
+  const hits = (accounts || []).filter((a) => {
+    const d = String(a.account_number || "").replace(/\D/g, "");
+    return d.length >= 4 && runs.some((r) => r.endsWith(d.slice(-4)));
+  });
+  return hits.length === 1 ? hits[0] : null;
+}
+
+export default function StatementImportWizard({ accounts, onClose }) {
   const [step, setStep] = useState(1);
-  const [acctId, setAcctId] = useState(defaultAccountId || (accounts[0] && accounts[0].id) || "");
+  // Pehle se koi khaata nahi (15 Oct 2026) — pehle Khaata Ledger ka pehla
+  // chuna khaata (aksar Cash on Hand) apne aap lag jaata tha aur PNB ka
+  // statement galat khaate par chal jaata. File ke baad user khud chunta hai.
+  const [acctId, setAcctId] = useState("");
   const [fileName, setFileName] = useState("");
   const [grid, setGrid] = useState(null);
   const [hdr, setHdr] = useState(null);
@@ -220,7 +235,7 @@ export default function StatementImportWizard({ accounts, defaultAccountId, onCl
     setBusy(true); setErr(""); setResult(null);
     try {
       const r = await api.postRaw(
-        `/finance/accounts/${acctId}/statement/parse-pdf`,
+        `/finance/accounts/${acctId || (accounts[0] && accounts[0].id)}/statement/parse-pdf`,
         await file.arrayBuffer(),
         { "Content-Type": "application/pdf", ...(password ? { "X-Statement-Password": password } : {}) });
       if (!r || !r.success) {
@@ -288,7 +303,7 @@ export default function StatementImportWizard({ accounts, defaultAccountId, onCl
         { rows: parsed.rows, tolerance_days: tol });
       if (!r || !r.success) throw new Error((r && r.message) || t("stmt.failed"));
       setResult(r.data); setStep(3);
-      setTab(r.data.only_in_statement.length ? "stmt" : "books");
+      setTab(r.data.elsewhere_count ? "else" : (r.data.only_in_statement.length ? "stmt" : "books"));
     } catch (e2) {
       setErr(e2.message || t("stmt.failed"));
     } finally { setBusy(false); }
@@ -338,10 +353,6 @@ export default function StatementImportWizard({ accounts, defaultAccountId, onCl
           {/* 1 — file */}
           {step === 1 && (
             <div>
-              <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: T.t2, marginBottom: 5 }}>{t("stmt.which_account")}</label>
-              <PickSelect value={acctId} onChange={(e) => setAcctId(e.target.value)} style={{ ...box, width: "100%", maxWidth: 400, marginBottom: 16 }}>
-                {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}{a.account_number ? ` · ${a.account_number}` : ""}</option>)}
-              </PickSelect>
               <label style={{ display: "block", border: `2px dashed ${T.b2}`, borderRadius: 10, padding: "34px 18px", textAlign: "center", cursor: "pointer", background: T.surfaceB }}>
                 <input type="file" accept=".xlsx,.xls,.csv,.pdf" style={{ display: "none" }} onChange={onFile} />
                 <div style={{ fontSize: 14, fontWeight: 600, color: T.blu }}>{busy ? t("stmt.reading") : t("stmt.pick_file")}</div>
@@ -372,6 +383,29 @@ export default function StatementImportWizard({ accounts, defaultAccountId, onCl
           )}
 
           {/* 2 — PDF ka nateeja (column mapping nahi — server saaf rows deta hai) */}
+          {step === 2 && (() => {
+            const head = [fileName, ...((grid || []).slice(0, 25).map((r) => (r || []).join(" ")))].join(" ");
+            const g = guessAccount(accounts, head);
+            const chosen = accounts.find((a) => String(a.id) === String(acctId));
+            const clash = g && chosen && String(g.id) !== String(chosen.id);
+            return (
+              <div style={{ marginBottom: 14, padding: "11px 13px", borderRadius: 8, border: `1.5px solid ${acctId ? (clash ? T.amb : T.grnM) : T.redM}`, background: acctId ? (clash ? T.ambL : T.surface) : T.redL }}>
+                <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: T.t1, marginBottom: 5 }}>{t("stmt.which_account")} <span style={{ color: T.red }}>*</span></label>
+                <PickSelect value={acctId} onChange={(e) => setAcctId(e.target.value)} placeholder={t("stmt.account_choose")} style={{ ...box, width: "100%", maxWidth: 400 }}>
+                  <option value="">{t("stmt.account_choose")}</option>
+                  {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}{a.account_number ? ` · ${a.account_number}` : ""}</option>)}
+                </PickSelect>
+                {g && !acctId && (
+                  <div style={{ marginTop: 7, fontSize: 12, color: T.t2 }}>
+                    {t("stmt.account_guess", { name: g.name, no: String(g.account_number).slice(-4) })}{" "}
+                    <button onClick={() => setAcctId(String(g.id))} style={{ border: "none", background: "none", color: T.blu, fontWeight: 700, cursor: "pointer", fontSize: 12, padding: 0, fontFamily: "inherit" }}>{t("stmt.account_use")}</button>
+                  </div>
+                )}
+                {clash && <div style={{ marginTop: 7, fontSize: 12, color: T.amb, fontWeight: 600 }}>{t("stmt.account_clash", { name: g.name, no: String(g.account_number).slice(-4) })}</div>}
+                {!acctId && !g && <div style={{ marginTop: 6, fontSize: 11.5, color: T.red }}>{t("stmt.account_required")}</div>}
+              </div>
+            );
+          })()}
           {step === 2 && isPdf && (
             <div>
               <div style={{ fontSize: 12.5, color: T.t2, marginBottom: 10 }}>
@@ -455,8 +489,8 @@ export default function StatementImportWizard({ accounts, defaultAccountId, onCl
         <div style={{ padding: "12px 18px", borderTop: `1px solid ${T.b1}`, display: "flex", gap: 9, justifyContent: "flex-end", background: T.surfaceB }}>
           {step > 1 && <button onClick={() => { setStep(step - 1); setErr(""); }} style={btn("ghost")}>{t("stmt.back")}</button>}
           {step === 2 && (
-            <button onClick={run} disabled={busy || !parsed.rows.length}
-              style={{ ...btn("primary"), opacity: busy || !parsed.rows.length ? 0.5 : 1 }}>
+            <button onClick={run} disabled={busy || !parsed.rows.length || !acctId}
+              style={{ ...btn("primary"), opacity: busy || !parsed.rows.length || !acctId ? 0.5 : 1 }}>
               {busy ? t("stmt.matching") : t("stmt.match_now")}
             </button>
           )}
@@ -471,8 +505,14 @@ export default function StatementImportWizard({ accounts, defaultAccountId, onCl
 function ResultView({ result, tab, setTab, accounts }) {
   const d = result;
   const bc = d.balance_check;
+  // Doosre khaate me mili line ka faisla: skip (wahi sahi) / moved / create (+ wajah)
+  const [decide, setDecide] = useState({});
+  const elsewhereIdx = useMemo(() => d.only_in_statement.map((l, i) => (l.elsewhere ? i : -1)).filter((i) => i >= 0), [d]);
+  const undecided = elsewhereIdx.filter((i) => !decide[i]).length;
+  const createN = d.only_in_statement.filter((l, i) => !l.elsewhere || (decide[i] && decide[i].kind === "create")).length;
   const tabs = [
-    { id: "stmt", label: t("stmt.tab_missing", { n: d.only_in_statement.length }), c: T.red },
+    ...(elsewhereIdx.length ? [{ id: "else", label: t("stmt.tab_elsewhere", { n: elsewhereIdx.length, u: undecided }), c: T.pur }] : []),
+    { id: "stmt", label: t("stmt.tab_missing", { n: createN }), c: T.red },
     { id: "books", label: t("stmt.tab_extra", { n: d.only_in_books.length }), c: T.amb },
     { id: "ok", label: t("stmt.tab_matched", { n: d.matched.length }), c: T.grn },
   ];
@@ -532,9 +572,15 @@ function ResultView({ result, tab, setTab, accounts }) {
         <div style={{ maxHeight: "min(62vh, 600px)", overflowY: "auto" }}>
           {/* Chhupao, hatao nahi — doosra tab dekh kar lauto to chuni hui
               party / remark mite nahi (pehle mit jaate the) */}
+          {tab === "else" && <ElsewhereList accountId={d.account.id} accountName={d.account.name} rows={d.only_in_statement} idx={elsewhereIdx} decide={decide} setDecide={setDecide} />}
           <div style={{ display: tab === "stmt" ? "block" : "none" }}>
+            {undecided > 0 && (
+              <div onClick={() => setTab("else")} style={{ padding: "8px 13px", fontSize: 12, color: T.pur, background: T.purL, borderBottom: `1px solid ${T.b1}`, cursor: "pointer", fontWeight: 600 }}>
+                {t("stmt.elsewhere_pending", { n: undecided })}
+              </div>
+            )}
             <ReviewCreate accountId={d.account.id} rows={d.only_in_statement} matched={d.matched}
-              accounts={accounts} tol={d.tolerance_days} />
+              accounts={accounts} tol={d.tolerance_days} decide={decide} />
           </div>
           {tab === "books" && <Rows rows={d.only_in_books} kind="books" />}
           {tab === "ok" && <Rows rows={d.matched} kind="ok" />}
@@ -596,7 +642,10 @@ function whyText(s) {
   return ex ? `${txt} — "${ex}"` : txt;
 }
 
-function ReviewCreate({ accountId, rows, matched, accounts, tol }) {
+function ReviewCreate({ accountId, rows, matched, accounts, tol, decide = {} }) {
+  // Doosre khaate me mili line: faisla na ho / "wahi sahi" / "khaata badla" = yahan nahi.
+  // "Phir bhi banao" = dikhe, force ke saath, wajah note me.
+  const shown = (r, i) => !r.elsewhere || (decide[i] && decide[i].kind === "create");
   const [parties, setParties] = useState([]);
   const [draft, setDraft] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -655,7 +704,7 @@ function ReviewCreate({ accountId, rows, matched, accounts, tol }) {
   }, [accounts, accountId, parties]);
 
   const upd = useCallback((i, patch) => setDraft((d) => d.map((x, j) => (j === i ? { ...x, ...patch } : x))), []);
-  const pending = draft.filter((x) => x.include && x.outcome !== "created" && x.outcome !== "already_imported");
+  const pending = draft.filter((x, i) => shown(x, i) && x.include && x.outcome !== "created" && x.outcome !== "already_imported");
 
   const pickFor = (onlyForce) => (onlyForce
     ? draft.filter((x) => x.outcome === "duplicate_suspect" && x.force)
@@ -683,8 +732,8 @@ function ReviewCreate({ accountId, rows, matched, accounts, tol }) {
           date: x.date, amount: x.amount, dir: x.dir, description: x.description, ref: x.ref || null,
           party_id: x.pick.startsWith("p:") ? Number(x.pick.slice(2)) : null,
           transfer_account_id: x.pick.startsWith("a:") ? Number(x.pick.slice(2)) : null,
-          note: x.note.trim() || null,
-          force: !!x.force,
+          note: x.note.trim() || (x.elsewhere && decide[draft.indexOf(x)] ? t("stmt.force_note", { why: decide[draft.indexOf(x)].reason, acc: x.elsewhere.account_name }) : null),
+          force: !!x.force || !!(x.elsewhere && decide[draft.indexOf(x)] && decide[draft.indexOf(x)].kind === "create"),
         })),
         // FIN-24: server ka duplicate-guard milaan wali hi ±din ki chhoot lagaye
         ...(Number.isFinite(Number(tol)) ? { tolerance_days: Number(tol) } : {}),
@@ -754,7 +803,74 @@ function ReviewCreate({ accountId, rows, matched, accounts, tol }) {
           )}
         </div>
       )}
-      {draft.map((r, i) => <ReviewRow key={i} r={r} i={i} baseOpts={baseOpts} upd={upd} />)}
+      {draft.map((r, i) => (shown(r, i) ? <ReviewRow key={i} r={r} i={i} baseOpts={baseOpts} upd={upd} /> : null))}
+    </div>
+  );
+}
+
+// ── Doosre khaate me pehle se (15 Oct 2026) ─────────────────────────────
+// Statement ki line is khaate ki kitaab me nahi, par wahi rakam usi disha me
+// ± din me kisi DOOSRE khaate me hai — payment galti se doosre khaate se daali
+// gayi ho sakti hai. Nayi entry = dohri. Har line par faisla:
+//   Wahi sahi hai  — kuch nahi banta
+//   Khaata badlo   — wahi purani entry is khaate par (dono khaate apne hon)
+//   Phir bhi banao — sach me alag payment hai; wajah zaroori, note me jaati hai
+function ElsewhereList({ accountId, accountName, rows, idx, decide, setDecide }) {
+  const [busy, setBusy] = useState(null);
+  const [err, setErr] = useState("");
+  const set = (i, v) => setDecide((p) => ({ ...p, [i]: v }));
+  const move = async (i) => {
+    const l = rows[i];
+    if (!window.confirm(t("stmt.move_confirm", { from: l.elsewhere.account_name, to: accountName, amt: inr2(l.amount) }))) return;
+    setBusy(i); setErr("");
+    const r = await api.post(`/finance/accounts/${accountId}/statement/move-entry`, { txn_id: l.elsewhere.txn_id }).catch((e) => ({ success: false, message: e.message }));
+    setBusy(null);
+    if (r && r.success) set(i, { kind: "moved" }); else setErr((r && r.message) || t("stmt.failed"));
+  };
+  const create = (i) => {
+    const why = (window.prompt(t("stmt.create_reason")) || "").trim();
+    if (why.length < 3) return;
+    set(i, { kind: "create", reason: why });
+  };
+  const bt = (c, on) => ({ fontSize: 11.5, fontWeight: 700, padding: "5px 10px", borderRadius: 6, cursor: "pointer", fontFamily: "inherit",
+    border: `1px solid ${c}`, background: on ? c : T.surface, color: on ? "#fff" : c });
+  const CHIP = { skip: [T.grn, t("stmt.dec_skip")], moved: [T.blu, t("stmt.dec_moved")], create: [T.amb, t("stmt.dec_create")] };
+  return (
+    <div>
+      <div style={{ padding: "9px 13px", fontSize: 12, color: T.t2, background: T.purL, borderBottom: `1px solid ${T.b1}`, lineHeight: 1.5 }}>{t("stmt.help_elsewhere")}</div>
+      {err && <div style={{ padding: "8px 13px", fontSize: 12, color: T.red, background: T.redL }}>{err}</div>}
+      {idx.map((i) => {
+        const l = rows[i], e = l.elsewhere, dcs = decide[i];
+        return (
+          <div key={i} style={{ padding: "10px 13px", borderBottom: `1px solid ${T.b1}`, display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr) auto", gap: 12, alignItems: "center", opacity: dcs && dcs.kind !== "create" ? 0.6 : 1 }}>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 10.5, color: T.t4, fontWeight: 700, textTransform: "uppercase" }}>{t("stmt.col_statement")}</div>
+              <div style={{ fontSize: 12.5, fontWeight: 700, color: l.dir === "in" ? T.grn : T.red }}>{l.dir === "in" ? "+" : "−"}{inr2(l.amount)} <span style={{ color: T.t3, fontWeight: 500 }}>· {dmy(l.date)}</span></div>
+              <div style={{ fontSize: 11.5, color: T.t3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} title={l.description || ""}>{l.description || "—"}</div>
+            </div>
+            <div style={{ minWidth: 0, borderLeft: `3px solid ${T.pur}`, paddingLeft: 10 }}>
+              <div style={{ fontSize: 10.5, color: T.pur, fontWeight: 700, textTransform: "uppercase" }}>{t("stmt.col_found_in", { acc: e.account_name })}</div>
+              <div style={{ fontSize: 12.5, fontWeight: 600, color: T.t1 }}>{e.party || e.note || e.type} <span style={{ color: T.t3, fontWeight: 500 }}>· {dmy(e.date)}</span></div>
+              <div style={{ fontSize: 11, color: T.t4 }}>#{e.txn_id}{e.created_by_name ? " · " + t("stmt.by_whom", { name: e.created_by_name }) : ""}</div>
+            </div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end", minWidth: 220 }}>
+              {dcs ? (
+                <>
+                  <span style={{ fontSize: 11.5, fontWeight: 700, color: CHIP[dcs.kind][0], padding: "5px 9px", borderRadius: 12, background: T.surfaceB, border: `1px solid ${CHIP[dcs.kind][0]}` }}>{CHIP[dcs.kind][1]}</span>
+                  {dcs.kind !== "moved" && <button onClick={() => set(i, undefined)} style={{ ...bt(T.t3, false), border: "none" }}>{t("stmt.dec_undo")}</button>}
+                </>
+              ) : (
+                <>
+                  <button onClick={() => set(i, { kind: "skip" })} style={bt(T.grn, false)}>{t("stmt.dec_skip_btn")}</button>
+                  <button onClick={() => move(i)} disabled={!e.can_move || busy === i} title={e.can_move ? "" : t("stmt.move_no_access")}
+                    style={{ ...bt(T.blu, false), opacity: e.can_move ? 1 : 0.45, cursor: e.can_move ? "pointer" : "not-allowed" }}>{busy === i ? "…" : t("stmt.dec_move_btn")}</button>
+                  <button onClick={() => create(i)} style={bt(T.amb, false)}>{t("stmt.dec_create_btn")}</button>
+                </>
+              )}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

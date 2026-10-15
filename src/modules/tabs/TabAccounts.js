@@ -689,7 +689,6 @@ export default function TabAccounts() {
     {importOpen && (
       <StatementImportWizard
         accounts={allAcc}
-        defaultAccountId={selected.length === 1 ? selected[0] : (allAcc[0] && allAcc[0].id)}
         onClose={() => { setImportOpen(false); load(); }} />
     )}
     <div style={{ flex: 1, overflow: "auto", paddingBottom: 20 }}>
