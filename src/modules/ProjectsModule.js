@@ -148,6 +148,7 @@ const PULSE_ALL_TYPES=["flag","progress","material","material_request","approval
 const PULSE_TAB={
   material:"material",           // GRN — Material tab
   material_request:"material",
+  material_used:"material",      // bina task ka material use
   payment:"transaction",         // Payment request — Fin Activity
   document:"files",
   progress:"solar_stages",       // stage completions come from solar_stages
@@ -283,6 +284,8 @@ function SitePulseDrawer({onClose,onSelectProject}){
     "flag":{c:"#DC2626",b:"#FEE2E2",icon:"⚠️",label:t("projects.flag")},
     // Project ka Note — app ke Chat ke message bar se likha (12 Oct 2026).
     "note":{c:"#3730A3",b:"#EEF2FF",icon:"💬",label:t("pulse_chat.note")},
+    // Bina task ka material use — filter me "Material" ke saath (alag chip nahi).
+    "material_used":{c:C.p,b:C.bl,icon:"📦",label:t("pulse_chat.material_used_tag")},
   };
   const avatarColors=["#1565C0","#2E7D32","#6A1B9A","#AD1457","#E65100","#00838F","#4527A0","#C62828"];
   const getAC=(name)=>avatarColors[Math.abs([...name].reduce((a,c)=>a+c.charCodeAt(0),0))%avatarColors.length];
@@ -317,7 +320,7 @@ function SitePulseDrawer({onClose,onSelectProject}){
     return new Date(d).toLocaleDateString("en-IN",{day:"numeric",month:"short",year:"2-digit"});
   };
 
-  const filtered=feed.filter(f=>(site==="All"||f.project_name===site)&&selTypes.includes(f.feed_type));
+  const filtered=feed.filter(f=>(site==="All"||f.project_name===site)&&selTypes.includes(f.feed_type==="material_used"?"material":f.feed_type));
   const allSelected=selTypes.length>=PULSE_ALL_TYPES.length;
   const toggleType=(k)=>setSelTypes(p=>p.includes(k)?p.filter(x=>x!==k):[...p,k]);
   const saveFilter=()=>{ try{localStorage.setItem("gb_pulse_types_v2",JSON.stringify(selTypes));}catch(_){} setShowTypeMenu(false); };
@@ -561,6 +564,8 @@ function SitePulseDrawer({onClose,onSelectProject}){
 
               {/* Caption */}
               <div style={{padding:"5px 12px 4px"}}><span style={{fontSize:12,color:C.t,lineHeight:1.45}}><strong>{f.user_name}</strong> {f.text}</span></div>
+              {f.progress_line&&<div style={{padding:"0 12px 3px",fontSize:11,color:C.tl}}>{f.progress_line}</div>}
+              {f.materials_line&&<div style={{padding:"0 12px 3px",fontSize:11,color:C.tl}}>{f.materials_line}</div>}
 
               {/* Footer */}
               <div style={{padding:"5px 12px 6px",display:"flex",alignItems:"center",gap:6}}>
