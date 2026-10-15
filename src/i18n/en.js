@@ -13909,6 +13909,7 @@ const dict = {
   "custody.used_note_ph": "Where was it used? (optional)",
   "custody.qty_exceeds_left": "Only {n} {unit} is pending — not more.",
   "custody.used_saved": "Usage recorded — Baaki reduced.",
+  "stmt.created_range": "These entries are dated {from} – {to}. Cash Book / Day Book show the last 30 days by default — set this date range there to see them (Khaata Ledger already shows them).",
 };
 
 export default dict;

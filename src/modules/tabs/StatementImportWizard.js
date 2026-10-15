@@ -700,7 +700,10 @@ function ReviewCreate({ accountId, rows, matched, accounts, tol }) {
         return { ...x, outcome: o.outcome || "invalid", txn_id: o.txn_id || null,
           existing: o.existing_description || null, other: o.other_account || null };
       }));
-      setDone(r.data.summary);
+      // Bani entries ki tareekh — statement purana ho to ye Cash Book ke default
+      // (pichhle 30 din) se bahar padti hain aur "save nahi hui" lagti hain.
+      const madeDates = pick.filter((x, i) => (res[i] || {}).outcome === "created").map((x) => String(x.date || "").slice(0, 10)).filter(Boolean).sort();
+      setDone({ ...r.data.summary, from: madeDates[0] || null, to: madeDates[madeDates.length - 1] || null });
       setPreview(null);
     } catch (e) {
       setErr(e.message || t("stmt.failed"));
@@ -744,6 +747,11 @@ function ReviewCreate({ accountId, rows, matched, accounts, tol }) {
       {done && (
         <div style={{ padding: "8px 13px", fontSize: 12, color: T.t2, background: T.grnL, borderBottom: `1px solid ${T.grnM}` }}>
           {t("stmt.created_done", { c: done.created, a: done.already_imported, d: done.duplicate_suspect })}
+          {done.created > 0 && done.from && (
+            <div style={{ marginTop: 4, fontWeight: 600, color: T.t1 }}>
+              {t("stmt.created_range", { from: done.from.split("-").reverse().join("/"), to: done.to.split("-").reverse().join("/") })}
+            </div>
+          )}
         </div>
       )}
       {draft.map((r, i) => <ReviewRow key={i} r={r} i={i} baseOpts={baseOpts} upd={upd} />)}

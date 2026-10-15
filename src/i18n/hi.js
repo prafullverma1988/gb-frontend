@@ -13908,6 +13908,7 @@ const dict = {
   "custody.used_note_ph": "कहाँ लगा? (optional)",
   "custody.qty_exceeds_left": "बाकी सिर्फ़ {n} {unit} है — उससे ज़्यादा नहीं।",
   "custody.used_saved": "Used दर्ज हो गया — बाकी घट गया।",
+  "stmt.created_range": "ये एंट्रियाँ {from} से {to} की तारीख की हैं। कैश बुक / डे बुक शुरू में सिर्फ़ पिछले 30 दिन दिखाते हैं — वहाँ यह तारीख चुनें तो दिखेंगी (खाता लेजर में अभी दिख रही हैं)।",
 };
 
 export default dict;
