@@ -13296,6 +13296,8 @@ const dict = {
   "material_ledger.trip_bhada": "Trip charge {amt} — in Machinery bill",
   "material_ledger.trip_rate_baaki": "Trip rate pending",
   "material_ledger.trip_summary": "By trip: {n} trips · {qty} {unit}",
+  "material_ledger.trip_hata": "Trip cancelled / rejected / removed — taken out of stock",
+  "material_ledger.trip_summary_n": "By trip: {n} trips",
   "tripbill.td_no_photo": "No photos on this trip.",
   "tripbill.td_party": "Party",
   "tripbill.td_photos": "Photos",

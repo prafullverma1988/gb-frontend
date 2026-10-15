@@ -13298,6 +13298,8 @@ const dict = {
   "material_ledger.trip_bhada": "Trip bhada {amt} — Machinery bill me",
   "material_ledger.trip_rate_baaki": "Trip ka rate baaki",
   "material_ledger.trip_summary": "Trip se: {n} trip · {qty} {unit}",
+  "material_ledger.trip_hata": "Trip cancel / reject / hatayi — stock se hata",
+  "material_ledger.trip_summary_n": "Trip se: {n} trip",
   "tripbill.td_no_photo": "Is trip ki koi photo nahi.",
   "tripbill.td_party": "Party",
   "tripbill.td_photos": "Photos",

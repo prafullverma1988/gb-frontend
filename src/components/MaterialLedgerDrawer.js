@@ -97,7 +97,7 @@ export default function MaterialLedgerDrawer({ material, projectId, onClose, onC
   }, [mrs, sortNew]);
 
   // Trip receipt ki chhoti line: "Trip bhada ₹650 — Machinery bill me" / "Rate baaki" (₹ sirf Finance VIEW ko).
-  const tripSub = (tr) => [tr.use === "auto" ? t("material_ledger.trip_auto") : tr.use === "mark" ? t("material_ledger.trip_mark") : "",
+  const tripSub = (tr) => tr.cancelled ? t("material_ledger.trip_hata") : [tr.use === "auto" ? t("material_ledger.trip_auto") : tr.use === "mark" ? t("material_ledger.trip_mark") : "",
     tr.bhada != null ? t("material_ledger.trip_bhada", { amt: "₹" + Number(tr.bhada).toLocaleString("en-IN") })
       : tr.rate_pending && !tr.money_hidden ? t("material_ledger.trip_rate_baaki") : ""].filter(Boolean).join(" · ");
 
@@ -227,7 +227,8 @@ export default function MaterialLedgerDrawer({ material, projectId, onClose, onC
         {/* Trip se aaya — ginti (15 Oct 2026) */}
         {material.trip_summary && material.trip_summary.trips > 0 && (
           <div style={{ margin: "-6px 20px 12px", fontSize: 11.5, color: T.t3, textAlign: "center" }}>
-            {t("material_ledger.trip_summary", { n: material.trip_summary.trips, qty: Number(material.trip_summary.qty).toLocaleString("en-IN"), unit: material.trip_summary.unit || material.unit || "" })}
+            {material.trip_summary.qty == null ? t("material_ledger.trip_summary_n", { n: material.trip_summary.trips })
+              : t("material_ledger.trip_summary", { n: material.trip_summary.trips, qty: Number(material.trip_summary.qty).toLocaleString("en-IN"), unit: material.trip_summary.unit || material.unit || "" })}
           </div>
         )}
 
