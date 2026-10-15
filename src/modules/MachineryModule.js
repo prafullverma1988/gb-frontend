@@ -3996,7 +3996,8 @@ function TbTripDetail({ id, onClose, onOverride, onBill }) {
               {fld(t("tripbill.td_material"), [d.material_name, d.qty != null ? tbNum(d.qty) + (d.qty_unit ? " " + d.qty_unit : "") : ""].filter(Boolean).join(" · "))}
               {/* Maal site par aaya (In) / gaya (Out) aur In ka site stock GRN — 14 Oct 2026 */}
               {fld(t("tripbill.td_direction"), d.direction ? [d.direction === "in" ? t("tripbill.dir_in") : t("tripbill.dir_out"),
-                d.stock ? (d.stock.active ? t("tripbill.stock_grn", { no: d.stock.grn_no }) : t("tripbill.stock_hata", { no: d.stock.grn_no })) : ""].filter(Boolean).join(" · ") : null)}
+                d.stock ? (d.stock.active ? t("tripbill.stock_grn", { no: d.stock.grn_no }) : t("tripbill.stock_hata", { no: d.stock.grn_no })) : "",
+                d.stock && d.stock.active && d.stock.use ? t(d.stock.use === "mark" ? "tripbill.stock_mark" : "tripbill.stock_auto") : ""].filter(Boolean).join(" · ") : null)}
               {fld(t("tripbill.td_challan"), d.challan_no)}
               {fld(t("tripbill.td_party"), d.party_name)}
               {fld(t("tripbill.td_driver"), d.driver_name)}

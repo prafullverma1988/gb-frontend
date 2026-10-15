@@ -4491,6 +4491,67 @@ function WeighbridgeSettings() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// TRIP SE AAYA MATERIAL (15 Oct 2026, Prafull) — "In" wali trip unload hote hi
+// project stock me GRN (TG-…) banta hai. Auto used = usi waqt utna hi "used"
+// bhi (balance 0, par aaya / laga dono ginti me); Mark used = stock me rahe,
+// supervisor Mark Used kare. Route apni pasand alag rakh sakta hai (Trip
+// Tracking → Routes). Paisa kahin nahi judta — trip ka bhada sirf Machinery
+// ke trip bill se kharch me aata hai.
+// Server: PUT /settings/company → companies.trip_material_use (utils/tripStock.js).
+// ═══════════════════════════════════════════════════════════════════════
+function TripMaterialSettings() {
+  const [mode, setMode] = useState("auto");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [savedTick, setSavedTick] = useState(false);
+
+  useEffect(() => {
+    api.get("/settings/company").then(r => {
+      if (r?.success && r.data) setMode(r.data.trip_material_use === "mark" ? "mark" : "auto");
+    }).catch(() => {}).finally(() => setLoading(false));
+  }, []);
+
+  // Chunte hi save — ek hi sawaal hai.
+  const pick = async (v) => {
+    if (v === mode || saving) return;
+    const prev = mode;
+    setMode(v); setSaving(true);
+    try {
+      const r = await api.put("/settings/company", { trip_material_use: v });
+      if (r?.success === false) { setMode(prev); window.alert(r.message || t("common.something_went_wrong")); }
+      else { setSavedTick(true); setTimeout(() => setSavedTick(false), 1800); }
+    } catch (e) { setMode(prev); window.alert(e?.message || t("common.something_went_wrong")); }
+    setSaving(false);
+  };
+
+  if (loading) return <div style={{ padding: 30, fontSize: 13, color: T.textLight }}>{t("common.loading")}</div>;
+  const opts = [
+    { v: "auto", label: t("trip_stock.auto"), sub: t("trip_stock.auto_sub") },
+    { v: "mark", label: t("trip_stock.mark"), sub: t("trip_stock.mark_sub") },
+  ];
+  return (
+    <div>
+      <SectionCard title={t("trip_stock.title")} desc={t("trip_stock.desc")}
+        action={savedTick ? <span style={{ fontSize: 12, fontWeight: 700, color: T.green }}>{t("trip_stock.saved")}</span> : null}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, paddingTop: 4 }}>
+          {opts.map((o) => (
+            <label key={o.v} style={{ display: "flex", gap: 10, padding: "10px 12px", borderRadius: 9, border: `1.5px solid ${mode === o.v ? T.blue : T.border}`, background: mode === o.v ? T.blueSoft : T.card, cursor: saving ? "wait" : "pointer", alignItems: "flex-start" }}>
+              <input type="radio" checked={mode === o.v} disabled={saving} onChange={() => pick(o.v)} style={{ marginTop: 3, accentColor: T.blue }} />
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 12.5, fontWeight: 700, color: mode === o.v ? T.blue : T.text }}>{o.label}</div>
+                <div style={{ fontSize: 11.5, color: T.textLight, marginTop: 2, lineHeight: 1.5 }}>{o.sub}</div>
+              </div>
+            </label>
+          ))}
+        </div>
+        <div style={{ fontSize: 11.5, color: T.textMid, marginTop: 12, lineHeight: 1.6 }}>{t("trip_stock.route_note")}</div>
+        <div style={{ fontSize: 11.5, color: T.textMid, marginTop: 6, lineHeight: 1.6 }}>{t("trip_stock.money_note")}</div>
+      </SectionCard>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // WALLET SETTINGS — staff-wallet photo policy (per category)
 // ═══════════════════════════════════════════════════════════════════════
 function WalletSettings({ onGoto }) {
@@ -5276,6 +5337,7 @@ const settingsSections = [
   { id: "warehouse",     label: "Warehouse Settings",   Icon: IcBox,       Comp: WarehouseSettings,      section: null },
   // Kaante ki settings apne tab me (2 Oct 2026) — naam t() se, baaki sidebar abhi English hai.
   { id: "weighbridge",   labelKey: "weigh.settings_tab", Icon: IcScale,     Comp: WeighbridgeSettings,    section: null },
+  { id: "tripmaterial",  labelKey: "trip_stock.settings_tab", Icon: IcBox,  Comp: TripMaterialSettings,   section: null },
   { id: "wallet",        label: "Wallet Settings",      Icon: IcDollar,    Comp: WalletSettings,         section: null },
   { id: "notifications", label: "Notifications",        Icon: IcBell,      Comp: NotificationSettings,   section: "SYSTEM" },
   { id: "sequences",     label: "Number Sequences",     Icon: IcHash,      Comp: NumberSequences,        section: null },
@@ -5303,6 +5365,7 @@ export default function SettingsModule({ initialSection = "company" } = {}) {
     finance: "Tax, invoicing, duplicate-payment guard and financial controls",
     warehouse: "Procurement mode, GRN photo policy and MR fulfillment flow",
     weighbridge: t("weigh.settings_tab_desc"),
+    tripmaterial: t("trip_stock.settings_tab_desc"),
     wallet: "Staff wallet photo policy + auto-approve limits",
     notifications: "Choose which in-app notifications you receive",
     sequences: "Configure auto-numbering for transactions", audit: "Audit trail and data retention settings",

@@ -1376,6 +1376,9 @@ function TabMaterial({ project }) {
                         <div>
                           <span style={{fontSize:13,fontWeight:700,color:isOpen?"white":T.t1}}>{mat.material_name}</span>
                           <span style={{fontSize:10.5,color:isOpen?"rgba(255,255,255,0.5)":T.t4,marginLeft:8}}>{t("material.unit_mat_grn_mat2_used_entries", { unit: mat.unit, mat: mat.receipts?.length||0, mat2: mat.usage?.length||0 })}</span>
+                          {mat.trip_summary&&mat.trip_summary.trips>0&&(
+                            <span style={{fontSize:10.5,color:T.t3,marginLeft:8}}>{t("material_ledger.trip_summary", { n: mat.trip_summary.trips, qty: Number(mat.trip_summary.qty).toLocaleString("en-IN"), unit: mat.trip_summary.unit || mat.unit || "" })}</span>
+                          )}
                           {Number(mat.open_issues)>0&&(
                             <span title={t("material.is_material_ki_kisi_delivery_me")}
                               style={{fontSize:10,fontWeight:700,color:T.red,background:T.redL,border:"1px solid "+T.redM,borderRadius:10,padding:"1px 8px",marginLeft:8}}>

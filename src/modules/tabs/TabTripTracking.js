@@ -704,6 +704,8 @@ function RouteForm({ projectId, tasks, route, onCancel, onSaved }) {
     default_task_id: route?.default_task_id || "",
     material_id: route?.material_id || null,
     material_name: route?.material_name || "",
+    // Is route ka material Auto used / Mark used (15 Oct 2026) — "" = company ki setting.
+    material_use: route?.material_use === "auto" || route?.material_use === "mark" ? route.material_use : "",
   });
   const [saving, setSaving] = useState(false);
   // Route ka material (5 Oct 2026) — Library se; app ke loading form me pehle se bhara.
@@ -776,6 +778,7 @@ function RouteForm({ projectId, tasks, route, onCancel, onSaved }) {
       default_task_id: f.default_task_id || null,
       material_id: f.material_id || null,
       material_name: f.material_name || null,
+      material_use: f.material_use || null,
       load_lat: a ? a.lat : numf(f.load_lat), load_lng: a ? a.lng : numf(f.load_lng),
       unload_lat: b ? b.lat : numf(f.unload_lat), unload_lng: b ? b.lng : numf(f.unload_lng),
       load_radius: f.load_radius, unload_radius: f.load_radius,
@@ -870,6 +873,17 @@ function RouteForm({ projectId, tasks, route, onCancel, onSaved }) {
           onChange={(id) => { const m = mats.find(x => String(x.id) === String(id)); setF(p => ({ ...p, material_id: m ? m.id : null, material_name: m ? m.name : "" })); }}
           placeholder={t("trip_tracking.route_material_ph")} />
         <div style={{ fontSize: 10.5, color: T.t4, marginTop: 3 }}>{t("trip_tracking.route_material_hint")}</div>
+      </div>
+      <div style={{ marginTop: 10 }}>
+        <div style={lblS}>{t("trip_stock.route_label")}</div>
+        <PickSelect value={f.material_use} onChange={e => upd("material_use", e.target.value)} style={inp}>
+          <option value="">{route && route.company_material_use
+            ? t("trip_stock.route_company", { mode: route.company_material_use === "mark" ? t("trip_stock.mark") : t("trip_stock.auto") })
+            : t("trip_stock.route_company_plain")}</option>
+          <option value="auto">{t("trip_stock.auto")}</option>
+          <option value="mark">{t("trip_stock.mark")}</option>
+        </PickSelect>
+        <div style={{ fontSize: 10.5, color: T.t4, marginTop: 3 }}>{t("trip_stock.route_hint")}</div>
       </div>
       <div style={{ marginTop: 10 }}>
         <div style={lblS}>{t("trip_tracking.default_task_optional")}</div>

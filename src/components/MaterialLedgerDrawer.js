@@ -96,6 +96,11 @@ export default function MaterialLedgerDrawer({ material, projectId, onClose, onC
     return arr;
   }, [mrs, sortNew]);
 
+  // Trip receipt ki chhoti line: "Trip bhada ₹650 — Machinery bill me" / "Rate baaki" (₹ sirf Finance VIEW ko).
+  const tripSub = (tr) => [tr.use === "auto" ? t("material_ledger.trip_auto") : tr.use === "mark" ? t("material_ledger.trip_mark") : "",
+    tr.bhada != null ? t("material_ledger.trip_bhada", { amt: "₹" + Number(tr.bhada).toLocaleString("en-IN") })
+      : tr.rate_pending && !tr.money_hidden ? t("material_ledger.trip_rate_baaki") : ""].filter(Boolean).join(" · ");
+
   // Unified credit/debit ledger — GRN = Cr (in), Used = Dr (out).
   // Running balance is always computed oldest-first; display order then
   // follows the sort toggle.
@@ -103,9 +108,13 @@ export default function MaterialLedgerDrawer({ material, projectId, onClose, onC
     const entries = [
       ...(material?.receipts || []).map(r => ({
         _t: "grn", date: r.received_date, ref: r.grn_number || "GRN",
-        party: r.vendor_name || "—",
+        // Trip se aaya (15 Oct 2026): vendor nahi — trip no. + gaadi, aur trip ka
+        // bhada sirf jaankari (paisa Machinery ke trip bill se, yahan nahi judta).
+        party: r.trip ? (r.trip.reg ? t("material_ledger.trip_party", { no: r.trip.trip_no || "", reg: r.trip.reg }) : t("material_ledger.trip_party_noreg", { no: r.trip.trip_no || "" }))
+          : (r.vendor_name || "—"),
         // Tolai wali gadi bhi (28 Sep 2026) — "kaunsi gadi se kitna aaya"
-        sub: [r.challan_no ? `Challan ${r.challan_no}` : "", r.vehicle_no ? "⚖️ " + r.vehicle_no : ""].filter(Boolean).join(" · "),
+        sub: r.trip ? tripSub(r.trip)
+          : [r.challan_no ? `Challan ${r.challan_no}` : "", r.vehicle_no ? "⚖️ " + r.vehicle_no : ""].filter(Boolean).join(" · "),
         by: r.received_by || "", qty: Number(r.qty) || 0, grn_id: r.grn_id,
         open_issues: Number(r.open_issues) || 0,
       })),
@@ -215,6 +224,12 @@ export default function MaterialLedgerDrawer({ material, projectId, onClose, onC
             </div>
           ))}
         </div>
+        {/* Trip se aaya — ginti (15 Oct 2026) */}
+        {material.trip_summary && material.trip_summary.trips > 0 && (
+          <div style={{ margin: "-6px 20px 12px", fontSize: 11.5, color: T.t3, textAlign: "center" }}>
+            {t("material_ledger.trip_summary", { n: material.trip_summary.trips, qty: Number(material.trip_summary.qty).toLocaleString("en-IN"), unit: material.trip_summary.unit || material.unit || "" })}
+          </div>
+        )}
 
         {/* Tabs + sort */}
         <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "8px 14px", borderBottom: `1px solid ${T.b1}`, flexShrink: 0 }}>
