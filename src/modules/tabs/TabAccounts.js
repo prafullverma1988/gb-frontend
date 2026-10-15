@@ -22,6 +22,7 @@ import api, { getUser } from "../../config/api";
 import { T, fmtN } from "../shared/tokens";
 import { Panel, PHead, Pill } from "../shared/ui";
 import StatementImportWizard from "./StatementImportWizard";
+import StmtBatchPanel from "./StmtBatchPanel";
 import { t } from "../../i18n";
 import { can } from "../../utils/perms";
 
@@ -692,6 +693,8 @@ export default function TabAccounts() {
         onClose={() => { setImportOpen(false); load(); }} />
     )}
     <div style={{ flex: 1, overflow: "auto", paddingBottom: 20 }}>
+      {/* Statement batch — approval me / draft / reject (approve hone par hi khaate me) */}
+      <StmtBatchPanel key={importOpen ? "o" : "c"} onChanged={load} />
       {/* Khaate chuno — ek se zyada chuno to wo ek hi timeline par chalte hain */}
       <Panel style={{ marginBottom: 10 }}>
         <PHead title={t("finance.accounts")} action={

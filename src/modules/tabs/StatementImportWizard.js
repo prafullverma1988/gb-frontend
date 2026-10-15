@@ -707,7 +707,7 @@ function ReviewCreate({ accountId, rows, matched, accounts, tol, decide = {}, ac
   }, [accounts, accountId, parties]);
 
   const upd = useCallback((i, patch) => setDraft((d) => d.map((x, j) => (j === i ? { ...x, ...patch } : x))), []);
-  const pending = draft.filter((x, i) => shown(x, i) && x.include && x.outcome !== "created" && x.outcome !== "already_imported");
+  const pending = draft.filter((x, i) => shown(x, i) && x.include && x.outcome !== "created" && x.outcome !== "already_imported" && x.outcome !== "queued");
 
   const pickFor = (onlyForce) => (onlyForce
     ? draft.filter((x) => x.outcome === "duplicate_suspect" && x.force)
@@ -725,12 +725,16 @@ function ReviewCreate({ accountId, rows, matched, accounts, tol, decide = {}, ac
     return k;
   }, [baseOpts, draft]);
 
-  const create = async (onlyForce, batchNote) => {
+  // 15 Oct 2026: save = batch. Seedhe khaate me nahi — Multi-Level Approval
+  // ("Bank Statement Import") se; daalne wala approver ho tab bhi pending.
+  // submit=false = draft (Khaata Ledger ki patti se baad me bhejo).
+  const create = async (onlyForce, batchNote, submit = true) => {
     const pick = pickFor(onlyForce);
     if (!pick.length) return;
     setBusy(true); setErr("");
     try {
-      const r = await api.post(`/finance/accounts/${accountId}/statement/create-entries`, {
+      const r = await api.post(`/finance/accounts/${accountId}/statement/batches`, {
+        submit,
         entries: pick.map((x) => ({
           date: x.date, amount: x.amount, dir: x.dir, description: x.description, ref: x.ref || null,
           party_id: x.pick.startsWith("p:") ? Number(x.pick.slice(2)) : null,
@@ -743,20 +747,9 @@ function ReviewCreate({ accountId, rows, matched, accounts, tol, decide = {}, ac
         ...(Number.isFinite(Number(tol)) ? { tolerance_days: Number(tol) } : {}),
       });
       if (!r || !r.success) throw new Error((r && r.message) || t("stmt.failed"));
-      // Nateeja wapas usi row par — fingerprint nahi, kram se, kyunki server
-      // usi kram me lauta ta hai jis kram me bheja gaya tha.
-      const res = r.data.results;
-      let k = 0;
-      setDraft((d) => d.map((x) => {
-        if (!pick.includes(x)) return x;
-        const o = res[k++] || {};
-        return { ...x, outcome: o.outcome || "invalid", txn_id: o.txn_id || null,
-          existing: o.existing_description || null, other: o.other_account || null };
-      }));
-      // Bani entries ki tareekh — statement purana ho to ye Cash Book ke default
-      // (pichhle 30 din) se bahar padti hain aur "save nahi hui" lagti hain.
-      const madeDates = pick.filter((x, i) => (res[i] || {}).outcome === "created").map((x) => String(x.date || "").slice(0, 10)).filter(Boolean).sort();
-      setDone({ ...r.data.summary, from: madeDates[0] || null, to: madeDates[madeDates.length - 1] || null });
+      // Batch me gayi lines yahan se hat jaati hain (dobara na bhej do)
+      setDraft((d) => d.map((x) => (pick.includes(x) ? { ...x, outcome: "queued", batch_id: r.data.id } : x)));
+      setDone({ batch: r.data.id, status: r.data.status, n: pick.length });
       setPreview(null);
     } catch (e) {
       setErr(e.message || t("stmt.failed"));
@@ -776,7 +769,8 @@ function ReviewCreate({ accountId, rows, matched, accounts, tol, decide = {}, ac
         <PreviewCreate rows={pickFor(preview.onlyForce)} nameOf={nameOf} force={preview.onlyForce} busy={busy}
           parties={parties} acctName={acctName} acctClosing={acctClosing}
           onBack={() => { setPreview(null); setErr(""); }}
-          onConfirm={(note) => create(preview.onlyForce, note)} />
+          onConfirm={(note) => create(preview.onlyForce, note, true)}
+          onDraft={(note) => create(preview.onlyForce, note, false)} />
       </div>
     );
   }
@@ -800,16 +794,11 @@ function ReviewCreate({ accountId, rows, matched, accounts, tol, decide = {}, ac
       {err && <div style={{ padding: "8px 13px", fontSize: 12, color: T.red, background: T.redL }}>{err}</div>}
       {done && (
         <div style={{ padding: "8px 13px", fontSize: 12, color: T.t2, background: T.grnL, borderBottom: `1px solid ${T.grnM}` }}>
-          {t("stmt.created_done", { c: done.created, a: done.already_imported, d: done.duplicate_suspect })}
-          {done.created > 0 && done.from && (
-            <div style={{ marginTop: 4, fontWeight: 600, color: T.t1 }}>
-              {t("stmt.created_range", { from: done.from.split("-").reverse().join("/"), to: done.to.split("-").reverse().join("/") })}
-            </div>
-          )}
+          {done.status === "draft" ? t("stmt.batch_drafted", { id: done.batch, n: done.n }) : t("stmt.batch_sent", { id: done.batch, n: done.n })}
         </div>
       )}
       {(() => {
-        const vis = draft.map((r, i) => [r, i]).filter(([r, i]) => shown(r, i) && r.outcome !== "created" && r.outcome !== "already_imported");
+        const vis = draft.map((r, i) => [r, i]).filter(([r, i]) => shown(r, i) && r.outcome !== "created" && r.outcome !== "already_imported" && r.outcome !== "queued");
         const picked = vis.filter(([r]) => r.pick);
         const left = vis.filter(([r]) => !r.pick);
         const maybe = left.filter(([r]) => !r.bank_own && (r.suggestions || []).length).length;
@@ -825,9 +814,9 @@ function ReviewCreate({ accountId, rows, matched, accounts, tol, decide = {}, ac
             </div>
             {list.length === 0 && <div style={{ padding: "18px 13px", fontSize: 12.5, color: T.t4, textAlign: "center" }}>{sub === "left" ? t("stmt.sub_left_empty") : t("stmt.sub_picked_empty")}</div>}
             {list.map(([r, i]) => <ReviewRow key={i} r={r} i={i} baseOpts={baseOpts} upd={upd} />)}
-            {draft.filter((r, i) => shown(r, i) && (r.outcome === "created" || r.outcome === "already_imported")).length > 0 && (
+            {draft.filter((r, i) => shown(r, i) && (r.outcome === "created" || r.outcome === "already_imported" || r.outcome === "queued")).length > 0 && (
               <div style={{ padding: "8px 13px", fontSize: 11.5, color: T.t4, borderTop: `1px solid ${T.b1}` }}>
-                {t("stmt.sub_done_hidden", { n: draft.filter((r, i) => shown(r, i) && (r.outcome === "created" || r.outcome === "already_imported")).length })}
+                {t("stmt.sub_done_hidden", { n: draft.filter((r, i) => shown(r, i) && (r.outcome === "created" || r.outcome === "already_imported" || r.outcome === "queued")).length })}
               </div>
             )}
           </>
@@ -911,7 +900,7 @@ function ElsewhereList({ accountId, accountName, rows, idx, decide, setDecide })
 // ab seedha save nahi karta — pehle ye dikhata hai ki KIS party ke khaate me
 // kitna jayega, kaunsi line doosre khaate me transfer banegi, aur kaunsi bina
 // party ke (sirf bank khaate me) — phir hi save.
-function PreviewCreate({ rows, nameOf, force, busy, onBack, onConfirm, parties = [], acctName, acctClosing }) {
+function PreviewCreate({ rows, nameOf, force, busy, onBack, onConfirm, onDraft, parties = [], acctName, acctClosing }) {
   const [note, setNote] = useState("");
   const noteOk = note.trim().length >= 3;
   // Party ka balance: >0 = party hume degi, <0 = hum denge. Khaate se paisa gaya
@@ -984,9 +973,15 @@ function PreviewCreate({ rows, nameOf, force, busy, onBack, onConfirm, parties =
           </button>
           <input value={note} onChange={(e) => setNote(e.target.value)} placeholder={t("stmt.batch_note_ph")} maxLength={500}
             style={{ flex: "1 1 260px", minWidth: 200, fontSize: 12.5, padding: "6px 10px", borderRadius: 6, border: `1.5px solid ${noteOk ? T.grnM : T.ambM}`, outline: "none", fontFamily: "inherit" }} />
+          {onDraft && (
+            <button onClick={() => onDraft(note)} disabled={busy || !rows.length}
+              style={{ fontSize: 12.5, fontWeight: 600, padding: "6px 14px", borderRadius: 6, cursor: busy ? "default" : "pointer", border: `1px solid ${T.slt}`, background: T.surface, color: T.slt }}>
+              {t("stmt.save_draft")}
+            </button>
+          )}
           <button onClick={() => onConfirm(note)} disabled={busy || !rows.length || !noteOk} title={noteOk ? "" : t("stmt.batch_note_req")}
             style={{ fontSize: 12.5, fontWeight: 700, padding: "6px 16px", borderRadius: 6, cursor: busy || !noteOk ? "default" : "pointer", border: "none", background: busy || !noteOk ? T.b2 : T.grn, color: "#fff" }}>
-            {busy ? t("stmt.creating") : t("stmt.pv_confirm", { n: rows.length })}
+            {busy ? t("stmt.creating") : t("stmt.send_approval", { n: rows.length })}
           </button>
         </div>
       </div>
