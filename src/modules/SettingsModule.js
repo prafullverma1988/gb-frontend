@@ -2677,6 +2677,10 @@ function ApprovalSettings() {
     // ke). Chalu karne par wahi kaam ek approval request banta hai, aur
     // manzoori milne par task archive hota hai.
     { id: 0,  module: "Task Delete",                 cat: "SITE",      enabled: false, levels: [{ role: "Admin", limit: null }] },
+    // Bank statement se entry (16 Oct 2026) — HAMESHA approval se: band karne par bhi
+    // server chalu kar deta hai, aur daalne wala approver ho tab bhi pending.
+    { id: 0,  module: "Bank Statement Import",       cat: "FINANCE",   enabled: true,  levels: [{ role: "Admin", limit: null }] },
+    { id: 0,  module: "Bank Statement Change",       cat: "FINANCE",   enabled: true,  levels: [{ role: "Admin", limit: null }] },
   ];
 
   const [approvals, setApprovals] = useState(DEFAULTS);

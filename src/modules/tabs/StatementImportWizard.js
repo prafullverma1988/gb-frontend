@@ -646,6 +646,9 @@ function whyText(s) {
 function ReviewCreate({ accountId, rows, matched, accounts, tol, decide = {}, acctName, acctClosing }) {
   // Do tab (15 Oct 2026): jinme party / khaata chuna hai, aur jo abhi chhooti hain
   const [sub, setSub] = useState("picked");
+  // Bina party / khaate wali line default me batch me NAHI jaati (16 Oct 2026) —
+  // wo "Abhi chhooti" me rehti hain. Bank charge / byaaj jaisi line bhejni ho to tick.
+  const [withNoParty, setWithNoParty] = useState(false);
   // Doosre khaate me mili line: faisla na ho / "wahi sahi" / "khaata badla" = yahan nahi.
   // "Phir bhi banao" = dikhe, force ke saath, wajah note me.
   const shown = (r, i) => !r.elsewhere || (decide[i] && decide[i].kind === "create");
@@ -709,9 +712,10 @@ function ReviewCreate({ accountId, rows, matched, accounts, tol, decide = {}, ac
   const upd = useCallback((i, patch) => setDraft((d) => d.map((x, j) => (j === i ? { ...x, ...patch } : x))), []);
   const pending = draft.filter((x, i) => shown(x, i) && x.include && x.outcome !== "created" && x.outcome !== "already_imported" && x.outcome !== "queued");
 
+  const sendable = (x) => withNoParty || !!x.pick;
   const pickFor = (onlyForce) => (onlyForce
     ? draft.filter((x) => x.outcome === "duplicate_suspect" && x.force)
-    : pending.filter((x) => x.outcome !== "duplicate_suspect"));
+    : pending.filter((x) => x.outcome !== "duplicate_suspect" && sendable(x)));
   // Preview me party / khaate ka NAAM — wahi list jo picker dikhata hai, plus
   // har line ke apne Andaze (jinka naam baseOpts me na ho).
   const nameOf = useCallback((k) => {
@@ -733,23 +737,36 @@ function ReviewCreate({ accountId, rows, matched, accounts, tol, decide = {}, ac
     if (!pick.length) return;
     setBusy(true); setErr("");
     try {
-      const r = await api.post(`/finance/accounts/${accountId}/statement/batches`, {
+      // Server ek batch me 500 line tak leta hai — zyada ho to 500-500 ke kai batch
+      const CH = 500;
+      const parts = [];
+      for (let i = 0; i < pick.length; i += CH) parts.push(pick.slice(i, i + CH));
+      const made = [];
+      let r = null;
+      for (let pi = 0; pi < parts.length; pi++) {
+      const part = parts[pi];
+      r = await api.post(`/finance/accounts/${accountId}/statement/batches`, {
         submit,
-        entries: pick.map((x) => ({
+        entries: part.map((x) => ({
           date: x.date, amount: x.amount, dir: x.dir, description: x.description, ref: x.ref || null,
           party_id: x.pick.startsWith("p:") ? Number(x.pick.slice(2)) : null,
           transfer_account_id: x.pick.startsWith("a:") ? Number(x.pick.slice(2)) : null,
           note: x.note.trim() || (x.elsewhere && decide[draft.indexOf(x)] ? t("stmt.force_note", { why: decide[draft.indexOf(x)].reason, acc: x.elsewhere.account_name }) : null),
           force: !!x.force || !!(x.elsewhere && decide[draft.indexOf(x)] && decide[draft.indexOf(x)].kind === "create"),
         })),
-        batch_note: (batchNote || "").trim() || null,
+        batch_note: ((batchNote || "").trim() + (parts.length > 1 ? ` (${pi + 1}/${parts.length})` : "")) || null,
         // FIN-24: server ka duplicate-guard milaan wali hi ±din ki chhoot lagaye
         ...(Number.isFinite(Number(tol)) ? { tolerance_days: Number(tol) } : {}),
       });
-      if (!r || !r.success) throw new Error((r && r.message) || t("stmt.failed"));
+      if (!r || !r.success) {
+        if (made.length) setDraft((d) => d.map((x) => (made.some((m) => m.rows.includes(x)) ? { ...x, outcome: "queued" } : x)));
+        throw new Error((r && r.message) || t("stmt.failed"));
+      }
+      made.push({ id: r.data.id, rows: part });
+      }
       // Batch me gayi lines yahan se hat jaati hain (dobara na bhej do)
-      setDraft((d) => d.map((x) => (pick.includes(x) ? { ...x, outcome: "queued", batch_id: r.data.id } : x)));
-      setDone({ batch: r.data.id, status: r.data.status, n: pick.length });
+      setDraft((d) => d.map((x) => (pick.includes(x) ? { ...x, outcome: "queued" } : x)));
+      setDone({ batch: made.map((m) => "#" + m.id).join(", "), status: r.data.status, n: pick.length });
       setPreview(null);
     } catch (e) {
       setErr(e.message || t("stmt.failed"));
@@ -759,7 +776,8 @@ function ReviewCreate({ accountId, rows, matched, accounts, tol, decide = {}, ac
   if (loading) return <div style={{ padding: "26px 16px", textAlign: "center", fontSize: 12.5, color: T.t4 }}>{t("stmt.suggest_loading")}</div>;
   if (!draft.length) return <div style={{ padding: "26px 16px", textAlign: "center", fontSize: 12.5, color: T.t4 }}>{t("stmt.nothing_here")}</div>;
 
-  const toCreate = pending.filter((x) => x.outcome !== "duplicate_suspect").length;
+  const toCreate = pending.filter((x) => x.outcome !== "duplicate_suspect" && sendable(x)).length;
+  const noPartyLeft = pending.filter((x) => x.outcome !== "duplicate_suspect" && !x.pick).length;
   const toForce = draft.filter((x) => x.outcome === "duplicate_suspect" && x.force).length;
 
   if (preview) {
@@ -786,6 +804,12 @@ function ReviewCreate({ accountId, rows, matched, accounts, tol, decide = {}, ac
             {t("stmt.force_create_n", { n: toForce })}
           </button>
         )}
+        {noPartyLeft > 0 && (
+          <label title={t("stmt.noparty_tip")} style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5, color: withNoParty ? T.amb : T.t3, cursor: "pointer" }}>
+            <input type="checkbox" checked={withNoParty} onChange={(e) => setWithNoParty(e.target.checked)} style={{ margin: 0 }} />
+            {t("stmt.noparty_include", { n: noPartyLeft })}
+          </label>
+        )}
         <button onClick={() => { setErr(""); setPreview({ onlyForce: false }); }} disabled={busy || !toCreate}
           style={{ fontSize: 12.5, fontWeight: 600, padding: "6px 15px", borderRadius: 6, cursor: busy || !toCreate ? "default" : "pointer", border: "none", background: busy || !toCreate ? T.b2 : T.blu, color: "#fff" }}>
           {busy ? t("stmt.creating") : t("stmt.preview_btn", { n: toCreate })}
@@ -795,6 +819,7 @@ function ReviewCreate({ accountId, rows, matched, accounts, tol, decide = {}, ac
       {done && (
         <div style={{ padding: "8px 13px", fontSize: 12, color: T.t2, background: T.grnL, borderBottom: `1px solid ${T.grnM}` }}>
           {done.status === "draft" ? t("stmt.batch_drafted", { id: done.batch, n: done.n }) : t("stmt.batch_sent", { id: done.batch, n: done.n })}
+          {noPartyLeft > 0 && <div style={{ marginTop: 4, color: T.amb }}>{t("stmt.noparty_stays", { n: noPartyLeft })}</div>}
         </div>
       )}
       {(() => {
@@ -979,6 +1004,8 @@ function PreviewCreate({ rows, nameOf, force, busy, onBack, onConfirm, onDraft, 
               {t("stmt.save_draft")}
             </button>
           )}
+          {!noteOk && <span style={{ fontSize: 11.5, color: T.red, fontWeight: 600, alignSelf: "center" }}>← {t("stmt.batch_note_req")}</span>}
+          {rows.length > 500 && <span style={{ fontSize: 11.5, color: T.t3, alignSelf: "center" }}>{t("stmt.split_note", { n: Math.ceil(rows.length / 500) })}</span>}
           <button onClick={() => onConfirm(note)} disabled={busy || !rows.length || !noteOk} title={noteOk ? "" : t("stmt.batch_note_req")}
             style={{ fontSize: 12.5, fontWeight: 700, padding: "6px 16px", borderRadius: 6, cursor: busy || !noteOk ? "default" : "pointer", border: "none", background: busy || !noteOk ? T.b2 : T.grn, color: "#fff" }}>
             {busy ? t("stmt.creating") : t("stmt.send_approval", { n: rows.length })}

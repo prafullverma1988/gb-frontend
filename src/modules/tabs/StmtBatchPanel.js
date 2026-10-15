@@ -29,7 +29,16 @@ export default function StmtBatchPanel({ onChanged }) {
     api.get("/finance/statement/batches?status=all").then((r) => { if (r && r.success) setList(r.data || []); }).catch(() => {});
   }, []);
   useEffect(() => { load(); }, [load]);
-  if (!list.length && !open) return null;
+  // Koi batch na ho to bhi chhota button — "Statement approval (0)" (16 Oct 2026)
+  if (!list.length && !open) {
+    return (
+      <div style={{ marginBottom: 10, display: "flex", justifyContent: "flex-end" }}>
+        <span title={t("stb.none_tip")} style={{ fontSize: 11.5, fontWeight: 600, color: T.t3, padding: "4px 10px", borderRadius: 14, border: `1px solid ${T.b1}`, background: T.surface }}>
+          {t("stb.btn_count", { n: 0 })}
+        </span>
+      </div>
+    );
+  }
   const isOpen = (b) => ["draft", "pending", "rejected"].includes(b.status) || Number(b.pending_changes) > 0;
   const openList = list.filter(isOpen), oldList = list.filter((b) => !isOpen(b));
   const n = (s) => list.filter((b) => b.status === s).length;
@@ -38,7 +47,7 @@ export default function StmtBatchPanel({ onChanged }) {
   return (
     <>
       <div style={{ marginBottom: 10, padding: "9px 13px", borderRadius: 8, background: T.purL, border: `1px solid ${T.pur}44`, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-        <b style={{ fontSize: 12.5, color: T.pur }}>{t("stb.title")}</b>
+        <b style={{ fontSize: 12.5, color: T.pur }}>{t("stb.btn_count", { n: n("pending") + nChg })}</b>
         {["pending", "draft", "rejected"].filter((s) => n(s)).map((s) => (
           <span key={s} style={{ fontSize: 11.5, fontWeight: 700, color: st[s][0], background: T.surface, border: `1px solid ${st[s][0]}55`, padding: "2px 9px", borderRadius: 12 }}>{n(s)} {st[s][2]}</span>
         ))}

@@ -13996,6 +13996,12 @@ const dict = {
   "stb.change_log": "Changes",
   "stb.n_changes": "{n} change(s)",
   "stb.approve_change": "Approve change",
+  "stmt.noparty_include": "Also send {n} lines without party",
+  "stmt.noparty_tip": "Only for bank charges / interest etc. — such lines go only into the bank account, no party ledger.",
+  "stmt.noparty_stays": "{n} lines without party were not sent — they stay in \"Still left\"; they show up again next time you match this statement.",
+  "stmt.split_note": "Will be sent as {n} batches (max 500 each)",
+  "stb.btn_count": "Statement approval ({n})",
+  "stb.none_tip": "No statement batch yet — batches made from \"Statement milao\" show here",
 };
 
 export default dict;

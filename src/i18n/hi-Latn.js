@@ -13998,6 +13998,12 @@ const dict = {
   "stb.change_log": "Badlaav",
   "stb.n_changes": "{n} badlaav",
   "stb.approve_change": "Badlaav approve",
+  "stmt.noparty_include": "Bina party wali {n} line bhi bhejo",
+  "stmt.noparty_tip": "Sirf bank charge / byaaj jaisi line ke liye — ye sirf bank khaate me jaati hain, kisi party ke khaate me nahi.",
+  "stmt.noparty_stays": "Bina party wali {n} line nahi bheji — \"Abhi chhooti\" me hain; agli baar ye statement milane par phir dikhengi.",
+  "stmt.split_note": "{n} batch me jaayega (har ek me 500 tak)",
+  "stb.btn_count": "Statement approval ({n})",
+  "stb.none_tip": "Abhi koi statement batch nahi — \"Statement milao\" se bane batch yahan dikhenge",
 };
 
 export default dict;
