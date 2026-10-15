@@ -13939,6 +13939,21 @@ const dict = {
   "stmt.move_no_access": "Entry ka khaata badalne ke liye dono khaate aapko mile hone chahiye (Account Access)",
   "stmt.create_reason": "Ye alag payment kyun hai? (zaroori)",
   "stmt.force_note": "Bank statement — {acc} wali entry se alag: {why}",
+  "stmt.sub_picked": "Party lagi ({n})",
+  "stmt.sub_left": "Abhi chhooti ({n})",
+  "stmt.sub_picked_help": "Har party ek baar dekh lo — galat party do khaate bigaadti hai.",
+  "stmt.sub_left_help": "Inme abhi party nahi chuni — {m} me sujhaav hai. Bina party ke entry sirf is khaate me jaayegi.",
+  "stmt.sub_left_empty": "Kuch nahi chhoota — har line par party / khaata laga hai.",
+  "stmt.sub_picked_empty": "Abhi kisi line par party nahi lagi.",
+  "stmt.sub_done_hidden": "{n} line pehle hi save ho chuki — yahan chhupi hain.",
+  "stmt.bal_receive": "lena",
+  "stmt.bal_pay": "dena",
+  "stmt.pv_col_old": "Abhi balance",
+  "stmt.pv_col_new": "Naya balance",
+  "stmt.pv_acc_now": "Abhi",
+  "stmt.pv_acc_after": "Baad me",
+  "stmt.batch_note_ph": "Is batch ka note (zaroori) — jaise PNB Sep statement",
+  "stmt.batch_note_req": "Pehle note likho",
 };
 
 export default dict;

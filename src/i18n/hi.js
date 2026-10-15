@@ -13936,6 +13936,21 @@ const dict = {
   "stmt.move_no_access": "एंट्री का खाता बदलने के लिए दोनों खाते आपको मिले होने चाहिए (Account Access)",
   "stmt.create_reason": "यह अलग पेमेंट क्यों है? (ज़रूरी)",
   "stmt.force_note": "बैंक स्टेटमेंट — {acc} वाली एंट्री से अलग: {why}",
+  "stmt.sub_picked": "पार्टी लगी ({n})",
+  "stmt.sub_left": "अभी छूटी ({n})",
+  "stmt.sub_picked_help": "हर पार्टी एक बार देख लें — गलत पार्टी दो खाते बिगाड़ती है।",
+  "stmt.sub_left_help": "इनमें अभी पार्टी नहीं चुनी — {m} में सुझाव है। बिना पार्टी के एंट्री सिर्फ़ इस खाते में जाएगी।",
+  "stmt.sub_left_empty": "कुछ नहीं छूटा — हर लाइन पर पार्टी / खाता लगा है।",
+  "stmt.sub_picked_empty": "अभी किसी लाइन पर पार्टी नहीं लगी।",
+  "stmt.sub_done_hidden": "{n} लाइन पहले ही सेव हो चुकी — यहाँ छुपी हैं।",
+  "stmt.bal_receive": "लेना",
+  "stmt.bal_pay": "देना",
+  "stmt.pv_col_old": "अभी बैलेंस",
+  "stmt.pv_col_new": "नया बैलेंस",
+  "stmt.pv_acc_now": "अभी",
+  "stmt.pv_acc_after": "बाद में",
+  "stmt.batch_note_ph": "इस बैच का नोट (ज़रूरी) — जैसे PNB सितंबर स्टेटमेंट",
+  "stmt.batch_note_req": "पहले नोट लिखें",
 };
 
 export default dict;

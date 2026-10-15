@@ -13937,6 +13937,21 @@ const dict = {
   "stmt.move_no_access": "You need both accounts (Account Access) to move an entry",
   "stmt.create_reason": "Why is this a separate payment? (required)",
   "stmt.force_note": "Bank statement — separate from the entry in {acc}: {why}",
+  "stmt.sub_picked": "Party chosen ({n})",
+  "stmt.sub_left": "Still left ({n})",
+  "stmt.sub_picked_help": "Check each party — a wrong party spoils two ledgers.",
+  "stmt.sub_left_help": "No party chosen yet — {m} have a suggestion. Without a party the entry goes only into this account.",
+  "stmt.sub_left_empty": "Nothing left — every line has a party / account.",
+  "stmt.sub_picked_empty": "No line has a party yet.",
+  "stmt.sub_done_hidden": "{n} line(s) already saved — hidden here.",
+  "stmt.bal_receive": "to receive",
+  "stmt.bal_pay": "to pay",
+  "stmt.pv_col_old": "Balance now",
+  "stmt.pv_col_new": "Balance after",
+  "stmt.pv_acc_now": "Now",
+  "stmt.pv_acc_after": "After",
+  "stmt.batch_note_ph": "Note for this batch (required) — e.g. PNB Sep statement",
+  "stmt.batch_note_req": "Write a note first",
 };
 
 export default dict;

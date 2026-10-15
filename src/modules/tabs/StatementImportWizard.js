@@ -580,7 +580,8 @@ function ResultView({ result, tab, setTab, accounts }) {
               </div>
             )}
             <ReviewCreate accountId={d.account.id} rows={d.only_in_statement} matched={d.matched}
-              accounts={accounts} tol={d.tolerance_days} decide={decide} />
+              accounts={accounts} tol={d.tolerance_days} decide={decide}
+              acctName={d.account.name} acctClosing={d.closing} />
           </div>
           {tab === "books" && <Rows rows={d.only_in_books} kind="books" />}
           {tab === "ok" && <Rows rows={d.matched} kind="ok" />}
@@ -642,7 +643,9 @@ function whyText(s) {
   return ex ? `${txt} — "${ex}"` : txt;
 }
 
-function ReviewCreate({ accountId, rows, matched, accounts, tol, decide = {} }) {
+function ReviewCreate({ accountId, rows, matched, accounts, tol, decide = {}, acctName, acctClosing }) {
+  // Do tab (15 Oct 2026): jinme party / khaata chuna hai, aur jo abhi chhooti hain
+  const [sub, setSub] = useState("picked");
   // Doosre khaate me mili line: faisla na ho / "wahi sahi" / "khaata badla" = yahan nahi.
   // "Phir bhi banao" = dikhe, force ke saath, wajah note me.
   const shown = (r, i) => !r.elsewhere || (decide[i] && decide[i].kind === "create");
@@ -722,7 +725,7 @@ function ReviewCreate({ accountId, rows, matched, accounts, tol, decide = {} }) 
     return k;
   }, [baseOpts, draft]);
 
-  const create = async (onlyForce) => {
+  const create = async (onlyForce, batchNote) => {
     const pick = pickFor(onlyForce);
     if (!pick.length) return;
     setBusy(true); setErr("");
@@ -735,6 +738,7 @@ function ReviewCreate({ accountId, rows, matched, accounts, tol, decide = {} }) 
           note: x.note.trim() || (x.elsewhere && decide[draft.indexOf(x)] ? t("stmt.force_note", { why: decide[draft.indexOf(x)].reason, acc: x.elsewhere.account_name }) : null),
           force: !!x.force || !!(x.elsewhere && decide[draft.indexOf(x)] && decide[draft.indexOf(x)].kind === "create"),
         })),
+        batch_note: (batchNote || "").trim() || null,
         // FIN-24: server ka duplicate-guard milaan wali hi ±din ki chhoot lagaye
         ...(Number.isFinite(Number(tol)) ? { tolerance_days: Number(tol) } : {}),
       });
@@ -770,8 +774,9 @@ function ReviewCreate({ accountId, rows, matched, accounts, tol, decide = {} }) 
       <div>
         {err && <div style={{ padding: "8px 13px", fontSize: 12, color: T.red, background: T.redL }}>{err}</div>}
         <PreviewCreate rows={pickFor(preview.onlyForce)} nameOf={nameOf} force={preview.onlyForce} busy={busy}
+          parties={parties} acctName={acctName} acctClosing={acctClosing}
           onBack={() => { setPreview(null); setErr(""); }}
-          onConfirm={() => create(preview.onlyForce)} />
+          onConfirm={(note) => create(preview.onlyForce, note)} />
       </div>
     );
   }
@@ -803,7 +808,31 @@ function ReviewCreate({ accountId, rows, matched, accounts, tol, decide = {} }) 
           )}
         </div>
       )}
-      {draft.map((r, i) => (shown(r, i) ? <ReviewRow key={i} r={r} i={i} baseOpts={baseOpts} upd={upd} /> : null))}
+      {(() => {
+        const vis = draft.map((r, i) => [r, i]).filter(([r, i]) => shown(r, i) && r.outcome !== "created" && r.outcome !== "already_imported");
+        const picked = vis.filter(([r]) => r.pick);
+        const left = vis.filter(([r]) => !r.pick);
+        const maybe = left.filter(([r]) => !r.bank_own && (r.suggestions || []).length).length;
+        const list = sub === "left" ? left : picked;
+        const sb = (on, c) => ({ fontSize: 12, fontWeight: 700, padding: "5px 12px", borderRadius: 14, cursor: "pointer", fontFamily: "inherit",
+          border: `1px solid ${on ? c : T.b1}`, background: on ? c : T.surface, color: on ? "#fff" : T.t2 });
+        return (
+          <>
+            <div style={{ padding: "8px 13px", display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", borderBottom: `1px solid ${T.b1}`, background: T.surface }}>
+              <button onClick={() => setSub("picked")} style={sb(sub === "picked", T.blu)}>{t("stmt.sub_picked", { n: picked.length })}</button>
+              <button onClick={() => setSub("left")} style={sb(sub === "left", T.amb)}>{t("stmt.sub_left", { n: left.length })}</button>
+              <span style={{ fontSize: 11.5, color: T.t3 }}>{sub === "left" ? t("stmt.sub_left_help", { m: maybe }) : t("stmt.sub_picked_help")}</span>
+            </div>
+            {list.length === 0 && <div style={{ padding: "18px 13px", fontSize: 12.5, color: T.t4, textAlign: "center" }}>{sub === "left" ? t("stmt.sub_left_empty") : t("stmt.sub_picked_empty")}</div>}
+            {list.map(([r, i]) => <ReviewRow key={i} r={r} i={i} baseOpts={baseOpts} upd={upd} />)}
+            {draft.filter((r, i) => shown(r, i) && (r.outcome === "created" || r.outcome === "already_imported")).length > 0 && (
+              <div style={{ padding: "8px 13px", fontSize: 11.5, color: T.t4, borderTop: `1px solid ${T.b1}` }}>
+                {t("stmt.sub_done_hidden", { n: draft.filter((r, i) => shown(r, i) && (r.outcome === "created" || r.outcome === "already_imported")).length })}
+              </div>
+            )}
+          </>
+        );
+      })()}
     </div>
   );
 }
@@ -882,7 +911,13 @@ function ElsewhereList({ accountId, accountName, rows, idx, decide, setDecide })
 // ab seedha save nahi karta — pehle ye dikhata hai ki KIS party ke khaate me
 // kitna jayega, kaunsi line doosre khaate me transfer banegi, aur kaunsi bina
 // party ke (sirf bank khaate me) — phir hi save.
-function PreviewCreate({ rows, nameOf, force, busy, onBack, onConfirm }) {
+function PreviewCreate({ rows, nameOf, force, busy, onBack, onConfirm, parties = [], acctName, acctClosing }) {
+  const [note, setNote] = useState("");
+  const noteOk = note.trim().length >= 3;
+  // Party ka balance: >0 = party hume degi, <0 = hum denge. Khaate se paisa gaya
+  // (payment) = party ki taraf +, aaya (receipt) = − — utils/moneyRules jaisa.
+  const balOf = (k) => { const p = parties.find((x) => "p:" + x.id === k); return p ? Number(p.live_balance != null ? p.live_balance : p.balance) || 0 : null; };
+  const balTxt = (v) => (v == null ? "—" : v === 0 ? "₹0" : `${inr(Math.abs(v))} ${v > 0 ? t("stmt.bal_receive") : t("stmt.bal_pay")}`);
   const tot = { in: 0, out: 0 };
   const grp = { p: {}, a: {} };
   const none = { n: 0, in: 0, out: 0 };
@@ -896,13 +931,13 @@ function PreviewCreate({ rows, nameOf, force, busy, onBack, onConfirm }) {
     bucket[r.dir === "in" ? "in" : "out"] += amt;
   }
   const byName = (o) => Object.values(o).sort((x, y) => (y.in + y.out) - (x.in + x.out));
-  const parties = byName(grp.p);
+  const partyList = byName(grp.p);
   const transfers = byName(grp.a);
 
   const th = { fontSize: 10, fontWeight: 700, color: T.t4, textTransform: "uppercase", letterSpacing: 0.4, padding: "6px 13px", textAlign: "left" };
   const td = { fontSize: 12.5, color: T.t1, padding: "6px 13px", borderTop: `1px solid ${T.b1}` };
   const num = { ...td, textAlign: "right", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" };
-  const Group = ({ title, list }) => !list.length ? null : (
+  const Group = ({ title, list, withBal }) => !list.length ? null : (
     <div style={{ marginBottom: 12, border: `1px solid ${T.b1}`, borderRadius: 8, overflow: "hidden" }}>
       <table style={{ width: "100%", borderCollapse: "collapse" }}>
         <thead style={{ background: T.surfaceB }}>
@@ -911,6 +946,8 @@ function PreviewCreate({ rows, nameOf, force, busy, onBack, onConfirm }) {
             <th style={{ ...th, textAlign: "right" }}>{t("stmt.pv_col_count")}</th>
             <th style={{ ...th, textAlign: "right" }}>{t("stmt.pv_col_in")}</th>
             <th style={{ ...th, textAlign: "right" }}>{t("stmt.pv_col_out")}</th>
+            {withBal && <th style={{ ...th, textAlign: "right" }}>{t("stmt.pv_col_old")}</th>}
+            {withBal && <th style={{ ...th, textAlign: "right" }}>{t("stmt.pv_col_new")}</th>}
           </tr>
         </thead>
         <tbody>
@@ -920,6 +957,11 @@ function PreviewCreate({ rows, nameOf, force, busy, onBack, onConfirm }) {
               <td style={num}>{g.n}</td>
               <td style={{ ...num, color: g.in ? T.grn : T.t4 }}>{g.in ? inr(g.in) : "—"}</td>
               <td style={{ ...num, color: g.out ? T.red : T.t4 }}>{g.out ? inr(g.out) : "—"}</td>
+              {withBal && (() => { const o = balOf(g.key); const nw = o == null ? null : Math.round((o + g.out - g.in) * 100) / 100;
+                return (<>
+                  <td style={{ ...num, color: T.t3 }}>{balTxt(o)}</td>
+                  <td style={{ ...num, fontWeight: 700, color: nw == null ? T.t4 : nw > 0 ? T.grn : nw < 0 ? T.red : T.t2 }}>{balTxt(nw)}</td>
+                </>); })()}
             </tr>
           ))}
         </tbody>
@@ -940,15 +982,26 @@ function PreviewCreate({ rows, nameOf, force, busy, onBack, onConfirm }) {
             style={{ fontSize: 12.5, fontWeight: 600, padding: "6px 14px", borderRadius: 6, cursor: busy ? "default" : "pointer", border: `1px solid ${T.b2}`, background: T.surface, color: T.t2 }}>
             {t("stmt.pv_back")}
           </button>
-          <button onClick={onConfirm} disabled={busy || !rows.length}
-            style={{ fontSize: 12.5, fontWeight: 700, padding: "6px 16px", borderRadius: 6, cursor: busy ? "default" : "pointer", border: "none", background: busy ? T.b2 : T.grn, color: "#fff" }}>
+          <input value={note} onChange={(e) => setNote(e.target.value)} placeholder={t("stmt.batch_note_ph")} maxLength={500}
+            style={{ flex: "1 1 260px", minWidth: 200, fontSize: 12.5, padding: "6px 10px", borderRadius: 6, border: `1.5px solid ${noteOk ? T.grnM : T.ambM}`, outline: "none", fontFamily: "inherit" }} />
+          <button onClick={() => onConfirm(note)} disabled={busy || !rows.length || !noteOk} title={noteOk ? "" : t("stmt.batch_note_req")}
+            style={{ fontSize: 12.5, fontWeight: 700, padding: "6px 16px", borderRadius: 6, cursor: busy || !noteOk ? "default" : "pointer", border: "none", background: busy || !noteOk ? T.b2 : T.grn, color: "#fff" }}>
             {busy ? t("stmt.creating") : t("stmt.pv_confirm", { n: rows.length })}
           </button>
         </div>
       </div>
 
       <div style={{ padding: "12px 13px" }}>
-        <Group title={t("stmt.pv_party")} list={parties} />
+        {acctName && acctClosing != null && (
+          <div style={{ marginBottom: 12, padding: "9px 12px", borderRadius: 8, background: T.bluL, border: `1px solid ${T.bluM}`, fontSize: 12.5, color: T.t2, display: "flex", gap: 18, flexWrap: "wrap" }}>
+            <b style={{ color: T.t1 }}>{acctName}</b>
+            <span>{t("stmt.pv_acc_now")}: <b>{inr(acctClosing)}</b></span>
+            <span style={{ color: T.grn }}>+{inr(tot.in)}</span>
+            <span style={{ color: T.red }}>−{inr(tot.out)}</span>
+            <span>{t("stmt.pv_acc_after")}: <b>{inr(Number(acctClosing) + tot.in - tot.out)}</b></span>
+          </div>
+        )}
+        <Group title={t("stmt.pv_party")} list={partyList} withBal />
         <Group title={t("stmt.pv_transfer")} list={transfers} />
         {none.n > 0 && (
           <div style={{ marginBottom: 12, padding: "9px 12px", borderRadius: 8, background: T.ambL, border: `1px solid ${T.amb}55`, fontSize: 12, color: T.t2, lineHeight: 1.5 }}>
