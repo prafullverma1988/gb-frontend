@@ -139,7 +139,7 @@ const UNBILLED_PARTIES=[];
 const PAY_REQS_DATA=[];
 const PEND_PMTS_DATA=[];
 
-const PULSE_ALL_TYPES=["flag","progress","material","material_request","approval","payment","photo","document","note"];
+const PULSE_ALL_TYPES=["flag","progress","material","material_used","material_request","approval","payment","photo","document","note"];
 
 // Which project tab a pulse activity belongs to, so clicking a feed card lands
 // the user exactly where the activity happened instead of a generic overview.
@@ -189,7 +189,7 @@ function SitePulseDrawer({onClose,onSelectProject}){
   // about and Saves; the choice persists (per-device) and is applied on every
   // future open. Default = all types until the user saves a custom set.
   // 'note' (12 Oct 2026) purani saved list me nahi — jod do, warna Note kabhi na dikhe.
-  const [selTypes,setSelTypes]=useState(()=>{ try{const s=JSON.parse(localStorage.getItem("gb_pulse_types_v2"));if(!Array.isArray(s)||!s.length)return PULSE_ALL_TYPES;return s.includes("note")?s:[...s,"note"];}catch{return PULSE_ALL_TYPES;} });
+  const [selTypes,setSelTypes]=useState(()=>{ try{const s=JSON.parse(localStorage.getItem("gb_pulse_types_v2"));if(!Array.isArray(s)||!s.length)return PULSE_ALL_TYPES;let o=s.includes("note")?s:[...s,"note"];if(!o.includes("material_used"))o=[...o,"material_used"];return o;}catch{return PULSE_ALL_TYPES;} });
   const [showTypeMenu,setShowTypeMenu]=useState(false);
   const [feed,setFeed]=useState([]);
   const [projects,setProjects]=useState([]);
@@ -320,7 +320,7 @@ function SitePulseDrawer({onClose,onSelectProject}){
     return new Date(d).toLocaleDateString("en-IN",{day:"numeric",month:"short",year:"2-digit"});
   };
 
-  const filtered=feed.filter(f=>(site==="All"||f.project_name===site)&&selTypes.includes(f.feed_type==="material_used"?"material":f.feed_type));
+  const filtered=feed.filter(f=>(site==="All"||f.project_name===site)&&selTypes.includes(f.feed_type));
   const allSelected=selTypes.length>=PULSE_ALL_TYPES.length;
   const toggleType=(k)=>setSelTypes(p=>p.includes(k)?p.filter(x=>x!==k):[...p,k]);
   const saveFilter=()=>{ try{localStorage.setItem("gb_pulse_types_v2",JSON.stringify(selTypes));}catch(_){} setShowTypeMenu(false); };
