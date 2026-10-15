@@ -13980,6 +13980,23 @@ const dict = {
   "stb.approved_res": "Approved — {c} entry bani, {d} dohri-shak me ruki, {a} pehle se thi.",
   "stb.load_fail": "Load nahi hua",
   "stb.fail": "Nahi hua",
+  "stb.st_undone": "hata diya",
+  "stb.n_change_pending": "{n} badlaav approval me",
+  "stb.old_batches": "Purane batch ({n})",
+  "stb.made_entries": "Bani entries ({n})",
+  "stb.gone": "hat gayi",
+  "stb.no_change": "Koi badlaav nahi",
+  "stb.act_party": "Party badlo",
+  "stb.act_remove": "Entry hatao",
+  "stb.pick_party": "Sahi party chuno",
+  "stb.change_note_ph": "Badlaav kyun? (zaroori)",
+  "stb.undo_all": "Poora batch hatao",
+  "stb.send_change": "{n} badlaav approval ke liye bhejo",
+  "stb.undo_confirm": "Is batch ki SAARI entry hatayein? Pehle approval me jaayega.",
+  "stb.change_wait": "Is batch ka ek badlaav approval me hai — approve hone tak kuch nahi badlega.",
+  "stb.change_log": "Badlaav",
+  "stb.n_changes": "{n} badlaav",
+  "stb.approve_change": "Badlaav approve",
 };
 
 export default dict;

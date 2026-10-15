@@ -13978,6 +13978,23 @@ const dict = {
   "stb.approved_res": "Approved — {c} entries made, {d} held as possible duplicates, {a} were already there.",
   "stb.load_fail": "Could not load",
   "stb.fail": "Could not do it",
+  "stb.st_undone": "undone",
+  "stb.n_change_pending": "{n} change awaiting approval",
+  "stb.old_batches": "Older batches ({n})",
+  "stb.made_entries": "Entries made ({n})",
+  "stb.gone": "removed",
+  "stb.no_change": "No change",
+  "stb.act_party": "Change party",
+  "stb.act_remove": "Remove entry",
+  "stb.pick_party": "Choose the right party",
+  "stb.change_note_ph": "Why change? (required)",
+  "stb.undo_all": "Remove whole batch",
+  "stb.send_change": "Send {n} change(s) for approval",
+  "stb.undo_confirm": "Remove ALL entries of this batch? It goes for approval first.",
+  "stb.change_wait": "A change for this batch is awaiting approval — nothing changes until it is approved.",
+  "stb.change_log": "Changes",
+  "stb.n_changes": "{n} change(s)",
+  "stb.approve_change": "Approve change",
 };
 
 export default dict;

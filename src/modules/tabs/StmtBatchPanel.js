@@ -8,6 +8,8 @@
 // Approve / Reject (engine: PATCH /approvals/:id/action — jiski baari, wahi).
 import React, { useState, useEffect, useCallback } from "react";
 import api from "../../config/api";
+import SearchSelect from "../../components/SearchSelect";
+import PickSelect from "../../components/PickSelect";
 import { T } from "../shared/tokens";
 import { t } from "../../i18n";
 
@@ -17,17 +19,21 @@ const balTxt = (v) => (v == null ? "—" : Number(v) === 0 ? "₹0" : `${inr(Mat
 const ST = () => ({
   pending: [T.pur, T.purL, t("stb.st_pending")], draft: [T.slt, T.sltL, t("stb.st_draft")],
   rejected: [T.red, T.redL, t("stb.st_rejected")], approved: [T.grn, T.grnL, t("stb.st_approved")], failed: [T.red, T.redL, t("stb.st_failed")],
+  undone: [T.slt, T.sltL, t("stb.st_undone")],
 });
 
 export default function StmtBatchPanel({ onChanged }) {
   const [list, setList] = useState([]);
   const [open, setOpen] = useState(null);       // batch id
   const load = useCallback(() => {
-    api.get("/finance/statement/batches?status=open").then((r) => { if (r && r.success) setList(r.data || []); }).catch(() => {});
+    api.get("/finance/statement/batches?status=all").then((r) => { if (r && r.success) setList(r.data || []); }).catch(() => {});
   }, []);
   useEffect(() => { load(); }, [load]);
   if (!list.length && !open) return null;
+  const isOpen = (b) => ["draft", "pending", "rejected"].includes(b.status) || Number(b.pending_changes) > 0;
+  const openList = list.filter(isOpen), oldList = list.filter((b) => !isOpen(b));
   const n = (s) => list.filter((b) => b.status === s).length;
+  const nChg = list.filter((b) => Number(b.pending_changes) > 0).length;
   const st = ST();
   return (
     <>
@@ -36,8 +42,15 @@ export default function StmtBatchPanel({ onChanged }) {
         {["pending", "draft", "rejected"].filter((s) => n(s)).map((s) => (
           <span key={s} style={{ fontSize: 11.5, fontWeight: 700, color: st[s][0], background: T.surface, border: `1px solid ${st[s][0]}55`, padding: "2px 9px", borderRadius: 12 }}>{n(s)} {st[s][2]}</span>
         ))}
-        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginLeft: "auto" }}>
-          {list.slice(0, 6).map((b) => (
+        {nChg > 0 && <span style={{ fontSize: 11.5, fontWeight: 700, color: T.amb, background: T.surface, border: `1px solid ${T.amb}55`, padding: "2px 9px", borderRadius: 12 }}>{t("stb.n_change_pending", { n: nChg })}</span>}
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginLeft: "auto", alignItems: "center" }}>
+          {oldList.length > 0 && (
+            <PickSelect value="" onChange={(e) => e.target.value && setOpen(Number(e.target.value))} style={{ fontSize: 11.5, padding: "4px 8px", borderRadius: 6, border: `1px solid ${T.b2}`, background: T.surface, minWidth: 170 }}>
+              <option value="">{t("stb.old_batches", { n: oldList.length })}</option>
+              {oldList.map((b) => <option key={b.id} value={String(b.id)}>#{b.id} · {b.account_name} · {(st[b.status] || [0, 0, b.status])[2]}</option>)}
+            </PickSelect>
+          )}
+          {openList.slice(0, 6).map((b) => (
             <button key={b.id} onClick={() => setOpen(b.id)} style={{ fontSize: 11.5, fontWeight: 600, padding: "4px 10px", borderRadius: 6, cursor: "pointer", fontFamily: "inherit",
               border: `1px solid ${st[b.status] ? st[b.status][0] : T.b2}`, background: T.surface, color: T.t1 }}>
               #{b.id} · {b.account_name} · {inr(Number(b.total_in) + Number(b.total_out))}
@@ -56,6 +69,24 @@ function BatchModal({ id, onClose }) {
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState("");
   const [changed, setChanged] = useState(false);
+  // Approve hue batch me badlaav: { [txnId]: { action: 'party'|'remove', party_id } }
+  const [edits, setEdits] = useState({});
+  const [cnote, setCnote] = useState("");
+  const [parties, setParties] = useState([]);
+  useEffect(() => { api.get("/finance/parties").then((r) => { if (r && r.success) setParties((r.data || []).filter((p) => !p.is_staff)); }).catch(() => {}); }, []);
+  const setEdit = (id, v) => setEdits((p) => { const n = { ...p }; if (!v) delete n[id]; else n[id] = v; return n; });
+  const sendChange = (kind) => {
+    if (cnote.trim().length < 3) { setErr(t("stmt.batch_note_req")); return; }
+    if (kind === "undo" && !window.confirm(t("stb.undo_confirm"))) return;
+    const changes = Object.entries(edits).map(([id, v]) => ({ txn_id: Number(id), action: v.action, party_id: v.party_id || null }));
+    if (kind === "change" && changes.some((c) => c.action === "party" && !c.party_id)) { setErr(t("stb.pick_party")); return; }
+    act(() => api.post(`/finance/statement/batches/${id}/changes`, { kind, changes, note: cnote })).then(() => { setEdits({}); setCnote(""); }).catch(() => {});
+  };
+  const decideChange = (c, action) => {
+    let remarks = "";
+    if (action === "reject") { remarks = (window.prompt(t("stb.reject_why")) || "").trim(); if (remarks.length < 3) return; }
+    act(() => api.patch(`/approvals/${c.approval_request_id}/action`, { action, remarks })).catch(() => {});
+  };
   const load = useCallback(() => {
     api.get(`/finance/statement/batches/${id}`).then((r) => {
       if (r && r.success) { setB(r.data); setNote(r.data.batch_note || ""); } else setErr((r && r.message) || t("stb.load_fail"));
@@ -63,11 +94,11 @@ function BatchModal({ id, onClose }) {
   }, [id]);
   useEffect(() => { load(); }, [load]);
 
-  const act = async (fn) => { setBusy(true); setErr(""); try { const r = await fn(); if (!r || r.success === false) throw new Error((r && r.message) || t("stb.fail")); setChanged(true); load(); } catch (e) { setErr(e.message); } setBusy(false); };
-  const approve = () => act(() => api.patch(`/approvals/${b.approval_request_id}/action`, { action: "approve", remarks: "" }));
-  const reject = () => { const why = (window.prompt(t("stb.reject_why")) || "").trim(); if (why.length < 3) return; act(() => api.patch(`/approvals/${b.approval_request_id}/action`, { action: "reject", remarks: why })); };
-  const submit = () => act(() => api.put(`/finance/statement/batches/${id}`, { batch_note: note, submit: true }));
-  const drop = () => { if (!window.confirm(t("stb.cancel_confirm"))) return; act(() => api.del ? api.del(`/finance/statement/batches/${id}`) : api(`/finance/statement/batches/${id}`, { method: "DELETE" })); };
+  const act = async (fn) => { setBusy(true); setErr(""); let okk = false; try { const r = await fn(); if (!r || r.success === false) throw new Error((r && r.message) || t("stb.fail")); setChanged(true); okk = true; load(); } catch (e) { setErr(e.message); } setBusy(false); if (!okk) throw new Error("x"); };
+  const approve = () => act(() => api.patch(`/approvals/${b.approval_request_id}/action`, { action: "approve", remarks: "" })).catch(() => {});
+  const reject = () => { const why = (window.prompt(t("stb.reject_why")) || "").trim(); if (why.length < 3) return; act(() => api.patch(`/approvals/${b.approval_request_id}/action`, { action: "reject", remarks: why })).catch(() => {}); };
+  const submit = () => act(() => api.put(`/finance/statement/batches/${id}`, { batch_note: note, submit: true })).catch(() => {});
+  const drop = () => { if (!window.confirm(t("stb.cancel_confirm"))) return; act(() => api.del ? api.del(`/finance/statement/batches/${id}`) : api(`/finance/statement/batches/${id}`, { method: "DELETE" })).catch(() => {}); };
 
   const st = ST();
   const th = { fontSize: 10, fontWeight: 700, color: T.t4, textTransform: "uppercase", padding: "6px 10px", textAlign: "left", background: T.surfaceB };
@@ -130,6 +161,71 @@ function BatchModal({ id, onClose }) {
                   ))}
                 </div>
               </details>
+              {b.status === "approved" && Array.isArray(b.created) && b.created.length > 0 && (() => {
+                const pend = (b.changes || []).some((c) => c.status === "pending");
+                const live = b.created.filter((x) => Number(x.is_active) !== 0);
+                const pOpts = parties.map((p) => ({ key: p.id, label: p.name }));
+                return (
+                  <div style={{ marginBottom: 12, border: `1px solid ${T.b1}`, borderRadius: 8, overflow: "hidden" }}>
+                    <div style={{ padding: "8px 10px", background: T.surfaceB, fontSize: 12, fontWeight: 700, color: T.t1 }}>{t("stb.made_entries", { n: live.length })}</div>
+                    {b.created.map((x) => {
+                      const gone = Number(x.is_active) === 0, e = edits[x.id];
+                      const canParty = ["payment", "receipt"].includes(x.type) && !x.paid_via_staff_id;
+                      return (
+                        <div key={x.id} style={{ padding: "6px 10px", borderTop: `1px solid ${T.b1}`, display: "grid", gridTemplateColumns: "70px minmax(0,1fr) 110px 260px", gap: 8, alignItems: "center", fontSize: 12, opacity: gone ? 0.45 : 1 }}>
+                          <span style={{ color: T.t3 }}>{dmy(x.date)}</span>
+                          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={x.description || ""}>
+                            <b style={{ color: T.t1 }}>{x.party || (x.type === "bank_transfer" ? t("stmt.sub_transfer") : t("stmt.pv_noparty"))}</b> <span style={{ color: T.t4 }}>#{x.id} · {x.description || ""}</span>
+                          </span>
+                          <b style={{ textAlign: "right", color: T.t1 }}>{inr(x.amount)}</b>
+                          {gone ? <span style={{ color: T.t4 }}>{t("stb.gone")}</span> : pend ? <span /> : (
+                            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                              <PickSelect value={e ? e.action : ""} onChange={(ev) => setEdit(x.id, ev.target.value ? { action: ev.target.value, party_id: null } : null)}
+                                style={{ fontSize: 11.5, padding: "4px 6px", borderRadius: 6, border: `1px solid ${e ? T.amb : T.b2}`, background: T.surface, width: 105 }}>
+                                <option value="">{t("stb.no_change")}</option>
+                                {canParty && <option value="party">{t("stb.act_party")}</option>}
+                                <option value="remove">{t("stb.act_remove")}</option>
+                              </PickSelect>
+                              {e && e.action === "party" && (
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                  <SearchSelect value={e.party_id || ""} options={pOpts} placeholder={t("stb.pick_party")} onChange={(k) => setEdit(x.id, { action: "party", party_id: Number(k) || null })} />
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                    {!pend && live.length > 0 && (
+                      <div style={{ padding: "9px 10px", borderTop: `1px solid ${T.b1}`, background: T.surfaceB, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                        <input value={cnote} onChange={(ev) => setCnote(ev.target.value)} maxLength={500} placeholder={t("stb.change_note_ph")}
+                          style={{ flex: "1 1 240px", fontSize: 12.5, padding: "6px 10px", borderRadius: 6, border: `1.5px solid ${cnote.trim().length >= 3 ? T.grnM : T.ambM}`, fontFamily: "inherit" }} />
+                        <button disabled={busy} onClick={() => sendChange("undo")} style={btn(T.red, false)}>{t("stb.undo_all")}</button>
+                        <button disabled={busy || !Object.keys(edits).length} onClick={() => sendChange("change")} style={{ ...btn(T.amb, true), opacity: Object.keys(edits).length ? 1 : 0.5 }}>{t("stb.send_change", { n: Object.keys(edits).length })}</button>
+                      </div>
+                    )}
+                    {pend && <div style={{ padding: "8px 10px", borderTop: `1px solid ${T.b1}`, fontSize: 12, color: T.amb, background: T.ambL }}>{t("stb.change_wait")}</div>}
+                  </div>
+                );
+              })()}
+              {Array.isArray(b.changes) && b.changes.length > 0 && (
+                <div style={{ marginBottom: 12 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: T.t3, textTransform: "uppercase", marginBottom: 5 }}>{t("stb.change_log")}</div>
+                  {b.changes.map((c) => (
+                    <div key={c.id} style={{ padding: "8px 10px", marginBottom: 6, borderRadius: 7, border: `1px solid ${T.b1}`, fontSize: 12, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                      {st[c.status] && <span style={{ fontSize: 11, fontWeight: 700, color: st[c.status][0], background: st[c.status][1], padding: "2px 8px", borderRadius: 10 }}>{st[c.status][2]}</span>}
+                      <b style={{ color: T.t1 }}>{c.kind === "undo" ? t("stb.undo_all") : t("stb.n_changes", { n: (c.changes || []).length })}</b>
+                      <span style={{ color: T.t2, flex: 1, minWidth: 160 }}>“{c.note}” · {c.created_by_name || "—"}{c.decision_note ? " · " + t("stb.rejected_why", { name: c.decided_by_name || "—", why: c.decision_note }) : ""}</span>
+                      {c.status === "pending" && c.approval_request_id && (
+                        <>
+                          <button disabled={busy} onClick={() => decideChange(c, "reject")} style={btn(T.red, false)}>{t("stb.reject")}</button>
+                          <button disabled={busy} onClick={() => decideChange(c, "approve")} style={btn(T.grn, true)}>{t("stb.approve_change")}</button>
+                        </>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
               {(b.status === "draft" || b.status === "rejected") ? (
                 <div><label style={{ fontSize: 11, fontWeight: 700, color: T.t3 }}>{t("stmt.batch_note_ph")}</label>
                   <input value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} style={{ width: "100%", boxSizing: "border-box", marginTop: 4, fontSize: 12.5, padding: "7px 10px", borderRadius: 6, border: `1.5px solid ${note.trim().length >= 3 ? T.grnM : T.ambM}`, fontFamily: "inherit" }} /></div>

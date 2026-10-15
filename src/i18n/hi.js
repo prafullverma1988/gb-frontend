@@ -13977,6 +13977,23 @@ const dict = {
   "stb.approved_res": "अप्रूव्ड — {c} एंट्री बनी, {d} दोहरी-शक में रुकी, {a} पहले से थी।",
   "stb.load_fail": "लोड नहीं हुआ",
   "stb.fail": "नहीं हुआ",
+  "stb.st_undone": "हटा दिया",
+  "stb.n_change_pending": "{n} बदलाव अप्रूवल में",
+  "stb.old_batches": "पुराने बैच ({n})",
+  "stb.made_entries": "बनी एंट्रियाँ ({n})",
+  "stb.gone": "हट गई",
+  "stb.no_change": "कोई बदलाव नहीं",
+  "stb.act_party": "पार्टी बदलें",
+  "stb.act_remove": "एंट्री हटाएँ",
+  "stb.pick_party": "सही पार्टी चुनें",
+  "stb.change_note_ph": "बदलाव क्यों? (ज़रूरी)",
+  "stb.undo_all": "पूरा बैच हटाएँ",
+  "stb.send_change": "{n} बदलाव अप्रूवल के लिए भेजें",
+  "stb.undo_confirm": "इस बैच की सारी एंट्री हटाएँ? पहले अप्रूवल में जाएगा।",
+  "stb.change_wait": "इस बैच का एक बदलाव अप्रूवल में है — अप्रूव होने तक कुछ नहीं बदलेगा।",
+  "stb.change_log": "बदलाव",
+  "stb.n_changes": "{n} बदलाव",
+  "stb.approve_change": "बदलाव अप्रूव",
 };
 
 export default dict;
