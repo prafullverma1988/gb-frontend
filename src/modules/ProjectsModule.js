@@ -194,6 +194,33 @@ function SitePulseDrawer({onClose,onSelectProject}){
   const [feed,setFeed]=useState([]);
   const [projects,setProjects]=useState([]);
   const [loading,setLoading]=useState(true);
+  // ── Task se chhaanna (16 Oct 2026): ek project chuna ho to main task ki patti,
+  // kisi bhi task ki khoj, card par rasta. Task chuna = server task_ids se chhaanta
+  // hai (us task + neeche ke saare); GRN / payment / document is filter me nahi aate.
+  const [sitePid,setSitePid]=useState(null);
+  const [taskSel,setTaskSel]=useState(null);              // { id, name } | null
+  const [pTasks,setPTasks]=useState({pid:null,list:[],type:null});
+  const [taskTree,setTaskTree]=useState(null);
+  const [taskQ,setTaskQ]=useState("");
+  const [taskDd,setTaskDd]=useState(false);
+  const pickSite=(name,pid,task)=>{
+    setSite(name);
+    setSitePid(name==="All"?null:(pid||(feed.find(f=>f.project_name===name)||{}).project_id||null));
+    setTaskSel(task||null); setTaskTree(null); setTaskQ(""); setTaskDd(false);
+  };
+  useEffect(()=>{
+    if(!sitePid){ setPTasks({pid:null,list:[],type:null}); return undefined; }
+    let alive=true;
+    api.get(`/projects/${sitePid}/pulse-tasks`).then(r=>{ if(alive&&r&&r.success&&r.data) setPTasks({pid:sitePid,list:r.data.tasks||[],type:r.data.project_type||null}); }).catch(()=>{});
+    return ()=>{ alive=false; };
+  },[sitePid]);
+  const showTasks=!!sitePid&&pTasks.pid===sitePid&&pTasks.list.length>0&&!/solar/i.test(String(pTasks.type||""));
+  const openTaskDd=()=>{
+    setTaskDd(true);
+    if(taskTree||!sitePid) return;
+    api.get(`/projects/${sitePid}/pulse-tasks?tree=1`).then(r=>setTaskTree(r&&r.success&&r.data&&Array.isArray(r.data.tree)?r.data.tree:[])).catch(()=>setTaskTree([]));
+  };
+  const treePath=(n)=>{ const by={}; for(const x of taskTree||[]) by[x.id]=x; const out=[]; let c=n; const seen={}; while(c&&!seen[c.id]){ seen[c.id]=1; out.unshift(c.name); c=c.parent_id==null?null:by[c.parent_id]; } return out.join(" › "); };
   // ── Chat (12 Oct 2026): tareekh ka daayra, khoj, comment, Dekh liya, Issue / To-do ──
   const [range,setRange]=useState({preset:"all",from:"",to:""});
   const [search,setSearch]=useState("");
@@ -292,11 +319,13 @@ function SitePulseDrawer({onClose,onSelectProject}){
 
   useEffect(()=>{
     setLoading(true);
-    const qs=(rangeQ.from?"&from="+rangeQ.from:"")+(rangeQ.to?"&to="+rangeQ.to:"")+(q?"&q="+encodeURIComponent(q):"");
+    const qs=(rangeQ.from?"&from="+rangeQ.from:"")+(rangeQ.to?"&to="+rangeQ.to:"")+(q?"&q="+encodeURIComponent(q):"")
+      +(taskSel&&sitePid?"&project_id="+sitePid+"&task_ids="+taskSel.id:"");
     api.get("/projects/site-pulse?limit="+(rangeQ.from||q?200:60)+qs).then(r=>{
       if(r.success&&r.data){
         setFeed(r.data.feed||[]);
-        setProjects(r.data.projects||[]);
+        // Task se chhaani feed me sirf ek project — dropdown ki list wahi rahe.
+        if(!taskSel) setProjects(r.data.projects||[]);
       }
     }).catch(()=>{}).finally(()=>setLoading(false));
     // Items waiting on THIS user right now. Failure is non-fatal — the feed is
@@ -305,7 +334,7 @@ function SitePulseDrawer({onClose,onSelectProject}){
       const list=(r&&r.success&&Array.isArray(r.data))?r.data:[];
       setPending(list.filter(i=>i._canActNow!==false&&(i._request_id||i.id)));
     }).catch(()=>{});
-  },[rangeQ.from,rangeQ.to,q]); // eslint-disable-line react-hooks/exhaustive-deps
+  },[rangeQ.from,rangeQ.to,q,taskSel&&taskSel.id,sitePid]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const timeAgo=(d)=>{
     if(!d) return "";
@@ -390,7 +419,7 @@ function SitePulseDrawer({onClose,onSelectProject}){
           </div>
         )}
         <div style={{display:"flex",gap:6}}>
-          <PickSelect value={site} onChange={e=>setSite(e.target.value)} style={{flex:1,padding:"6px 8px",borderRadius:7,border:`1.5px solid ${C.b}`,fontSize:11.5,background:C.bg,outline:"none",fontFamily:"inherit",color:C.t}}>
+          <PickSelect value={site} onChange={e=>pickSite(e.target.value)} style={{flex:1,padding:"6px 8px",borderRadius:7,border:`1.5px solid ${C.b}`,fontSize:11.5,background:C.bg,outline:"none",fontFamily:"inherit",color:C.t}}>
             <option value="All">{t("common.all_projects")}</option>
             {projects.map(s=><option key={s}>{s}</option>)}
           </PickSelect>
@@ -426,6 +455,50 @@ function SitePulseDrawer({onClose,onSelectProject}){
             )}
           </div>
         </div>
+        {/* Task ki patti + kisi bhi task ki khoj — ek project chuna ho tab */}
+        {showTasks&&(
+          <div style={{display:"flex",gap:5,overflowX:"auto",marginTop:7,paddingBottom:2,scrollbarWidth:"thin"}}>
+            {[{id:null,name:t("pulse_chat.task_sab")},...pTasks.list].map(x=>{
+              const on=x.id==null?!taskSel:!!taskSel&&taskSel.id===x.id;
+              return <button key={x.id||"sab"} onClick={()=>setTaskSel(x.id==null||on?null:{id:x.id,name:x.name})}
+                style={{height:24,padding:"0 9px",borderRadius:12,border:`1px solid ${on?C.p:C.b}`,background:on?C.bl:C.w,color:on?C.p:C.tl,fontSize:10.5,fontWeight:on?700:500,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap",flexShrink:0,display:"inline-flex",alignItems:"center",gap:4}}>
+                {x.name}
+                {x.updates_today>0&&<span style={{background:C.r,color:"white",fontSize:9,fontWeight:800,padding:"0 5px",borderRadius:8}}>{x.updates_today}</span>}
+              </button>;
+            })}
+          </div>
+        )}
+        {showTasks&&(
+          <div style={{position:"relative",marginTop:6}}>
+            <input value={taskQ} onChange={e=>{setTaskQ(e.target.value);openTaskDd();}} onFocus={openTaskDd} placeholder={t("pulse_chat.task_khojo")} aria-label={t("pulse_chat.task_khojo")}
+              style={{width:"100%",boxSizing:"border-box",height:26,padding:"0 9px",borderRadius:7,border:`1.5px solid ${taskDd?C.p:C.b}`,fontSize:11,fontFamily:"inherit",outline:"none",color:C.t,background:C.w}}/>
+            {taskDd&&(
+              <>
+                <div onClick={()=>setTaskDd(false)} style={{position:"fixed",inset:0,zIndex:202}}/>
+                <div style={{position:"absolute",top:"calc(100% + 4px)",left:0,right:0,zIndex:203,background:C.w,border:`1px solid ${C.b}`,borderRadius:9,boxShadow:"0 8px 28px rgba(0,0,0,0.16)",maxHeight:260,overflowY:"auto"}}>
+                  {taskTree==null?<div style={{padding:10,fontSize:11,color:C.tl}}>{t("projects.loading_feed")}</div>:(()=>{
+                    const s2=taskQ.trim().toLowerCase();
+                    const hits=taskTree.filter(n=>!s2||String(n.name||"").toLowerCase().includes(s2)||String(n.task_no||"").toLowerCase().includes(s2)).slice(0,60);
+                    if(!hits.length) return <div style={{padding:10,fontSize:11,color:C.tl}}>{t("pulse_chat.task_nahi_mila")}</div>;
+                    return hits.map(n=>(
+                      <button key={n.id} onClick={()=>{ setTaskSel({id:n.id,name:n.name}); setTaskDd(false); setTaskQ(""); }}
+                        style={{display:"flex",alignItems:"center",gap:8,width:"100%",textAlign:"left",padding:"7px 10px",border:"none",borderBottom:`1px solid ${C.b}`,background:taskSel&&taskSel.id===n.id?C.bl:C.w,cursor:"pointer",fontFamily:"inherit"}}>
+                        <span style={{flex:1,minWidth:0,fontSize:11.5,color:C.t,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{treePath(n)}</span>
+                        {n.progress_pct!=null&&<span style={{fontSize:10.5,fontWeight:700,color:C.tl}}>{Math.round(Number(n.progress_pct))}%</span>}
+                      </button>
+                    ));
+                  })()}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+        {taskSel&&(
+          <div style={{marginTop:6}}>
+            <div style={{fontSize:11.5,fontWeight:700,color:C.t}}>📍 {site} · {taskSel.name}</div>
+            <div style={{fontSize:10.5,color:C.tl,marginTop:2}}>{t("pulse_chat.task_filter_hint")}</div>
+          </div>
+        )}
       </div>
 
       <div style={{flex:1,overflowY:"auto",padding:"6px 8px"}}>
@@ -500,8 +573,8 @@ function SitePulseDrawer({onClose,onSelectProject}){
         ):filtered.length===0?(
           <div style={{textAlign:"center",padding:"50px 0",color:C.tl,fontSize:13}}>
             <div style={{fontSize:36,marginBottom:10}}>📡</div>
-           {t("projects.no_activities_yet")}
-            <div style={{fontSize:11,marginTop:4,color:C.tl+"99"}}>{t("projects.activities_from_your_projects_will_appear")}</div>
+           {taskSel?t("pulse_chat.task_par_update_nahi",{task:taskSel.name}):t("projects.no_activities_yet")}
+            {!taskSel&&<div style={{fontSize:11,marginTop:4,color:C.tl+"99"}}>{t("projects.activities_from_your_projects_will_appear")}</div>}
           </div>
         ):filtered.map((f,idx)=>{
           const tm=tagMeta[f.feed_type]||{c:C.tl,b:C.b,icon:"📌",label:f.feed_type};
@@ -562,6 +635,13 @@ function SitePulseDrawer({onClose,onSelectProject}){
                 </div>
               )}
 
+              {/* Task ka rasta — pehle hisse par click = us project + main task ki feed */}
+              {f.task_path&&(()=>{ const segs=String(f.task_path).split(" › "); return (
+                <div style={{padding:"5px 12px 0",fontSize:11,color:C.tl,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+                  <button onClick={e=>{ e.stopPropagation(); pickSite(f.project_name,f.project_id,{id:f.main_task_id,name:f.main_task_name}); }}
+                    style={{background:"none",border:"none",padding:0,font:"inherit",fontWeight:700,color:C.p,cursor:"pointer"}}>{segs[0]}</button>
+                  {segs.length>1?" › "+segs.slice(1).join(" › "):""}
+                </div>); })()}
               {/* Caption */}
               <div style={{padding:"5px 12px 4px"}}><span style={{fontSize:12,color:C.t,lineHeight:1.45}}><strong>{f.user_name}</strong> {f.text}</span></div>
               {f.progress_line&&<div style={{padding:"0 12px 3px",fontSize:11,color:C.tl}}>{f.progress_line}</div>}
