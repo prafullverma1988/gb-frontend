@@ -1870,6 +1870,7 @@ function parseNotifLink(link){
 
 function ProjectsWrapper({deepLink,onDeepLinkDone}){
   const [selectedProject,setSelectedProject]=useState(null);
+  const [pulseIntent,setPulseIntent]=useState(null);   // { projectId, projectName, task }
   // Project khula = browser Back se wapas list par. Project badalna (switcher)
   // naya kadam nahi — wahi page hai, isliye sirf khule/band par entry.
   const projOpen=!!selectedProject;
@@ -1898,8 +1899,11 @@ function ProjectsWrapper({deepLink,onDeepLinkDone}){
     });
     return()=>{alive=false;};
   },[deepLink,onDeepLinkDone]);
-  if(selectedProject) return <ProjectDetailPage project={selectedProject} onBack={()=>setSelectedProject(null)} onSwitchProject={switchProject}/>;
-  return <ProjectsPage onSelectProject={setSelectedProject}/>;
+  // Overview ke "Main task ka haal" ki row → project band, list par Site Pulse
+  // us project + task par khulta hai (drawer ProjectsModule me hai).
+  if(selectedProject) return <ProjectDetailPage project={selectedProject} onBack={()=>setSelectedProject(null)} onSwitchProject={switchProject}
+    onOpenPulse={(x)=>{ setPulseIntent(x); setSelectedProject(null); }}/>;
+  return <ProjectsPage onSelectProject={setSelectedProject} pulseIntent={pulseIntent} onPulseIntentDone={()=>setPulseIntent(null)}/>;
 }
 
 

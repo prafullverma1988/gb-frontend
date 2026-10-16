@@ -715,7 +715,7 @@ function ProjectSettingsForm({ project, isAdmin, onClose }) {
   );
 }
 
-function ProjectDetailPage({project=PROJ, onBack, onSwitchProject}) {
+function ProjectDetailPage({project=PROJ, onBack, onSwitchProject, onOpenPulse}) {
   const currentUser = (() => { try { return JSON.parse(localStorage.getItem("gb_user")) || {}; } catch { return {}; } })();
   const isAdmin = ["admin","super_admin","project_manager"].includes(currentUser.role);
   if(!document.getElementById("gb-spin-css")){const s=document.createElement("style");s.id="gb-spin-css";s.textContent="@keyframes spin{to{transform:rotate(360deg)}}";document.head.appendChild(s);}
@@ -855,7 +855,8 @@ function ProjectDetailPage({project=PROJ, onBack, onSwitchProject}) {
 
   const tabContent = {
     // ── Construction tabs (unchanged) ──
-    overview:    <TabOverview    proj={project} onRequestPayment={canReqPay ? ()=>setPaymentReq({}) : undefined}/>,
+    overview:    <TabOverview    proj={project} onRequestPayment={canReqPay ? ()=>setPaymentReq({}) : undefined}
+                   onOpenPulseTask={onOpenPulse ? (task)=>onOpenPulse({projectId:project.id, projectName:project.name, task}) : undefined}/>,
     design:      <TabDesign project={project} isAdmin={isAdmin}/>,
     estimate:    <TabEstimate project={project}/>,
     budget:      <TabBudget project={project}/>,

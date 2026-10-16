@@ -101,7 +101,59 @@ function CashBars({data, height=160}){
   );
 }
 
-function TabOverview({proj, onRequestPayment}) {
+/* ── Main task ka haal (A5, 16 Oct 2026) — Site Pulse ki patti wale hi task
+   (server apne aap sahi level par utarta hai; prefix = upar ki chhoti line).
+   Laal = 3+ din chup (ya kabhi update nahi) aur 100% nahi; laal pehle, phir
+   server ka kram. Row click = Site Pulse isi project + task par. ── */
+const TASK_HAAL_MAX = 8;
+const isSilentRed = (x) => (x.days_silent == null || Number(x.days_silent) >= 3) && !(Number(x.progress_pct) >= 100);
+const silentText = (d) => d == null ? t("overview.abhi_koi_update_nahi")
+  : Number(d) === 0 ? t("overview.aakhri_update_aaj") : t("overview.aakhri_update_din", { n: Number(d) });
+function MainTaskHaal({ pid, onOpen }) {
+  const [st, setSt] = useState(null);
+  const [all, setAll] = useState(false);
+  useEffect(() => {
+    if (!pid) return undefined;
+    let alive = true;
+    api.get(`/projects/${pid}/pulse-tasks`)
+      .then(r => { if (alive) setSt(r && r.success && r.data ? r.data : { tasks: [] }); })
+      .catch(() => { if (alive) setSt({ tasks: [] }); });
+    return () => { alive = false; };
+  }, [pid]);
+  if (!st || /solar/i.test(String(st.project_type || "")) || !Array.isArray(st.tasks) || !st.tasks.length) return null;
+  const rows = st.tasks.map((x, i) => ({ ...x, red: isSilentRed(x), i })).sort((a, b) => (Number(b.red) - Number(a.red)) || (a.i - b.i));
+  const prefix = Array.isArray(st.prefix) ? st.prefix.filter(x => x && x.name) : [];
+  const shown = all ? rows : rows.slice(0, TASK_HAAL_MAX);
+  return (
+    <Panel>
+      <PHead title={t("overview.main_task_haal")} action={prefix.length ? <span style={{fontSize:11, color:T.t4, maxWidth:"55%", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{prefix.map(x => x.name).join(" › ") + " ›"}</span> : null}/>
+      <div>
+        {shown.map(x => {
+          const pct = x.progress_pct == null ? 0 : Math.max(0, Math.min(100, Math.round(Number(x.progress_pct))));
+          return (
+            <div key={x.id} onClick={onOpen ? () => onOpen({ id: x.id, name: x.name }) : undefined} role={onOpen ? "button" : undefined}
+              style={{padding:"9px 15px", borderBottom:`1px solid ${T.b1}`, borderLeft:`3px solid ${x.red ? T.red : T.blu + "44"}`, background:x.red ? T.redL : "transparent", cursor:onOpen ? "pointer" : "default"}}>
+              <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:5, gap:8}}>
+                <span style={{fontSize:12.5, fontWeight:600, color:T.t1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{x.name}</span>
+                <span style={{fontSize:12, fontWeight:700, color:x.red ? T.red : T.blu, flexShrink:0}}>{pct}%</span>
+              </div>
+              <PBar pct={pct} color={x.red ? T.red : T.blu} h={4}/>
+              <div style={{fontSize:11, marginTop:5, color:x.red ? T.red : T.t4, fontWeight:x.red ? 600 : 400}}>{silentText(x.days_silent)}</div>
+            </div>
+          );
+        })}
+      </div>
+      {rows.length > TASK_HAAL_MAX && (
+        <button onClick={() => setAll(v => !v)}
+          style={{width:"100%", padding:"9px 0", border:"none", background:"none", color:T.blu, fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"inherit"}}>
+          {all ? t("overview.task_haal_kam") : t("overview.task_haal_sab", { n: rows.length })}
+        </button>
+      )}
+    </Panel>
+  );
+}
+
+function TabOverview({proj, onRequestPayment, onOpenPulseTask}) {
   // ── Roles & Access (5 Oct 2026): Overview ka darwaza Overview row se, par har
   // hissa apne module ki VIEW se — jiska adhikar nahi wo hissa dikhta hi nahi,
   // aur uski API bhi nahi maangi jaati (server bhi ab Overview ke naam par
@@ -113,6 +165,8 @@ function TabOverview({proj, onRequestPayment}) {
   const canPnl   = canSeeFinancials();
   const canPipe  = canAny(["Tenders", "Mapping"], "view");
   const canPhotos = can("Files", "view");
+  // Main task ka haal — Pulse + Projects VIEW (server /pulse-tasks wahi maangta hai)
+  const canTaskHaal = can("Pulse", "view") && can("Projects", "view");
   const showFinance = canFin || canPnl;
   const canReqPay = !!onRequestPayment && canEntry("Finance");
   const [view, setView]   = useState("operations"); // operations | finance
@@ -396,6 +450,8 @@ function TabOverview({proj, onRequestPayment}) {
             </div>
           </Panel>
         </div>}
+
+        {canTaskHaal && <MainTaskHaal pid={proj?.id} onOpen={onOpenPulseTask}/>}
 
         {/* Material (Material/Procurement/Warehouse VIEW) + Team (Attendance VIEW) */}
         {(canMat || canTeam) && <div style={{display:"grid", gridTemplateColumns:(canMat && canTeam)?"1fr 1fr":"1fr", gap:14}}>

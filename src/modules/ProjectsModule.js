@@ -183,8 +183,10 @@ function approvalTab(item){
     || "overview";
 }
 
-function SitePulseDrawer({onClose,onSelectProject}){
-  const [site,setSite]=useState("All");
+// initial = { projectId, projectName, task:{id,name} } — project ke Overview ke
+// "Main task ka haal" se: drawer seedha us project + task par khulta hai.
+function SitePulseDrawer({onClose,onSelectProject,initial}){
+  const [site,setSite]=useState(initial&&initial.projectName?initial.projectName:"All");
   // Multi-select type filter — user tick-marks the activity types they care
   // about and Saves; the choice persists (per-device) and is applied on every
   // future open. Default = all types until the user saves a custom set.
@@ -197,9 +199,10 @@ function SitePulseDrawer({onClose,onSelectProject}){
   // ── Task se chhaanna (16 Oct 2026): ek project chuna ho to main task ki patti,
   // kisi bhi task ki khoj, card par rasta. Task chuna = server task_ids se chhaanta
   // hai (us task + neeche ke saare); GRN / payment / document is filter me nahi aate.
-  const [sitePid,setSitePid]=useState(null);
-  const [taskSel,setTaskSel]=useState(null);              // { id, name } | null
-  const [pTasks,setPTasks]=useState({pid:null,list:[],type:null});
+  const [sitePid,setSitePid]=useState(initial&&initial.projectName&&initial.projectId?initial.projectId:null);
+  const [taskSel,setTaskSel]=useState(initial&&initial.projectName&&initial.task?initial.task:null);   // { id, name } | null
+  // prefix = jin akele task se server apne aap neeche utra ("Sendh › Phase 1 ›")
+  const [pTasks,setPTasks]=useState({pid:null,list:[],type:null,prefix:[]});
   const [taskTree,setTaskTree]=useState(null);
   const [taskQ,setTaskQ]=useState("");
   const [taskDd,setTaskDd]=useState(false);
@@ -209,9 +212,9 @@ function SitePulseDrawer({onClose,onSelectProject}){
     setTaskSel(task||null); setTaskTree(null); setTaskQ(""); setTaskDd(false);
   };
   useEffect(()=>{
-    if(!sitePid){ setPTasks({pid:null,list:[],type:null}); return undefined; }
+    if(!sitePid){ setPTasks({pid:null,list:[],type:null,prefix:[]}); return undefined; }
     let alive=true;
-    api.get(`/projects/${sitePid}/pulse-tasks`).then(r=>{ if(alive&&r&&r.success&&r.data) setPTasks({pid:sitePid,list:r.data.tasks||[],type:r.data.project_type||null}); }).catch(()=>{});
+    api.get(`/projects/${sitePid}/pulse-tasks`).then(r=>{ if(alive&&r&&r.success&&r.data) setPTasks({pid:sitePid,list:r.data.tasks||[],type:r.data.project_type||null,prefix:Array.isArray(r.data.prefix)?r.data.prefix.filter(x=>x&&x.id):[]}); }).catch(()=>{});
     return ()=>{ alive=false; };
   },[sitePid]);
   const showTasks=!!sitePid&&pTasks.pid===sitePid&&pTasks.list.length>0&&!/solar/i.test(String(pTasks.type||""));
@@ -324,8 +327,9 @@ function SitePulseDrawer({onClose,onSelectProject}){
     api.get("/projects/site-pulse?limit="+(rangeQ.from||q?200:60)+qs).then(r=>{
       if(r.success&&r.data){
         setFeed(r.data.feed||[]);
-        // Task se chhaani feed me sirf ek project — dropdown ki list wahi rahe.
-        if(!taskSel) setProjects(r.data.projects||[]);
+        // Task se chhaani feed me sirf ek project — dropdown ki list wahi rahe
+        // (pehli baar task ke saath khula ho to jo aaya wahi).
+        if(!taskSel||!projects.length) setProjects(r.data.projects||[]);
       }
     }).catch(()=>{}).finally(()=>setLoading(false));
     // Items waiting on THIS user right now. Failure is non-fatal — the feed is
@@ -458,6 +462,16 @@ function SitePulseDrawer({onClose,onSelectProject}){
         {/* Task ki patti + kisi bhi task ki khoj — ek project chuna ho tab */}
         {showTasks&&(
           <div style={{display:"flex",gap:5,overflowX:"auto",marginTop:7,paddingBottom:2,scrollbarWidth:"thin"}}>
+            {pTasks.prefix.length>0&&(
+              <span style={{display:"inline-flex",alignItems:"center",flexShrink:0,whiteSpace:"nowrap",fontSize:10.5,color:C.tl}}>
+                {pTasks.prefix.map(x=>{ const on=!!taskSel&&taskSel.id===x.id; return (
+                  <span key={x.id} style={{display:"inline-flex",alignItems:"center"}}>
+                    <button onClick={()=>setTaskSel(on?null:{id:x.id,name:x.name})}
+                      style={{background:"none",border:"none",padding:"0 2px",font:"inherit",fontWeight:700,color:on?C.p:C.t,cursor:"pointer",textDecoration:on?"underline":"none"}}>{x.name}</button>
+                    <span style={{padding:"0 2px"}}>›</span>
+                  </span>); })}
+              </span>
+            )}
             {[{id:null,name:t("pulse_chat.task_sab")},...pTasks.list].map(x=>{
               const on=x.id==null?!taskSel:!!taskSel&&taskSel.id===x.id;
               return <button key={x.id||"sab"} onClick={()=>setTaskSel(x.id==null||on?null:{id:x.id,name:x.name})}
@@ -3600,7 +3614,7 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
   </>);
 }
 
-function ProjectsPage({onSelectProject}){
+function ProjectsPage({onSelectProject,pulseIntent,onPulseIntentDone}){
   const currentUser = (() => { try { return JSON.parse(localStorage.getItem("gb_user")) || {}; } catch { return {}; } })();
   // admin / super_admin see ALL projects; everyone else sees only their assigned projects
   const isAdmin = ["admin","super_admin"].includes(currentUser.role);
@@ -3634,6 +3648,13 @@ function ProjectsPage({onSelectProject}){
   const [sortBy,setSortBy]=useState("Default");
   const [page,setPage]=useState(1); const PER_PAGE=20;
   const [showPulse,setShowPulse]=useState(false);
+  // Project Overview ke "Main task ka haal" se aaye: Site Pulse us project + task par.
+  const [pulseInit,setPulseInit]=useState(null);
+  useEffect(()=>{
+    if(!pulseIntent) return;
+    setPulseInit(pulseIntent); setShowPulse(true);
+    if(onPulseIntentDone) onPulseIntentDone();
+  },[pulseIntent]); // eslint-disable-line react-hooks/exhaustive-deps
   const [dupOf,setDupOf]=useState(null);
   const [showNew,setShowNew]=useState(false);
   const [cardMenu,setCardMenu]=useState(null); // project id with open menu
@@ -4226,7 +4247,7 @@ function ProjectsPage({onSelectProject}){
           <span style={{fontSize:11,color:T.t4,marginLeft:8}}>{t("projects.page_page_of_totalpages", { page, totalPages })}</span>
         </div>
       )}
-      {showPulse&&<SitePulseDrawer onClose={()=>setShowPulse(false)} onSelectProject={onSelectProject}/>}
+      {showPulse&&<SitePulseDrawer initial={pulseInit} onClose={()=>{setShowPulse(false);setPulseInit(null);}} onSelectProject={onSelectProject}/>}
       {showApprovals&&<ApprovalsDrawer onClose={()=>{setShowApprovals(false);apiCache.invalidate("approval-counts");loadApprovalCounts();}} mode={approvalMode} onSelectProject={onSelectProject}
         onCountSync={approvalMode==="materials"
           ? cnt=>{setMrPendingCount(cnt);apiCache.invalidate("approval-counts");}
