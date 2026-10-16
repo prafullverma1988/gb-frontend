@@ -1997,6 +1997,14 @@ function MachineDetail({ id, onBack, onChanged, onEdit, onRemoved, canRemove, pa
                {t("machinery.is_unit_par_fuel_sensor_nahi")}
               </div>
             )}
+            {/* Tank ka ANDAZA (P1) — vendor "abhi kitna" nahi deta */}
+            {gps.unit.tank_est_l != null && (
+              <div title={t("machinery.tel_tank_hint")}
+                style={{ background: T.surface, border: `1.5px solid ${T.b1}`, borderRadius: 10, padding: "9px 13px", fontSize: 11.5, color: T.t2 }}>
+                <b>{t("machinery.tel_tank_line", { l: Math.round(gps.unit.tank_est_l) })}</b>
+                <span style={{ color: T.t4 }}> · {t("machinery.tel_tank_title", { b: Math.round(gps.unit.tank_base_l), at: fmtDT(gps.unit.tank_base_at), u: Math.round(gps.unit.tank_used_l) })}</span>
+              </div>
+            )}
           </div>
 
           <Panel title={t("machinery.roz_ka_sensor_data_pichhle_14")} style={{ marginBottom: 14 }}>
@@ -2037,7 +2045,14 @@ function MachineDetail({ id, onBack, onChanged, onEdit, onRemoved, canRemove, pa
                 <span>{ev.event_type === "fill"
                   ? <Pill label={"+" + fmtN(ev.litres) + " L"} c={T.grn} bg={T.grnL} />
                   : <Pill label={"−" + fmtN(ev.litres) + " L"} c={T.red} bg={T.redL} />}</span>
-                <span style={{ fontSize: 11.5, color: T.t3 }}>{ev.location_text || "—"}</span>
+                <span style={{ fontSize: 11.5, color: T.t3 }}>{ev.location_text || "—"}
+                  {/* Pin (P1): us samay ki jagah / us din ki parking / jagah ka naam se */}
+                  {ev.lat != null && (
+                    <a href={`https://www.google.com/maps?q=${ev.lat},${ev.lng}`} target="_blank" rel="noreferrer"
+                      title={ev.pin_source && ev.pin_source !== "snap" ? t("machinery.tel_pin_andaza") : undefined}
+                      style={{ marginLeft: 6, color: T.ind, fontWeight: 700, textDecoration: "none", whiteSpace: "nowrap" }}>{t("machinery.tel_naksha")}</a>
+                  )}
+                </span>
                 <span style={{ fontSize: 11.5, color: T.t3 }}>
                   {ev.event_type === "fill"
                     ? (ev.matched_fuel_entry_id ? t("machinery.fuel_entry_se_mila") : t("machinery.entry_nahi_mili_cross_check_me"))
@@ -6036,9 +6051,11 @@ function TeleMap({ dash, height = 540 }) {
   const markersRef = useRef([]);
   const infoRef = useRef(null);
   const trailRef = useRef(null);
+  const dayRef = useRef([]);   // aaj ka raasta + fill/drop pin (P1)
   const didFitRef = useRef(false);
   const [status, setStatus] = useState("loading");
   const [selId, setSelId] = useState(null);
+  const [selUnit, setSelUnit] = useState(null);
   const apiKey = process.env.REACT_APP_GOOGLE_MAPS_KEY;
 
   const points = ((dash && dash.machines) || []).filter((m) => m.last && m.last.lat != null);
@@ -6090,10 +6107,13 @@ function TeleMap({ dash, height = 540 }) {
              <div style="margin-top:4px">${m.last.location || "—"}</div>
              <div style="color:#6B7280">${m.last.data_at ? "data " + String(m.last.data_at).slice(0, 10) + " tak" : "data nahi aaya"}</div>
              ${y ? `<div style="margin-top:4px">Kal: ${Math.floor(y.engine_sec / 3600)}:${String(Math.floor((y.engine_sec % 3600) / 60)).padStart(2, "0")} hrs · ${Math.round(y.consumed_l * 10) / 10} L</div>` : ""}
+             ${m.tank ? `<div style="margin-top:4px">${t("machinery.tel_tank_line", { l: Math.round(m.tank.est_l) })}</div>` : ""}
+             ${m.last_fill ? `<div style="color:#6B7280">${t("machinery.tel_last_fill", { at: fmtDT(m.last_fill.at), l: Math.round(m.last_fill.litres * 10) / 10, loc: m.last_fill.location || "—" })}</div>` : ""}
              ${m.linked ? "" : `<div style="margin-top:4px;color:#B27A0A;font-weight:600">Machine se judi nahi — GPS → Jodna baaki</div>`}
            </div>`);
         infoRef.current.open(mapRef.current, marker);
         setSelId(m.linked && m.equipment_id ? m.equipment_id : null);
+        setSelUnit(m.unit_id);
       });
       markersRef.current.push(marker);
     });
@@ -6130,6 +6150,59 @@ function TeleMap({ dash, height = 540 }) {
     return () => { dead = true; };
   }, [selId, status]);
 
+  // Aaj ka raasta (har sync ka snapshot — vendor din ki sirf ek jod-row deta
+  // hai) + aaj ke fill/drop ke pin. Bina judi unit par bhi.
+  useEffect(() => {
+    if (status !== "ok" || !mapRef.current) return;
+    for (const o of dayRef.current) o.setMap(null);
+    dayRef.current = [];
+    if (!selUnit) return;
+    let dead = false;
+    api.get(`/telematics/unit/${selUnit}/track`).then((r) => {
+      if (dead || !r || !r.success) return;
+      const g = window.google;
+      const pos = r.data.positions || [];
+      if (pos.length >= 2) {
+        dayRef.current.push(new g.maps.Polyline({
+          map: mapRef.current, path: pos.map((p) => ({ lat: p.lat, lng: p.lng })),
+          strokeColor: "#B27A0A", strokeOpacity: 0.9, strokeWeight: 3,
+          icons: [{ icon: { path: g.maps.SymbolPath.FORWARD_CLOSED_ARROW, scale: 2.4, strokeColor: "#B27A0A" }, offset: "100%" }],
+        }));
+      }
+      pos.forEach((p) => {
+        const c = new g.maps.Circle({ map: mapRef.current, center: { lat: p.lat, lng: p.lng }, radius: 25,
+          strokeColor: "#B27A0A", strokeWeight: 1, fillColor: "#B27A0A", fillOpacity: 0.35 });
+        c.addListener("click", () => {
+          infoRef.current.setContent(`<div style="font:12px 'Segoe UI',sans-serif">${p.location_text || "—"}<div style="color:#6B7280">${localDT(p.first_seen_at).slice(11)} – ${localDT(p.last_seen_at).slice(11)}</div></div>`);
+          infoRef.current.setPosition({ lat: p.lat, lng: p.lng });
+          infoRef.current.open(mapRef.current);
+        });
+        dayRef.current.push(c);
+      });
+      (r.data.events || []).filter((e) => e.lat != null).forEach((e) => {
+        const fill = e.event_type === "fill";
+        const mk = new g.maps.Marker({
+          map: mapRef.current, position: { lat: e.lat, lng: e.lng },
+          label: { text: fill ? "F" : "D", color: "#FFFFFF", fontSize: "10px", fontWeight: "700" },
+          icon: { path: g.maps.SymbolPath.CIRCLE, scale: 9, fillColor: fill ? "#1E8E5A" : "#C43A45", fillOpacity: 1, strokeColor: "#FFFFFF", strokeWeight: 2 },
+          title: `${fill ? "+" : "−"}${Math.round(e.litres * 10) / 10} L`,
+        });
+        mk.addListener("click", () => {
+          infoRef.current.setContent(
+            `<div style="font:12px 'Segoe UI',sans-serif;min-width:170px">
+               <div style="font-weight:700">${fill ? "+" : "−"}${Math.round(e.litres * 10) / 10} L · ${localDT(e.event_time).slice(11)}</div>
+               <div>${e.location_text || "—"}</div>
+               <div style="color:#6B7280">${e.level_before != null ? Math.round(e.level_before) + " → " + Math.round(e.level_after) + " L" : ""}</div>
+               ${e.pin_source && e.pin_source !== "snap" ? `<div style="color:#B27A0A">${t("machinery.tel_pin_andaza")}</div>` : ""}
+             </div>`);
+          infoRef.current.open(mapRef.current, mk);
+        });
+        dayRef.current.push(mk);
+      });
+    }).catch(() => {});
+    return () => { dead = true; };
+  }, [selUnit, status]);
+
   if (status === "nokey") return <Empty>{t("machinery.map_ke_liye_react_app_google")}</Empty>;
   if (status === "err") return <Empty>{t("machinery.google_maps_load_nahi_hua_internet")}</Empty>;
 
@@ -6140,6 +6213,7 @@ function TeleMap({ dash, height = 540 }) {
         <span><span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 4, background: T.amb, marginRight: 4 }} />{t("machinery.2_3_din_purana")}</span>
         <span><span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 4, background: T.red, marginRight: 4 }} />{t("machinery.sensor_chup")}</span>
         <span style={{ color: T.t4 }}>{t("machinery.jagah_aakhri_sync_tak_ki_parking")}</span>
+        <span style={{ color: T.amb }}>{t("machinery.tel_map_legend_day")}</span>
       </div>
       <div ref={boxRef} style={{ height, borderRadius: 12, border: `1.5px solid ${T.b1}`, overflow: "hidden" }} />
       {points.length === 0 && <Empty>{t("machinery.abhi_kisi_unit_ke_coordinates_nahi")}</Empty>}
@@ -6195,14 +6269,15 @@ function TeleDash({ dash, onAction }) {
       </div>
 
       <Panel title={t("machinery.fleet_kal_ka_kaam_aur_7")}>
-        <Row head cols="16px 1.5fr 90px 90px 110px 90px 1.3fr">
+        <Row head cols="16px 1.5fr 80px 80px 90px 105px 80px 1.4fr">
           <span></span><span>{t("fuel.machine")}</span><span>{t("machinery.kal_chali")}</span><span>{t("machinery.diesel_kal")}</span>
+          <span title={t("machinery.tel_tank_hint")}>{t("machinery.tel_tank_col")}</span>
           <span>{t("machinery.l_hr_7d")}</span><span>{t("machinery.fill_drop")}</span><span>{t("fuel.jagah")}</span>
         </Row>
         {machines.map((m) => {
           const over = m.lph7 != null && m.norm_lph != null && m.lph7 > m.norm_lph * 1.15;
           return (
-            <Row key={m.unit_id} cols="16px 1.5fr 90px 90px 110px 90px 1.3fr">
+            <Row key={m.unit_id} cols="16px 1.5fr 80px 80px 90px 105px 80px 1.4fr">
               {dot(m.health)}
               <span>
                 <span style={{ fontSize: 12.5, fontWeight: 600, color: m.linked ? T.t1 : T.t3 }}>
@@ -6215,6 +6290,11 @@ function TeleDash({ dash, onAction }) {
               </span>
               <span style={{ fontFamily: "monospace", fontSize: 12 }}>{m.yday ? hhmm(m.yday.engine_sec) : "—"}</span>
               <span style={{ fontFamily: "monospace", fontSize: 12 }}>{m.yday && m.yday.consumed_l > 0 ? fmtN(m.yday.consumed_l) + " L" : "—"}</span>
+              {/* Tank ka ANDAZA — aakhri fill/drop ka level − tab se jala */}
+              <span style={{ fontFamily: "monospace", fontSize: 12, color: T.t2 }}
+                title={m.tank ? t("machinery.tel_tank_title", { b: Math.round(m.tank.base_l), at: fmtDT(m.tank.base_at), u: Math.round(m.tank.used_l) }) : undefined}>
+                {m.tank ? "~" + fmtN(Math.round(m.tank.est_l)) + " L" : "—"}
+              </span>
               <span style={{ fontFamily: "monospace", fontSize: 12, color: over ? T.red : T.t2 }}>
                 {m.lph7 != null ? fmtN(m.lph7) : "—"}{m.norm_lph != null ? ` / ${fmtN(m.norm_lph)}` : ""}
                 {over && " ⚠"}
@@ -6223,6 +6303,11 @@ function TeleDash({ dash, onAction }) {
               <span style={{ fontSize: 11.5, color: T.t3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                 {m.last.location || "—"}
                 {m.last.data_at && <span style={{ color: T.t4 }}> · {fmtD(m.last.data_at)}</span>}
+                {m.last_fill && (
+                  <div style={{ fontSize: 10.5, color: T.t4, overflow: "hidden", textOverflow: "ellipsis" }}>
+                    {t("machinery.tel_last_fill", { at: fmtDT(m.last_fill.at), l: Math.round(m.last_fill.litres * 10) / 10, loc: m.last_fill.location || "—" })}
+                  </div>
+                )}
               </span>
             </Row>
           );

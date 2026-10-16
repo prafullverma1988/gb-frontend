@@ -14059,6 +14059,14 @@ const dict = {
   "machinery.tel_renamed_to":                                  "नया नाम: {name} — डेटा अब वहाँ आता है",
   "machinery.tel_merged_title":                                "नाम बदले — पुरानी यूनिट ({n})",
   "machinery.tel_merged_note":                                 "वेंडर ने इन यूनिट का नाम बदला; पुराना नाम 3+ दिन से चुप है और आखिरी 4 अंक नए नाम से मिलते हैं। गलत लगे तो \"वापस लाओ\"।",
+  "machinery.tel_tank_line":                                   "टैंक ~{l} L (अंदाज़ा)",
+  "machinery.tel_tank_col":                                    "टैंक ~",
+  "machinery.tel_tank_hint":                                   "अंदाज़ा: आखिरी भराई/ड्रॉप के बाद का लेवल − तब से जला डीज़ल। वेंडर अभी का टैंक लेवल नहीं देता।",
+  "machinery.tel_tank_title":                                  "{at} पर {b} L, तब से {u} L जला",
+  "machinery.tel_last_fill":                                   "आखिरी भराई {at} · {l} L · {loc}",
+  "machinery.tel_pin_andaza":                                  "पिन अंदाज़े से — जगह के नाम / उस दिन की पार्किंग से",
+  "machinery.tel_map_legend_day":                              "पिन दबाओ: आज का रास्ता (हर सिंक) + F/D = भराई/ड्रॉप",
+  "machinery.tel_naksha":                                      "📍 नक्शा",
 };
 
 export default dict;

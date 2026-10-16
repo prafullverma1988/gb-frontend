@@ -14060,6 +14060,14 @@ const dict = {
   "machinery.tel_renamed_to":                                  "New name: {name} — data now comes there",
   "machinery.tel_merged_title":                                "Renamed — old units ({n})",
   "machinery.tel_merged_note":                                 "The vendor renamed these units; the old name has been silent for 3+ days and its last 4 digits match the new name. If wrong, use \"Restore\".",
+  "machinery.tel_tank_line":                                   "Tank ~{l} L (estimate)",
+  "machinery.tel_tank_col":                                    "Tank ~",
+  "machinery.tel_tank_hint":                                   "Estimate: level after the last fill/drop minus diesel burnt since. The vendor does not send the live tank level.",
+  "machinery.tel_tank_title":                                  "{b} L at {at}, {u} L burnt since",
+  "machinery.tel_last_fill":                                   "Last fill {at} · {l} L · {loc}",
+  "machinery.tel_pin_andaza":                                  "Pin is approximate — from the place name / that day's parking",
+  "machinery.tel_map_legend_day":                              "Click a pin: today's route (every sync) + F/D = fill/drop",
+  "machinery.tel_naksha":                                      "📍 Map",
 };
 
 export default dict;

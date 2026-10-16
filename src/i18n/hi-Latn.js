@@ -14062,6 +14062,14 @@ const dict = {
   "machinery.tel_renamed_to":                                  "Naya naam: {name} — data ab wahan aata hai",
   "machinery.tel_merged_title":                                "Naam badle — purani unit ({n})",
   "machinery.tel_merged_note":                                 "Vendor ne in unit ka naam badla; purana naam 3+ din se chup hai aur aakhri 4 digit naye naam se milte hain. Galat lage to \"Return karo\".",
+  "machinery.tel_tank_line":                                   "Tank ~{l} L (andaza)",
+  "machinery.tel_tank_col":                                    "Tank ~",
+  "machinery.tel_tank_hint":                                   "Andaza: aakhri fill/drop ke baad ka level − tab se jala diesel. Vendor abhi ka tank level nahi deta.",
+  "machinery.tel_tank_title":                                  "{at} par {b} L, tab se {u} L jala",
+  "machinery.tel_last_fill":                                   "Aakhri fill {at} · {l} L · {loc}",
+  "machinery.tel_pin_andaza":                                  "Pin andaze se — jagah ke naam / us din ki parking se",
+  "machinery.tel_map_legend_day":                              "Pin dabao: aaj ka raasta (har sync) + F/D = fill/drop",
+  "machinery.tel_naksha":                                      "📍 Naksha",
 };
 
 export default dict;
