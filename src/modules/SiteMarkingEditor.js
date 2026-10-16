@@ -54,16 +54,22 @@ const partsOf = (pts, gaps) => {
 };
 // Chhodi hui jagah (road crossing) kabhi lambai me nahi judti.
 const lenOfParts = (pts, gaps) => partsOf(pts, gaps).reduce((m, p) => m + pathM(p), 0);
-// Rakba lagbhag (shoelace, local metre) — asli rakba server geometry se likhta hai.
+// Rakba — server (utils/kml.js polygonAreaSqm) jaisa HI hisaab: ausat
+// latitude, latitude ka metre 111320, pehla point (0,0). Pehle yahan
+// 110540 aur pehle point ka cos tha — dikhta rakba server se ~0.7% alag
+// aata tha, aur freelance me yahi rakba save hota hai.
 const areaOf = (pts) => {
   if (!pts || pts.length < 3) return 0;
-  const lat0 = rad(pts[0].lat), mx = 111320 * Math.cos(lat0), my = 110540;
-  let a2 = 0;
+  let latSum = 0;
+  for (const p of pts) latSum += Number(p.lat);
+  const mLat = 111320, mLng = 111320 * Math.cos(rad(latSum / pts.length));
+  const lng0 = Number(pts[0].lng), lat0 = Number(pts[0].lat);
+  let twice = 0;
   for (let i = 0; i < pts.length; i++) {
     const a = pts[i], b = pts[(i + 1) % pts.length];
-    a2 += (a.lng * mx) * (b.lat * my) - (b.lng * mx) * (a.lat * my);
+    twice += (a.lng - lng0) * mLng * (b.lat - lat0) * mLat - (b.lng - lng0) * mLng * (a.lat - lat0) * mLat;
   }
-  return Math.abs(a2) / 2;
+  return Math.abs(twice) / 2;
 };
 const fmtCh = (m) => {
   const v = Math.max(0, Math.round(Number(m) || 0));
