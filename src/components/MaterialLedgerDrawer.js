@@ -118,8 +118,11 @@ export default function MaterialLedgerDrawer({ material, projectId, onClose, onC
           : (r.vendor_name || "—"),
         // Tolai wali gadi bhi (28 Sep 2026) — "kaunsi gadi se kitna aaya"
         sub: r.trip ? tripSub(r.trip)
+          // Hatayi gayi site GRN (16 Oct 2026) — "Cancelled · wajah", qty jod me nahi
+          : r.cancelled ? [t("site_grnc.cancelled_tag"), t("site_grnc.cancelled_line", { reason: r.cancel_reason || "—" })].join(" · ")
           : [r.challan_no ? `Challan ${r.challan_no}` : "", r.vehicle_no ? "⚖️ " + r.vehicle_no : ""].filter(Boolean).join(" · "),
         by: r.received_by || "", qty: Number(r.qty) || 0, grn_id: r.grn_id,
+        cancelled: !!r.cancelled, cqty: Number(r.cancelled_qty) || 0,
         open_issues: Number(r.open_issues) || 0,
       })),
       ...(material?.usage || []).map(u => ({
@@ -292,7 +295,7 @@ export default function MaterialLedgerDrawer({ material, projectId, onClose, onC
                           )}
                         </div>
                       </div>
-                      <div style={{ fontSize: 12, fontWeight: 800, color: isGRN ? T.grn : T.b2, textAlign: "right" }}>{isGRN ? e.qty : "—"}</div>
+                      <div style={{ fontSize: 12, fontWeight: 800, color: isGRN && !e.cancelled ? T.grn : T.b2, textAlign: "right", textDecoration: e.cancelled ? "line-through" : "none" }}>{isGRN ? (e.cancelled ? e.cqty : e.qty) : "—"}</div>
                       <div style={{ fontSize: 12, fontWeight: 800, color: !isGRN ? T.red : T.b2, textAlign: "right" }}>{!isGRN ? e.qty : "—"}</div>
                       <div style={{ fontSize: 12, fontWeight: 800, color: balNeg ? T.red : T.t1, textAlign: "right" }}>{e.bal}</div>
                       <div style={{ display: "flex", justifyContent: "center" }}>

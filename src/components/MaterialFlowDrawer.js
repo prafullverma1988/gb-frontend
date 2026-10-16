@@ -201,6 +201,7 @@ export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin 
 
   const grn = data?.grn;
   const items = data?.items || [];
+  const grnGone = grn?.grn_type === "Cancelled";   // hatayi gayi site GRN — sudhaar / delete nahi
   const mr = data?.mr;
   // Purane GRN ke liye server ka andaaza (naam + vendor se) — sirf batane ke
   // liye; ye MR is GRN se JUDI nahi hai, isliye timeline/Edit MR me nahi (MAT-09).
@@ -503,6 +504,8 @@ export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin 
                     pendingNote={grnPending > 0 ? t("grn_ph.uploading", { n: grnPending }) : ""}
                   />
                 )}
+                {/* Site GRN hatana (16 Oct 2026) — request + Admin password se approve */}
+                {grn && !grnEditing && <SiteGrnCancelBox grnId={grn.id} grnNo={grn.grn_number} onDone={() => { reload(); onChanged && onChanged(); }}/>}
                 {grn && grnEditing && (
                   <div style={{ background: T.surface, border: `1px solid ${T.b1}`, borderLeft: `3px solid ${T.grn}`, borderRadius: 8, padding: "12px 14px" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 10 }}>
@@ -687,7 +690,7 @@ export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin 
         </div>
 
         {/* Footer — admin actions */}
-        {!loading && data && (mayEditGrn || mayDelGrn || (mr && onEditMR && mayEditMr)) && (
+        {!loading && data && ((!grnGone && (mayEditGrn || mayDelGrn)) || (mr && onEditMR && mayEditMr)) && (
           <div style={{ padding: "12px 20px", borderTop: `1px solid ${T.b1}`, background: T.surfaceB, flexShrink: 0, display: "flex", gap: 8, flexWrap: "wrap" }}>
             {grnEditing ? (
               <>
@@ -702,11 +705,11 @@ export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin 
               </>
             ) : (
               <>
-                {mayEditGrn && <button onClick={() => setGrnEditing(true)}
+                {mayEditGrn && !grnGone && <button onClick={() => setGrnEditing(true)}
                   style={{ padding: "9px 12px", borderRadius: 7, background: T.grnL, border: `1px solid ${T.grnM}`, color: T.grn, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
                  {t("material_flow.edit_grn")}
                 </button>}
-                {mayDelGrn && <button onClick={handleGrnDelete} disabled={grnDeleting}
+                {mayDelGrn && !grnGone && <button onClick={handleGrnDelete} disabled={grnDeleting}
                   style={{ padding: "9px 12px", borderRadius: 7, background: T.redL, border: `1px solid ${T.redM}`, color: T.red, fontSize: 12, fontWeight: 700, cursor: grnDeleting ? "not-allowed" : "pointer" }}>
                   {grnDeleting ? t("common.deleting") : t("material_flow.delete_grn")}
                 </button>}
@@ -727,6 +730,135 @@ export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin 
         @keyframes matSpin { to { transform: rotate(360deg); } }
       `}</style>
     </>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════
+// Site GRN hatana (16 Oct 2026, Phase 2) — store wale "GRN hatao" jaisa.
+// Vendor se site par aayi GRN par "GRN hatao" → wajah ke saath request (kuch
+// nahi hilta); Admin / Procurement Approve tick wala Admin password se approve
+// kare tabhi site stock, MR, PO wapas. Bhejne wala request wapas le sakta hai.
+// Button server ke flag (GET /procurement/grns/:id/cancel-info) se.
+// ════════════════════════════════════════════════════════════════
+function SiteGrnCancelBox({ grnId, grnNo, onDone }) {
+  const [info, setInfo] = useState(null);
+  const [open, setOpen] = useState(false);       // request ka modal
+  const [reason, setReason] = useState("");
+  const [pw, setPw] = useState("");
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState(null);          // { ok, txt }
+  const load = () => {
+    api.get(`/procurement/grns/${grnId}/cancel-info`)
+      .then((r) => setInfo(r && r.success ? r.data : null))
+      .catch(() => setInfo(null));
+  };
+  useEffect(() => { setOpen(false); setReason(""); setPw(""); setNote(""); setMsg(null); setInfo(null); if (grnId) load(); }, [grnId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const run = async (url, body) => {
+    if (busy) return;
+    setBusy(true); setMsg(null);
+    const r = await api.post(url, body).catch(() => ({ success: false }));
+    setBusy(false);
+    if (r && r.success) { setOpen(false); setReason(""); setPw(""); setNote(""); setMsg({ ok: true, txt: r.message || "" }); load(); onDone && onDone(); }
+    else setMsg({ ok: false, txt: (r && r.message) || t("site_grnc.fail") });
+  };
+  if (!info || (!info.cancelled && !info.cancellable)) return null;
+  const rq = info.cancel_req && info.cancel_req.status === "pending" ? info.cancel_req : null;
+  const last = info.cancel_req && !rq ? info.cancel_req : null;
+  const send = () => {
+    if (!reason.trim()) { setMsg({ ok: false, txt: t("site_grnc.need_reason") }); return; }
+    run(`/procurement/grns/${grnId}/cancel-request`, { reason: reason.trim() });
+  };
+  const approve = () => {
+    if (!pw) { setMsg({ ok: false, txt: t("site_grnc.need_pw") }); return; }
+    run(`/procurement/site-grn-cancel-requests/${rq.id}/approve`, { password: pw });
+  };
+  const reject = () => {
+    if (!note.trim()) { setMsg({ ok: false, txt: t("site_grnc.need_note") }); return; }
+    run(`/procurement/site-grn-cancel-requests/${rq.id}/reject`, { note: note.trim() });
+  };
+
+  const inp = { width: "100%", boxSizing: "border-box", padding: "8px 10px", borderRadius: 7, border: `1.5px solid ${T.b1}`, fontSize: 12.5, outline: "none", fontFamily: "inherit" };
+  const lbl = { fontSize: 10.5, fontWeight: 700, color: T.t3, textTransform: "uppercase", letterSpacing: ".4px", margin: "10px 0 4px" };
+  const btn = (bg, fg, bd) => ({ padding: "8px 14px", borderRadius: 7, border: bd ? `1.5px solid ${bd}` : "none", background: bg, color: fg || "#fff", fontSize: 12.5, fontWeight: 700, cursor: busy ? "default" : "pointer", opacity: busy ? 0.6 : 1 });
+  const Msg = () => msg ? <div style={{ marginTop: 9, fontSize: 11.5, fontWeight: 600, color: msg.ok ? T.grn : T.red }}>{msg.txt}</div> : null;
+
+  if (info.cancelled) {
+    return (
+      <div style={{ padding: "10px 12px", background: T.redL, borderRadius: 8, borderLeft: `3px solid ${T.red}` }}>
+        <div style={{ fontSize: 12.5, fontWeight: 700, color: T.red }}>{t("site_grnc.cancelled_tag")} · {t("site_grnc.cancelled_box")}</div>
+        <div style={{ fontSize: 11.5, color: T.t2, marginTop: 4 }}>{t("site_grnc.cancelled_line", { reason: info.cancel_reason || "—" })}</div>
+        <div style={{ fontSize: 11, color: T.t3, marginTop: 2 }}>{t("site_grnc.cancelled_by", { name: info.cancelled_by || "—", date: fmtDate(info.cancelled_at) })}</div>
+        {(info.cancelled_items || []).map((it, i) => (
+          <div key={i} style={{ fontSize: 11, color: T.t3, marginTop: 2, textDecoration: "line-through" }}>{it.description} — {it.qty} {it.unit}</div>
+        ))}
+        <Msg/>
+      </div>
+    );
+  }
+  if (rq) {
+    return (
+      <div style={{ padding: "10px 12px", background: T.ambL, borderRadius: 8, borderLeft: `3px solid ${T.amb}` }}>
+        <div style={{ fontSize: 12.5, fontWeight: 700, color: T.amb }}>{t("site_grnc.pending_tag")}</div>
+        <div style={{ fontSize: 11.5, color: T.t2, marginTop: 4 }}>{t("site_grnc.req_reason", { reason: rq.reason })}</div>
+        <div style={{ fontSize: 11, color: T.t3, marginTop: 2 }}>{t("site_grnc.req_by", { name: rq.by || "—", date: fmtDate(rq.at) })}</div>
+        {info.can_approve && (
+          <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px dashed ${T.b2}` }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: T.t1 }}>{t("site_grnc.approve_title")}</div>
+            <div style={{ fontSize: 11, color: T.t3, marginTop: 3 }}>{t("site_grnc.hint")}</div>
+            <div style={lbl}>{t("site_grnc.pw")}</div>
+            <input type="password" autoComplete="new-password" aria-label={t("site_grnc.pw")} value={pw} onChange={ev => setPw(ev.target.value)} style={inp}/>
+            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 9 }}>
+              <button onClick={approve} disabled={busy} style={btn(T.red)}>{t("site_grnc.approve_btn")}</button>
+            </div>
+            <div style={lbl}>{t("site_grnc.reject_note")}</div>
+            <textarea rows={2} value={note} onChange={ev => setNote(ev.target.value)} style={{ ...inp, resize: "vertical" }}/>
+            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 9 }}>
+              <button onClick={reject} disabled={busy} style={btn(T.surface, T.t2, T.b2)}>{t("site_grnc.reject_btn")}</button>
+            </div>
+          </div>
+        )}
+        {rq.mine && (
+          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 10 }}>
+            <button onClick={() => run(`/procurement/site-grn-cancel-requests/${rq.id}/withdraw`, {})} disabled={busy} style={btn(T.surface, T.amb, T.amb)}>{t("site_grnc.withdraw")}</button>
+          </div>
+        )}
+        <Msg/>
+      </div>
+    );
+  }
+  if (!info.can_request && !(last && last.status === "rejected") && !msg) return null;
+  return (
+    <div>
+      {last && last.status === "rejected" && (
+        <div style={{ fontSize: 11.5, color: T.t3, padding: "8px 10px", background: T.surfaceB, borderRadius: 7, marginBottom: 8 }}>
+          {t("site_grnc.rejected_line", { note: last.note || "—", name: last.decided_by || "—" })}
+        </div>
+      )}
+      {info.can_request && (
+        <div style={{ display: "flex", justifyContent: "flex-end" }}>
+          <button onClick={() => { setOpen(true); setMsg(null); }} style={btn(T.surface, T.red, T.red)}>{t("site_grnc.btn")}</button>
+        </div>
+      )}
+      {!open && <Msg/>}
+      {open && (
+        <>
+          <div onClick={() => !busy && setOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.45)", zIndex: 1600 }}/>
+          <div style={{ position: "fixed", top: "50%", left: "50%", transform: "translate(-50%,-50%)", width: "min(420px,92vw)", background: T.surface, borderRadius: 12, zIndex: 1601, padding: "16px 18px", boxShadow: "0 20px 50px rgba(0,0,0,0.3)", fontFamily: "'Segoe UI',system-ui,sans-serif" }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: T.t1 }}>{t("site_grnc.title", { no: grnNo || "" })}</div>
+            <div style={{ fontSize: 11.5, color: T.t3, marginTop: 5 }}>{t("site_grnc.hint")}</div>
+            <div style={lbl}>{t("site_grnc.reason")}</div>
+            <textarea rows={3} autoFocus value={reason} onChange={ev => setReason(ev.target.value)} placeholder={t("site_grnc.reason_ph")} style={{ ...inp, resize: "vertical" }}/>
+            <Msg/>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 12 }}>
+              <button onClick={() => setOpen(false)} disabled={busy} style={btn(T.surface, T.t2, T.b2)}>{t("common.cancel")}</button>
+              <button onClick={send} disabled={busy} style={btn(T.red)}>{t("site_grnc.send")}</button>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 

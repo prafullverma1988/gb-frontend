@@ -301,7 +301,7 @@ function TabMaterial({ project }) {
       const directEntries = [];
       if (grnRes.success && Array.isArray(grnRes.data)) {
         grnRes.data
-          .filter(g => !g.po_id && !g.linked_mr_id)
+          .filter(g => !g.po_id && !g.linked_mr_id && g.grn_type !== "Cancelled")   // hatayi gayi site GRN (16 Oct 2026) "Received" nahi
           .forEach(g => {
             (g.items || []).forEach((item, i) => {
               const matName = item.description || item.item_name || "Material";
@@ -1525,7 +1525,11 @@ function TabMaterial({ project }) {
                               <div style={{fontSize:12,color:T.t1}}>
                                 {isGRN
                                   ? <>
-                                      <span style={{fontSize:10.5,padding:"2px 7px",borderRadius:3,background:T.grnL,color:T.grn,fontWeight:600}}>{t("common.grn_received")}</span>
+                                      {/* Hatayi gayi site GRN (16 Oct 2026) — line dikhti hai, jod / balance me nahi */}
+                                      {row.cancelled
+                                        ? <span title={row.cancel_reason||""} style={{fontSize:10.5,padding:"2px 7px",borderRadius:3,background:T.redL,color:T.red,fontWeight:700}}>{t("site_grnc.cancelled_tag")}</span>
+                                        : <span style={{fontSize:10.5,padding:"2px 7px",borderRadius:3,background:T.grnL,color:T.grn,fontWeight:600}}>{t("common.grn_received")}</span>}
+                                      {row.cancelled&&<div style={{fontSize:10.5,color:T.red,marginTop:3,lineHeight:1.35}}>{t("site_grnc.cancelled_line",{reason:row.cancel_reason||"—"})}</div>}
                                       {Number(row.open_issues)>0&&(
                                         <span title={t("material.is_delivery_me_open_issue_hai")}
                                           style={{fontSize:10.5,padding:"2px 7px",borderRadius:3,background:T.redL,color:T.red,fontWeight:700,marginLeft:6,border:"1px solid "+T.redM}}>
@@ -1545,7 +1549,7 @@ function TabMaterial({ project }) {
                               {/* Ref# */}
                               <div style={{fontSize:11,fontWeight:700,color:isGRN?T.grn:T.amb,fontFamily:"monospace"}}>{isGRN?(row.grn_number||"—"):("USE-"+(ri+1))}</div>
                               {/* Cr (In) */}
-                              <div style={{fontSize:13,fontWeight:800,color:isGRN?T.grn:T.t4,textAlign:"right"}}>{isGRN?row.qty:"—"}</div>
+                              <div style={{fontSize:13,fontWeight:800,color:isGRN&&!row.cancelled?T.grn:T.t4,textAlign:"right",textDecoration:row.cancelled?"line-through":"none"}}>{isGRN?(row.cancelled?row.cancelled_qty:row.qty):"—"}</div>
                               {/* Dr (Out) */}
                               <div style={{fontSize:13,fontWeight:800,color:!isGRN?T.red:T.t4,textAlign:"right"}}>{!isGRN?row.qty:"—"}</div>
                               {/* Running Balance */}
