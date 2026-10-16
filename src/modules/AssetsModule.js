@@ -1116,6 +1116,194 @@ const itemForm = (it) => ({
   vendor_name: it.vendor_name || "", notes: it.notes || "",
 });
 
+// ── Asset ka poora log (17 Oct 2026) ──────────────────────────────
+// Prafull: "asset incharge asset ka pura log dekh sake with date filter — kab
+// kisake pas tha, kahan kahan gaya, kisako issue hua, damage ya repair bhi".
+// Item ke History tab me: tareekh ka filter, "Kab kiske paas tha" (har jagah
+// kitna, kab se kab tak) aur har ghatna (voucher, ginti, register ka badlav)
+// naye se purane. Server: GET /assets/items/:id/log (niyam utils/assetLog.js).
+const logKindLabel = (k) => ({
+  store: t("assets.log_kind_store"), site: t("assets.log_kind_site"), repair: t("assets.log_kind_repair"),
+  transit: t("assets.log_kind_transit"), loss_pending: t("assets.log_kind_loss_pending"),
+})[k] || k;
+const LOG_TONE = { store: [T.ind, T.indL], site: [T.grn, T.grnL], repair: [T.amb, T.ambL], transit: [T.slt, T.sltL], loss_pending: [T.red, T.redL] };
+const logPlace = (pl) => {
+  if (!pl) return { main: "—", sub: "" };
+  if (pl.kind === "transit") return { main: t("assets.log_transit", { no: pl.voucher_no || "" }), sub: pl.to_place ? pl.to_place.name || "" : "" };
+  if (pl.kind === "loss_pending") return { main: t("assets.log_loss_pending", { no: pl.voucher_no || "" }), sub: "" };
+  if (pl.kind === "repair") return { main: pl.name || "—", sub: t("assets.repair_vendor") };
+  if (pl.kind === "store") return { main: pl.name || "—", sub: t("assets.warehouse") };
+  const who = pl.holder_name ? pl.holder_name + (pl.holder_type && pl.holder_type !== "user" ? " · " + holderLabel(pl.holder_type) : "") : "";
+  const cust = pl.custodian_name && pl.custodian_name !== pl.holder_name ? t("assets.log_custodian_x", { name: pl.custodian_name }) : "";
+  return { main: pl.name || "—", sub: [who, cust].filter(Boolean).join(" · ") };
+};
+const placeLine = (pl) => { const p = logPlace(pl); return p.sub ? `${p.main} (${p.sub})` : p.main; };
+// Line ki ginti aur haalat: "18 Good · 2 Good → Damaged".
+const logLines = (e) => (e.lines || []).map((l) => {
+  const q = l.accepted_qty != null && e.status === "accepted" ? l.accepted_qty : l.qty;
+  const c = l.accepted_condition || l.item_condition;
+  const was = l.from_condition && c && l.from_condition !== c ? condLabel(l.from_condition) + " → " : "";
+  return `${fmtN(q)} ${was}${c ? condLabel(c) : ""}`.trim();
+}).join(" · ");
+const logWho = (e) => {
+  const when = e.accepted_ts ? fmtDT(e.accepted_ts.replace(" ", "T") + "Z") : "";
+  if (e.status === "pending") return t("assets.log_waiting");
+  if (!e.accepted_by_name) return "";
+  if (e.status === "rejected") return t("assets.log_rejected_x", { name: e.accepted_by_name, when });
+  if (e.status === "cancelled") return t("assets.log_cancelled_x", { name: e.accepted_by_name, when });
+  return t("assets.log_accepted_x", { name: e.accepted_by_name, when });
+};
+
+function LogEvent({ e, unit, onOpenVoucher }) {
+  const row = { display: "flex", gap: 12, padding: "10px 14px", borderBottom: `1px solid ${T.b1}` };
+  const line = { fontSize: 12, color: T.t2, marginTop: 4, wordBreak: "break-word" };
+  const muted = { fontSize: 11, color: T.t4, marginTop: 3 };
+  const date = <div style={{ width: 70, flexShrink: 0, fontSize: 11.5, color: T.t3, paddingTop: 2 }}>{fmtD(e.date)}</div>;
+  if (e.kind === "count") {
+    const gap = N(e.counted) - N(e.system);
+    return (
+      <div style={row}>{date}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+            <Pill label={t("assets.log_count")} c={T.slt} bg={T.sltL} /><b style={{ fontSize: 12, color: T.t1 }}>{e.voucher_no}</b>
+            <Pill label={verifStatusLabel(e.status)} {...verifTone(e.status)} />
+          </div>
+          <div style={line}>
+            {e.place ? e.place + " · " : ""}{t("assets.log_count_x", { system: fmtN(e.system), counted: fmtN(e.counted) })}
+            {gap !== 0 && <b style={{ color: gap < 0 ? T.red : T.grn }}> ({gap > 0 ? "+" : ""}{fmtN(gap)})</b>}
+          </div>
+          {(e.remarks || e.count_note) && <div style={muted}>{[e.remarks, e.count_note].filter(Boolean).join(" · ")}</div>}
+          <div style={muted}>{[e.created_by_name, e.closed_by_name && t("assets.log_closed_by_x", { name: e.closed_by_name }), e.adjust_voucher_no].filter(Boolean).join(" · ")}</div>
+        </div>
+      </div>
+    );
+  }
+  if (e.kind === "edit") {
+    return (
+      <div style={row}>{date}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+            <Pill label={t("assets.log_edit")} c={T.pur || T.ind} bg={T.purL || T.indL} /><b style={{ fontSize: 12, color: T.t1 }}>{e.created_by_name || "—"}</b>
+          </div>
+          {(e.changes || []).map((c, i) => (
+            <div key={i} style={line}>
+              <span style={{ color: T.t3 }}>{editFieldLabel(c.field)}: </span>
+              <span style={{ color: T.t4, textDecoration: "line-through" }}>{editVal(c.field, c.old)}</span>{" → "}<b style={{ color: T.t1 }}>{editVal(c.field, c.new)}</b>
+            </div>
+          ))}
+          {e.reason && <div style={muted}>{t("assets.edit_reason_x", { reason: e.reason })}</div>}
+        </div>
+      </div>
+    );
+  }
+  // Voucher — kahan se → kahan, kitna, kis haalat me, kisne kiya, kisne liya.
+  const same = e.from && e.to && JSON.stringify(e.from) === JSON.stringify(e.to);
+  const route = same || !e.to ? placeLine(e.from) : !e.from ? "→ " + placeLine(e.to) : `${placeLine(e.from)} → ${placeLine(e.to)}`;
+  const inc = e.incident;
+  return (
+    <div style={row}>{date}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+          <TypePill ty={e.type} />
+          <button type="button" onClick={() => onOpenVoucher(e.id)}
+            style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontSize: 12, fontWeight: 700, color: T.ind, fontFamily: "inherit" }}>{e.voucher_no}</button>
+          <StatusPill s={e.status} />
+        </div>
+        <div style={line}>{route}</div>
+        <div style={line}>
+          <b>{fmtN(e.status === "accepted" && e.accepted_qty != null ? e.accepted_qty : e.qty)} {unit || ""}</b>
+          {logLines(e) && <span style={{ color: T.t3 }}> — {logLines(e)}</span>}
+        </div>
+        {inc && (inc.reason || inc.note) && (
+          <div style={line}>{[inc.reason && t("assets.inc_reason_" + inc.reason), inc.note].filter(Boolean).join(" · ")}</div>
+        )}
+        {e.repair_cost != null && <div style={line}>{t("assets.log_repair_cost_x", { amt: rupee(e.repair_cost) })}</div>}
+        {e.remarks && <div style={muted}>{e.remarks}</div>}
+        {e.reject_reason && <div style={{ ...muted, color: T.red }}>{e.reject_reason}</div>}
+        <div style={muted}>{[e.created_by_name && t("assets.log_by_x", { name: e.created_by_name }), logWho(e),
+          e.expected_return_date && e.status !== "cancelled" && t("assets.log_return_by", { date: fmtD(e.expected_return_date) })].filter(Boolean).join(" · ")}</div>
+      </div>
+    </div>
+  );
+}
+
+function ItemLog({ id, unit, version, onOpenVoucher }) {
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const [data, setData] = useState(null);
+  const [err, setErr] = useState("");
+  const [xlsErr, setXlsErr] = useState("");
+  useEffect(() => {
+    let alive = true;
+    setData(null); setErr("");
+    api.get(`/assets/items/${id}/log?` + qs({ from, to })).then((r) => {
+      if (!alive) return;
+      if (r && r.success) setData(r.data);
+      else { setData({ events: [], periods: [] }); setErr((r && r.message) || t("assets.log_load_failed")); }
+    }).catch(() => { if (alive) { setData({ events: [], periods: [] }); setErr(t("assets.log_load_failed")); } });
+    return () => { alive = false; };
+  }, [id, from, to, version]);
+  const doExport = async () => {
+    setXlsErr("");
+    try { saveBlob(await fetchBlob(`/assets/items/${id}/log/export?` + qs({ from, to }), t("assets.export_failed")), `asset-log-${id}.xlsx`); }
+    catch (e) { setXlsErr(e.message || t("assets.export_failed")); }
+  };
+  const lastDays = (n) => { setFrom(new Date(Date.now() - n * 864e5).toLocaleDateString("en-CA")); setTo(""); };
+  const periods = (data && data.periods) || [];
+  const events = (data && data.events) || [];
+  const pc = "1.7fr 90px 1.3fr 50px 1.2fr";
+  return (
+    <>
+      <div style={{ display: "flex", gap: 8, alignItems: "flex-end", flexWrap: "wrap", marginBottom: 6 }}>
+        <Field label={t("assets.log_from")}><input type="date" value={from} max={to || undefined} onChange={(e) => setFrom(e.target.value)} style={{ ...inp, width: 150 }} /></Field>
+        <Field label={t("assets.log_to")}><input type="date" value={to} min={from || undefined} onChange={(e) => setTo(e.target.value)} style={{ ...inp, width: 150 }} /></Field>
+        <Btn size="sm" ghost onClick={() => lastDays(30)}>{t("assets.log_last_30")}</Btn>
+        <Btn size="sm" ghost onClick={() => lastDays(90)}>{t("assets.log_last_90")}</Btn>
+        <Btn size="sm" ghost onClick={() => { setFrom(""); setTo(""); }}>{t("assets.log_all")}</Btn>
+        <span style={{ flex: 1 }} />
+        <Btn size="sm" ghost onClick={doExport}>{t("assets.log_excel")}</Btn>
+      </div>
+      <div style={{ fontSize: 10.5, color: T.t4, marginBottom: 10 }}>{t("assets.log_hint")}</div>
+      <ErrBox>{xlsErr || err}</ErrBox>
+      {data == null && <Spinner />}
+      {data && (
+        <>
+          <Panel title={t("assets.log_periods_title")} style={{ marginBottom: 14 }}>
+            {periods.length === 0 ? <Empty>{t("assets.log_periods_empty")}</Empty> : (
+              <Scroll minWidth={660}>
+                <Row head cols={pc}><span>{t("assets.log_where")}</span><span>{t("assets.qty")}</span><span>{t("assets.log_when")}</span><span>{t("assets.log_days")}</span><span>{t("assets.voucher")}</span></Row>
+                {periods.map((p, i) => {
+                  const pl = logPlace(p.place);
+                  const [c, bg] = LOG_TONE[p.place.kind] || LOG_TONE.store;
+                  return (
+                    <Row key={i} cols={pc}>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ display: "flex", gap: 6, alignItems: "center", minWidth: 0 }}>
+                          <span style={{ flexShrink: 0 }}><Pill label={logKindLabel(p.place.kind)} c={c} bg={bg} /></span>
+                          <span style={{ fontWeight: 600, color: T.t1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{pl.main}</span>
+                        </div>
+                        {pl.sub && <div style={{ fontSize: 10.5, color: T.t4, marginTop: 2 }}>{pl.sub}</div>}
+                      </div>
+                      <span style={{ fontWeight: 700 }}>{fmtN(p.qty)} <span style={{ fontSize: 10.5, color: T.t4, fontWeight: 400 }}>{unit || ""}</span></span>
+                      <span style={{ fontSize: 11.5 }}>{fmtD(p.in_date)} → {p.out_date ? fmtD(p.out_date) : <b style={{ color: T.grn }}>{t("assets.log_till_now")}</b>}</span>
+                      <span style={{ fontSize: 11.5, color: T.t3 }}>{p.days == null ? "—" : p.days}</span>
+                      <span style={{ fontSize: 10.5, color: T.t4 }}>{[p.in_voucher_no, p.out_voucher_no].filter(Boolean).join(" → ")}</span>
+                    </Row>
+                  );
+                })}
+              </Scroll>
+            )}
+          </Panel>
+          <Panel title={t("assets.log_events_title", { n: events.length })}>
+            {events.length === 0 ? <Empty>{t("assets.log_events_empty")}</Empty>
+              : events.map((e) => <LogEvent key={e.kind + ":" + e.id} e={e} unit={unit} onOpenVoucher={onOpenVoucher} />)}
+          </Panel>
+        </>
+      )}
+    </>
+  );
+}
+
 function ItemDrawer({ item, cats, canEdit, canDelete, onClose, onChanged, onOpenVoucher }) {
   const toast = useToast();
   const [tab, setTab] = useState("details");
@@ -1129,9 +1317,8 @@ function ItemDrawer({ item, cats, canEdit, canDelete, onClose, onChanged, onOpen
   const [reason, setReason] = useState("");
   const reasonRef = useRef(null);
   const [holdings, setHoldings] = useState(null);
-  const [history, setHistory] = useState(null);
-  const [counts, setCounts] = useState(null);    // is item ki saari ginti (kab, kitna, kyun)
-  const [edits, setEdits] = useState(null);      // badlav ka itihaas (wajah ke saath)
+  // History tab ka poora log (ItemLog) — badlav save hote hi dobara aaye.
+  const [logVersion, setLogVersion] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const id = item && item.id;
@@ -1147,26 +1334,12 @@ function ItemDrawer({ item, cats, canEdit, canDelete, onClose, onChanged, onOpen
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [item]);
 
-  const loadEdits = useCallback(() => {
-    if (!id) return;
-    api.get(`/assets/items/${id}/edits`).then((r) => setEdits(r && r.success ? r.data || [] : [])).catch(() => setEdits([]));
-  }, [id]);
-
   useEffect(() => {
     if (!id) return;
     let alive = true;
-    setHoldings(null); setHistory(null); setCounts(null); setEdits(null);
-    Promise.all([
-      api.get(`/assets/items/${id}/holdings`).catch(() => null),
-      api.get(`/assets/items/${id}/history`).catch(() => null),
-      api.get(`/assets/items/${id}/verifications`).catch(() => null),
-      api.get(`/assets/items/${id}/edits`).catch(() => null),
-    ]).then(([h, hs, cs, es]) => {
-      if (!alive) return;
-      setHoldings(h && h.success ? h.data || [] : []);
-      setHistory(hs && hs.success ? hs.data || [] : []);
-      setCounts(cs && cs.success ? cs.data || [] : []);
-      setEdits(es && es.success ? es.data || [] : []);
+    setHoldings(null);
+    api.get(`/assets/items/${id}/holdings`).catch(() => null).then((h) => {
+      if (alive) setHoldings(h && h.success ? h.data || [] : []);
     });
     return () => { alive = false; };
   }, [id]);
@@ -1198,7 +1371,7 @@ function ItemDrawer({ item, cats, canEdit, canDelete, onClose, onChanged, onOpen
     if (r && r.success) {
       toast.success(r.message || t("assets.saved"));
       setEditing(false); setReason("");
-      loadEdits(); onChanged();
+      setLogVersion((v) => v + 1); onChanged();
     } else setError((r && r.message) || t("assets.save_failed"));
   };
 
@@ -1355,92 +1528,8 @@ function ItemDrawer({ item, cats, canEdit, canDelete, onClose, onChanged, onOpen
         </Panel>
       )}
 
-      {/* Register ke item ka badlav — kisne, kab, kya (purana → naya), kyon. */}
-      {tab === "history" && edits && edits.length > 0 && (
-        <div style={{ marginBottom: 14 }}>
-          <Panel title={t("assets.item_edits")}>
-            {edits.map((e) => (
-              <div key={e.id} style={{ padding: "10px 14px", borderBottom: `1px solid ${T.b1}` }}>
-                <div style={{ display: "flex", gap: 8, alignItems: "baseline", flexWrap: "wrap", fontSize: 11.5 }}>
-                  <b style={{ color: T.t1 }}>{e.edited_by_name || "—"}</b>
-                  <span style={{ color: T.t4 }}>{fmtDT(e.created_at)}</span>
-                </div>
-                {(e.changes || []).map((c, i) => (
-                  <div key={i} style={{ fontSize: 12, marginTop: 4, color: T.t2 }}>
-                    <span style={{ color: T.t3 }}>{editFieldLabel(c.field)}: </span>
-                    <span style={{ color: T.t4, textDecoration: "line-through" }}>{editVal(c.field, c.old)}</span>
-                    {" → "}
-                    <b style={{ color: T.t1 }}>{editVal(c.field, c.new)}</b>
-                  </div>
-                ))}
-                {e.reason && <div style={{ fontSize: 11.5, color: T.t3, marginTop: 4 }}>{t("assets.edit_reason_x", { reason: e.reason })}</div>}
-              </div>
-            ))}
-          </Panel>
-        </div>
-      )}
-      {/* Ginti ka itihaas — kab gina, ledger me kitna tha, kitna mila, kya wajah. */}
-      {tab === "history" && counts && counts.length > 0 && (
-        <div style={{ marginBottom: 14 }}>
-          <Panel title={t("assets.item_counts")}>
-            <Scroll minWidth={820}>
-              <Row head cols="118px 80px 90px 78px 78px 70px 1.6fr">
-                <span>{t("assets.verify_no")}</span><span>{t("assets.date")}</span><span>{t("assets.status")}</span>
-                <span>{t("assets.verify_system")}</span><span>{t("assets.verify_counted")}</span><span>{t("assets.verify_gap")}</span><span>{t("assets.remarks")}</span>
-              </Row>
-              {counts.map((c, i) => {
-                const sys = N(c.system_good) + N(c.system_damaged);
-                const got = N(c.counted_good) + N(c.counted_damaged);
-                const gap = got - sys;
-                return (
-                  <Row key={c.id + "-" + i} cols="118px 80px 90px 78px 78px 70px 1.6fr">
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ fontWeight: 600, color: T.t1 }}>{c.verification_no}</div>
-                      {c.adjust_voucher_no && <div style={{ fontSize: 10.5, color: T.ind }}>{c.adjust_voucher_no}</div>}
-                    </div>
-                    <span style={{ fontSize: 11.5, color: T.t3 }}>{fmtD(c.date)}</span>
-                    <span><Pill label={verifStatusLabel(c.status)} {...verifTone(c.status)} /></span>
-                    <span>{fmtN(sys)}</span>
-                    <span>{fmtN(got)}</span>
-                    <span style={{ fontWeight: 700, color: gap < 0 ? T.red : gap > 0 ? T.grn : T.t4 }}>
-                      {gap === 0 ? "—" : `${gap > 0 ? "+" : ""}${fmtN(gap)}`}
-                    </span>
-                    <div style={{ fontSize: 11.5, color: T.t3, minWidth: 0 }}>
-                      {c.remarks || "—"}
-                      {c.count_note && <div style={{ fontSize: 10.5, color: T.t4 }}>{c.count_note}</div>}
-                    </div>
-                  </Row>
-                );
-              })}
-            </Scroll>
-          </Panel>
-        </div>
-      )}
-      {tab === "history" && (
-        <Panel>
-          {history == null && <Spinner />}
-          {history && history.length === 0 && <Empty>{t("assets.item_history_empty")}</Empty>}
-          {history && history.length > 0 && (
-            <>
-              <Row head cols="120px 80px 90px 1.3fr 1.3fr 60px 90px"><span>{t("assets.voucher")}</span><span>{t("assets.date")}</span><span>{t("assets.type")}</span><span>{t("assets.from")}</span><span>{t("assets.to")}</span><span>{t("assets.qty")}</span><span>{t("assets.status")}</span></Row>
-              {history.map((v, i) => {
-                const f = sideText(v, "from"), to = sideText(v, "to");
-                return (
-                  <Row key={v.id + "-" + i} cols="120px 80px 90px 1.3fr 1.3fr 60px 90px" onClick={() => onOpenVoucher(v.id)}>
-                    <span style={{ fontWeight: 600, color: T.t1 }}>{v.voucher_no}</span>
-                    <span style={{ fontSize: 11.5, color: T.t3 }}>{fmtD(v.date)}</span>
-                    <span><TypePill ty={v.type} /></span>
-                    <div style={{ minWidth: 0 }}><div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.main}</div><div style={{ fontSize: 10.5, color: T.t4 }}>{f.sub}</div></div>
-                    <div style={{ minWidth: 0 }}><div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{to.main}</div><div style={{ fontSize: 10.5, color: T.t4 }}>{to.sub}</div></div>
-                    <div><div>{fmtN(v.qty)}</div>{v.accepted_qty != null && v.status === "accepted" && N(v.accepted_qty) !== N(v.qty) && <div style={{ fontSize: 10, color: T.amb }}>{t("assets.accepted_n", { n: fmtN(v.accepted_qty) })}</div>}</div>
-                    <span><StatusPill s={v.status} /></span>
-                  </Row>
-                );
-              })}
-            </>
-          )}
-        </Panel>
-      )}
+      {/* Poora log — kab kiske paas tha + har ghatna, tareekh ke filter ke saath (17 Oct 2026). */}
+      {tab === "history" && <ItemLog id={id} unit={item.unit} version={logVersion} onOpenVoucher={onOpenVoucher} />}
     </Drawer>
   );
 }
