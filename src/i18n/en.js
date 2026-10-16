@@ -14002,6 +14002,7 @@ const dict = {
   "stmt.split_note": "Will be sent as {n} batches (max 500 each)",
   "stb.btn_count": "Statement approval ({n})",
   "stb.none_tip": "No statement batch yet — batches made from \"Statement milao\" show here",
+  "stmt.done_tip": "Only closes this window — nothing is saved here. Batches you sent are in Khaata Ledger → \"Statement approval\".",
 };
 
 export default dict;

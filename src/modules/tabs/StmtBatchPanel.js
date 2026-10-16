@@ -82,7 +82,7 @@ function BatchModal({ id, onClose }) {
   const [edits, setEdits] = useState({});
   const [cnote, setCnote] = useState("");
   const [parties, setParties] = useState([]);
-  useEffect(() => { api.get("/finance/parties").then((r) => { if (r && r.success) setParties((r.data || []).filter((p) => !p.is_staff)); }).catch(() => {}); }, []);
+  useEffect(() => { api.get("/finance/parties").then((r) => { if (r && r.success) setParties(r.data || []); }).catch(() => {}); }, []);
   const setEdit = (id, v) => setEdits((p) => { const n = { ...p }; if (!v) delete n[id]; else n[id] = v; return n; });
   const sendChange = (kind) => {
     if (cnote.trim().length < 3) { setErr(t("stmt.batch_note_req")); return; }
@@ -173,7 +173,13 @@ function BatchModal({ id, onClose }) {
               {b.status === "approved" && Array.isArray(b.created) && b.created.length > 0 && (() => {
                 const pend = (b.changes || []).some((c) => c.status === "pending");
                 const live = b.created.filter((x) => Number(x.is_active) !== 0);
-                const pOpts = parties.map((p) => ({ key: p.id, label: p.name }));
+                // Party pehle, phir Staff (16 Oct 2026: staff chhupe the — Priya jaise naam nahi milte the).
+                // Ek jaisa naam do baar ho to aage phone / #id — galat party na chun lo.
+                const nm = (p) => String(p.name || "").trim().toLowerCase();
+                const dup = (p) => parties.filter((q) => nm(q) === nm(p)).length > 1;
+                const po = (p) => ({ key: p.id, label: p.name, group: p.is_staff ? t("stmt.grp_staff") : t("stmt.grp_parties"),
+                  sub: dup(p) ? (p.phone || "#" + p.id) : null, search: p.phone || "" });
+                const pOpts = [...parties.filter((p) => !p.is_staff).map(po), ...parties.filter((p) => p.is_staff).map(po)];
                 return (
                   <div style={{ marginBottom: 12, border: `1px solid ${T.b1}`, borderRadius: 8, overflow: "hidden" }}>
                     <div style={{ padding: "8px 10px", background: T.surfaceB, fontSize: 12, fontWeight: 700, color: T.t1 }}>{t("stb.made_entries", { n: live.length })}</div>

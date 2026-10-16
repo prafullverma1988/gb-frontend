@@ -14001,6 +14001,7 @@ const dict = {
   "stmt.split_note": "{n} बैच में जाएगा (हर एक में 500 तक)",
   "stb.btn_count": "स्टेटमेंट अप्रूवल ({n})",
   "stb.none_tip": "अभी कोई स्टेटमेंट बैच नहीं — \"Statement milao\" से बने बैच यहाँ दिखेंगे",
+  "stmt.done_tip": "सिर्फ़ यह खिड़की बंद होती है — यहाँ से कुछ सेव नहीं होता। भेजे हुए बैच खाता लेजर → \"Statement approval\" में हैं।",
 };
 
 export default dict;

@@ -14004,6 +14004,7 @@ const dict = {
   "stmt.split_note": "{n} batch me jaayega (har ek me 500 tak)",
   "stb.btn_count": "Statement approval ({n})",
   "stb.none_tip": "Abhi koi statement batch nahi — \"Statement milao\" se bane batch yahan dikhenge",
+  "stmt.done_tip": "Sirf ye khidki band hoti hai — yahan se kuch save nahi hota. Bheje hue batch Khaata Ledger → \"Statement approval\" me hain.",
 };
 
 export default dict;

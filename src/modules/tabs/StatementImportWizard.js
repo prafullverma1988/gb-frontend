@@ -494,7 +494,7 @@ export default function StatementImportWizard({ accounts, onClose }) {
               {busy ? t("stmt.matching") : t("stmt.match_now")}
             </button>
           )}
-          {step === 3 && <button onClick={onClose} style={btn("primary")}>{t("stmt.done")}</button>}
+          {step === 3 && <button onClick={onClose} title={t("stmt.done_tip")} style={btn("ghost")}>{t("stmt.close")}</button>}
         </div>
       </div>
     </div>
@@ -701,7 +701,11 @@ function ReviewCreate({ accountId, rows, matched, accounts, tol, decide = {}, ac
     const acc = (accounts || []).filter((a) => String(a.id) !== String(accountId)).map((a) => ({
       key: `a:${a.id}`, label: a.name, sub: t("stmt.sub_transfer"), group: t("stmt.grp_accounts"), search: a.account_number || "",
     }));
-    const po = (p, group) => ({ key: `p:${p.id}`, label: p.name, group, search: p.phone || "" });
+    const nm = (p) => String(p.name || "").trim().toLowerCase();
+    const cnt = {};
+    parties.forEach((p) => { cnt[nm(p)] = (cnt[nm(p)] || 0) + 1; });
+    const po = (p, group) => ({ key: `p:${p.id}`, label: p.name, group, search: p.phone || "",
+      ...(cnt[nm(p)] > 1 ? { sub: p.phone || "#" + p.id } : {}) });
     return [
       ...acc,
       ...parties.filter((p) => !p.is_staff).map((p) => po(p, t("stmt.grp_parties"))),
