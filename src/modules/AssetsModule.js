@@ -24,7 +24,7 @@
 // Self-contained (own theme/icons/helpers), same as MachineryModule.
 // API contract: gb-backend/docs/plans/asset-api-phase1.md + asset-api-phase2.md
 // ══════════════════════════════════════════════════════════════════════
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import PickSelect from "../components/PickSelect";
 import api, { API_BASE, getToken, getUser } from "../config/api";
 import SearchSelect from "../components/SearchSelect";
@@ -339,9 +339,18 @@ const Notice = ({ children, tone }) => (
   }}>{children}</div>
 );
 
-const ErrBox = ({ children }) => (children
-  ? <div style={{ marginTop: 12, padding: "9px 12px", background: T.redL, color: T.red, fontSize: 12, borderRadius: 7, fontWeight: 600 }}>{children}</div>
-  : null);
+const ErrBox = ({ children }) => {
+  const ref = useRef(null);
+  // Drawer / form ka content scroll hota hai par footer ka Save nahi — galti (jaise "wajah likho")
+  // niche chhup jaati thi aur lagta tha Save kaam hi nahi karta (15 Oct 2026, Ratna asset edit).
+  // Sandesh badalte hi use nazar me le aao; "nearest" = dikh raha ho to hilta nahi.
+  useEffect(() => {
+    if (children && ref.current && ref.current.scrollIntoView) ref.current.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [children]);
+  return children
+    ? <div ref={ref} style={{ marginTop: 12, padding: "9px 12px", background: T.redL, color: T.red, fontSize: 12, borderRadius: 7, fontWeight: 600 }}>{children}</div>
+    : null;
+};
 
 const inp = {
   width: "100%", padding: "9px 11px", borderRadius: 8, border: `1.5px solid ${T.b1}`,
@@ -1118,6 +1127,7 @@ function ItemDrawer({ item, cats, canEdit, canDelete, onClose, onChanged, onOpen
   const [delReason, setDelReason] = useState("");
   const [f, setF] = useState({});
   const [reason, setReason] = useState("");
+  const reasonRef = useRef(null);
   const [holdings, setHoldings] = useState(null);
   const [history, setHistory] = useState(null);
   const [counts, setCounts] = useState(null);    // is item ki saari ginti (kab, kitna, kyun)
@@ -1172,7 +1182,12 @@ function ItemDrawer({ item, cats, canEdit, canDelete, onClose, onChanged, onOpen
     if (!String(f.name || "").trim()) { setError(t("assets.err_name_required")); return; }
     // Kuch badla hi nahi to wajah kyon maangein — bas edit band.
     if (JSON.stringify(itemForm(item)) === JSON.stringify(f)) { toast.success(t("assets.edit_no_change")); cancelEdit(); return; }
-    if (!reason.trim()) { setError(t("assets.edit_reason_required")); return; }
+    if (!reason.trim()) {
+      setError(t("assets.edit_reason_required"));
+      // Wajah ka khaana form ke bilkul neeche hai — wahin cursor (scroll ErrBox sambhalta hai, dono dikhte hain)
+      setTimeout(() => { if (reasonRef.current) reasonRef.current.focus({ preventScroll: true }); }, 0);
+      return;
+    }
     setBusy(true);
     const r = await api.put(`/assets/items/${id}`, {
       name: f.name.trim(), spec: f.spec, unit: f.unit || null, category_id: f.category_id || null,
@@ -1311,8 +1326,8 @@ function ItemDrawer({ item, cats, canEdit, canDelete, onClose, onChanged, onOpen
             <textarea value={f.notes || ""} onChange={(e) => upd("notes", e.target.value)} style={{ ...inp, minHeight: 64, resize: "vertical" }} />
           </Field>
           <Field label={t("assets.edit_reason")} span={2} hint={t("assets.edit_reason_hint")}>
-            <textarea value={reason} onChange={(e) => setReason(e.target.value)} maxLength={500}
-              style={{ ...inp, minHeight: 56, resize: "vertical" }} placeholder={t("assets.edit_reason_ph")} />
+            <textarea ref={reasonRef} value={reason} onChange={(e) => setReason(e.target.value)} maxLength={500}
+              style={{ ...inp, minHeight: 56, resize: "vertical", ...(error === t("assets.edit_reason_required") && !reason.trim() ? { borderColor: T.red } : {}) }} placeholder={t("assets.edit_reason_ph")} />
           </Field>
           <div style={{ gridColumn: "span 2" }}><ErrBox>{error}</ErrBox></div>
         </div>
