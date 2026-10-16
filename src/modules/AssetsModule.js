@@ -1192,7 +1192,7 @@ function ItemDrawer({ item, cats, canEdit, canDelete, onClose, onChanged, onOpen
     const r = await api.put(`/assets/items/${id}`, {
       name: f.name.trim(), spec: f.spec, unit: f.unit || null, category_id: f.category_id || null,
       purchase_date: f.purchase_date || null, purchase_cost: f.purchase_cost === "" ? null : Number(f.purchase_cost),
-      vendor_name: f.vendor_name, notes: f.notes, reason: reason.trim(),
+      vendor_name: f.vendor_name, reason: reason.trim(),
     });
     setBusy(false);
     if (r && r.success) {
@@ -1293,9 +1293,11 @@ function ItemDrawer({ item, cats, canEdit, canDelete, onClose, onChanged, onOpen
       )}
 
       {tab === "details" && editing && (
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-          <div style={{ gridColumn: "span 2" }}><Notice>{t("assets.edit_notice")}</Notice></div>
-          <Field label={t("assets.item_name")} span={2}>
+        // Ek screen, bina scroll (16 Oct 2026): 3-3 khaane ek line me. Item ka Notes yahan nahi —
+        // Add me bharta hai aur Details me dikhta hai; edit me sirf "Badlav ki wajah" (History ke liye).
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 10 }}>
+          <div style={{ gridColumn: "span 3" }}><Notice>{t("assets.edit_notice")}</Notice></div>
+          <Field label={t("assets.item_name")} span={3}>
             <input value={f.name || ""} onChange={(e) => upd("name", e.target.value)} style={inp} />
           </Field>
           <Field label={t("assets.spec")}>
@@ -1319,17 +1321,14 @@ function ItemDrawer({ item, cats, canEdit, canDelete, onClose, onChanged, onOpen
           <Field label={t("assets.purchase_cost")}>
             <input value={f.purchase_cost || ""} inputMode="decimal" onChange={(e) => upd("purchase_cost", e.target.value.replace(/[^0-9.]/g, ""))} style={inp} />
           </Field>
-          <Field label={t("assets.vendor")} span={2}>
+          <Field label={t("assets.vendor")} span={3}>
             <input value={f.vendor_name || ""} onChange={(e) => upd("vendor_name", e.target.value)} style={inp} />
           </Field>
-          <Field label={t("assets.notes")} span={2}>
-            <textarea value={f.notes || ""} onChange={(e) => upd("notes", e.target.value)} style={{ ...inp, minHeight: 64, resize: "vertical" }} />
-          </Field>
-          <Field label={t("assets.edit_reason")} span={2} hint={t("assets.edit_reason_hint")}>
+          <Field label={t("assets.edit_reason")} span={3} hint={t("assets.edit_reason_hint")}>
             <textarea ref={reasonRef} value={reason} onChange={(e) => setReason(e.target.value)} maxLength={500}
-              style={{ ...inp, minHeight: 56, resize: "vertical", ...(error === t("assets.edit_reason_required") && !reason.trim() ? { borderColor: T.red } : {}) }} placeholder={t("assets.edit_reason_ph")} />
+              style={{ ...inp, minHeight: 48, resize: "none", ...(error === t("assets.edit_reason_required") && !reason.trim() ? { borderColor: T.red } : {}) }} placeholder={t("assets.edit_reason_ph")} />
           </Field>
-          <div style={{ gridColumn: "span 2" }}><ErrBox>{error}</ErrBox></div>
+          <div style={{ gridColumn: "span 3" }}><ErrBox>{error}</ErrBox></div>
         </div>
       )}
 
