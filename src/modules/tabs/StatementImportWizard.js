@@ -13,7 +13,8 @@
 // Sabse pehla aankda "Closing balance" wala hai, line-wise milaan nahi. Wo do
 // number ek hon to aage ka kaam sirf safai hai; alag hon to farak utna hi hai
 // jitni entry kahin gum hai — aur wahi asli sawaal hai.
-import React, { useState, useCallback, useEffect, useMemo } from "react";
+import React, { useState, useCallback, useEffect, useMemo, useContext, createContext } from "react";
+import { createPortal } from "react-dom";
 import PickSelect from "../../components/PickSelect";
 import api from "../../config/api";
 import SearchSelect from "../../components/SearchSelect";
@@ -169,6 +170,18 @@ const STEPS = ["file", "map", "result"];
 
 // Dono raaste (CSV/Excel aur PDF) ki preview ek jaisi dikhni chahiye — jo
 // screen par aata hai wahi server par jaayega, chahe file kis roop me aayi ho.
+// Match step ke kaam ke button (Preview dekho / Approval ke liye bhejo) wizard ke
+// NEECHE wali patti me dikhte hain (16 Oct 2026) — andar ka component unhe
+// portal se wahan rakhta hai, state wahi ki wahi rehti hai.
+const FootCtx = createContext(null);
+const footBtn = (kind, off) => ({
+  padding: "8px 18px", borderRadius: 7, fontSize: 13, fontWeight: 600, fontFamily: "inherit", whiteSpace: "nowrap",
+  cursor: off ? "default" : "pointer",
+  border: kind === "ghost" ? `1px solid ${T.b2}` : "none",
+  background: kind === "ghost" ? T.surface : off ? T.b2 : kind === "send" ? T.grn : T.blu,
+  color: kind === "ghost" ? T.t2 : "#fff",
+});
+
 function PreviewTable({ rows }) {
   return (
     <div style={{ overflowX: "auto", border: `1px solid ${T.b1}`, borderRadius: 7 }}>
@@ -207,6 +220,9 @@ function guessAccount(accounts, text) {
 }
 
 export default function StatementImportWizard({ accounts, onClose }) {
+  const [footSlot, setFootSlot] = useState(null);
+  const [hideBack, setHideBack] = useState(false);
+  const footCtx = useMemo(() => ({ slot: footSlot, setHideBack }), [footSlot]);
   const [step, setStep] = useState(1);
   // Pehle se koi khaata nahi (15 Oct 2026) — pehle Khaata Ledger ka pehla
   // chuna khaata (aksar Cash on Hand) apne aap lag jaata tha aur PNB ka
@@ -482,19 +498,23 @@ export default function StatementImportWizard({ accounts, onClose }) {
           )}
 
           {/* 3 — milaan */}
-          {step === 3 && result && <ResultView result={result} tab={tab} setTab={setTab} accounts={accounts} />}
+          {step === 3 && result && (
+            <FootCtx.Provider value={footCtx}>
+              <ResultView result={result} tab={tab} setTab={setTab} accounts={accounts} />
+            </FootCtx.Provider>
+          )}
         </div>
 
         {/* Footer */}
-        <div style={{ padding: "12px 18px", borderTop: `1px solid ${T.b1}`, display: "flex", gap: 9, justifyContent: "flex-end", background: T.surfaceB }}>
-          {step > 1 && <button onClick={() => { setStep(step - 1); setErr(""); }} style={btn("ghost")}>{t("stmt.back")}</button>}
+        <div style={{ padding: "12px 18px", borderTop: `1px solid ${T.b1}`, display: "flex", gap: 9, alignItems: "center", flexWrap: "wrap", background: T.surfaceB }}>
+          {step > 1 && !(step === 3 && hideBack) && <button onClick={() => { setStep(step - 1); setErr(""); }} style={btn("ghost")}>{t("stmt.back")}</button>}
+          <div ref={setFootSlot} style={{ flex: 1, minWidth: 0, display: "flex", gap: 9, alignItems: "center", justifyContent: "flex-end", flexWrap: "wrap" }} />
           {step === 2 && (
             <button onClick={run} disabled={busy || !parsed.rows.length || !acctId}
               style={{ ...btn("primary"), opacity: busy || !parsed.rows.length || !acctId ? 0.5 : 1 }}>
               {busy ? t("stmt.matching") : t("stmt.match_now")}
             </button>
           )}
-          {step === 3 && <button onClick={onClose} title={t("stmt.done_tip")} style={btn("ghost")}>{t("stmt.close")}</button>}
         </div>
       </div>
     </div>
@@ -520,9 +540,9 @@ function ResultView({ result, tab, setTab, accounts }) {
     <div>
       {/* Sabse pehle wahi sawaal jiske liye ye feature hai */}
       {bc ? (
-        <div style={{ padding: "14px 16px", borderRadius: 9, marginBottom: 14,
-          background: bc.matches ? T.grnL : T.redL, border: `1px solid ${bc.matches ? T.grnM : T.redM}` }}>
-          <div style={{ fontSize: 14, fontWeight: 700, color: bc.matches ? T.grn : T.red, marginBottom: 6 }}>
+        <div style={{ padding: "12px 15px", borderRadius: 8, marginBottom: 14, background: T.surface,
+          border: `1px solid ${T.b1}`, borderLeft: `4px solid ${bc.matches ? T.grn : T.red}` }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: bc.matches ? T.grn : T.red, marginBottom: 5 }}>
             {bc.matches ? t("stmt.bal_ok") : t("stmt.bal_diff", { amt: inr2(Math.abs(bc.difference)) })}
           </div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 22px", fontSize: 12.5, color: T.t2 }}>
@@ -551,12 +571,12 @@ function ResultView({ result, tab, setTab, accounts }) {
         ))}
       </div>
 
-      <div style={{ display: "flex", gap: 6, marginBottom: 10, flexWrap: "wrap" }}>
+      <div style={{ display: "flex", gap: 4, marginBottom: 10, flexWrap: "wrap", borderBottom: `1px solid ${T.b1}` }}>
         {tabs.map((x) => (
           <button key={x.id} onClick={() => setTab(x.id)}
-            style={{ fontSize: 12, fontWeight: 600, padding: "6px 13px", borderRadius: 20, cursor: "pointer",
-              border: `1px solid ${tab === x.id ? x.c : T.b1}`,
-              background: tab === x.id ? x.c : T.surface, color: tab === x.id ? "#fff" : T.t2 }}>
+            style={{ fontSize: 12.5, fontWeight: tab === x.id ? 700 : 500, padding: "8px 12px", marginBottom: -1, cursor: "pointer", fontFamily: "inherit",
+              border: "none", borderBottom: `2px solid ${tab === x.id ? x.c : "transparent"}`,
+              background: "none", color: tab === x.id ? T.t1 : T.t3 }}>
             {x.label}
           </button>
         ))}
@@ -579,7 +599,7 @@ function ResultView({ result, tab, setTab, accounts }) {
                 {t("stmt.elsewhere_pending", { n: undecided })}
               </div>
             )}
-            <ReviewCreate accountId={d.account.id} rows={d.only_in_statement} matched={d.matched}
+            <ReviewCreate active={tab === "stmt"} accountId={d.account.id} rows={d.only_in_statement} matched={d.matched}
               accounts={accounts} tol={d.tolerance_days} decide={decide}
               acctName={d.account.name} acctClosing={d.closing} />
           </div>
@@ -593,7 +613,7 @@ function ResultView({ result, tab, setTab, accounts }) {
           {t("stmt.outside_window", { n: d.totals.book_rows_outside_window })}
         </div>
       )}
-      <div style={{ marginTop: 12, padding: "10px 13px", background: T.bluL, border: `1px solid ${T.bluM}`, borderRadius: 8, fontSize: 12, color: T.t2, lineHeight: 1.6 }}>
+      <div style={{ marginTop: 10, fontSize: 11.5, color: T.t4, lineHeight: 1.6 }}>
         {t("stmt.readonly_note")}
       </div>
     </div>
@@ -643,7 +663,7 @@ function whyText(s) {
   return ex ? `${txt} — "${ex}"` : txt;
 }
 
-function ReviewCreate({ accountId, rows, matched, accounts, tol, decide = {}, acctName, acctClosing }) {
+function ReviewCreate({ active, accountId, rows, matched, accounts, tol, decide = {}, acctName, acctClosing }) {
   // Do tab (15 Oct 2026): jinme party / khaata chuna hai, aur jo abhi chhooti hain
   const [sub, setSub] = useState("picked");
   // Bina party / khaate wali line default me batch me NAHI jaati (16 Oct 2026) —
@@ -777,6 +797,16 @@ function ReviewCreate({ accountId, rows, matched, accounts, tol, decide = {}, ac
     } finally { setBusy(false); }
   };
 
+  // Preview khula ho to neeche ka "Peeche" (column step) chhupao — "Wapas" apna hai
+  const foot = useContext(FootCtx);
+  const slot = active && foot ? foot.slot : null;
+  const setHideBack = foot && foot.setHideBack;
+  useEffect(() => {
+    if (!setHideBack) return undefined;
+    setHideBack(!!(active && preview));
+    return () => setHideBack(false);
+  }, [active, preview, setHideBack]);
+
   if (loading) return <div style={{ padding: "26px 16px", textAlign: "center", fontSize: 12.5, color: T.t4 }}>{t("stmt.suggest_loading")}</div>;
   if (!draft.length) return <div style={{ padding: "26px 16px", textAlign: "center", fontSize: 12.5, color: T.t4 }}>{t("stmt.nothing_here")}</div>;
 
@@ -788,7 +818,7 @@ function ReviewCreate({ accountId, rows, matched, accounts, tol, decide = {}, ac
     return (
       <div>
         {err && <div style={{ padding: "8px 13px", fontSize: 12, color: T.red, background: T.redL }}>{err}</div>}
-        <PreviewCreate rows={pickFor(preview.onlyForce)} nameOf={nameOf} force={preview.onlyForce} busy={busy}
+        <PreviewCreate slot={slot} rows={pickFor(preview.onlyForce)} nameOf={nameOf} force={preview.onlyForce} busy={busy}
           parties={parties} acctName={acctName} acctClosing={acctClosing}
           onBack={() => { setPreview(null); setErr(""); }}
           onConfirm={(note) => create(preview.onlyForce, note, true)}
@@ -799,26 +829,24 @@ function ReviewCreate({ accountId, rows, matched, accounts, tol, decide = {}, ac
 
   return (
     <div>
-      {/* Button upar chipka rahe — 500 line neeche jaakar bhi dikhe */}
-      <div style={{ position: "sticky", top: 0, zIndex: 2, padding: "9px 13px", background: T.surfaceB, borderBottom: `1px solid ${T.b1}`, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-        <span style={{ fontSize: 12, color: T.t2, flex: 1, minWidth: 200 }}>{t("stmt.review_help")}</span>
-        {toForce > 0 && (
-          <button onClick={() => { setErr(""); setPreview({ onlyForce: true }); }} disabled={busy}
-            style={{ fontSize: 12, fontWeight: 600, padding: "6px 13px", borderRadius: 6, cursor: "pointer", border: `1px solid ${T.amb}`, background: T.ambL, color: T.amb }}>
-            {t("stmt.force_create_n", { n: toForce })}
+      <div style={{ padding: "9px 13px", fontSize: 12, color: T.t3, lineHeight: 1.55, borderBottom: `1px solid ${T.b1}` }}>{t("stmt.review_help")}</div>
+      {slot && createPortal(
+        <>
+          {noPartyLeft > 0 && (
+            <label title={t("stmt.noparty_tip")} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, color: withNoParty ? T.amb : T.t3, cursor: "pointer", marginRight: "auto" }}>
+              <input type="checkbox" checked={withNoParty} onChange={(e) => setWithNoParty(e.target.checked)} style={{ margin: 0 }} />
+              {t("stmt.noparty_include", { n: noPartyLeft })}
+            </label>
+          )}
+          {toForce > 0 && (
+            <button onClick={() => { setErr(""); setPreview({ onlyForce: true }); }} disabled={busy} style={{ ...footBtn("ghost", busy), color: T.amb, borderColor: T.amb }}>
+              {t("stmt.force_create_n", { n: toForce })}
+            </button>
+          )}
+          <button onClick={() => { setErr(""); setPreview({ onlyForce: false }); }} disabled={busy || !toCreate} style={footBtn("primary", busy || !toCreate)}>
+            {busy ? t("stmt.creating") : t("stmt.preview_btn", { n: toCreate })}
           </button>
-        )}
-        {noPartyLeft > 0 && (
-          <label title={t("stmt.noparty_tip")} style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5, color: withNoParty ? T.amb : T.t3, cursor: "pointer" }}>
-            <input type="checkbox" checked={withNoParty} onChange={(e) => setWithNoParty(e.target.checked)} style={{ margin: 0 }} />
-            {t("stmt.noparty_include", { n: noPartyLeft })}
-          </label>
-        )}
-        <button onClick={() => { setErr(""); setPreview({ onlyForce: false }); }} disabled={busy || !toCreate}
-          style={{ fontSize: 12.5, fontWeight: 600, padding: "6px 15px", borderRadius: 6, cursor: busy || !toCreate ? "default" : "pointer", border: "none", background: busy || !toCreate ? T.b2 : T.blu, color: "#fff" }}>
-          {busy ? t("stmt.creating") : t("stmt.preview_btn", { n: toCreate })}
-        </button>
-      </div>
+        </>, slot)}
       {err && <div style={{ padding: "8px 13px", fontSize: 12, color: T.red, background: T.redL }}>{err}</div>}
       {done && (
         <div style={{ padding: "8px 13px", fontSize: 12, color: T.t2, background: T.grnL, borderBottom: `1px solid ${T.grnM}` }}>
@@ -833,7 +861,7 @@ function ReviewCreate({ accountId, rows, matched, accounts, tol, decide = {}, ac
         const maybe = left.filter(([r]) => !r.bank_own && (r.suggestions || []).length).length;
         const list = sub === "left" ? left : picked;
         const sb = (on, c) => ({ fontSize: 12, fontWeight: 700, padding: "5px 12px", borderRadius: 14, cursor: "pointer", fontFamily: "inherit",
-          border: `1px solid ${on ? c : T.b1}`, background: on ? c : T.surface, color: on ? "#fff" : T.t2 });
+          border: `1px solid ${on ? c : T.b1}`, background: on ? T.surfaceB : T.surface, color: on ? c : T.t3 });
         return (
           <>
             <div style={{ padding: "8px 13px", display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", borderBottom: `1px solid ${T.b1}`, background: T.surface }}>
@@ -929,7 +957,7 @@ function ElsewhereList({ accountId, accountName, rows, idx, decide, setDecide })
 // ab seedha save nahi karta — pehle ye dikhata hai ki KIS party ke khaate me
 // kitna jayega, kaunsi line doosre khaate me transfer banegi, aur kaunsi bina
 // party ke (sirf bank khaate me) — phir hi save.
-function PreviewCreate({ rows, nameOf, force, busy, onBack, onConfirm, onDraft, parties = [], acctName, acctClosing }) {
+function PreviewCreate({ slot, rows, nameOf, force, busy, onBack, onConfirm, onDraft, parties = [], acctName, acctClosing }) {
   const [note, setNote] = useState("");
   const noteOk = note.trim().length >= 3;
   // Party ka balance: >0 = party hume degi, <0 = hum denge. Khaate se paisa gaya
@@ -995,27 +1023,26 @@ function PreviewCreate({ rows, nameOf, force, busy, onBack, onConfirm, onDraft, 
           {t("stmt.preview_sub", { n: rows.length, in: inr(tot.in), out: inr(tot.out) })}
         </div>
         {force && <div style={{ fontSize: 11.5, color: T.amb, marginTop: 4 }}>{t("stmt.pv_force_note")}</div>}
-        <div style={{ display: "flex", gap: 8, marginTop: 9, flexWrap: "wrap" }}>
-          <button onClick={onBack} disabled={busy}
-            style={{ fontSize: 12.5, fontWeight: 600, padding: "6px 14px", borderRadius: 6, cursor: busy ? "default" : "pointer", border: `1px solid ${T.b2}`, background: T.surface, color: T.t2 }}>
-            {t("stmt.pv_back")}
-          </button>
-          <input value={note} onChange={(e) => setNote(e.target.value)} placeholder={t("stmt.batch_note_ph")} maxLength={500}
-            style={{ flex: "1 1 260px", minWidth: 200, fontSize: 12.5, padding: "6px 10px", borderRadius: 6, border: `1.5px solid ${noteOk ? T.grnM : T.ambM}`, outline: "none", fontFamily: "inherit" }} />
-          {onDraft && (
-            <button onClick={() => onDraft(note)} disabled={busy || !rows.length}
-              style={{ fontSize: 12.5, fontWeight: 600, padding: "6px 14px", borderRadius: 6, cursor: busy ? "default" : "pointer", border: `1px solid ${T.slt}`, background: T.surface, color: T.slt }}>
-              {t("stmt.save_draft")}
-            </button>
-          )}
-          {!noteOk && <span style={{ fontSize: 11.5, color: T.red, fontWeight: 600, alignSelf: "center" }}>← {t("stmt.batch_note_req")}</span>}
-          {rows.length > 500 && <span style={{ fontSize: 11.5, color: T.t3, alignSelf: "center" }}>{t("stmt.split_note", { n: Math.ceil(rows.length / 500) })}</span>}
-          <button onClick={() => onConfirm(note)} disabled={busy || !rows.length || !noteOk} title={noteOk ? "" : t("stmt.batch_note_req")}
-            style={{ fontSize: 12.5, fontWeight: 700, padding: "6px 16px", borderRadius: 6, cursor: busy || !noteOk ? "default" : "pointer", border: "none", background: busy || !noteOk ? T.b2 : T.grn, color: "#fff" }}>
-            {busy ? t("stmt.creating") : t("stmt.send_approval", { n: rows.length })}
-          </button>
-        </div>
+        <input value={note} onChange={(e) => setNote(e.target.value)} placeholder={t("stmt.batch_note_ph")} maxLength={500} autoFocus
+          style={{ display: "block", width: "100%", boxSizing: "border-box", marginTop: 9, fontSize: 13, padding: "8px 11px", borderRadius: 7, border: `1.5px solid ${noteOk ? T.grnM : T.b2}`, outline: "none", fontFamily: "inherit", background: T.surface, color: T.t1 }} />
       </div>
+      {(() => {
+        const btns = (
+          <>
+            <button onClick={onBack} disabled={busy} style={{ ...footBtn("ghost", busy), marginRight: "auto" }}>{t("stmt.pv_back")}</button>
+            {!noteOk && <span style={{ fontSize: 12, color: T.red, fontWeight: 600 }}>{t("stmt.batch_note_req")}</span>}
+            {rows.length > 500 && <span style={{ fontSize: 12, color: T.t3 }}>{t("stmt.split_note", { n: Math.ceil(rows.length / 500) })}</span>}
+            {onDraft && (
+              <button onClick={() => onDraft(note)} disabled={busy || !rows.length} style={footBtn("ghost", busy || !rows.length)}>{t("stmt.save_draft")}</button>
+            )}
+            <button onClick={() => onConfirm(note)} disabled={busy || !rows.length || !noteOk} title={noteOk ? "" : t("stmt.batch_note_req")}
+              style={footBtn("send", busy || !rows.length || !noteOk)}>
+              {busy ? t("stmt.creating") : t("stmt.send_approval", { n: rows.length })}
+            </button>
+          </>
+        );
+        return slot ? createPortal(btns, slot) : <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", padding: "9px 13px" }}>{btns}</div>;
+      })()}
 
       <div style={{ padding: "12px 13px" }}>
         {acctName && acctClosing != null && (
