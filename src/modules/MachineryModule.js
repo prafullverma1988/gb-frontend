@@ -2009,7 +2009,11 @@ function MachineDetail({ id, onBack, onChanged, onEdit, onRemoved, canRemove, pa
                 {gps.daily.map((d) => (
                   <Row key={d.day} cols="100px 1fr 1fr 1fr 1fr 1fr 1.4fr">
                     <span style={{ fontSize: 11.5, color: T.t3 }}>{fmtD(d.day)}</span>
-                    <span style={{ fontFamily: "monospace", fontSize: 12 }}>{d.engine_sec > 0 ? `${Math.floor(d.engine_sec / 3600)}:${String(Math.floor((d.engine_sec % 3600) / 60)).padStart(2, "0")} hrs` : "—"}</span>
+                    <span style={{ fontFamily: "monospace", fontSize: 12, color: Number(d.engine_suspect) === 1 ? T.amb : undefined }}
+                      title={Number(d.engine_suspect) === 1 ? t("machinery.tel_engine_shak_hint") : undefined}>
+                      {d.engine_sec > 0 ? `${Math.floor(d.engine_sec / 3600)}:${String(Math.floor((d.engine_sec % 3600) / 60)).padStart(2, "0")} hrs` : "—"}
+                      {Number(d.engine_suspect) === 1 && " ⚠"}
+                    </span>
                     <span style={{ fontFamily: "monospace", fontSize: 12 }}>{Number(d.mileage_km) > 0 ? fmtN(d.mileage_km) : "—"}</span>
                     <span style={{ fontFamily: "monospace", fontSize: 12 }}>{Number(d.consumed_l) > 0 ? fmtN(d.consumed_l) + " L" : "—"}</span>
                     <span style={{ fontFamily: "monospace", fontSize: 12, color: Number(d.filled_l) > 0 ? T.grn : T.t2 }}>{Number(d.filled_l) > 0 ? "+" + fmtN(d.filled_l) + " L" : "—"}</span>
@@ -5901,6 +5905,7 @@ function TeleConfigForm({ existing, onSaved, onCancel }) {
     resource_id: existing?.resource_id || "",
     api_token: "",
     groups: existing?.groups?.length ? existing.groups : [{ objectId: "", label: "" }],
+    auto_sync_min: existing && existing.auto_sync_min != null ? String(existing.auto_sync_min) : "15",
   }));
   const [busy, setBusy] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -5917,6 +5922,7 @@ function TeleConfigForm({ existing, onSaved, onCancel }) {
     resource_id: f.resource_id.trim(),
     api_token: f.api_token.trim() || undefined,
     groups: f.groups.filter((g) => String(g.objectId).trim()),
+    auto_sync_min: Number(f.auto_sync_min),
   });
 
   const test = async () => {
@@ -5951,6 +5957,14 @@ function TeleConfigForm({ existing, onSaved, onCancel }) {
         </Field>
         <Field label={t("machinery.resource_id")} hint={t("machinery.url_me_resourceid_wala_number")}>
           <input value={f.resource_id} onChange={(e) => upd("resource_id", e.target.value)} style={inp} />
+        </Field>
+        {/* Din (6–22) me har itne minute "aaj" ka sync — ek sync ~25 sec, 4 call */}
+        <Field label={t("machinery.tel_auto_label")} hint={t("machinery.tel_auto_hint")}>
+          <PickSelect value={f.auto_sync_min} onChange={(e) => upd("auto_sync_min", e.target.value)} style={inp}>
+            {[0, 5, 10, 15, 30, 60].map((n) => (
+              <option key={n} value={String(n)}>{n ? t("machinery.tel_auto_opt", { n }) : t("machinery.tel_auto_off")}</option>
+            ))}
+          </PickSelect>
         </Field>
       </div>
 
@@ -6136,6 +6150,16 @@ function TeleMap({ dash, height = 540 }) {
 // Dashboard — fleet ka roz ka saar + flags. Ankde /telematics/dashboard se,
 // wahi jo Sahayak ka machine_gps tool padhta hai — screen aur bot kabhi alag
 // number nahi bolenge.
+// Jod par shak ka sandesh (backend linkWarn, 16 Oct 2026) — jod badalti nahi,
+// sirf batata hai ki aadmi dekhe.
+function teleWarnText(w) {
+  if (!w) return "";
+  if (w.code === "machine_removed") return t("machinery.tel_warn_removed");
+  if (w.code === "number_mismatch") return t("machinery.tel_warn_number", { u: w.unit4, m: w.machine4 });
+  if (w.code === "other_machine") return t("machinery.tel_warn_other", { u: w.unit4, name: w.other_name || "—" });
+  return "";
+}
+
 function TeleDash({ dash, onAction }) {
   if (!dash) return <Empty>{t("common.loading")}</Empty>;
   const tiles = dash.tiles || {};
@@ -6186,6 +6210,8 @@ function TeleDash({ dash, onAction }) {
                 </span>
                 {!m.linked && <span style={{ fontSize: 10, color: T.amb, fontWeight: 700 }}> {t("machinery.judi_nahi")}</span>}
                 {!!m.has_fls && m.linked && <span style={{ fontSize: 10, color: T.t4 }}> {t("machinery.fuel_sensor")}</span>}
+                {m.engine_suspect7 > 0 && <span title={t("machinery.tel_engine_shak_hint")} style={{ fontSize: 10, color: T.amb, fontWeight: 700 }}> {t("machinery.tel_engine_shak")}</span>}
+                {m.link_warn && <span title={teleWarnText(m.link_warn)} style={{ fontSize: 10, color: T.red, fontWeight: 700 }}> {t("machinery.tel_jod_shak")}</span>}
               </span>
               <span style={{ fontFamily: "monospace", fontSize: 12 }}>{m.yday ? hhmm(m.yday.engine_sec) : "—"}</span>
               <span style={{ fontFamily: "monospace", fontSize: 12 }}>{m.yday && m.yday.consumed_l > 0 ? fmtN(m.yday.consumed_l) + " L" : "—"}</span>
@@ -6206,8 +6232,27 @@ function TeleDash({ dash, onAction }) {
         </div>
       </Panel>
 
-      {(dash.flags.drops.length > 0 || dash.flags.fills_no_entry.length > 0 || dash.flags.silent.length > 0) && (
+      {(dash.flags.drops.length > 0 || dash.flags.fills_no_entry.length > 0 || dash.flags.silent.length > 0
+        || (dash.flags.engine_suspect || []).length > 0 || (dash.flags.link_warn || []).length > 0) && (
         <Panel title={t("fuel.dhyan_dene_layak")}>
+          {(dash.flags.link_warn || []).map((w, i) => (
+            <Row key={"w" + i} cols="110px 1.4fr 90px 1fr 100px">
+              <span></span>
+              <span style={{ fontSize: 12, fontWeight: 600 }}>{w.unit_name}<span style={{ fontWeight: 400, color: T.t4, fontSize: 10.5 }}> → {w.machine_name || "—"}</span></span>
+              <span style={{ fontSize: 11, color: T.red, fontWeight: 700 }}>{t("machinery.tel_jod_shak")}</span>
+              <span style={{ fontSize: 11, color: T.t3 }}>{teleWarnText(w.warn)}</span>
+              <span></span>
+            </Row>
+          ))}
+          {(dash.flags.engine_suspect || []).map((e, i) => (
+            <Row key={"e" + i} cols="110px 1.4fr 90px 1fr 100px">
+              <span></span>
+              <span style={{ fontSize: 12, fontWeight: 600 }}>{e.machine_name || e.unit_name}</span>
+              <span style={{ fontSize: 11, color: T.amb, fontWeight: 700 }}>{t("machinery.tel_engine_shak")}</span>
+              <span style={{ fontSize: 11, color: T.t3 }}>{t("machinery.tel_flag_engine", { n: e.days })}</span>
+              <span></span>
+            </Row>
+          ))}
           {dash.flags.drops.map((d) => (
             <Row key={"d" + d.id} cols="110px 1.4fr 90px 1fr 100px">
               <span style={{ fontSize: 11, color: T.t3 }}>{localDT(d.event_time).slice(5)}</span>
@@ -6247,15 +6292,19 @@ function TelematicsTab({ data, onReload, onNewMachine }) {
   // Har pending unit ke liye chuni hui machine + "gadi no. bhar do" ka tick.
   const [choice, setChoice] = useState({});
   const [fillReg, setFillReg] = useState({});
-  const [syncing, setSyncing] = useState(false);
   const [sub, setSub] = useState("dash");
   const [dash, setDash] = useState(null);
-  const syncMarkRef = useRef(null);
+  // Sync ka haal (16 Oct 2026): server dashboard khulte hi purana ho to khud
+  // sync chala deta hai (aur din me har auto_sync_min minute). Jab tak chal
+  // raha hai, har 10 sec /sync-status — khatam hote hi dashboard + jod list taaza.
+  const [syncSt, setSyncSt] = useState(null);
 
   const hasAccount = !!(data && data.account);
   const loadDash = useCallback(async () => {
     const r = await api.get("/telematics/dashboard").catch(() => null);
-    setDash(r && r.success ? r.data : null);
+    const d = r && r.success ? r.data : null;
+    setDash(d);
+    if (d && d.sync) setSyncSt(d.sync);
   }, []);
   useEffect(() => { if (hasAccount) loadDash(); }, [hasAccount, loadDash]);
 
@@ -6263,16 +6312,20 @@ function TelematicsTab({ data, onReload, onNewMachine }) {
   // apna dashboard (ankde) ek hi kadam me.
   const reloadAll = useCallback(() => { onReload && onReload(true); loadDash(); }, [onReload, loadDash]);
 
-  // Sync khatam hone ka pata last_sync_at badalne se chalta hai — service
-  // use sirf aakhri me likhti hai. Tab tak har 20 sec me chupchaap reload.
+  const syncRunning = !!(syncSt && syncSt.running);
   useEffect(() => {
-    if (!syncing) return;
-    const mark = (data && data.account && data.account.last_sync_at) || null;
-    if (mark !== syncMarkRef.current) { setSyncing(false); loadDash(); return; }
-    const t = setTimeout(() => onReload && onReload(true), 20000);
-    return () => clearTimeout(t);
+    if (!syncRunning) return undefined;
+    let dead = false;
+    const tick = setInterval(async () => {
+      const r = await api.get("/telematics/sync-status").catch(() => null);
+      if (dead || !r || !r.success || !r.data || r.data.running) return;
+      setSyncSt(r.data);
+      loadDash();
+      onReload && onReload(true);
+    }, 10000);
+    return () => { dead = true; clearInterval(tick); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [syncing, data]);
+  }, [syncRunning]);
 
   if (!data) return <Empty>{t("common.loading")}</Empty>;
 
@@ -6295,6 +6348,12 @@ function TelematicsTab({ data, onReload, onNewMachine }) {
   const pending = data.pending || [];
   const linked = data.linked || [];
   const ignored = data.ignored || [];
+  const merged = data.merged || [];
+  const st = syncSt || data.sync || {
+    last_at: acc.last_sync_at, status: acc.last_sync_status, error: acc.last_error,
+    running: false, auto_min: acc.auto_sync_min, age_min: null,
+  };
+  const ago = st.age_min == null ? "" : st.age_min < 1 ? t("machinery.tel_abhi") : t("machinery.tel_min_pehle", { n: st.age_min });
   const noUnit = (data.no_unit || []).slice().sort((a, b) => {
     const w = { red: 0, amber: 1, grey: 2 };
     return w[a.flag] - w[b.flag];
@@ -6306,8 +6365,17 @@ function TelematicsTab({ data, onReload, onNewMachine }) {
     const r = await api.post("/telematics/sync", {});
     if (!r || r.success === false) { window.alert(r?.message || "Sync shuru nahi hua"); return; }
     if (r.data && r.data.started === false) { window.alert(r.data.message); return; }
-    syncMarkRef.current = acc.last_sync_at || null;
-    setSyncing(true);
+    setSyncSt((p) => ({ ...(p || st), running: true }));
+  };
+
+  // Vendor ne naam badla — purani unit ki jod naye naam par
+  const moveLink = async (u) => {
+    if (!window.confirm(t("machinery.tel_move_q", { old: u.unit_name, name: u.renamed_to.unit_name, m: u.machine_name }))) return;
+    setBusyId(u.id);
+    const r = await api.post(`/telematics/units/${u.id}/move-link`, {});
+    setBusyId(null);
+    if (!r || r.success === false) { window.alert(r?.message || "Nahi hua"); return; }
+    reloadAll();
   };
 
   const link = async (u) => {
@@ -6348,22 +6416,23 @@ function TelematicsTab({ data, onReload, onNewMachine }) {
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
         <div style={{ fontSize: 11.5, color: T.t3, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
           <Pill label={acc.vendor || "vendor"} c={T.ind} bg={T.indL} />
-          {acc.last_sync_status === "error"
-            ? <span style={{ color: T.red, fontWeight: 600 }}>{t("machinery.aakhri_sync_fail_acc", { acc: acc.last_error || "vendor se jawab nahi" })}</span>
-            : acc.last_sync_at
-              ? <span>{t("machinery.aakhri_sync_fmtd_har_raat_apne", { fmtD: fmtD(acc.last_sync_at) })}</span>
+          {st.status === "error"
+            ? <span style={{ color: T.red, fontWeight: 600 }}>{t("machinery.aakhri_sync_fail_acc", { acc: st.error || "—" })}</span>
+            : st.last_at
+              ? <span>{t("machinery.tel_sync_at", { time: localDT(st.last_at).slice(5) })}{ago ? " · " + ago : ""}</span>
               : <span>{t("machinery.abhi_pehla_sync_hona_baaki_hai")}</span>}
+          <span style={{ color: T.t4 }}>· {Number(st.auto_min) > 0 ? t("machinery.tel_auto_every", { n: st.auto_min }) : t("machinery.tel_auto_off")}</span>
         </div>
         {/* Telematics ka setup / sync / jod = Machinery Create (server: routes/telematics.js) */}
         {canMach("create") && (
           <div style={{ display: "flex", gap: 7 }}>
             <Btn size="sm" ghost onClick={() => setConfigOpen(true)}>{t("common.settings")}</Btn>
-            <Btn size="sm" onClick={doSync} disabled={syncing}>{syncing ? t("machinery.sync_chal_raha_hai") : t("machinery.sync_now")}</Btn>
+            <Btn size="sm" onClick={doSync} disabled={syncRunning}>{syncRunning ? t("machinery.sync_chal_raha_hai") : t("machinery.sync_now")}</Btn>
           </div>
         )}
       </div>
-      {syncing && (
-        <Notice>{t("machinery.vendor_se_data_aa_raha_hai")}</Notice>
+      {syncRunning && (
+        <Notice>{t("machinery.tel_refreshing")}</Notice>
       )}
 
       {/* ── sub-views: Dashboard | Map | Jod ── */}
@@ -6409,6 +6478,14 @@ function TelematicsTab({ data, onReload, onNewMachine }) {
                   {u.last_data_at ? `aakhri data ${fmtD(u.last_data_at)}` : t("machinery.data_abhi_nahi_aaya")}
                 </div>
               </div>
+              {/* Vendor ne naam badla — purana naam kis machine se juda tha */}
+              {u.renamed_from && (
+                <div style={{ fontSize: 11.5, color: T.ind, fontWeight: 600, marginBottom: 6 }}>
+                  {u.renamed_from.machine_name
+                    ? t("machinery.tel_renamed_from_m", { old: u.renamed_from.unit_name, m: u.renamed_from.machine_name })
+                    : t("machinery.tel_renamed_from", { old: u.renamed_from.unit_name })}
+                </div>
+              )}
 
               {u.top ? (
                 <div style={{ fontSize: 11.5, color: T.t3, marginBottom: 8 }}><Rich k="machinery.sujhav_name_u_why_bharosa_confidence" params={{ name: u.top.name, u: u.top.registration_no ? ` (${u.top.registration_no})` : "", why: u.top.why, confidence: u.top.confidence }} />{u.top.conflict && <span style={{ color: T.amb, fontWeight: 600 }}> · ⚠ {u.top.conflict}</span>}
@@ -6454,20 +6531,27 @@ function TelematicsTab({ data, onReload, onNewMachine }) {
         {linked.length === 0 && <Empty>{t("machinery.abhi_koi_unit_judi_nahi_upar")}</Empty>}
         {linked.length > 0 && (
           <>
-            <Row head cols="16px 1.4fr 1.4fr 130px 90px">
+            <Row head cols="16px 1.4fr 1.4fr 130px 190px">
               <span></span><span>{t("machinery.vendor_unit")}</span><span>{t("fuel.machine")}</span><span>{t("machinery.aakhri_data")}</span><span></span>
             </Row>
             {linked.map((u) => (
-              <Row key={u.id} cols="16px 1.4fr 1.4fr 130px 90px">
+              <Row key={u.id} cols="16px 1.4fr 1.4fr 130px 190px">
                 {healthDot(u.health)}
-                <span style={{ fontSize: 12, color: T.t2 }}>{u.unit_name}</span>
+                <span style={{ fontSize: 12, color: T.t2 }}>{u.unit_name}
+                  {u.renamed_to && <div style={{ fontSize: 10.5, color: T.amb, fontWeight: 600 }}>{t("machinery.tel_renamed_to", { name: u.renamed_to.unit_name })}</div>}
+                </span>
                 <span style={{ fontSize: 12.5, fontWeight: 600, color: T.t1 }}>{u.machine_name}
-                  {u.machine_reg ? <span style={{ fontWeight: 400, color: T.t4, fontSize: 10.5 }}> · {u.machine_reg}</span> : null}</span>
+                  {u.machine_reg ? <span style={{ fontWeight: 400, color: T.t4, fontSize: 10.5 }}> · {u.machine_reg}</span> : null}
+                  {u.link_warn && <div style={{ fontSize: 10.5, color: T.red, fontWeight: 600 }}>⚠ {teleWarnText(u.link_warn)}</div>}
+                </span>
                 <span style={{ fontSize: 11.5, color: u.health === "red" ? T.red : T.t3 }}>
                   {u.last_data_at ? fmtD(u.last_data_at) : t("fuel.kabhi_nahi")}
                   {u.health === "red" && t("machinery.sensor_chup_hai")}
                 </span>
-                <span style={{ textAlign: "right" }}>
+                <span style={{ textAlign: "right", display: "flex", gap: 6, justifyContent: "flex-end", flexWrap: "wrap" }}>
+                  {canMach("create") && u.renamed_to && u.renamed_to.link_status !== "linked" && (!u.link_warn || u.link_warn.code !== "machine_removed") && (
+                    <Btn size="sm" onClick={() => moveLink(u)} disabled={busyId === u.id}>{t("machinery.tel_move_link")}</Btn>
+                  )}
                   {canMach("create") && <Btn size="sm" ghost onClick={() => unlink(u)} disabled={busyId === u.id}>{t("machinery.kholo")}</Btn>}
                 </span>
               </Row>
@@ -6503,6 +6587,22 @@ function TelematicsTab({ data, onReload, onNewMachine }) {
           {ignored.map((u) => (
             <Row key={u.id} cols="1.6fr 130px">
               <span style={{ fontSize: 12, color: T.t3 }}>{u.unit_name}</span>
+              <span style={{ textAlign: "right" }}>
+                {canMach("create") && <Btn size="sm" ghost onClick={() => act(u, "restore")}>{t("machinery.wapas_lao")}</Btn>}
+              </span>
+            </Row>
+          ))}
+        </Panel>
+      )}
+
+      {/* Vendor ne naam badle — purane naam (3+ din chup, wahi aakhri 4 ank) */}
+      {merged.length > 0 && (
+        <Panel title={t("machinery.tel_merged_title", { n: merged.length })}>
+          <div style={{ padding: "8px 15px", fontSize: 11, color: T.t4 }}>{t("machinery.tel_merged_note")}</div>
+          {merged.map((u) => (
+            <Row key={u.id} cols="1.4fr 1.4fr 130px">
+              <span style={{ fontSize: 12, color: T.t3 }}>{u.unit_name}</span>
+              <span style={{ fontSize: 12, color: T.t2 }}>{u.renamed_to ? "→ " + u.renamed_to.unit_name : "—"}</span>
               <span style={{ textAlign: "right" }}>
                 {canMach("create") && <Btn size="sm" ghost onClick={() => act(u, "restore")}>{t("machinery.wapas_lao")}</Btn>}
               </span>
