@@ -5329,6 +5329,257 @@ function groupsOf(prefs) {
   return out;
 }
 
+// ════════════════════════════════════════════════════════════════
+// Integrations → GPS / Telematics (P4, 17 Oct 2026)
+// Company ke GPS vendor account — ek se zyada bhi (alag vendor, ya ek hi
+// vendor ke do resource). Dashboard Machinery → GPS me hai; yahan setup,
+// token, "vendor kya deta hai" aur har sync ka log. Token server par BAND
+// (encrypted) rehta hai — screen par sirf aakhri 4 akshar.
+// Setup / sync / band-chalu = Machinery CREATE (server: routes/telematics.js).
+// ════════════════════════════════════════════════════════════════
+const TG_AUTO = [0, 5, 10, 15, 30, 60];
+const tgDT = (v) => (v ? new Date(v).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "—");
+const tgInp = { width: "100%", padding: "8px 10px", borderRadius: 8, border: `1.5px solid ${T.border}`, fontSize: 13, outline: "none", fontFamily: "inherit", boxSizing: "border-box", background: T.card, color: T.text };
+const tgLbl = { fontSize: 11.5, fontWeight: 600, color: T.textMid, margin: "12px 0 5px" };
+const tgBtn = (kind) => ({
+  padding: "7px 14px", borderRadius: 8, fontSize: 12.5, fontWeight: 600, cursor: "pointer", fontFamily: "inherit",
+  border: kind === "primary" ? "none" : `1.5px solid ${T.border}`,
+  background: kind === "primary" ? T.blue : kind === "danger" ? T.redSoft : T.card,
+  color: kind === "primary" ? "#fff" : kind === "danger" ? T.red : T.textMid,
+});
+const tgPill = (txt, c, bg) => (
+  <span style={{ fontSize: 10.5, fontWeight: 700, padding: "2px 8px", borderRadius: 10, color: c, background: bg, whiteSpace: "nowrap" }}>{txt}</span>
+);
+const TG_CAPS = ["daily", "fuel_events", "parking", "trips", "live_position", "tank_level", "odometer", "unit_id", "push"];
+const tgBlank = (vendor) => ({ vendor, name: "", base_url: "", api_token: "", resource_id: "", groups: [{ objectId: "", label: "" }], report_id: 2, auto_sync_min: 15 });
+
+function GpsIntegrations() {
+  const [data, setData] = useState(null);
+  const [err, setErr] = useState(null);
+  const [form, setForm] = useState(null);          // { id?, ...fields }
+  const [busy, setBusy] = useState("");
+  const [test, setTest] = useState(null);
+  const [logFor, setLogFor] = useState(null);
+  const [log, setLog] = useState(null);
+  const [msg, setMsg] = useState(null);
+
+  const load = async () => {
+    const r = await api.get("/telematics/accounts").catch(() => null);
+    if (r && r.success) { setData(r.data); setErr(null); } else setErr((r && r.message) || t("common.something_went_wrong"));
+  };
+  useEffect(() => { load(); }, []);
+
+  const vendors = (data && data.vendors) || [];
+  const vendorOf = (k) => vendors.find((v) => v.key === k) || null;
+  const capsOf = (k) => (vendorOf(k) || {}).caps || {};
+  const fieldsOf = (k) => (vendorOf(k) || {}).fields || ["base_url", "api_token", "resource_id", "groups", "report_id"];
+
+  const openNew = () => { setForm(tgBlank((vendors[0] && vendors[0].key) || "technoton")); setTest(null); setMsg(null); };
+  const openEdit = (a) => {
+    setForm({
+      id: a.id, vendor: a.vendor, name: a.name || "", base_url: a.base_url || "", api_token: a.api_token_masked || "",
+      resource_id: a.resource_id || "", groups: (a.groups && a.groups.length ? a.groups : [{ objectId: "", label: "" }]).map((g) => ({ objectId: String(g.objectId || ""), label: g.label || "" })),
+      report_id: a.report_id || 2, auto_sync_min: a.auto_sync_min != null ? Number(a.auto_sync_min) : 15,
+    });
+    setTest(null); setMsg(null);
+  };
+  const setF = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+  const body = () => ({
+    ...(form.id ? { account_id: form.id } : { create: true, vendor: form.vendor }),
+    name: form.name, base_url: form.base_url, api_token: form.api_token, resource_id: form.resource_id,
+    groups: form.groups.filter((g) => String(g.objectId).trim()), report_id: Number(form.report_id) || 2,
+    auto_sync_min: Number(form.auto_sync_min),
+  });
+
+  const doTest = async () => {
+    setBusy("test"); setTest(null);
+    const r = await api.post("/telematics/config/test", body()).catch((e) => ({ success: false, message: e.message }));
+    setBusy("");
+    setTest(r && r.success ? { ok: true, d: r.data } : { ok: false, m: (r && r.message) || "—" });
+  };
+  const doSave = async () => {
+    setBusy("save");
+    const r = await api.post("/telematics/config", body()).catch((e) => ({ success: false, message: e.message }));
+    setBusy("");
+    if (!r || r.success === false) { setMsg({ ok: false, t: (r && r.message) || "—" }); return; }
+    setForm(null); setTest(null); setMsg({ ok: true, t: t("settings.tg_saved") });
+    load();
+  };
+  const doSync = async (a) => {
+    setBusy("sync" + a.id);
+    const r = await api.post("/telematics/sync", { account_id: a.id }).catch((e) => ({ success: false, message: e.message }));
+    setBusy("");
+    setMsg(r && r.success ? { ok: true, t: t("settings.tg_sync_shuru") } : { ok: false, t: (r && r.message) || "—" });
+    setTimeout(load, 1500);
+  };
+  const doActive = async (a, active) => {
+    if (!active && !window.confirm(t("settings.tg_band_q", { name: a.name || a.vendor_label }))) return;
+    setBusy("act" + a.id);
+    const r = await api.post(`/telematics/accounts/${a.id}/active`, { active }).catch((e) => ({ success: false, message: e.message }));
+    setBusy("");
+    if (!r || r.success === false) { setMsg({ ok: false, t: (r && r.message) || "—" }); return; }
+    load();
+  };
+  const openLog = async (a) => {
+    if (logFor === a.id) { setLogFor(null); return; }
+    setLogFor(a.id); setLog(null);
+    const r = await api.get(`/telematics/accounts/${a.id}/log`).catch(() => null);
+    setLog(r && r.success ? r.data : []);
+  };
+
+  if (err) return <div style={{ padding: 20, color: T.red, fontSize: 13 }}>{err}</div>;
+  if (!data) return <div style={{ padding: 30, fontSize: 13, color: T.textLight }}>{t("common.loading")}</div>;
+  const accounts = data.accounts || [];
+
+  const fieldInput = (k) => {
+    if (k === "groups") {
+      return (
+        <div key={k}>
+          <div style={tgLbl}>{t("settings.tg_f_groups")}</div>
+          {form.groups.map((g, i) => (
+            <div key={i} style={{ display: "flex", gap: 8, marginBottom: 6 }}>
+              <input value={g.objectId} placeholder="objectId" onChange={(e) => setF("groups", form.groups.map((x, j) => (j === i ? { ...x, objectId: e.target.value } : x)))} style={{ ...tgInp, flex: 1 }} />
+              <input value={g.label} placeholder={t("settings.tg_group_naam_ph")} onChange={(e) => setF("groups", form.groups.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))} style={{ ...tgInp, flex: 1 }} />
+              {form.groups.length > 1 && <button type="button" onClick={() => setF("groups", form.groups.filter((_, j) => j !== i))} style={tgBtn("danger")}>×</button>}
+            </div>
+          ))}
+          <button type="button" onClick={() => setF("groups", [...form.groups, { objectId: "", label: "" }])} style={tgBtn()}>{t("settings.tg_group_add")}</button>
+          <div style={{ fontSize: 11, color: T.textLight, marginTop: 4 }}>{t("settings.tg_f_groups_hint")}</div>
+        </div>
+      );
+    }
+    const type = k === "api_token" ? "password" : k === "report_id" ? "number" : "text";
+    return (
+      <div key={k}>
+        <div style={tgLbl}>{t("settings.tg_f_" + k)}</div>
+        <input type={type} value={form[k] == null ? "" : form[k]} onChange={(e) => setF(k, e.target.value)}
+          onFocus={(e) => { if (k === "api_token" && String(form.api_token).startsWith("••••")) { setF("api_token", ""); e.target.value = ""; } }}
+          placeholder={k === "base_url" ? "https://…" : ""} style={tgInp} autoComplete="off" />
+        {k === "api_token" && form.id ? <div style={{ fontSize: 11, color: T.textLight, marginTop: 4 }}>{t("settings.tg_token_hint")}</div> : null}
+      </div>
+    );
+  };
+
+  return (
+    <div style={{ maxWidth: 920 }}>
+      <SectionCard title={t("settings.tg_title")} desc={t("settings.tg_desc")}
+        action={!form ? <button type="button" onClick={openNew} style={tgBtn("primary")}>{t("settings.tg_naya")}</button> : null}>
+        <div style={{ fontSize: 12, color: T.textMid, background: T.blueSoft, borderRadius: 8, padding: "9px 12px", margin: "8px 0 4px", lineHeight: 1.55 }}>
+          {t("settings.tg_note")}
+        </div>
+        {msg && <div style={{ fontSize: 12.5, fontWeight: 600, color: msg.ok ? T.green : T.red, margin: "8px 0" }}>{msg.t}</div>}
+
+        {form && (
+          <div style={{ border: `1.5px solid ${T.blue}`, borderRadius: 10, padding: "12px 16px 16px", margin: "12px 0" }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: T.text }}>{form.id ? t("settings.tg_edit") : t("settings.tg_naya_title")}</div>
+            {!form.id && (
+              <>
+                <div style={tgLbl}>{t("settings.tg_vendor")}</div>
+                <PickSelect value={form.vendor} onChange={(e) => setForm({ ...tgBlank(e.target.value), name: form.name })} style={tgInp}>
+                  {vendors.map((v) => <option key={v.key} value={v.key}>{v.label}</option>)}
+                </PickSelect>
+              </>
+            )}
+            <div style={tgLbl}>{t("settings.tg_f_name")}</div>
+            <input value={form.name} onChange={(e) => setF("name", e.target.value)} placeholder={t("settings.tg_name_ph")} style={tgInp} />
+            {fieldsOf(form.vendor).map(fieldInput)}
+            <div style={tgLbl}>{t("settings.tg_auto")}</div>
+            <PickSelect value={String(form.auto_sync_min)} onChange={(e) => setF("auto_sync_min", Number(e.target.value))} style={tgInp}>
+              {TG_AUTO.map((n) => <option key={n} value={String(n)}>{n ? t("settings.tg_auto_n", { n }) : t("settings.tg_auto_band")}</option>)}
+            </PickSelect>
+            <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
+              <button type="button" onClick={doTest} disabled={!!busy} style={tgBtn()}>{busy === "test" ? t("settings.tg_test_chal") : t("settings.tg_test")}</button>
+              <button type="button" onClick={doSave} disabled={!!busy} style={tgBtn("primary")}>{busy === "save" ? t("common.saving") : t("common.save")}</button>
+              <button type="button" onClick={() => { setForm(null); setTest(null); }} disabled={!!busy} style={tgBtn()}>{t("common.cancel")}</button>
+            </div>
+            {test && (
+              <div style={{ marginTop: 12, fontSize: 12, lineHeight: 1.6, color: test.ok ? T.text : T.red }}>
+                {!test.ok ? test.m : (
+                  <>
+                    <div style={{ fontWeight: 700, color: T.green }}>{t("settings.tg_test_ok", { day: test.d.day })}</div>
+                    {test.d.groups.map((g) => (
+                      <div key={g.group}>
+                        <b>{g.group}</b>: {t("settings.tg_test_units", { n: g.units.length })}
+                        <span style={{ color: T.textLight }}> — {g.units.slice(0, 6).map((u) => u.name).join(", ")}{g.units.length > 6 ? " …" : ""}</span>
+                      </div>
+                    ))}
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {accounts.length === 0 && !form && (
+          <div style={{ padding: "20px 0", fontSize: 13, color: T.textLight }}>{t("settings.tg_koi_nahi")}</div>
+        )}
+        {accounts.map((a) => {
+          const caps = capsOf(a.vendor);
+          const s = a.sync || {};
+          const active = Number(a.is_active) === 1;
+          return (
+            <div key={a.id} style={{ borderTop: `1px solid ${T.borderLight}`, padding: "14px 0", opacity: active ? 1 : 0.6 }}>
+              <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                <span style={{ fontSize: 14, fontWeight: 700, color: T.text }}>{a.name || a.vendor_label}</span>
+                {a.name && tgPill(a.vendor_label, T.textMid, T.borderLight)}
+                {active ? tgPill(t("settings.tg_chalu"), T.green, T.greenSoft) : tgPill(t("settings.tg_band"), T.textMid, T.borderLight)}
+                {!a.api_token_ok && tgPill(t("settings.tg_token_kharab"), T.red, T.redSoft)}
+                {a.api_token_sealed ? tgPill("🔒 " + t("settings.tg_token_band"), T.purple, T.purpleSoft) : null}
+              </div>
+              <div style={{ fontSize: 12, color: T.textMid, marginTop: 5 }}>
+                {t("settings.tg_ginti", { u: a.units, l: a.linked, p: a.pending })}
+                {" · "}{Number(a.auto_sync_min) > 0 ? t("settings.tg_auto_n", { n: a.auto_sync_min }) : t("settings.tg_auto_band")}
+                {" · "}{t("settings.tg_token", { m: a.api_token_masked || "—" })}
+              </div>
+              <div style={{ fontSize: 12, marginTop: 3, color: s.status === "error" ? T.red : T.textLight }}>
+                {s.running ? t("settings.tg_sync_chal") : s.last_at
+                  ? t("settings.tg_last_sync", { time: tgDT(s.last_at) }) + (s.status === "error" ? " — " + (s.error || "") : " ✓")
+                  : t("settings.tg_sync_kabhi_nahi")}
+              </div>
+              <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 7 }}>
+                {TG_CAPS.filter((k) => k in caps).map((k) => (
+                  <span key={k} title={t("settings.tg_cap_hint")} style={{ fontSize: 10.5, padding: "2px 8px", borderRadius: 10, border: `1px solid ${caps[k] ? T.green + "55" : T.border}`, color: caps[k] ? T.green : T.textLight }}>
+                    {(caps[k] ? "✓ " : "✗ ") + t("settings.tg_cap_" + k)}
+                  </span>
+                ))}
+              </div>
+              <div style={{ display: "flex", gap: 7, marginTop: 10, flexWrap: "wrap" }}>
+                <button type="button" onClick={() => openEdit(a)} disabled={!!busy} style={tgBtn()}>{t("settings.tg_edit_btn")}</button>
+                {active && <button type="button" onClick={() => doSync(a)} disabled={!!busy || s.running} style={tgBtn()}>{busy === "sync" + a.id ? "…" : t("settings.tg_sync_now")}</button>}
+                <button type="button" onClick={() => openLog(a)} style={tgBtn()}>{logFor === a.id ? t("settings.tg_log_band") : t("settings.tg_log")}</button>
+                <button type="button" onClick={() => doActive(a, !active)} disabled={!!busy} style={tgBtn(active ? "danger" : undefined)}>
+                  {active ? t("settings.tg_band_karo") : t("settings.tg_chalu_karo")}
+                </button>
+              </div>
+              {logFor === a.id && (
+                <div style={{ marginTop: 10, border: `1px solid ${T.border}`, borderRadius: 8, overflow: "hidden" }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "130px 80px 50px 60px 60px 60px 70px 1fr", gap: 8, padding: "7px 10px", background: T.borderLight, fontSize: 10.5, fontWeight: 700, color: T.textMid, textTransform: "uppercase" }}>
+                    <span>{t("settings.tg_l_samay")}</span><span>{t("settings.tg_l_kism")}</span><span></span>
+                    <span>{t("settings.tg_l_call")}</span><span>{t("settings.tg_l_unit")}</span><span>{t("settings.tg_l_event")}</span>
+                    <span>{t("settings.tg_l_der")}</span><span>{t("settings.tg_l_galti")}</span>
+                  </div>
+                  {log == null && <div style={{ padding: 10, fontSize: 12, color: T.textLight }}>{t("common.loading")}</div>}
+                  {log != null && log.length === 0 && <div style={{ padding: 10, fontSize: 12, color: T.textLight }}>{t("settings.tg_log_khali")}</div>}
+                  {(log || []).map((l) => (
+                    <div key={l.id} style={{ display: "grid", gridTemplateColumns: "130px 80px 50px 60px 60px 60px 70px 1fr", gap: 8, padding: "6px 10px", borderTop: `1px solid ${T.borderLight}`, fontSize: 11.5, color: T.textMid }}>
+                      <span>{tgDT(l.started_at)}</span>
+                      <span>{t("settings.tg_kind_" + l.kind)}</span>
+                      <span style={{ fontWeight: 700, color: l.ok == null ? T.amber : Number(l.ok) ? T.green : T.red }}>{l.ok == null ? "…" : Number(l.ok) ? "✓" : "✗"}</span>
+                      <span>{l.calls ?? "—"}</span><span>{l.units ?? "—"}</span><span>{l.events ?? "—"}</span>
+                      <span>{l.ms != null ? Math.round(l.ms / 1000) + " s" : "—"}</span>
+                      <span style={{ color: T.red, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={l.error || ""}>{l.error || ""}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </SectionCard>
+    </div>
+  );
+}
+
 const settingsSections = [
   { id: "profile",       label: "My Profile",           Icon: IcUsers,     Comp: MyProfile,              section: "ACCOUNT" },
   { id: "company",       label: "Company Profile",      Icon: IcBuilding,  Comp: CompanySettings,        section: "GENERAL" },
@@ -5349,6 +5600,8 @@ const settingsSections = [
   { id: "weighbridge",   labelKey: "weigh.settings_tab", Icon: IcScale,     Comp: WeighbridgeSettings,    section: null },
   { id: "tripmaterial",  labelKey: "trip_stock.settings_tab", Icon: IcBox,  Comp: TripMaterialSettings,   section: null },
   { id: "wallet",        label: "Wallet Settings",      Icon: IcDollar,    Comp: WalletSettings,         section: null },
+  // GPS / telematics vendor account (P4, 17 Oct 2026) — dashboard Machinery → GPS me
+  { id: "integrations",  labelKey: "settings.tg_tab",   Icon: IcGlobe,     Comp: GpsIntegrations,        section: "INTEGRATIONS" },
   { id: "notifications", label: "Notifications",        Icon: IcBell,      Comp: NotificationSettings,   section: "SYSTEM" },
   { id: "sequences",     label: "Number Sequences",     Icon: IcHash,      Comp: NumberSequences,        section: null },
   { id: "audit",         label: "Audit Trail",          Icon: IcClipboard, Comp: AuditSettings,          section: null },
@@ -5377,6 +5630,7 @@ export default function SettingsModule({ initialSection = "company" } = {}) {
     weighbridge: t("weigh.settings_tab_desc"),
     tripmaterial: t("trip_stock.settings_tab_desc"),
     wallet: "Staff wallet photo policy + auto-approve limits",
+    integrations: t("settings.tg_tab_desc"),
     notifications: "Choose which in-app notifications you receive",
     sequences: "Configure auto-numbering for transactions", audit: "Audit trail and data retention settings",
     features: "Request new features and track their status",

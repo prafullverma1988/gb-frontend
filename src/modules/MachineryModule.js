@@ -5958,6 +5958,8 @@ function TeleConfigForm({ existing, onSaved, onCancel }) {
 
   return (
     <div style={{ display: "grid", gap: 12 }}>
+      {/* P4: kai account, token band, sync log — Settings → Integrations */}
+      <div style={{ fontSize: 11.5, color: T.t3, lineHeight: 1.5 }}>{t("machinery.tel_hub_hint")}</div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
         <Field label={t("machinery.api_base_url")} span={2} hint={t("machinery.vendor_ke_diye_url_ka_shuru")}>
           <input value={f.base_url} onChange={(e) => upd("base_url", e.target.value)} placeholder="https://api.vendor.in:5000" style={inp} />
