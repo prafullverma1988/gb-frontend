@@ -2400,6 +2400,7 @@ const dict = {
   "design.no_drawings_yet":                                    "अभी तक कोई ड्राइंग नहीं",
   "design.pdf_png_jpg_dwg_dxf_max":                            "PDF, PNG, JPG, DWG, DXF · मैक्स 50MB",
   "design.pdf_png_jpg_dwg_max_50mb":                           "PDF, PNG, JPG, DWG · मैक्स 50MB",
+  "design.project_tick_client_approval_hint":                   "अपलोड के बाद ड्रॉइंग साइडबार के डिज़ाइन मॉड्यूल → \"क्लाइंट अप्रूवल\" टैब में जाएगी। वहाँ से क्लाइंट को शेयर करो और क्लाइंट का जवाब दर्ज करो — क्लाइंट की हाँ के बाद ही एडमिन अप्रूवल होगा।",
   "design.pending_client_approval":                            "क्लाइंट अप्रूवल पेंडिंग",
   "design.pending_client_share":                               "क्लाइंट शेयर पेंडिंग",
   "design.pendingdrawings_drawings_awaiting_approval":         "{pendingDrawings} ड्रॉइंग अप्रूवल का इंतज़ार कर रहे हैं",

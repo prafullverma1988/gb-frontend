@@ -242,7 +242,7 @@ function TabDesign({ project, isAdmin }) {
   const [pendingReqId, setPendingReqId] = useState(null); // request to mark "Uploaded" after drawing saved
 
   // Upload form state
-  const [uForm, setUForm]   = useState({ title:"", category:"Architectural", drawing_type:"2D", note:"" });
+  const [uForm, setUForm]   = useState({ title:"", category:"Architectural", drawing_type:"2D", approval_required:false, note:"" });
   const [uFile, setUFile]   = useState(null);
   const [uploading, setUploading] = useState(false);
   const [uploadPct, setUploadPct] = useState(0);
@@ -411,6 +411,8 @@ function TabDesign({ project, isAdmin }) {
         title:        uForm.title,
         category:     uForm.category,
         drawing_type: uForm.drawing_type,
+        // Tick = pehle client (Design module → Client Approval), uske baad andar ka approval
+        approval_required: !!uForm.approval_required,
         note:         uForm.note || null,
         file_url:     cld.secure_url,
         file_size:    Math.round(uFile.size / 1024) + " KB",
@@ -421,7 +423,7 @@ function TabDesign({ project, isAdmin }) {
         apiCache.refreshApprovals();  // pre-warm Pending Approvals badge
         setDrawings(p => [res.data, ...p]);
         setShowUpload(false);
-        setUForm({ title:"", category:"Architectural", drawing_type:"2D", note:"" });
+        setUForm({ title:"", category:"Architectural", drawing_type:"2D", approval_required:false, note:"" });
         setUFile(null); setUploadPct(0);
         // Mark linked request as Uploaded
         if (pendingReqId) {
@@ -544,6 +546,21 @@ function TabDesign({ project, isAdmin }) {
                 onChange={v=>setUForm(p=>({...p,drawing_type:v}))} placeholder={t("common.select_type")}/>
             </div>
           </div>
+
+          {/* Approval Required — Design module ke upload jaisa: client ki haan pehle */}
+          <div style={{marginBottom:8,padding:"9px 11px",background:T.surfaceB,border:`1px solid ${T.b1}`,borderRadius:7,display:"flex",alignItems:"center",gap:10}}>
+            <input type="checkbox" id="tdApprovalReq" checked={!!uForm.approval_required}
+              onChange={e=>setUForm(p=>({...p,approval_required:e.target.checked}))}
+              style={{width:15,height:15,cursor:"pointer"}}/>
+            <label htmlFor="tdApprovalReq" style={{flex:1,fontSize:12,color:T.t2,cursor:"pointer"}}>
+              <b>{t("design.approval_required")}</b> {t("design.drawing_client_consultant_approval_ke_liye")}
+            </label>
+          </div>
+          {uForm.approval_required && (
+            <div style={{marginBottom:12,padding:"9px 11px",background:T.bluL,border:`1px solid ${T.bluM}`,borderLeft:`3px solid ${T.blu}`,borderRadius:7,fontSize:11,color:T.t2,lineHeight:1.5}}>
+              {t("design.project_tick_client_approval_hint")}
+            </div>
+          )}
 
           {/* File drop zone */}
           <div style={{marginBottom:12}}>
@@ -1163,7 +1180,7 @@ function TabDesign({ project, isAdmin }) {
                         </button>
                         <button onClick={(e)=>{
                           e.stopPropagation();
-                          setUForm({title:req.title+" Drawing",category:req.category,drawing_type:"2D",note:req.description||""});
+                          setUForm({title:req.title+" Drawing",category:req.category,drawing_type:"2D",approval_required:false,note:req.description||""});
                           setPendingReqId(req.id);
                           setMainTab("drawings"); setShowUpload(true);
                           handleUpdateReqStatus(req.id,"In Progress");
@@ -1178,7 +1195,7 @@ function TabDesign({ project, isAdmin }) {
                       {req.status==="In Progress"&&(
                         <button onClick={(e)=>{
                           e.stopPropagation();
-                          setUForm({title:req.title+" Drawing",category:req.category,drawing_type:"2D",note:req.description||""});
+                          setUForm({title:req.title+" Drawing",category:req.category,drawing_type:"2D",approval_required:false,note:req.description||""});
                           setPendingReqId(req.id);
                           setMainTab("drawings"); setShowUpload(true);
                         }}

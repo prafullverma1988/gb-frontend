@@ -2403,6 +2403,7 @@ const dict = {
   "design.no_drawings_yet":                                    "No drawings yet",
   "design.pdf_png_jpg_dwg_dxf_max":                            "PDF, PNG, JPG, DWG, DXF · Max 50MB",
   "design.pdf_png_jpg_dwg_max_50mb":                           "PDF, PNG, JPG, DWG · Max 50MB",
+  "design.project_tick_client_approval_hint":                   "Upload ke baad drawing sidebar ke Design module → \"Client Approval\" tab me jayegi. Wahan se client ko share karo aur client ka jawab darj karo — client ki haan ke baad hi admin approval hoga.",
   "design.pending_client_approval":                            "Pending Client Approval",
   "design.pending_client_share":                               "Pending Client Share",
   "design.pendingdrawings_drawings_awaiting_approval":         "{pendingDrawings} drawings awaiting approval",
