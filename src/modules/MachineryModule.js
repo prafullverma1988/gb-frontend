@@ -6084,6 +6084,8 @@ const teleHrs = (sec) => {
   return s ? Math.floor(s / 3600) + ":" + String(Math.floor((s % 3600) / 60)).padStart(2, "0") : "—";
 };
 const teleName = (m) => (m && (m.machine_name || m.unit_name)) || "—";
+// Jagah naam se (chalti gaadi, 18 Oct 2026) — GPS pakka nahi
+const teleAndaza = (src) => (src === "name" ? " (" + t("machinery.tr_andaza") + ")" : "");
 const l1 = (x) => Math.round((Number(x) || 0) * 10) / 10;
 const teleMono = { fontFamily: "monospace", fontSize: 12 };
 const teleEll = { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
@@ -6311,7 +6313,7 @@ function TeleFleetDash({ fleet, ms, rg, onOpen, onAction, goTab }) {
               </span>
               <span style={{ fontSize: 11.5, color: T.t3, minWidth: 0 }}>
                 <div style={teleEll}>
-                  {m.last.location || "—"}
+                  {(m.last.location || "—") + teleAndaza(m.last.src)}
                   {m.last.data_at && <span style={{ color: m.fresh ? T.t4 : T.red }}> · {fmtD(m.last.data_at)}</span>}
                 </div>
                 {m.last_fill && (
@@ -6424,7 +6426,7 @@ function TeleMap({ ms, sites, rg, syncAt, onOpen, height = 520 }) {
         icon: { path: TELE_PIN, fillColor: st.c, fillOpacity: 1, strokeColor: m.unit_id === sel ? "#111827" : "#FFFFFF", strokeWeight: 2, scale: m.unit_id === sel ? 1.9 : 1.6, anchor: new g.maps.Point(12, 22) },
       });
       mk.addListener("click", () => {
-        infoRef.current.setContent(`<div style="font:12px 'Segoe UI',sans-serif;min-width:160px"><div style="font-weight:700">${teleName(m)}</div><div>${m.last.location || "—"}</div></div>`);
+        infoRef.current.setContent(`<div style="font:12px 'Segoe UI',sans-serif;min-width:160px"><div style="font-weight:700">${teleName(m)}</div><div>${m.last.location || "—"}${teleAndaza(m.last.src)}</div></div>`);
         infoRef.current.open(mapRef.current, mk);
         setSel(m.unit_id);
       });
@@ -6541,9 +6543,9 @@ function TeleMap({ ms, sites, rg, syncAt, onOpen, height = 520 }) {
       }
       pos.forEach((p) => {
         const c = new g.maps.Circle({ map: mapRef.current, center: { lat: p.lat, lng: p.lng }, radius: 25,
-          strokeColor: "#B27A0A", strokeWeight: 1, fillColor: "#B27A0A", fillOpacity: 0.35 });
+          strokeColor: "#B27A0A", strokeWeight: 1, fillColor: "#B27A0A", fillOpacity: p.src === "name" ? 0 : 0.35 });
         c.addListener("click", () => {
-          infoRef.current.setContent(`<div style="font:12px 'Segoe UI',sans-serif">${p.location_text || "—"}<div style="color:#6B7280">${localDT(p.first_seen_at).slice(11)} – ${localDT(p.last_seen_at).slice(11)}</div></div>`);
+          infoRef.current.setContent(`<div style="font:12px 'Segoe UI',sans-serif">${p.location_text || "—"}${teleAndaza(p.src)}<div style="color:#6B7280">${localDT(p.first_seen_at).slice(11)} – ${localDT(p.last_seen_at).slice(11)}</div></div>`);
           infoRef.current.setPosition({ lat: p.lat, lng: p.lng });
           infoRef.current.open(mapRef.current);
         });
@@ -6616,7 +6618,7 @@ function TeleMap({ ms, sites, rg, syncAt, onOpen, height = 520 }) {
             {t("machinery.tp_m_period", { h: teleHrs(selM.p.engine_sec), km: fmtN(l1(selM.p.km)), l: fmtN(l1(selM.p.consumed_l)), f: fmtN(l1(selM.p.filled_l)) })}
           </div>
           <div style={{ fontSize: 11.5, color: T.t3 }}>
-            {selM.last.location || "—"}{selM.last.data_at ? " · " + fmtD(selM.last.data_at) : ""}
+            {(selM.last.location || "—") + teleAndaza(selM.last.src)}{selM.last.data_at ? " · " + fmtD(selM.last.data_at) : ""}
             {selM.tank ? " · " + t("machinery.tel_tank_line", { l: Math.round(selM.tank.est_l) }) : ""}
             {selM.last_fill ? " · " + t("machinery.tel_last_fill", { at: fmtDT(selM.last_fill.at), l: l1(selM.last_fill.litres), loc: selM.last_fill.location || "—" }) : ""}
           </div>
@@ -7203,7 +7205,7 @@ function TeleDayView({ unitId, day, row, onWhere }) {
         strokeColor: "#B27A0A", strokeOpacity: 0.9, strokeWeight: 3 }));
     }
     pos.forEach((p) => add(new g.maps.Circle({ map: mapRef.current, center: { lat: p.lat, lng: p.lng }, radius: 25,
-      strokeColor: "#B27A0A", strokeWeight: 1, fillColor: "#B27A0A", fillOpacity: 0.35 }), { lat: p.lat, lng: p.lng }));
+      strokeColor: "#B27A0A", strokeWeight: 1, fillColor: "#B27A0A", fillOpacity: p.src === "name" ? 0 : 0.35 }), { lat: p.lat, lng: p.lng }));
     (tr.events || []).filter((e) => e.lat != null).forEach((e) => {
       const fill = e.event_type === "fill";
       add(new g.maps.Marker({ map: mapRef.current, position: { lat: e.lat, lng: e.lng },
@@ -7227,7 +7229,7 @@ function TeleDayView({ unitId, day, row, onWhere }) {
   if (row && row.park_start_at) items.push({ at: row.park_start_at, c: T.slt, txt: t("machinery.tp_u_tl_park", { loc: row.park_location || "—" }) });
   ((tr && tr.positions) || []).forEach((p) => items.push({
     at: p.first_seen_at, c: T.amb,
-    txt: t("machinery.tp_u_tl_pos", { loc: p.location_text || "—" }) + " (" + localDT(p.first_seen_at).slice(11) + "–" + localDT(p.last_seen_at).slice(11) + ")",
+    txt: t("machinery.tp_u_tl_pos", { loc: p.location_text || "—" }) + teleAndaza(p.src) + " (" + localDT(p.first_seen_at).slice(11) + "–" + localDT(p.last_seen_at).slice(11) + ")",
   }));
   ((tr && tr.events) || []).forEach((e) => items.push({
     at: e.event_time, c: e.event_type === "fill" ? T.grn : T.red, bold: true, ev: e,
@@ -7321,7 +7323,7 @@ function TeleUnitPanel({ unitId, onClose }) {
               <Pill label={t("machinery.tp_u_lph", { n: data.days, x: fmtN(data.lph) }) + (data.norm_lph != null ? " · " + t("machinery.tp_u_norm", { x: fmtN(data.norm_lph) }) : "")}
                 c={over ? T.red : T.ind} bg={over ? T.redL : T.indL} />
             )}
-            <span style={{ color: T.t3 }}>{u.last.location || "—"}{u.last.data_at ? " · " + t("machinery.tp_h_aakhri_data", { t: fmtD(u.last.data_at) }) : ""}</span>
+            <span style={{ color: T.t3 }}>{(u.last.location || "—") + teleAndaza(u.last.src)}{u.last.data_at ? " · " + t("machinery.tp_h_aakhri_data", { t: fmtD(u.last.data_at) }) : ""}</span>
             {(u.renamed_from || []).length > 0 && <span style={{ color: T.ind }}>{t("machinery.tel_renamed_from", { old: u.renamed_from.join(", ") })}</span>}
             <span style={{ marginLeft: "auto", display: "inline-flex", gap: 5 }}>
               {[14, 30, 60].map((n) => (
