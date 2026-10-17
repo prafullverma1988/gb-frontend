@@ -39,6 +39,12 @@ const RoadLevels = lazy(() => import("../road/RoadLevels"));
 
 // Wahi jaanch jo server lagata hai — PATCH /design/drawings/:id/status par
 // requireRole(admin/super_admin/manager/project_manager) + requirePerm("Design","edit").
+// "Approval Required" wali drawing abhi client ke paas (share baaki / jawab
+// baaki) aur andar ka faisla nahi hua — server ka utils/designClientStatus.js
+// (inClientReview) bhi yahi maanta hai aur tab tak approve rokta hai.
+const inClientReview = (d) => d.status === "Pending"
+  && (d.client_status === "PendingShare" || d.client_status === "SharedWithClient");
+
 const canDecideDesign = () => canApproveAction({
   roles: ["admin", "super_admin", "manager", "project_manager"],
   perm: ["Design", "edit"],
@@ -258,14 +264,15 @@ function TabDesign({ project, isAdmin }) {
   };
 
   // Load drawings
-  const loadDrawings = async () => {
+  // quiet = list chhupaye bina taaza karo (approve/reject ke baad)
+  const loadDrawings = async (quiet) => {
     if (!projectId) return;
-    setLoading(true);
+    if (!quiet) setLoading(true);
     try {
       const res = await api.get("/design/drawings?project_id=" + projectId);
       if (res.success) setDrawings(res.data || []);
     } catch(e) {}
-    setLoading(false);
+    if (!quiet) setLoading(false);
   };
   const loadRequests = async () => {
     if (!projectId) return;
@@ -410,15 +417,7 @@ function TabDesign({ project, isAdmin }) {
       });
       setUploadPct(100);
       if (res.success) {
-        api.post("/approvals/submit", {
-          module: "Design Approval",
-          ref_id: res.data.id,
-          ref_no: res.data.drawing_no || "",
-          title: res.data.title || uForm.title || "Drawing",
-          amount: 0,
-          project_id: projectId || res.data.project_id,
-          project_name: projectName || res.data.project_name || "",
-        }).catch(e => console.error("Approval submit:", e));
+        // Approval queue me server khud daalta hai (POST /design/drawings).
         apiCache.refreshApprovals();  // pre-warm Pending Approvals badge
         setDrawings(p => [res.data, ...p]);
         setShowUpload(false);
@@ -468,7 +467,9 @@ function TabDesign({ project, isAdmin }) {
     try {
       const res = await api.patch("/design/drawings/" + id + "/status", { status, note: note || null });
       if (res.success) {
-        setDrawings(p => p.map(d => d.id === id ? { ...d, status } : d));
+        // Server se dobara — multi-level me L1 ke baad bhi drawing Pending rehti
+        // hai, aur approve ke baad client_status server tay karta hai.
+        await loadDrawings(true);
         setSel(null);
       } else { setActionErr(res.message || "Failed to update status"); }
     } catch(e) {
@@ -792,7 +793,7 @@ function TabDesign({ project, isAdmin }) {
 
         {/* Drawing is in client review — admin actions are gated until the
             client signs off. Show a status pill instead of Approve/Reject. */}
-        {d.status!=="Approved" && (d.client_status==="PendingShare" || d.client_status==="SharedWithClient") && (
+        {inClientReview(d) && (
           <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
             <span style={{display:"inline-flex",alignItems:"center",gap:5,padding:"5px 11px",borderRadius:14,
               border:`1px solid ${d.client_status==="PendingShare"?T.ambM:T.bluM}`,
@@ -808,7 +809,7 @@ function TabDesign({ project, isAdmin }) {
           </div>
         )}
 
-        {canDecideDesign() && d.status!=="Approved" && d.client_status!=="PendingShare" && d.client_status!=="SharedWithClient" && (
+        {canDecideDesign() && d.status!=="Approved" && !inClientReview(d) && (
           <div style={S.chipRow}>
             {/* Approve */}
             <button onClick={()=>handleStatus(d.id,"Approved",null)} disabled={!!acting[d.id]}
@@ -1010,13 +1011,14 @@ function TabDesign({ project, isAdmin }) {
           {filtered.map(d=>{
             // When the drawing is still routing through client review, show
             // a client-flavoured pill instead of the generic admin status.
-            const inClientFlow = d.client_status === "PendingShare" || d.client_status === "SharedWithClient";
+            // Approved / Rejected ho chuki drawing par apna status hi.
+            const inClientFlow = inClientReview(d);
             const sm = inClientFlow
               ? { c: d.client_status === "PendingShare" ? T.amb : T.blu,
                   bg: d.client_status === "PendingShare" ? T.ambL : T.bluL }
               : (statusMeta[d.status] || statusMeta["Pending"]);
             const statusLabel = inClientFlow
-              ? (d.client_status === "PendingShare" ? "Pending Client Share" : "Pending Client Approval")
+              ? (d.client_status === "PendingShare" ? t("design.pending_client_share") : t("design.pending_client_approval"))
               : d.status;
             const isS = sel?.id===d.id;
             return(

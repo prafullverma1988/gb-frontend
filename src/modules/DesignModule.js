@@ -173,15 +173,9 @@ function UploadModal({ show, onClose, projects, dbTitles, dbCats, dbTypes, prefi
             linked_request_id: linkedRequestId,
           });
           if (res.success) {
-            api.post("/approvals/submit", {
-              module: "Design Approval",
-              ref_id: res.data.id,
-              ref_no: res.data.drawing_no || "",
-              title: res.data.title || capturedForm.title || "Drawing",
-              amount: 0,
-              project_id: capturedForm.project_id || res.data.project_id,
-              project_name: proj?.name || res.data.project_name || "",
-            }).catch(e => console.error("Approval submit:", e));
+            // Approval queue me server khud daalta hai (POST /design/drawings) —
+            // "Approval Required" wali client ke "Approved" ke baad. Yahan se
+            // /approvals/submit bhejne par wo client se pehle hi queue me aa jaati thi.
             // Pre-warm the approval badge: drawer's next open paints instantly.
             apiCache.refreshApprovals();
             // Auto-learn site location from live-camera presence
@@ -194,7 +188,8 @@ function UploadModal({ show, onClose, projects, dbTitles, dbCats, dbTypes, prefi
                 source: "drawing_photo",
               }).catch(() => {});
             }
-            onUploaded(res.data);
+            // POST ka jawab project ka naam nahi deta — list me "—" na dikhe
+            onUploaded({ ...res.data, project_name: res.data.project_name || proj?.name || null });
           }
         } catch (e) {
           console.error("Save drawing error:", e);
@@ -422,6 +417,21 @@ export default function DesignModule() {
 
   useEffect(()=>{ loadAll(); }, [loadAll]);
 
+  // Approve / reject ke baad sirf drawings server se dobara (list chhupaye bina) —
+  // multi-level me L1 ke baad drawing Pending hi rehti hai, aur approve par
+  // client_status server tay karta hai.
+  const reloadDrawings = useCallback(async () => {
+    try {
+      const r = await api.get("/design/drawings");
+      if (r.success) setDrawings(r.data||[]);
+    } catch(e) {}
+  }, []);
+
+  // "Approval Required" wali drawing client ke paas (share baaki / jawab baaki) —
+  // tab tak andar ka Approve nahi (server bhi rokta hai).
+  const inClientReview = (d) => d.status === "Pending"
+    && (d.client_status === "PendingShare" || d.client_status === "SharedWithClient");
+
   const CATS_LIST  = dbCats.length  > 0 ? dbCats.map(c=>c.name)  : CATS;
   const TYPES_LIST = dbTypes.length > 0 ? dbTypes.map(t=>t.name) : TYPES;
   const projectNames = ["All", ...projects.map(p=>p.name)];
@@ -431,7 +441,7 @@ export default function DesignModule() {
     setActing(p=>({...p,[id]:status})); setActionErr("");
     try {
       const res = await api.patch("/design/drawings/"+id+"/status", {status, note:note||null});
-      if (res.success) { setDrawings(p=>p.map(d=>d.id===id?{...d,status}:d)); setSelDraw(null); }
+      if (res.success) { await reloadDrawings(); setSelDraw(null); }
       else setActionErr(res.message||"Failed");
     } catch(e) { setActionErr(e.message); }
     setActing(p=>({...p,[id]:null}));
@@ -590,7 +600,7 @@ export default function DesignModule() {
                     {d.file_url&&<a href={d.file_url} target="_blank" rel="noreferrer" style={S.linkBlue}>{t("common.view")}</a>}
                     {d.file_url&&<a href={d.file_url} download target="_blank" rel="noreferrer" style={S.linkGrey}>{t("design.download")}</a>}
                     <button onClick={()=>setShowVer(d)} style={{padding:"5px 10px",borderRadius:6,background:T.surfaceB,border:"1px solid "+T.b1,color:T.t3,fontSize:11,cursor:"pointer"}}><IcHist size={12}/> {t("common.history")}</button>
-                    {canDecideDesign()&&d.status!=="Approved"&&<button onClick={()=>handleStatus(d.id,"Approved")} disabled={!!acting[d.id]} style={{padding:"5px 11px",borderRadius:6,background:T.grn,border:"none",color:"white",fontSize:11,fontWeight:700,cursor:"pointer"}}>{t("common.approve")}</button>}
+                    {canDecideDesign()&&d.status!=="Approved"&&!inClientReview(d)&&<button onClick={()=>handleStatus(d.id,"Approved")} disabled={!!acting[d.id]} style={{padding:"5px 11px",borderRadius:6,background:T.grn,border:"none",color:"white",fontSize:11,fontWeight:700,cursor:"pointer"}}>{t("common.approve")}</button>}
                     {canDecideDesign()&&d.status!=="Revision"&&<button onClick={()=>{ const r=prompt(t("design.revision_reason")); if(r) handleStatus(d.id,"Revision",r); }} style={{padding:"5px 11px",borderRadius:6,background:T.ambL,border:"1px solid "+T.ambM,color:T.amb,fontSize:11,fontWeight:600,cursor:"pointer"}}>{t("design.revision")}</button>}
                     {canDecideDesign()&&d.status!=="Rejected"&&<button onClick={()=>{ const r=prompt(t("design.rejection_reason")); if(r) handleStatus(d.id,"Rejected",r); }} style={{padding:"5px 11px",borderRadius:6,background:T.redL,border:"1px solid "+T.redM,color:T.red,fontSize:11,fontWeight:600,cursor:"pointer"}}>{t("common.reject")}</button>}
                   </div>
@@ -1074,7 +1084,7 @@ export default function DesignModule() {
       setAprvActing(p=>({...p,[id]:"approving"}));
       try {
         const res = await api.patch("/design/drawings/"+id+"/status", {status:"Approved"});
-        if (res.success) setDrawings(p=>p.map(d=>d.id===id?{...d,status:"Approved"}:d));
+        if (res.success) await reloadDrawings();
       } catch(e) {}
       setAprvActing(p=>({...p,[id]:null}));
     };
