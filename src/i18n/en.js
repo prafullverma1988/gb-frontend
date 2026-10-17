@@ -14384,6 +14384,8 @@ const dict = {
   "machinery.tw_gmaps":                                        "Open in Google Maps",
   "machinery.tw_other_ev":                                     "Other fills / drops that day — tap to see their place",
   "machinery.tr_andaza":                                       "approx.",
+  "machinery.vg_wapas":                                        "Taken back by vendor",
+  "machinery.vg_where_note":                                   "The vendor took this drop back later (noticed {t}) — it is no longer in the vendor's report. Kept only for the record.",
 };
 
 export default dict;

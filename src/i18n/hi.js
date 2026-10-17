@@ -14383,6 +14383,8 @@ const dict = {
   "machinery.tw_gmaps":                                        "Google Maps में खोलो",
   "machinery.tw_other_ev":                                     "उस दिन के बाकी भराई / ड्रॉप — दबाओ तो उनकी जगह",
   "machinery.tr_andaza":                                       "अंदाज़ा",
+  "machinery.vg_wapas":                                        "वेंडर ने वापस लिया",
+  "machinery.vg_where_note":                                   "वेंडर ने ये ड्रॉप बाद में वापस ले लिया ({t} पर पकड़ा) — अब वेंडर की रिपोर्ट में नहीं है। सिर्फ़ रिकॉर्ड के लिए रखा है।",
 };
 
 export default dict;

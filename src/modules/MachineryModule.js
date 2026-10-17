@@ -6829,6 +6829,7 @@ function TeleWhere({ q: q0, onClose }) {
               {w && w.vendor === "unsupported" && <div style={{ marginTop: 10, fontSize: 11.5, color: T.t3 }}>{t("machinery.tw_vendor_none")}</div>}
               {!moment && <div style={{ marginTop: 10, fontSize: 11.5, color: T.t3 }}>{t("machinery.tw_day_note")}</div>}
               <div style={{ marginTop: 12 }}>
+                {ev && ev.vendor_gone_at && line("", t("machinery.vg_where_note", { t: fmtDT(ev.vendor_gone_at) }), T.amb)}
                 {line(t("machinery.tw_us_samay"), stTxt)}
                 {ev && line(t("machinery.tw_sensor"),
                   teleEvWhat(ev) + (ev.level_before != null ? " · " + t("machinery.tw_level", { a: Math.round(ev.level_before), b: Math.round(ev.level_after) }) : ""),
@@ -6966,23 +6967,25 @@ function TeleFuelRegister({ rg, ms, onOpen, onAction }) {
   const [trunc, setTrunc] = useState(false);
   const [k, setK] = useState({ type: "", entry: "", jaanch: "" });
   const [tick, setTick] = useState(0);
+  // "Vendor ne wapas liya" — server alag se deta hai (baaki screen par wo hote hi nahi)
+  const gone = k.jaanch === "gone";
   useEffect(() => {
     let dead = false;
     setRows(null);
-    api.get(`/telematics/events?from=${rg.from}&to=${rg.to}`).then((r) => {
+    api.get(`/telematics/events?from=${rg.from}&to=${rg.to}${gone ? "&gone=1" : ""}`).then((r) => {
       if (dead) return;
       setRows(r && r.success ? r.data.rows : []);
       setTrunc(!!(r && r.success && r.data.truncated));
     }).catch(() => { if (!dead) setRows([]); });
     return () => { dead = true; };
-  }, [rg.from, rg.to, tick]);
+  }, [rg.from, rg.to, tick, gone]);
   const byUnit = new Map(ms.map((m) => [m.unit_id, m]));
   const set = (key, v) => setK((x) => ({ ...x, [key]: v }));
   const vis = (rows || []).filter((r) => byUnit.has(r.unit_ref))
     .filter((r) => !k.type || r.event_type === k.type)
     .filter((r) => !k.entry || (k.entry === "mili" ? !!r.matched_fuel_entry_id
       : (r.event_type === "fill" && !!r.equipment_id && !r.matched_fuel_entry_id)))
-    .filter((r) => !k.jaanch || (k.jaanch === "new" ? (r.event_type === "drop" && r.review_status === "new") : r.review_status === "ok"));
+    .filter((r) => !k.jaanch || gone || (k.jaanch === "new" ? (r.event_type === "drop" && r.review_status === "new") : r.review_status === "ok"));
   const fills = vis.filter((r) => r.event_type === "fill"), drops = vis.filter((r) => r.event_type === "drop");
   const sumL = (a) => fmtN(l1(a.reduce((x, r) => x + (Number(r.litres) || 0), 0)));
   const nameOf = (r) => { const m = byUnit.get(r.unit_ref); return m ? teleName(m) : (r.machine_name || r.unit_name); };
@@ -7012,7 +7015,7 @@ function TeleFuelRegister({ rg, ms, onOpen, onAction }) {
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
         {sel(t("machinery.tp_r_kya"), "type", [{ v: "fill", l: t("machinery.tp_r_fill") }, { v: "drop", l: t("machinery.tp_r_drop") }])}
         {sel(t("machinery.tp_r_entry"), "entry", [{ v: "mili", l: t("machinery.tp_r_mili") }, { v: "nahi", l: t("machinery.tp_r_nahi_mili") }])}
-        {sel(t("machinery.tp_r_jaanch"), "jaanch", [{ v: "new", l: t("machinery.tp_r_bina_jaanch") }, { v: "ok", l: t("fuel.theek_tha") }])}
+        {sel(t("machinery.tp_r_jaanch"), "jaanch", [{ v: "new", l: t("machinery.tp_r_bina_jaanch") }, { v: "ok", l: t("fuel.theek_tha") }, { v: "gone", l: t("machinery.vg_wapas") }])}
         <span style={{ fontSize: 11.5, color: T.t2, paddingBottom: 7 }}>
           {t("machinery.tp_r_tot", { fn: fills.length, fl: sumL(fills), dn: drops.length, dl: sumL(drops) })}
         </span>
@@ -7050,7 +7053,8 @@ function TeleFuelRegister({ rg, ms, onOpen, onAction }) {
                 {entryTxt(r)}
               </span>
               <span style={{ fontSize: 11 }}>
-                {r.review_status === "ok" ? <span style={{ color: T.t4 }}>{t("fuel.theek_tha")}</span>
+                {r.vendor_gone_at ? <span style={{ color: T.t4 }} title={fmtDT(r.vendor_gone_at)}>{t("machinery.vg_wapas")}</span>
+                  : r.review_status === "ok" ? <span style={{ color: T.t4 }}>{t("fuel.theek_tha")}</span>
                   : !fill ? (canMach("create")
                     ? <Btn size="sm" ghost onClick={() => review(r.id)}>{t("fuel.theek_tha")}</Btn>
                     : <span style={{ color: T.red, fontWeight: 600 }}>{t("machinery.tp_r_bina_jaanch")}</span>)

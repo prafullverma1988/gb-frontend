@@ -14386,6 +14386,8 @@ const dict = {
   "machinery.tw_gmaps":                                        "Google Maps me kholo",
   "machinery.tw_other_ev":                                     "Us din ke baaki fill / drop — dabao to unki jagah",
   "machinery.tr_andaza":                                       "andaza",
+  "machinery.vg_wapas":                                        "Vendor ne wapas liya",
+  "machinery.vg_where_note":                                   "Vendor ne ye drop baad me wapas le liya ({t} par pakda) — ab vendor ki report me nahi hai. Sirf record ke liye rakha hai.",
 };
 
 export default dict;
