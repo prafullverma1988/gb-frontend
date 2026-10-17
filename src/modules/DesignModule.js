@@ -8,6 +8,7 @@ import SearchSelect from "../components/SearchSelect";
 import { Avatar, Credit, fmtTimeAgo } from "../components/Credit";
 import RevisionNoteModal from "../components/RevisionNoteModal";
 import { canApproveAction } from "../utils/approvalAuthority";
+import { can } from "../utils/perms";
 import { t } from "../i18n";
 import { companyName } from "../utils/companyName";
 import { cld } from "../utils/cloudinary";
@@ -553,10 +554,10 @@ export default function DesignModule() {
             <SearchSelect value={f.val} options={f.opts.map(o=>({value:o,label:o==="All"?`All ${f.label}s`:o}))} onChange={f.set} placeholder={`All ${f.label}s`}/>
           </div>
         ))}
-        <button onClick={()=>setShowUpload(true)}
+        {can("Design","create")&&<button onClick={()=>setShowUpload(true)}
           style={{padding:"7px 14px",borderRadius:7,background:T.blu,border:"none",color:"white",fontSize:12,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:5,whiteSpace:"nowrap"}}>
           <IcUpload size={13} color="white"/> {t("design.upload_drawing")}
-        </button>
+        </button>}
       </div>
 
       <div style={S.hint}>{filteredDrawings.length} drawings</div>
@@ -702,12 +703,12 @@ export default function DesignModule() {
                      {t("design.assign_2")}
                     </button>
                   )}
-                  <button onClick={()=>{setUploadPrefill({project_id:projects.find(p=>p.name===req.project_name)?.id||"",title:req.title,category:req.category,drawing_type:"2D",note:req.description||"",linked_request_id:req.id});setShowUpload(true);updateReqStatus(req.id,"In Progress");}}
+                  {can("Design","create")&&<button onClick={()=>{setUploadPrefill({project_id:projects.find(p=>p.name===req.project_name)?.id||"",title:req.title,category:req.category,drawing_type:"2D",note:req.description||"",linked_request_id:req.id});setShowUpload(true);updateReqStatus(req.id,"In Progress");}}
                     style={S.btnGreen}>
                    {t("design.upload_direct")}
-                  </button>
+                  </button>}
                 </>}
-                {req.status==="In Progress"&&(
+                {req.status==="In Progress"&&can("Design","create")&&(
                   <button onClick={()=>{setUploadPrefill({project_id:projects.find(p=>p.name===req.project_name)?.id||"",title:req.title,category:req.category,drawing_type:"2D",note:req.description||"",linked_request_id:req.id});setShowUpload(true);}}
                     style={S.btnGreen}>
                    {t("design.upload_drawing_2")}
@@ -777,14 +778,15 @@ export default function DesignModule() {
               {d.file_url&&<a href={d.file_url} target="_blank" rel="noreferrer" style={{padding:"4px 9px",borderRadius:6,background:T.bluL,border:"1px solid "+T.bluM,color:T.blu,fontSize:11,fontWeight:600,textDecoration:"none"}}>{t("design.view_current")}</a>}
             </div>
           </div>
-          <div style={{paddingTop:8,borderTop:"1px solid "+T.b1}}>
+          {/* Naya version — Design CREATE tick (server POST /drawings/:id/versions) */}
+          {can("Design","create")&&<div style={{paddingTop:8,borderTop:"1px solid "+T.b1}}>
             <label style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:5}}>{t("design.upload_revised_version")}</label>
             <label style={{display:"flex",alignItems:"center",gap:8,padding:"8px 11px",border:"1.5px dashed "+(revUploading[d.id]?T.blu:T.b2),borderRadius:7,cursor:revUploading[d.id]?"not-allowed":"pointer",background:revUploading[d.id]?T.bluL:T.surfaceB}}>
               <input type="file" accept=".pdf,.png,.jpg,.jpeg,.dwg" style={{display:"none"}} disabled={revUploading[d.id]}
                 onChange={e=>{if(e.target.files[0])handleNewVersion(d.id,e.target.files[0]);}}/>
               <span style={{fontSize:11.5,color:T.blu,fontWeight:600}}>{revUploading[d.id]?t("design.uploading"):t("design.upload_new_version")}</span>
             </label>
-          </div>
+          </div>}
         </div>
       );})}
     </div>
@@ -1439,10 +1441,11 @@ export default function DesignModule() {
           <button onClick={loadAll} style={{padding:"7px 12px",borderRadius:7,background:T.surface,border:"1px solid "+T.b1,color:T.t3,fontSize:12,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
             <IcRefresh size={13}/> {t("common.refresh")}
           </button>
-          <button onClick={()=>{setUploadPrefill(null);setShowUpload(true);}}
+          {/* Drawing upload = Design CREATE tick (server POST /design/drawings) */}
+          {can("Design","create")&&<button onClick={()=>{setUploadPrefill(null);setShowUpload(true);}}
             style={{padding:"7px 16px",borderRadius:7,background:T.blu,border:"none",color:"white",fontSize:12.5,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
             <IcUpload size={14} color="white"/> {t("design.upload_drawing")}
-          </button>
+          </button>}
         </div>
       </div>
 

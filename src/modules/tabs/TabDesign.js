@@ -681,8 +681,8 @@ function TabDesign({ project, isAdmin }) {
               </div>}
               {/* Add Pin */}
               <RevPinForm drawingId={d.id} onAdded={loadDrawings}/>
-              {/* Upload new version */}
-              <div style={{marginTop:10,paddingTop:8,borderTop:"1px solid "+T.b1}}>
+              {/* Upload new version — Design CREATE tick (server POST /drawings/:id/versions) */}
+              {can("Design","create")&&<div style={{marginTop:10,paddingTop:8,borderTop:"1px solid "+T.b1}}>
                 <label style={S.labelLg}>{t("design.upload_revised_version")}</label>
                 <label style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",
                   border:"1.5px dashed "+(acting["ver"+d.id]?T.blu:T.b2),borderRadius:6,
@@ -702,7 +702,7 @@ function TabDesign({ project, isAdmin }) {
                     <span style={{fontSize:11.5,color:T.blu,fontWeight:600}}>{t("design.upload_new_version")}</span>
                   )}
                 </label>
-              </div>
+              </div>}
             </div>
           ))}
         </div>
@@ -997,14 +997,15 @@ function TabDesign({ project, isAdmin }) {
               <span style={{background:T.amb,color:"white",fontSize:9.5,fontWeight:700,padding:"1px 6px",borderRadius:10,fontVariantNumeric:"tabular-nums"}}>{revQueue.length}</span>
             </button>
           )}
-          <button onClick={()=>setShowUpload(true)}
+          {/* Drawing upload = Design CREATE tick (server POST /design/drawings) */}
+          {can("Design","create")&&<button onClick={()=>setShowUpload(true)}
             style={{padding:"7px 14px",borderRadius:6,background:T.blu,border:"none",color:"white",
               fontSize:11.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:6,fontFamily:"inherit",boxShadow:`0 2px 6px ${T.blu}33`,transition:"all .12s"}}
             onMouseEnter={el=>el.currentTarget.style.background="#1D4ED8"}
             onMouseLeave={el=>el.currentTarget.style.background=T.blu}>
             <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
            {t("design.upload_drawing")}
-          </button>
+          </button>}
         </div>
       </div>
 
@@ -1018,7 +1019,7 @@ function TabDesign({ project, isAdmin }) {
             <svg width={28} height={28} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>
           </div>
           <div style={S.title}>{t("design.no_drawings_yet")}</div>
-          <div style={S.emptyText}>{t("common.click")} <b>{t("design.upload_drawing")}</b> {t("design.to_add_the_first_drawing_for")}</div>
+          {can("Design","create")&&<div style={S.emptyText}>{t("common.click")} <b>{t("design.upload_drawing")}</b> {t("design.to_add_the_first_drawing_for")}</div>}
         </div>
       )}
 
