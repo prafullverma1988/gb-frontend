@@ -2008,7 +2008,11 @@ function RolesAccess() {
                   </tr>,
                   ...(collapsed ? [] : group.items.map(name => {
                     const dflt = rowMissing(selectedRole, name);
-                    const perms = dflt ? rowDefault(selectedRole, name) : (permMatrix[selectedRole]?.[name] || []);
+                    // Admin har rok se bahar hai (server middleware/auth.js, app utils/perms.js) —
+                    // DB ki purani row nahi, asli adhikar dikhao: har chalu box tick. Warna naya
+                    // box (jaise Design ka Entry, 17 Oct 2026) Admin par khaali dikhta tha.
+                    const perms = selectedRole === "admin" ? allPerms.filter(p => !permNA(name, p))
+                      : dflt ? rowDefault(selectedRole, name) : (permMatrix[selectedRole]?.[name] || []);
                     return (
                       <tr key={name} style={{ borderBottom: `1px solid ${T.borderLight}` }}>
                         <td style={{ padding: "12px", fontWeight: 600, color: T.text }}
