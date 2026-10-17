@@ -118,8 +118,9 @@ function ToggleRow({ icon, label, desc, value, onChange }) {
 //   (nadaarad) — abhi kuch nahi rokta, sirf record hai
 // Ye list asli code se banayi gayi hai (scripts/gen-perm-reference.js wahi
 // routes padhta hai). Roles & Access v2 (5 Oct 2026) ke baad:
-//   • Entry 15 row par server padhta hai — transition me "Entry YA Create"
+//   • Entry 16 row par server padhta hai — transition me "Entry YA Create"
 //     (middleware/auth.js entryOrCreate), isliye Create wale ka kaam nahi rukta.
+//     Design (17 Oct 2026): Entry = sirf Design Request bhejna.
 //   • Overview / Reports ka View ab sirf tab/screen kholta hai — data apne
 //     source module ki View se (finance ki lists se "Overview"/"Reports" hate).
 //   • Fin Activity (Transaction) ka View server par finance list kholta hai;
@@ -132,7 +133,7 @@ function ToggleRow({ icon, label, desc, value, onChange }) {
 const PERM_LIVE = {
   view:    { "*": "app", "CRM": "server", "Township CRM": "server", "Tenders": "server", "Team & HR": "server", "Machinery": "server", "Equipment": "server", "Subcon": "server", "Estimate": "server", "Finance": "server", "Fuel": "server", "Procurement": "server", "Warehouse": "server", "Material": "server", "Assets": "server", "Financial Reports": "server", "Users & Roles": "server", "Attendance": "server", "Transaction": "server", "Mapping": "server", "Pulse": "server", "RMC": "server", "Road Levels": "server", "Budget": "server" },
   create:  { "Attendance": "server", "CRM": "server", "Design": "server", "Equipment": "server", "Estimate": "server", "Finance": "server", "Fuel": "server", "Library": "server", "MOM": "server", "Machinery": "server", "Procurement": "server", "Projects": "server", "Subcon": "server", "Team & HR": "server", "Tenders": "server", "Township CRM": "server", "Users & Roles": "server", "Warehouse": "server", "Material": "server", "Mapping": "server", "Assets": "server", "Tasks": "server", "To Do": "server", "Budget": "server", "Site / DPR": "server", "RMC": "server", "Road Levels": "server", "Party": "server" },
-  entry:   { "Site / DPR": "server", "Tasks": "server", "Material": "server", "Attendance": "server", "Equipment": "server", "Files": "server", "Procurement": "server", "Warehouse": "server", "Fuel": "server", "Machinery": "server", "Assets": "server", "RMC": "server", "Tenders": "server", "Mapping": "server", "Finance": "server" },
+  entry:   { "Site / DPR": "server", "Tasks": "server", "Material": "server", "Attendance": "server", "Equipment": "server", "Files": "server", "Procurement": "server", "Warehouse": "server", "Fuel": "server", "Machinery": "server", "Assets": "server", "RMC": "server", "Tenders": "server", "Mapping": "server", "Finance": "server", "Design": "server" },
   edit:    { "Attendance": "server", "CRM": "server", "Design": "server", "Equipment": "server", "Estimate": "server", "Finance": "server", "Fuel": "server", "Library": "server", "MOM": "server", "Machinery": "server", "Procurement": "server", "Projects": "server", "Subcon": "server", "Team & HR": "server", "Tenders": "server", "Township CRM": "server", "Users & Roles": "server", "Warehouse": "server", "Mapping": "server", "Assets": "server", "Tasks": "server", "To Do": "server", "Budget": "server", "RMC": "server", "Road Levels": "server", "Party": "server", "Material": "server", "Site / DPR": "server" },
   delete:  { "Attendance": "server", "CRM": "server", "Design": "server", "Equipment": "server", "Estimate": "server", "Finance": "server", "Fuel": "server", "Library": "server", "MOM": "server", "Machinery": "server", "Projects": "server", "Subcon": "server", "Team & HR": "server", "Tenders": "server", "Township CRM": "server", "Users & Roles": "server", "Warehouse": "server", "Mapping": "server", "Tasks": "server", "To Do": "server", "RMC": "server", "Road Levels": "server", "Party": "server", "Budget": "server", "Files": "server", "Material": "server", "Procurement": "server", "Assets": "server", "Site / DPR": "server" },
   approve: { "Attendance": "server", "Finance": "server", "Procurement": "server", "Team & HR": "server", "Warehouse": "server", "Mapping": "server", "Assets": "server", "Site / DPR": "server", "Equipment": "server", "RMC": "server", "Fuel": "server", "Subcon": "server", "Estimate": "server", "CRM": "server", "Budget": "server", "Design": "server" },
@@ -165,9 +166,9 @@ const PERM_STRICT = {
 //   NA            — is row par lagoo nahi ("–" bujha box)
 //   naTip(key)    — bujha box, par hover par wajah (Settings: sirf Admin;
 //                   Fin Activity: kaam Finance row se)
-// Entry sirf 15 row par khulta hai (Site / DPR, Tasks, Material, Attendance,
+// Entry sirf 16 row par khulta hai (Site / DPR, Tasks, Material, Attendance,
 // Equipment, Files, Procurement, Warehouse, Fuel, Machinery, Assets, RMC,
-// Tenders, Mapping, Finance) — baaki sab par NA.
+// Tenders, Mapping, Finance, Design) — baaki sab par NA.
 const NA = "—";
 const naTip = (key) => ({ na: true, tip: () => t(key) });
 const PERM_HELP = {
@@ -176,7 +177,7 @@ const PERM_HELP = {
     delete: () => t("settings.perm_projects_delete"), approve: NA, export: () => t("settings.perm_projects_export"),
   },
   "Design": {
-    view: () => t("settings.perm_design_view"), create: () => t("settings.perm_design_create"), entry: NA, edit: () => t("settings.perm_design_edit"),
+    view: () => t("settings.perm_design_view"), create: () => t("settings.perm_design_create"), entry: () => t("settings.perm_design_entry"), edit: () => t("settings.perm_design_edit"),
     delete: () => t("settings.perm_design_delete"), approve: () => t("settings.perm_design_approve"), export: NA,   // koi design export button/route tick nahi padhta
   },
   "Finance": {
