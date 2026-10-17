@@ -7,6 +7,7 @@ import SearchSelect from "../../components/SearchSelect";
 import { T } from "../shared/tokens";
 import { Pill, Panel, THead } from "../shared/ui";
 import { canApproveAction } from "../../utils/approvalAuthority";
+import { can, canEntry } from "../../utils/perms";
 import { useRoadAccess } from "../road/roadShared";
 import { t } from "../../i18n";
 
@@ -1091,7 +1092,9 @@ function TabDesign({ project, isAdmin }) {
               <option value="All">{t("common.all_categories")}</option>
               {CATS.map(c=><option key={c}>{c}</option>)}
             </PickSelect>
-            {isAdmin&&<button onClick={()=>{setEditReq(null);setReqForm({title:"",category:"Architectural",description:"",priority:"Normal",due_date:""});setShowReqForm(true);}}
+            {/* Request bhejna = Design ENTRY (ya Create) tick — server ka entryOrCreate("Design").
+                Pehle sirf Admin/PM role ko dikhta tha, tick ho tab bhi. */}
+            {canEntry("Design")&&<button onClick={()=>{setEditReq(null);setReqForm({title:"",category:"Architectural",description:"",priority:"Normal",due_date:""});setShowReqForm(true);}}
               style={{padding:"7px 14px",borderRadius:6,background:T.blu,border:"none",color:"white",fontSize:11.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:5,fontFamily:"inherit",boxShadow:`0 2px 6px ${T.blu}33`,flexShrink:0,transition:"background .12s"}}
               onMouseEnter={el=>el.currentTarget.style.background="#1D4ED8"}
               onMouseLeave={el=>el.currentTarget.style.background=T.blu}>
@@ -1107,7 +1110,7 @@ function TabDesign({ project, isAdmin }) {
                 <svg width={28} height={28} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><path d="M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
               </div>
               <div style={S.title}>{t("common.no_design_requests_yet")}</div>
-              <div style={S.emptyText}>{t("common.click")} <b>{t("payment_request.new_request_2")}</b> {t("design.to_ask_for_a_drawing_from")}</div>
+              {canEntry("Design")&&<div style={S.emptyText}>{t("common.click")} <b>{t("payment_request.new_request_2")}</b> {t("design.to_ask_for_a_drawing_from")}</div>}
             </div>
           )}
 
@@ -1172,13 +1175,15 @@ function TabDesign({ project, isAdmin }) {
                     </div>
                     {/* Action buttons */}
                     <div style={S.chipRow}>
+                      {/* Server jo maange wahi tick: Assign = Design Edit, upload = Design Create.
+                          Sirf Entry wala (request bhejne wala) ye nahi dekhta — dabane par 403 aata. */}
                       {req.status==="Pending"&&<>
-                        <button onClick={(e)=>{e.stopPropagation();setEditReq(req);setReqForm({title:req.title,category:req.category,description:req.description||"",priority:req.priority,due_date:req.due_date||"",assigned_to:req.assigned_to||""});setShowReqForm(true);}}
+                        {can("Design","edit")&&<button onClick={(e)=>{e.stopPropagation();setEditReq(req);setReqForm({title:req.title,category:req.category,description:req.description||"",priority:req.priority,due_date:req.due_date||"",assigned_to:req.assigned_to||""});setShowReqForm(true);}}
                           style={{padding:"5px 11px",borderRadius:6,background:T.bluL,border:`1px solid ${T.bluM}`,color:T.blu,fontSize:11,fontWeight:600,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:5,fontFamily:"inherit"}}>
                           <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="8.5" cy="7" r="4"/><path d="M20 8v6M23 11h-6"/></svg>
                          {t("design.assign")}
-                        </button>
-                        <button onClick={(e)=>{
+                        </button>}
+                        {can("Design","create")&&<button onClick={(e)=>{
                           e.stopPropagation();
                           setUForm({title:req.title+" Drawing",category:req.category,drawing_type:"2D",approval_required:false,note:req.description||""});
                           setPendingReqId(req.id);
@@ -1190,9 +1195,9 @@ function TabDesign({ project, isAdmin }) {
                           onMouseLeave={el=>{el.currentTarget.style.background=T.surface; el.currentTarget.style.borderColor=T.b1;}}>
                           <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
                          {t("design.upload_direct_2")}
-                        </button>
+                        </button>}
                       </>}
-                      {req.status==="In Progress"&&(
+                      {req.status==="In Progress"&&can("Design","create")&&(
                         <button onClick={(e)=>{
                           e.stopPropagation();
                           setUForm({title:req.title+" Drawing",category:req.category,drawing_type:"2D",approval_required:false,note:req.description||""});

@@ -17,6 +17,7 @@ import RevisionNoteModal from "./RevisionNoteModal";
 import { t, Rich } from "../i18n";
 import { BackClose } from "../utils/backNav";
 import { cld } from "../utils/cloudinary";
+import { canEntry } from "../utils/perms";
 
 const T = {
   surface: "#FFFFFF",
@@ -241,7 +242,8 @@ export default function LeadDesignDrawer({ lead, onClose, onShareClick }) {
             </div>
           </div>
           <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
-            {mode === "list" && (
+            {/* Request bhejna = Design ENTRY (ya Create) tick — server ka entryOrCreate("Design") */}
+            {mode === "list" && canEntry("Design") && (
               <button onClick={() => setMode("form")}
                 style={{ padding: "6px 12px", borderRadius: 6, background: T.blu, border: "none", color: "white", fontSize: 11.5, fontWeight: 600, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 5, fontFamily: "inherit" }}>
                 <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
