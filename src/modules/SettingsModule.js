@@ -2681,6 +2681,7 @@ function ApprovalSettings() {
     // server chalu kar deta hai, aur daalne wala approver ho tab bhi pending.
     { id: 0,  module: "Bank Statement Import",       cat: "FINANCE",   enabled: true,  levels: [{ role: "Admin", limit: null }] },
     { id: 0,  module: "Bank Statement Change",       cat: "FINANCE",   enabled: true,  levels: [{ role: "Admin", limit: null }] },
+    { id: 0,  module: "Fuel Entry Delete",           cat: "FINANCE",   enabled: true,  levels: [{ role: "Admin", limit: null }] },
   ];
 
   const [approvals, setApprovals] = useState(DEFAULTS);

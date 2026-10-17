@@ -350,10 +350,12 @@ const PAYABLE_PILL = {
   cash: () => ({ l: t("common.cash"), c: T.grn, bg: T.grnL }),
 };
 
-function FuelEntryDrawer({ entry, onClose }) {
+function FuelEntryDrawer({ entry, onClose, onChanged }) {
   const [data, setData] = useState(null);
   const [fail, setFail] = useState("");
   const [shot, setShot] = useState(null);
+  const [rev, setRev] = useState(0);          // delete maangne ke baad byora dobara
+  const [delBusy, setDelBusy] = useState(false);
 
   useEffect(() => {
     if (!entry) return undefined;
@@ -363,7 +365,7 @@ function FuelEntryDrawer({ entry, onClose }) {
       .then((r) => { if (!dead) { if (r?.success) setData(r.data); else setFail(r?.message || t("fuel.d_load_fail")); } })
       .catch((e) => { if (!dead) setFail(e?.message || t("fuel.d_load_fail")); });
     return () => { dead = true; };
-  }, [entry]);
+  }, [entry, rev]);
 
   useEffect(() => {
     if (!entry) return undefined;
@@ -375,6 +377,41 @@ function FuelEntryDrawer({ entry, onClose }) {
   if (!entry) return null;
   const d = data;
   const pill = d && d.payable_status ? (PAYABLE_PILL[d.payable_status] || PAYABLE_PILL.unbilled)() : null;
+  const dr = d && d.delete_request;
+  const delPending = !!(dr && dr.status === "pending");
+
+  // Delete sirf entry ke andar se, wajah ke saath, aur Multi-Level Approval
+  // ("Fuel Entry Delete") se (17 Oct 2026). Manzoor hone tak entry waisi hi;
+  // manzoor hote hi server udhaar / cash / kharcha / katauti wapas karta hai —
+  // wahi yahan pehle dikhate hain.
+  const askDelete = async () => {
+    const L = [];
+    if (d.kind === "purchase") {
+      L.push(d.payment_mode === "cash"
+        ? t("fuel.d_del_imp_cash", { amt: rsx(d.amount) })
+        : t("fuel.d_del_imp_udhaar", { name: d.vendor_name || t("fuel.d_pump"), amt: rsx(d.amount) }));
+    }
+    if (d.route === "pump_store") L.push(t("fuel.d_del_imp_drum_kam", { l: fmtL(d.litres), drum: d.store_name || "" }));
+    if (d.route.startsWith("store")) L.push(t("fuel.d_del_imp_drum_wapas", { l: fmtL(d.litres), drum: d.store_name || "" }));
+    if (d.expense) L.push(t("fuel.d_del_imp_kharcha", { amt: rsx(d.expense.amount), where: d.expense.project_name || t("fuel.company_level_koi_project_nahi") }));
+    if (d.recovery) L.push(t("fuel.d_del_imp_katauti", { name: d.subcon_name || "", amt: rsx(d.recovery.amount) }));
+    const why = await window.promptAsync(t("fuel.d_del_confirm", { lines: L.map((x) => "• " + x).join("\n") }), "");
+    if (why == null) return;
+    const url = d.route.endsWith("subcon")
+      ? `/fuel/subcon-issues/${d.id}?source=${d.kind === "purchase" ? "pump" : "store"}&`
+      : d.kind === "purchase" ? `/fuel/purchases/${d.id}?` : `/fuel/issues/${d.id}?`;
+    setDelBusy(true);
+    try {
+      const r = await api.del(url + "reason=" + encodeURIComponent(String(why).trim()));
+      if (r && r.success === false) window.alert(r.message || "Delete failed");
+      else {
+        if (window.toast && r?.message) window.toast.success(r.message);
+        setRev((x) => x + 1);
+        if (onChanged) onChanged();
+      }
+    } catch (e) { window.alert(e?.message || "Network error"); }
+    setDelBusy(false);
+  };
   const Sec = ({ title, children }) => (
     <div style={{ padding: "12px 18px", borderBottom: `1px solid ${T.b1}` }}>
       <div style={{ fontSize: 9.5, fontWeight: 700, color: T.t4, textTransform: "uppercase", letterSpacing: ".4px", marginBottom: 7 }}>{title}</div>
@@ -409,6 +446,7 @@ function FuelEntryDrawer({ entry, onClose }) {
               {d && <Pill label={(ROUTE_LABEL[d.route] || ROUTE_LABEL.pump_machine)()} c={T.ind} bg={T.indL} />}
               {d && d.fuel_type === "petrol" && <Pill label={t("fuel.petrol")} c={T.amb} bg={T.ambL} />}
               {pill && <Pill label={pill.l} c={pill.c} bg={pill.bg} />}
+              {delPending && <Pill label={t("fuel.d_del_pill")} c={T.red} bg={T.redL} />}
             </div>
             {d && <div style={{ fontSize: 11.5, color: T.t3, marginTop: 3 }}>{fmtDT(d.at)}</div>}
           </div>
@@ -523,6 +561,27 @@ function FuelEntryDrawer({ entry, onClose }) {
             </>
           )}
         </div>
+
+        {d && (delPending || can("Fuel", "delete")) && (
+          <div style={{ padding: "10px 18px", borderTop: `1px solid ${T.b1}` }}>
+            {delPending ? (
+              <div style={{ padding: "8px 10px", background: T.ambL, color: T.amb, borderRadius: 6, fontSize: 11.5, fontWeight: 700 }}>
+                {t("fuel.d_del_pending", { name: dr.requested_by_name || "—", reason: dr.reason || "" })}
+              </div>
+            ) : (
+              <>
+                {dr && (dr.status === "rejected" || dr.status === "failed") && (
+                  <div style={{ fontSize: 11.5, color: T.t3, marginBottom: 8 }}>
+                    {t(dr.status === "rejected" ? "fuel.d_del_rejected" : "fuel.d_del_failed", { note: dr.result_note ? " — " + dr.result_note : "" })}
+                  </div>
+                )}
+                {d.bill
+                  ? <div style={{ fontSize: 11.5, color: T.t3 }}>{t("fuel.d_del_bill_lock")}</div>
+                  : <Btn size="sm" ghost c={T.red} icon={IcTrash} disabled={delBusy} onClick={askDelete}>{t("fuel.d_delete")}</Btn>}
+              </>
+            )}
+          </div>
+        )}
       </aside>
 
       {shot && (
@@ -1105,7 +1164,7 @@ function OverviewTab({ stores, purchases, issues, byEquipment, normMissing, onRe
   );
 }
 
-function RefuelingTab({ purchases, issues, onRefuel, onDeletePurchase, onDeleteIssue }) {
+function RefuelingTab({ purchases, issues, onRefuel }) {
   const openEntry = useOpenEntry();
   const [kind, setKind] = useState("all");
   const rows = useMemo(() => {
@@ -1129,12 +1188,12 @@ function RefuelingTab({ purchases, issues, onRefuel, onDeletePurchase, onDeleteI
       {rows.length === 0 && <Empty>{t("fuel.koi_entry_nahi_mili")}</Empty>}
       {rows.length > 0 && (
         <>
-          <Row head cols="105px 80px 1.3fr 1.2fr 80px 80px 95px 90px 40px">
+          <Row head cols="105px 80px 1.3fr 1.2fr 80px 80px 95px 90px">
             <span>{t("fuel.kab")}</span><span>{t("fuel.kya")}</span><span>{t("fuel.vendor_barrel")}</span><span>{t("fuel.machine_barrel")}</span>
             <span>{t("fuel.litres")}</span><span>{t("common.rate")}</span><span style={{ textAlign: "right" }}>{t("common.amount_2")}</span><span>{t("common.status")}</span><span />
           </Row>
           {rows.map((r) => (
-            <Row key={r._k + r.id} cols="105px 80px 1.3fr 1.2fr 80px 80px 95px 90px 40px" onClick={() => openEntry({ kind: r._k, id: r.id })}>
+            <Row key={r._k + r.id} cols="105px 80px 1.3fr 1.2fr 80px 80px 95px 90px" onClick={() => openEntry({ kind: r._k, id: r.id })}>
               <span style={{ fontSize: 11, color: T.t3 }}>{fmtDT(r._at)}</span>
               <span>{r._k === "purchase"
                 ? <Pill label={r.destination === "store" ? t("fuel.barrel") : t("fuel.machine_2")} c={T.blu} bg={T.bluL} />
@@ -1164,13 +1223,6 @@ function RefuelingTab({ purchases, issues, onRefuel, onDeletePurchase, onDeleteI
                         ? <Pill label={t("fuel.payable_unbilled")} c={T.amb} bg={T.ambL} />
                         : <Pill label={r.payable_status === "partial" ? t("fuel.payable_partial") : t("fuel.payable_unpaid")} c={T.amb} bg={T.ambL} />}
               </span>
-              {can("Fuel", "delete") ? (
-                <button type="button" title={t("common.delete")}
-                  onClick={(ev) => { ev.stopPropagation(); if (r._k === "purchase") onDeletePurchase(r); else onDeleteIssue(r); }}
-                  style={{ background: "none", border: "none", cursor: "pointer", color: T.t4, padding: 3, display: "flex" }}>
-                  <IcTrash size={13} color="currentColor" />
-                </button>
-              ) : <span />}
             </Row>
           ))}
         </>
@@ -1816,17 +1868,6 @@ function SubconTab({ subcons, stores, vendors, projects, from, to, onRange, onRe
     setBusy(false);
   };
 
-  // Hatana = Fuel Delete + wajah (server audit me poori entry rakhta hai).
-  const remove = async (r) => {
-    const why = await window.promptAsync(t("fuel.subcon_entry_hatane_ki_wajah", { name: r.subcon_name, amt: fmtC(r.amount) }), "");
-    if (why == null) return;
-    try {
-      const res = await api.del(`/fuel/subcon-issues/${r.id}?source=${r.source}&reason=${encodeURIComponent(String(why).trim())}`);
-      if (res && res.success === false) { window.alert(res.message || "Delete failed"); return; }
-      await load(); onReload();
-    } catch (e) { window.alert(e?.message || "Network error"); }
-  };
-
   const totalAmt = summary.reduce((s, r) => s + Number(r.amount || 0), 0);
   const totalL = summary.reduce((s, r) => s + Number(r.litres || 0), 0);
 
@@ -1909,12 +1950,6 @@ function SubconTab({ subcons, stores, vendors, projects, from, to, onRange, onRe
                         style={{ display: "inline-flex", alignItems: "center", color: T.t3 }}>
                         <IcCamera size={15} />
                       </a>
-                    )}
-                    {can("Fuel", "delete") && (
-                      <button type="button" onClick={(ev) => { ev.stopPropagation(); remove(r); }} title={t("common.delete")}
-                        style={{ border: "none", background: "none", cursor: "pointer", color: T.t4, padding: 0 }}>
-                        <IcTrash size={15} />
-                      </button>
                     )}
                   </div>
                 </Row>
@@ -3654,18 +3689,6 @@ function FuelModule() {
 
   const reloadAll = useCallback(async () => { await loadCore(); await loadReports(); }, [loadCore, loadReports]);
 
-  // Entry hatana = Fuel Delete + wajah (kam se kam 3 akshar) — server poori
-  // entry audit me rakhta hai (5 Oct 2026).
-  const del = async (url, label) => {
-    const why = await window.promptAsync(t("fuel.hatane_ki_wajah_likho", { label }), "");
-    if (why == null) return;
-    try {
-      const r = await api.del(url + (url.includes("?") ? "&" : "?") + "reason=" + encodeURIComponent(String(why).trim()));
-      if (r && r.success === false) { window.alert(r.message || "Delete failed"); return; }
-      reloadAll();
-    } catch (e) { window.alert(e?.message || "Network error"); }
-  };
-
   // Machines whose diesel is our cost but which carry no consumption norm.
   // Derived from the master, so it counts machines that have no fuel entries
   // yet — the report's own norm_missing only sees machines already in it.
@@ -3761,9 +3784,7 @@ function FuelModule() {
         )}
         {tab === "refueling" && (
           <RefuelingTab purchases={purchases} issues={issues}
-            onRefuel={() => setRefuelOpen(true)}
-            onDeletePurchase={(r) => del(`/fuel/purchases/${r.id}`, `${fmtL(r.litres)} ka purchase`)}
-            onDeleteIssue={(r) => del(`/fuel/issues/${r.id}`, `${fmtL(r.litres)} ka issue`)} />
+            onRefuel={() => setRefuelOpen(true)} />
         )}
         {tab === "barrel" && (
           <BarrelTab stores={stores} projects={projects} onReload={reloadAll} dipPending={dipPending}
@@ -3793,7 +3814,7 @@ function FuelModule() {
       <RefuelForm open={refuelOpen} onClose={() => setRefuelOpen(false)} onSaved={reloadAll}
         stores={stores} equipment={equipment} vendors={vendors} projects={projects} />
       <LedgerModal store={ledgerStore} onClose={() => setLedgerStore(null)} onChanged={reloadAll} />
-      <FuelEntryDrawer entry={openEntry} onClose={closeEntry} />
+      <FuelEntryDrawer entry={openEntry} onClose={closeEntry} onChanged={reloadAll} />
     </div>
     </OpenEntryCtx.Provider>
   );
