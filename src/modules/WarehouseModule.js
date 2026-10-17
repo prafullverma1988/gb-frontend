@@ -2699,9 +2699,18 @@ function GRNDetailDrawer({grn,onClose,onVerify}){
 }
 
 // ── ISSUE TAB ──────────────────────────────────────────────────────
+// Issue ki lines — Material column, filter aur khoj ek hi tarah padhein.
+const issueItemsOf=i=>(i.items||[]).map(it=>({name:it.name||it.material_name||"—",qty:it.qty,unit:it.unit||""}));
+const issueLineOf=it=>`${it.name} ×${fmtN(it.qty)} ${it.unit}`.trim();
 function IssueTab({issues,projects,onNew,onSelect}){
   const [fStatus,setFStatus]=useState("All");
-  const [fProj,setFProj]=useState(null);
+  const [fProj,setFProj]=useState("");
+  // Material / Zimmedar column + har jagah ki khoj (17 Oct 2026, Prafull):
+  // project ke neeche dabe material ka alag column, zimmedar ka naam, aur
+  // ek search box jo poori row me dhoondhe — saath me material / zimmedar filter.
+  const [q,setQ]=useState("");
+  const [fMat,setFMat]=useState("");
+  const [fZim,setFZim]=useState("");
   const STATUS_S={
     "Pending":{c:T.amb,bg:T.ambL,brd:T.ambM},
     "Partial":{c:T.blu,bg:T.bluL,brd:T.bluM},
@@ -2710,14 +2719,35 @@ function IssueTab({issues,projects,onNew,onSelect}){
     // Machine me gaya oil (11 Oct 2026, AB) — receive nahi hota
     "Consumed":{c:T.blu,bg:T.bluL,brd:T.bluM},
   };
+  const STATUS_L={All:"common.all",Pending:"common.pending",Partial:"common.partial",Received:"common.received",Cancelled:"common.cancelled"};
+  const NO_ZIM="__none__";
+  const matOpts=useMemo(()=>[...new Set(issues.flatMap(i=>issueItemsOf(i).map(it=>it.name)).filter(n=>n&&n!=="—"))]
+    .sort((a,b)=>a.localeCompare(b)).map(n=>({id:n,name:n})),[issues]);
+  const zimOpts=useMemo(()=>{
+    const m=new Map();
+    issues.forEach(i=>{ if(i.zimId) m.set(String(i.zimId),i.zimmedar||"—"); });
+    return [...m].sort((a,b)=>a[1].localeCompare(b[1])).map(([id,name])=>({id,name}));
+  },[issues]);
+  // Har shabd row me kahin bhi ho (issue no, project, material, kisko diya,
+  // zimmedar, subcontractor, By, note, value).
+  const words=q.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const hay=i=>[i.id,i.date,i.project,i.issuedTo,i.zimmedar,i.zimParty,i.by,i.remarks,i.status,String(Math.round(i.total||0)),
+    ...issueItemsOf(i).map(issueLineOf)].join(" ").toLowerCase();
+  const base=issues.filter(i=>
+    (!fProj||String(i.project_id)===String(fProj))&&
+    (!fMat||issueItemsOf(i).some(it=>it.name===fMat))&&
+    (!fZim||(fZim===NO_ZIM?!i.zimId:String(i.zimId)===String(fZim)))&&
+    (!words.length||(h=>words.every(w=>h.includes(w)))(hay(i))));
   // Cancel hue issue (11 Oct 2026, AA) — "Cancelled" chip me hi; "All" aur
   // ginti me nahi (stock wapas aa chuka, ab kuch gaya hi nahi).
-  const live=issues.filter(i=>i.status!=="Cancelled");
-  let filtered=fStatus==="Cancelled"?issues.filter(i=>i.status==="Cancelled"):live;
-  if (fProj) filtered=filtered.filter(i=>i.project_id===fProj);
+  const live=base.filter(i=>i.status!=="Cancelled");
+  let filtered=fStatus==="Cancelled"?base.filter(i=>i.status==="Cancelled"):live;
   if (fStatus!=="All"&&fStatus!=="Cancelled") filtered=filtered.filter(i=>(i.status||"Pending")===fStatus);
-  const pendingCount=live.filter(i=>(i.status||"Pending")==="Pending").length;
-  const partialCount=live.filter(i=>i.status==="Partial").length;
+  const pendingCount=issues.filter(i=>(i.status||"Pending")==="Pending").length;
+  const anyFilter=!!(q||fProj||fMat||fZim);
+  const clearAll=()=>{setQ("");setFProj("");setFMat("");setFZim("");};
+  const COLS="92px 74px minmax(130px,1.1fr) minmax(170px,1.5fr) 110px 130px 92px 100px 95px";
+  const fieldBox=on=>({minWidth:170,maxWidth:220,flex:1,borderRadius:8,boxShadow:on?`0 0 0 1.5px ${T.blu}`:"none"});
 
   return(
     <div>
@@ -2727,54 +2757,86 @@ function IssueTab({issues,projects,onNew,onSelect}){
           <span style={{fontSize:12,color:T.amb,fontWeight:700}}>{t("warehouse.pendingcount_issuependingcount2_pending_receive_destination_project", { pendingCount, pendingCount2: pendingCount>1?"s":"" })}</span>
         </div>
       )}
-      <div style={{display:"flex",gap:8,marginBottom:11,alignItems:"center",flexWrap:"wrap"}}>
-        <div style={{minWidth:200,maxWidth:240,flex:1}}>
-          <SearchSelect compact value={fProj} options={[{id:null,name:"All projects"},...projects]} onChange={v=>setFProj(v)} placeholder={t("warehouse.filter_by_project")}/>
+      <div style={{display:"flex",gap:8,marginBottom:8,alignItems:"center",flexWrap:"wrap"}}>
+        <div style={{position:"relative",flex:2,minWidth:220}}>
+          <span style={{position:"absolute",left:9,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}><IcSearch size={13} color={T.t4}/></span>
+          <input value={q} onChange={e=>setQ(e.target.value)} placeholder={t("warehouse.out_search_ph")}
+            style={{width:"100%",height:30,padding:"0 9px 0 28px",borderRadius:7,border:`1.5px solid ${q?T.blu:T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
         </div>
+        <div style={fieldBox(!!fProj)}>
+          <SearchSelect compact value={fProj} options={[{id:"",name:t("common.all_projects")},...projects]} onChange={v=>setFProj(v||"")} placeholder={t("warehouse.filter_by_project")}/>
+        </div>
+        <div style={fieldBox(!!fMat)}>
+          <SearchSelect compact value={fMat} options={[{id:"",name:t("warehouse.out_all_materials")},...matOpts]} onChange={v=>setFMat(v||"")} placeholder={t("warehouse.out_filter_material")}/>
+        </div>
+        <div style={fieldBox(!!fZim)}>
+          <SearchSelect compact value={fZim} options={[{id:"",name:t("warehouse.out_all_zimmedar")},{id:NO_ZIM,name:t("warehouse.out_no_zimmedar")},...zimOpts]} onChange={v=>setFZim(v||"")} placeholder={t("warehouse.out_filter_zimmedar")}/>
+        </div>
+        {anyFilter&&<button onClick={clearAll}
+          style={{height:28,padding:"0 11px",borderRadius:7,border:`1.5px solid ${T.b1}`,background:T.surface,color:T.t3,fontSize:11.5,cursor:"pointer",fontFamily:"inherit"}}>✕ {t("common.clear")}</button>}
+      </div>
+      <div style={{display:"flex",gap:8,marginBottom:11,alignItems:"center",flexWrap:"wrap"}}>
         {["All","Pending","Partial","Received","Cancelled"].map(s=>{
-          const count = s==="All" ? live.length : issues.filter(i=>(i.status||"Pending")===s).length;
+          const count = s==="All" ? live.length : base.filter(i=>(i.status||"Pending")===s).length;
           return (
             <button key={s} onClick={()=>setFStatus(s)}
               style={{padding:"5px 13px",borderRadius:20,border:`1.5px solid ${fStatus===s?(STATUS_S[s]?.brd||T.blu):T.b1}`,background:fStatus===s?(STATUS_S[s]?.bg||T.bluL):"none",color:fStatus===s?(STATUS_S[s]?.c||T.blu):T.t3,fontSize:11.5,fontWeight:fStatus===s?700:400,cursor:"pointer",fontFamily:"inherit"}}>
-              {s} {s!=="All"&&<span style={{marginLeft:3,fontWeight:800}}>{count}</span>}
+              {t(STATUS_L[s])} {s!=="All"&&<span style={{marginLeft:3,fontWeight:800}}>{count}</span>}
             </button>
           );
         })}
+        {anyFilter&&<span style={{fontSize:11.5,color:T.t3}}>{t("warehouse.out_count",{shown:filtered.length,total:issues.length})}</span>}
         <div style={{flex:1}}/>
         {onNew&&<Btn onClick={onNew} c={T.amb} icon={IcOut} size="sm">{t("warehouse.issue_material")}</Btn>}
       </div>
-      {filtered.length===0?<Empty label={t("warehouse.koi_issue_nahi")} sub={t("warehouse.stock_se_material_project_ko_bhejne")}/>:(
-        <div style={{background:T.surface,borderRadius:9,border:`1px solid ${T.b1}`,overflow:"hidden"}}>
-          <div style={{display:"grid",gridTemplateColumns:"100px 80px 1fr 110px 100px 95px 95px",padding:"7px 14px",background:T.sb,gap:8}}>
-            {["Issue No","Date","To Project","Issued To","Value","By","Status"].map((h,i)=>(
-              <span key={i} style={{fontSize:9.5,fontWeight:700,color:"rgba(255,255,255,0.45)",textTransform:"uppercase",letterSpacing:".3px",textAlign:i===4?"right":"left"}}>{h}</span>
+      {filtered.length===0?(anyFilter
+        ?<Empty label={t("warehouse.out_no_match")} sub={t("warehouse.out_no_match_sub")}/>
+        :<Empty label={t("warehouse.koi_issue_nahi")} sub={t("warehouse.stock_se_material_project_ko_bhejne")}/>):(
+        <div style={{background:T.surface,borderRadius:9,border:`1px solid ${T.b1}`,overflowX:"auto"}}>
+          <div style={{minWidth:1040}}>
+          <div style={{display:"grid",gridTemplateColumns:COLS,padding:"7px 14px",background:T.sb,gap:8}}>
+            {[t("warehouse.out_col_issue_no"),t("common.date"),t("warehouse.out_col_to_project"),t("common.material"),t("warehouse.issued_to"),t("custody.zimmedar"),t("warehouse.out_col_value"),t("warehouse.out_col_by"),t("common.status")].map((h,i)=>(
+              <span key={i} style={{fontSize:9.5,fontWeight:700,color:"rgba(255,255,255,0.45)",textTransform:"uppercase",letterSpacing:".3px",textAlign:i===6?"right":"left",paddingRight:i===6?10:0}}>{h}</span>
             ))}
           </div>
           {filtered.map(iss=>{
             const status=iss.status||"Pending";
             const ss=STATUS_S[status]||STATUS_S["Pending"];
+            const its=issueItemsOf(iss);
             return (
               <div key={iss.id} onClick={()=>onSelect(iss)}
-                style={{display:"grid",gridTemplateColumns:"100px 80px 1fr 110px 100px 95px 95px",padding:"10px 14px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",cursor:"pointer",transition:"background .1s",gap:8,borderLeft:`3px solid ${ss.c}`}}
+                style={{display:"grid",gridTemplateColumns:COLS,padding:"10px 14px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",cursor:"pointer",transition:"background .1s",gap:8,borderLeft:`3px solid ${ss.c}`}}
                 onMouseEnter={e=>e.currentTarget.style.background=T.bluL+"77"}
                 onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
                 <span style={{fontSize:11.5,fontWeight:700,color:T.amb,fontFamily:"monospace"}}>{iss.id}</span>
                 <span style={{fontSize:11.5,color:T.t3}}>{iss.date}</span>
                 <div style={{minWidth:0}}>
                   <div style={{fontSize:12,fontWeight:600,color:T.t1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{iss.project}</div>
-                  <div style={{fontSize:10,color:T.t4,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{(iss.items||[]).map(it=>`${it.name||it.material_name} ×${fmtN(it.qty)} ${it.unit||""}`).slice(0,2).join(", ")}</div>
                   {/* Issue ka note list me bhi (11 Oct 2026, O) */}
                   {iss.remarks&&<div title={iss.remarks} style={{fontSize:10,color:T.t4,fontStyle:"italic",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{t("material.issue_note",{note:iss.remarks})}</div>}
                   {/* Cancel ki wajah (11 Oct 2026, AA) */}
                   {status==="Cancelled"&&<div title={iss.cancel_reason||""} style={{fontSize:10,color:T.red,fontWeight:600,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{t("warehouse.issue_cancelled_line",{reason:iss.cancel_reason||"—",name:iss.cancelled_by_name||"—",date:fmtDate(iss.cancelled_at)})}</div>}
                 </div>
-                <span style={{fontSize:11.5,color:T.t2}}>{iss.issuedTo}</span>
-                <span style={{fontSize:12,fontWeight:700,color:status==="Cancelled"?T.t4:T.amb,textAlign:"right",textDecoration:status==="Cancelled"?"line-through":"none"}}>₹{fmt(iss.total)}</span>
-                <span style={{fontSize:11.5,color:T.t3}}>{iss.by}</span>
-                <Pill label={status==="Consumed"?t("warehouse.issue_machine_tag"):status} c={ss.c} bg={ss.bg} brd={ss.brd}/>
+                <div style={{minWidth:0}} title={its.map(issueLineOf).join("\n")}>
+                  {its.length===0?<span style={{fontSize:11.5,color:T.t4}}>—</span>:its.slice(0,3).map((it,k)=>(
+                    <div key={k} style={{fontSize:11.5,color:T.t2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+                      <span style={{fontWeight:600,color:T.t1}}>{it.name}</span> <span style={{color:T.t3}}>×{fmtN(it.qty)} {it.unit}</span>
+                    </div>
+                  ))}
+                  {its.length>3&&<div style={{fontSize:10,color:T.blu,fontWeight:600}}>{t("warehouse.out_more_items",{n:its.length-3})}</div>}
+                </div>
+                <span style={{fontSize:11.5,color:T.t2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{iss.issuedTo}</span>
+                <div style={{minWidth:0}}>
+                  <div style={{fontSize:11.5,fontWeight:iss.zimmedar?600:400,color:iss.zimmedar?T.t1:T.t4,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{iss.zimmedar||"—"}</div>
+                  {iss.zimParty&&<div title={iss.zimParty} style={{fontSize:10,color:T.t4,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{iss.zimParty}</div>}
+                </div>
+                <span style={{fontSize:12,fontWeight:700,color:status==="Cancelled"?T.t4:T.amb,textAlign:"right",paddingRight:10,textDecoration:status==="Cancelled"?"line-through":"none"}}>₹{fmt(iss.total)}</span>
+                <span style={{fontSize:11.5,color:T.t3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{iss.by}</span>
+                <Pill label={status==="Consumed"?t("warehouse.issue_machine_tag"):t(STATUS_L[status]||"common.pending")} c={ss.c} bg={ss.bg} brd={ss.brd}/>
               </div>
             );
           })}
+          </div>
         </div>
       )}
     </div>
@@ -3946,7 +4008,7 @@ function WarehouseModule({deepLink,onDeepLinkDone}={}){
       if(sRes.success) setStock((sRes.data||[]).map(m=>({...m,value:m.stock_value!=null?Number(m.stock_value)||0:(Number(m.qty)||0)*(Number(m.rate)||0),qty:Number(m.qty)||0,min_qty:Number(m.min_qty)||0,max_qty:Number(m.max_qty)||0,rate:Number(m.rate)||0,minQty:Number(m.min_qty)||0,maxQty:Number(m.max_qty)||0,qty_damaged:Number(m.qty_damaged)||0,qty_scrap:Number(m.qty_scrap)||0,qty_repair:Number(m.qty_repair)||0})));
       // Hatayi gayi GRN (12 Oct 2026, khaate se "GRN hatao") — status "Cancelled" dikhe.
       if(gRes.success) setGrns((gRes.data||[]).map(g=>({...g,status:g.cancelled_at?"Cancelled":g.status,id:g.grn_no||`GRN-${g.id}`,dbId:g.id,date:fmtDate(g.date),poNo:g.po_no||"—",vendor:g.vendor||"—",by:g.received_by_name||"—",total:Number(g.total)||0,items:(g.items||[]).map(it=>({...it,name:it.material_name||it.name||"—",matId:it.material_id,ordQty:Number(it.ordered_qty)||0,recQty:Number(it.received_qty)||0,rate:Number(it.rate)||0,amount:Number(it.amount)||0,unit:it.unit||""}))})));
-      if(iRes.success) setIssues((iRes.data||[]).map(i=>({...i,id:i.issue_no||`ISS-${i.id}`,dbId:i.id,date:fmtDate(i.date),project:i.project_name||"—",issuedTo:i.issued_to_name||"—",by:i.issued_by_name||"—",total:Number(i.total)||0,remarks:i.remarks||"",status:i.status||"Pending",items:(i.items||[]).map(it=>({...it,name:it.material_name||it.name||"—",matId:it.material_id,qty:Number(it.qty)||0,rate:Number(it.rate)||0,unit:it.unit||""}))})));
+      if(iRes.success) setIssues((iRes.data||[]).map(i=>({...i,id:i.issue_no||`ISS-${i.id}`,dbId:i.id,date:fmtDate(i.date),project:i.project_name||"—",issuedTo:i.issued_to_name||"—",by:i.issued_by_name||"—",zimmedar:i.custodian_name||"",zimParty:i.custody_party_name||"",zimId:i.custodian_user_id||null,total:Number(i.total)||0,remarks:i.remarks||"",status:i.status||"Pending",items:(i.items||[]).map(it=>({...it,name:it.material_name||it.name||"—",matId:it.material_id,qty:Number(it.qty)||0,rate:Number(it.rate)||0,unit:it.unit||""}))})));
       if(mRes.success) setMrs((mRes.data||[]).map(m=>({...m,project:m.project_name||(m.project_id?"—":(m.warehouse_name?`${m.warehouse_name} ${t("warehouse.internal_request")}`:"Warehouse (internal)")),requestedBy:m.requested_by_name||"—",id:m.mr_no||`MR-${m.id}`,dbId:m.id,date:fmtDate(m.date),items:m.items||[]})));
       if(tRes.success) setTransfers((tRes.data||[]).map(t=>({...t,from:t.from_warehouse_name||t.from_project_name||t.from_location||"—",to:t.to_warehouse_name||t.to_project_name||t.to_location||"—",by:t.transferred_by_name||"—",id:t.transfer_no||`TRF-${t.id}`,dbId:t.id,date:fmtDate(t.date),items:t.items||[],total_value:Number(t.total_value)||0})));
       if(pRes.success) setProjects((pRes.data||[]).map(p=>({id:p.id,name:p.name})));
