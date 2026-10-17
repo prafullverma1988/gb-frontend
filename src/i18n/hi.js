@@ -14382,6 +14382,7 @@ const dict = {
   "machinery.tw_din_park":                                     "पार्किंग {loc}",
   "machinery.tw_gmaps":                                        "Google Maps में खोलो",
   "machinery.tw_other_ev":                                     "उस दिन के बाकी भराई / ड्रॉप — दबाओ तो उनकी जगह",
+  "machinery.tr_andaza":                                       "अंदाज़ा",
 };
 
 export default dict;

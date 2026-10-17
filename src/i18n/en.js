@@ -14383,6 +14383,7 @@ const dict = {
   "machinery.tw_din_park":                                     "parking {loc}",
   "machinery.tw_gmaps":                                        "Open in Google Maps",
   "machinery.tw_other_ev":                                     "Other fills / drops that day — tap to see their place",
+  "machinery.tr_andaza":                                       "approx.",
 };
 
 export default dict;
