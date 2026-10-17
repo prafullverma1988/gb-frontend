@@ -2637,7 +2637,7 @@ function VoucherDrawer({ id, me, onClose, onChanged }) {
             {v.expected_return_date && <KV k={t("assets.expected_return")} v={fmtD(v.expected_return_date)} />}
             {v.accepted_at && <KV k={t("assets.accepted_at")} v={fmtD(v.accepted_at)} />}
             <KV k={t("assets.remarks")} v={v.remarks} />
-            {v.photo_url && !(v.type === "grn" && (v.grn_photos || []).length) && <KV k={t("assets.photo")} v={<a href={v.photo_url} target="_blank" rel="noreferrer" style={{ color: T.ind }}>{t("assets.photo_view")}</a>} />}
+            {v.photo_url && !(v.type === "grn" && (v.grn_photos || []).length) && !(v.type !== "grn" && ((v.photos || []).length > 1 || N(v.photos_pending) > 0)) && <KV k={t("assets.photo")} v={<a href={v.photo_url} target="_blank" rel="noreferrer" style={{ color: T.ind }}>{t("assets.photo_view")}</a>} />}
           </div>
 
           <Panel title={t("assets.lines")}>
@@ -2711,6 +2711,18 @@ function VoucherDrawer({ id, me, onClose, onChanged }) {
                 ))}
               </div>
               {N(v.grn_photos_pending) > 0 && <div style={{ fontSize: 10.5, color: T.amb, marginTop: 5 }}>{t("assets.grn_photos_pending", { n: N(v.grn_photos_pending) })}</div>}
+            </div>
+          )}
+          {/* Issue / move / repair me 3 photo tak (17 Oct 2026) — ek se zyada ho ya peeche chadh rahi ho to sab chhote me. */}
+          {v.type !== "grn" && ((v.photos || []).length > 1 || N(v.photos_pending) > 0) && (
+            <div style={{ marginTop: 12 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: T.t3, textTransform: "uppercase", letterSpacing: ".4px", marginBottom: 6 }}>{t("assets.photo")}</div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {(v.photos || []).map((u) => (
+                  <a key={u} href={u} target="_blank" rel="noreferrer"><img src={cld(u, "thumb")} alt="" style={{ width: 56, height: 56, objectFit: "cover", borderRadius: 8, border: `1.5px solid ${T.b2}`, display: "block" }} /></a>
+                ))}
+              </div>
+              {N(v.photos_pending) > 0 && <div style={{ fontSize: 10.5, color: T.amb, marginTop: 5 }}>{t("assets.grn_photos_pending", { n: N(v.photos_pending) })}</div>}
             </div>
           )}
           {v.type === "grn" && (v.grn_issues || []).length > 0 && (
