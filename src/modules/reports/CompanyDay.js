@@ -5,6 +5,7 @@ import { Pill } from "../shared/ui";
 import { t, getLang } from "../../i18n";
 import { todayISO, isoDate } from "../../utils/today";
 import { cld } from "../../utils/cloudinary";
+import PdfModal from "../../components/PdfModal";
 
 // ── Company ka din ──────────────────────────────────────────────
 // Ek tareekh, poori company. Project ki DPR ek site ka sach hai; ye uska
@@ -31,14 +32,6 @@ const fetchPdf = async (path) => {
   }
   return await res.blob();
 };
-const saveBlob = (blob, filename) => {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url; a.download = filename;
-  document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 4000);
-};
-
 const rs = (n) => "₹" + Math.round(Number(n || 0)).toLocaleString("en-IN");
 const nq = (n) => {
   const x = Number(n);
@@ -181,6 +174,7 @@ function SiteDetail({ line }) {
 
 export default function CompanyDay() {
   const [date, setDate] = useState(todayISO());
+  const [pdfView, setPdfView] = useState(null);   // din ki PDF app ke andar (19 Oct 2026)
   const [data, setData] = useState(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -208,7 +202,7 @@ export default function CompanyDay() {
     setNote("");
     try {
       const blob = await fetchPdf(`/dpr/company/day/pdf?date=${date}`);
-      saveBlob(blob, `Din_${date}.pdf`);
+      setPdfView({ blob, title: t("coday.din_pdf_title", { date }), filename: `Din_${date}.pdf` });
     } catch (e) { setNote(e.message); }
   };
   const onText = async () => {
@@ -233,6 +227,7 @@ export default function CompanyDay() {
 
   return (
     <div>
+      {pdfView && <PdfModal blob={pdfView.blob} title={pdfView.title} filename={pdfView.filename} onClose={() => setPdfView(null)} />}
       {/* Upar: tareekh aur kagaz */}
       <div style={{ ...card, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
         <button onClick={() => shift(-1)} style={btn(false)}>&#8249;</button>

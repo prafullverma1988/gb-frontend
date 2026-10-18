@@ -8,6 +8,7 @@ import { can } from "../../utils/perms";
 import { t, getLang } from "../../i18n";
 import { todayISO, isoDate } from "../../utils/today";
 import { cld } from "../../utils/cloudinary";
+import PdfModal from "../../components/PdfModal";
 
 // DPR approve server par PATCH /dpr/:id/approve hai —
 // requirePerm(["Site / DPR","Projects"], "approve", {strict:true}). Yahan
@@ -46,13 +47,6 @@ const fetchPdf = async (path) => {
 // Client copy ke hisse — kram wahi jo server (utils/dprSections.js) ka hai.
 const SEC_KEYS = ["hazri", "kaam", "maal", "machine", "photo", "issue", "todo", "rukawat", "mausam", "suraksha", "note"];
 
-const saveBlob = (blob, filename) => {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url; a.download = filename;
-  document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 4000);
-};
 
 const fq = (n) => {
   const x = Number(n);
@@ -78,7 +72,9 @@ const STATUS = {
   none:      () => ({ c: T.t4,  bg: T.bg,   l: t("site.st_none") }),
 };
 
-function TabSite({ project }) {   // approve ka haq ab canApproveDpr() se, role ke naam se nahi
+function TabSite({ project }) {
+  // DPR ki PDF app ke andar (PdfModal) — wahin Download bhi (19 Oct 2026).
+  const [pdfView, setPdfView] = useState(null);   // approve ka haq ab canApproveDpr() se, role ke naam se nahi
   const projectId = project?.id;
   const [date, setDate]       = useState(todayISO());
   const [day, setDay]         = useState(null);
@@ -174,7 +170,7 @@ function TabSite({ project }) {   // approve ka haq ab canApproveDpr() se, role 
       const cq = copy === "client" ? "&copy=client" : "";
       const blob = await fetchPdf(`/dpr/day/pdf?project_id=${projectId}&date=${date}${cq}`);
       const safe = String(project?.name || "DPR").replace(/[^\w\- ]+/g, "").trim().slice(0, 40) || "DPR";
-      saveBlob(blob, `DPR_${safe}_${date}${copy === "client" ? "_client" : ""}.pdf`);
+      setPdfView({ blob, title: "DPR · " + (project?.name || "") + " · " + date, filename: `DPR_${safe}_${date}${copy === "client" ? "_client" : ""}.pdf` });
     } catch (e) { flash(e.message); }
     setBusy(false);
   };
@@ -253,6 +249,7 @@ function TabSite({ project }) {   // approve ka haq ab canApproveDpr() se, role 
 
   return (
     <div style={{ padding: "14px 18px" }}>
+      {pdfView && <PdfModal blob={pdfView.blob} title={pdfView.title} filename={pdfView.filename} onClose={() => setPdfView(null)} />}
       {segBar}
 
       {/* ── Tareekh ki patti ── */}

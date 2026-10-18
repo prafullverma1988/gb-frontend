@@ -2230,6 +2230,9 @@ function App(){
     if(parsed&&parsed.module==="assets"&&parsed.incidentId) setAssetDeepLink({incident:parsed.incidentId});
     else if(parsed&&parsed.module==="assets"&&parsed.refId) setAssetDeepLink(parsed.refId);
     if(parsed&&parsed.whLink) setWhDeepLink(parsed.whLink);
+    // Drawing par mark ki khabar ("/design?drawing=72") → wahi drawing review me (19 Oct 2026).
+    const dm=mod==="design"&&/[?&]drawing=(\d+)/.exec(String(link||""));
+    if(dm){ try{ sessionStorage.setItem("design_open_drawing",dm[1]); }catch(_){} setTimeout(()=>window.dispatchEvent(new CustomEvent("design:open-id",{detail:dm[1]})),0); }
     if(mod) setNav(mod);
   };
 

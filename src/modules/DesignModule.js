@@ -12,6 +12,8 @@ import { can } from "../utils/perms";
 import { t } from "../i18n";
 import { companyName } from "../utils/companyName";
 import { cld } from "../utils/cloudinary";
+import DrawingReview from "../components/DrawingReview";
+import { currentUser } from "../utils/perms";
 
 // Drawing ka status badalna = approval ka faisla. Server ise
 // requireRole(admin/super_admin/manager/project_manager) + requirePerm("Design","edit")
@@ -21,6 +23,18 @@ const canDecideDesign = () => canApproveAction({
   roles: ["admin", "super_admin", "manager", "project_manager"],
   perm: ["Design", "edit"],
 });
+// Drawing kholna = app ke andar dekhna + mark (DrawingReview, 19 Oct 2026).
+// Is file ke kai hisson se khulta hai — ek event, ek jagah sunte hain.
+const openReview = (d) => window.dispatchEvent(new CustomEvent("design:review", { detail: d }));
+// DWG / DXF browser me nahi khulte — saath me PDF zaroori (server bhi rokta hai).
+const isCadFile = (f) => !!f && /\.(dwg|dxf)$/i.test(f.name || "");
+const isPdfFile = (f) => !!f && /\.pdf$/i.test(f.name || "");
+// PDF pehle chadhao, phir asli file — dono ke url saath bhejne hain.
+const uploadWithPdf = ({ file, pdf, label, onDone, onError }) => {
+  const main = (pdfUrl) => uploadManager.add({ file, folder: "gb_buildcon/drawings", label, onDone: (url) => onDone(url, pdfUrl), onError });
+  if (!pdf) { main(null); return; }
+  uploadManager.add({ file: pdf, folder: "gb_buildcon/drawings", label: label + " (PDF)", onDone: (pdfUrl) => main(pdfUrl), onError });
+};
 
 // ── ICONS ────────────────────────────────────────────────────────────
 const Ic = ({d,d2,size=18,color="currentColor",sw=1.8,fill="none"}) => (
@@ -117,6 +131,7 @@ function UploadModal({ show, onClose, projects, dbTitles, dbCats, dbTypes, prefi
   const PRESET     = "gb_buildcon_drawings";
   const [form,     setForm]     = useState({ project_id:"", title:"", category:"Architectural", drawing_type:"Plan", stage:"Working", floor:"", approval_required:false, note:"" });
   const [file,     setFile]     = useState(null);
+  const [pdfFile,  setPdfFile]  = useState(null);
   const [uploading,setUploading]= useState(false);
   const [pct,      setPct]      = useState(0);
   const [err,      setErr]      = useState("");
@@ -138,28 +153,31 @@ function UploadModal({ show, onClose, projects, dbTitles, dbCats, dbTypes, prefi
     if (!form.project_id && !prefill?.linked_request_id) { setErr(t("design.project_select_karo")); return; }
     if (!form.title.trim()) { setErr(t("design.title_required")); return; }
     if (!file) { setErr(t("design.file_select_karo")); return; }
+    if (isCadFile(file) && !isPdfFile(pdfFile)) { setErr(t("dmark.cad_pdf_zaroori")); return; }
 
     // Capture form values before closing modal
     const capturedForm = { ...form };
     const capturedFile = file;
+    const capturedPdf = isCadFile(file) ? pdfFile : null;
     const linkedRequestId = prefill?.linked_request_id || null;
     const proj = projects.find(p => p.id === parseInt(capturedForm.project_id));
     const fileSize = Math.round(capturedFile.size / 1024) + " KB";
 
     // ── CLOSE MODAL IMMEDIATELY — upload runs in background ──
     onClose();
-    setFile(null);
+    setFile(null); setPdfFile(null);
     setForm({ project_id: "", title: "", category: "Architectural", drawing_type: "Plan", stage: "Working", floor: "", approval_required: false, note: "" });
     setPct(0);
 
     // ── BACKGROUND UPLOAD via uploadManager ──
-    uploadManager.add({
+    uploadWithPdf({
       file: capturedFile,
-      folder: "gb_buildcon/drawings",
+      pdf: capturedPdf,
       label: capturedForm.title || capturedFile.name,
-      onDone: async (url) => {
+      onDone: async (url, pdfUrl) => {
         try {
           const res = await api.post("/design/drawings", {
+            pdf_url:      pdfUrl || null,
             project_id:   capturedForm.project_id || null,
             project_name: proj?.name || "",
             title:        capturedForm.title,
@@ -316,10 +334,16 @@ function UploadModal({ show, onClose, projects, dbTitles, dbCats, dbTypes, prefi
           <div style={{marginBottom:12}}>
             <label style={S.label}>{t("common.file")}</label>
             <label style={{display:"block",border:"2px dashed "+(file?T.grn:T.b2),borderRadius:9,padding:"18px",textAlign:"center",background:file?T.grnL:T.surfaceB,cursor:"pointer"}}>
-              <input type="file" accept=".pdf,.png,.jpg,.jpeg,.dwg,.dxf" style={{display:"none"}} onChange={e=>{if(e.target.files[0]){setFile(e.target.files[0]);setErr("");}}}/>
+              <input type="file" accept=".pdf,.png,.jpg,.jpeg,.dwg,.dxf" style={{display:"none"}} onChange={e=>{if(e.target.files[0]){setFile(e.target.files[0]);setPdfFile(null);setErr("");}}}/>
               {file?<div><div style={{fontSize:13,fontWeight:700,color:T.grn}}>✓ {file.name}</div><div style={S.sub}>{(file.size/1024).toFixed(0)} KB</div></div>
                 :<div><div style={{fontSize:13,fontWeight:600,color:T.t2}}>{t("design.choose_file_or_drop")}</div><div style={S.sub}>{t("design.pdf_png_jpg_dwg_max_50mb")}</div></div>}
             </label>
+            {isCadFile(file) && (
+              <label style={{display:"flex",alignItems:"center",gap:8,marginTop:8,padding:"9px 12px",border:"1.5px dashed "+(pdfFile?T.grnM:T.ambM),borderRadius:8,background:pdfFile?T.grnL:T.ambL,cursor:"pointer"}}>
+                <input type="file" accept=".pdf" style={{display:"none"}} onChange={e=>{if(e.target.files[0]){setPdfFile(e.target.files[0]);setErr("");}}}/>
+                <span style={{fontSize:12.5,fontWeight:700,color:pdfFile?T.grn:T.amb}}>{pdfFile?("✓ "+pdfFile.name):t("dmark.cad_pdf_chuno")}</span>
+              </label>
+            )}
           </div>
           {/* Note */}
           <div>
@@ -373,6 +397,22 @@ export default function DesignModule() {
   const [dStatus,   setDStatus]   = useState("All");
   const [dType,     setDType]     = useState("All");
   const [selDraw,   setSelDraw]   = useState(null);
+  const [review,    setReview]    = useState(null);   // DrawingReview khula
+  useEffect(() => {
+    const on = (e) => { if (e && e.detail) setReview(e.detail); };
+    window.addEventListener("design:review", on);
+    return () => window.removeEventListener("design:review", on);
+  }, []);
+  // Notification se: /design?drawing=ID (seedha URL) ya App ka "design:open-id" (bell).
+  useEffect(() => {
+    const open = (id) => { if (id) api.get("/design/drawings/"+id).then((r) => { if (r && r.success) setReview(r.data); }).catch(() => {}); };
+    let id = new URLSearchParams(window.location.search).get("drawing");
+    try { id = id || sessionStorage.getItem("design_open_drawing"); sessionStorage.removeItem("design_open_drawing"); } catch (_) {}
+    open(id);
+    const on = (e) => { try { sessionStorage.removeItem("design_open_drawing"); } catch (_) {} open(e && e.detail); };
+    window.addEventListener("design:open-id", on);
+    return () => window.removeEventListener("design:open-id", on);
+  }, []);
   const [showVer,   setShowVer]   = useState(null);
 
   // Request filters
@@ -449,17 +489,23 @@ export default function DesignModule() {
   };
 
   // Upload new version from revision queue — BACKGROUND
-  const handleNewVersion = async (drawingId, file) => {
+  const handleNewVersion = async (drawingId, files) => {
+    const list = Array.from(files || []);
+    const cad = list.find(isCadFile);
+    const file = cad || list[0];
+    if (!file) return;
+    const pdf = cad ? list.find(isPdfFile) : null;
+    if (cad && !pdf) { window.alert(t("dmark.cad_pdf_saath_chuno")); return; }
     setRevUploading(p=>({...p,[drawingId]:true}));
     const fileSize = Math.round(file.size/1024)+" KB";
-    uploadManager.add({
+    uploadWithPdf({
       file,
-      folder: "gb_buildcon/drawings",
+      pdf,
       label: t("design.revision_drawing_drawingid", { drawingId }),
-      onDone: async (url) => {
+      onDone: async (url, pdfUrl) => {
         try {
           const res = await api.post("/design/drawings/"+drawingId+"/versions", {
-            file_url: url, file_size: fileSize,
+            file_url: url, file_size: fileSize, pdf_url: pdfUrl || null,
           });
           if (res.success) { await loadAll(); }
         } catch(e) { console.error("Version save error:", e); }
@@ -598,7 +644,7 @@ export default function DesignModule() {
                 <div style={{padding:"10px 14px",background:T.bluL,borderBottom:"1px solid "+T.bluM}}>
                   {actionErr&&<div style={{padding:"5px 9px",background:T.redL,border:"1px solid "+T.redM,borderRadius:6,fontSize:11.5,color:T.red,marginBottom:8}}>{actionErr}</div>}
                   <div style={{display:"flex",gap:7,flexWrap:"wrap",alignItems:"center"}}>
-                    {d.file_url&&<a href={d.file_url} target="_blank" rel="noreferrer" style={S.linkBlue}>{t("common.view")}</a>}
+                    {d.file_url&&<button type="button" onClick={()=>openReview(d)} style={{...S.linkBlue,cursor:"pointer"}}>{t("dmark.dekho_mark")}{d.open_marks?" · "+d.open_marks:""}</button>}
                     {d.file_url&&<a href={d.file_url} download target="_blank" rel="noreferrer" style={S.linkGrey}>{t("design.download")}</a>}
                     <button onClick={()=>setShowVer(d)} style={{padding:"5px 10px",borderRadius:6,background:T.surfaceB,border:"1px solid "+T.b1,color:T.t3,fontSize:11,cursor:"pointer"}}><IcHist size={12}/> {t("common.history")}</button>
                     {canDecideDesign()&&d.status!=="Approved"&&!inClientReview(d)&&<button onClick={()=>handleStatus(d.id,"Approved")} disabled={!!acting[d.id]} style={{padding:"5px 11px",borderRadius:6,background:T.grn,border:"none",color:"white",fontSize:11,fontWeight:700,cursor:"pointer"}}>{t("common.approve")}</button>}
@@ -775,15 +821,15 @@ export default function DesignModule() {
               {d.pin_count>0&&<div style={{fontSize:11,color:T.t3,marginTop:4}}>{t("design.pin_count_revision_pin_s", { pin_count: d.pin_count })}</div>}
             </div>
             <div style={{display:"flex",gap:6,flexShrink:0}}>
-              {d.file_url&&<a href={d.file_url} target="_blank" rel="noreferrer" style={{padding:"4px 9px",borderRadius:6,background:T.bluL,border:"1px solid "+T.bluM,color:T.blu,fontSize:11,fontWeight:600,textDecoration:"none"}}>{t("design.view_current")}</a>}
+              {d.file_url&&<button type="button" onClick={()=>openReview(d)} style={{padding:"4px 9px",borderRadius:6,background:T.bluL,border:"1px solid "+T.bluM,color:T.blu,fontSize:11,fontWeight:600,cursor:"pointer"}}>{t("design.view_current")}{d.open_marks?" · "+t("dmark.khule_n",{n:d.open_marks}):""}</button>}
             </div>
           </div>
           {/* Naya version — Design CREATE tick (server POST /drawings/:id/versions) */}
           {can("Design","create")&&<div style={{paddingTop:8,borderTop:"1px solid "+T.b1}}>
             <label style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:5}}>{t("design.upload_revised_version")}</label>
             <label style={{display:"flex",alignItems:"center",gap:8,padding:"8px 11px",border:"1.5px dashed "+(revUploading[d.id]?T.blu:T.b2),borderRadius:7,cursor:revUploading[d.id]?"not-allowed":"pointer",background:revUploading[d.id]?T.bluL:T.surfaceB}}>
-              <input type="file" accept=".pdf,.png,.jpg,.jpeg,.dwg" style={{display:"none"}} disabled={revUploading[d.id]}
-                onChange={e=>{if(e.target.files[0])handleNewVersion(d.id,e.target.files[0]);}}/>
+              <input type="file" multiple accept=".pdf,.png,.jpg,.jpeg,.dwg,.dxf" style={{display:"none"}} disabled={revUploading[d.id]}
+                onChange={e=>{if(e.target.files&&e.target.files.length)handleNewVersion(d.id,e.target.files); e.target.value="";}}/>
               <span style={{fontSize:11.5,color:T.blu,fontWeight:600}}>{revUploading[d.id]?t("design.uploading"):t("design.upload_new_version")}</span>
             </label>
           </div>}
@@ -885,10 +931,10 @@ export default function DesignModule() {
                 )}
               </div>
               {d.file_url && (
-                <a href={d.file_url} target="_blank" rel="noreferrer"
-                  style={{fontSize:11,color:T.blu,background:T.bluL,border:`1px solid ${T.bluM}`,padding:"3px 9px",borderRadius:6,textDecoration:"none",fontWeight:600,whiteSpace:"nowrap",flexShrink:0}}>
-                 {t("common.view")}
-                </a>
+                <button type="button" onClick={()=>openReview(d)}
+                  style={{fontSize:11,color:T.blu,background:T.bluL,border:`1px solid ${T.bluM}`,padding:"3px 9px",borderRadius:6,cursor:"pointer",fontWeight:600,whiteSpace:"nowrap",flexShrink:0}}>
+                 {t("dmark.dekho_mark")}
+                </button>
               )}
             </div>
             <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
@@ -1165,8 +1211,8 @@ export default function DesignModule() {
                 {d.note&&<div style={{fontSize:11.5,color:T.t3,marginTop:4,padding:"4px 8px",background:T.surfaceB,borderRadius:5}}>{d.note}</div>}
               </div>
               <div style={{display:"flex",gap:6}}>
-                {d.file_url&&<a href={d.file_url} target="_blank" rel="noreferrer"
-                  style={S.linkBlue}>{t("common.view")}</a>}
+                {d.file_url&&<button type="button" onClick={()=>openReview(d)}
+                  style={{...S.linkBlue,cursor:"pointer"}}>{t("dmark.dekho_mark")}</button>}
                 {d.file_url&&<a href={d.file_url} download target="_blank" rel="noreferrer"
                   style={S.linkGrey}>⬇</a>}
               </div>
@@ -1495,6 +1541,9 @@ export default function DesignModule() {
       {showUpload&&<UploadModal show={showUpload} onClose={()=>{setShowUpload(false);setUploadPrefill(null);}} projects={projects} dbTitles={dbTitles} dbCats={dbCats} dbTypes={dbTypes} prefill={uploadPrefill}
         onUploaded={(d)=>setDrawings(p=>[d,...p])}/>}
       {showVer&&<VersionModal/>}
+      {review&&<DrawingReview drawing={review} me={(currentUser()||{}).id} canDecide={canDecideDesign()}
+        onClose={()=>{setReview(null); if(new URLSearchParams(window.location.search).get("drawing")) window.history.replaceState(null,"",window.location.pathname);}}
+        onChanged={()=>loadAll()}/>}
     </div>
   );
 }

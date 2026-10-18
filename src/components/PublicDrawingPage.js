@@ -1,10 +1,18 @@
 // ── PUBLIC DRAWING PAGE ─────────────────────────────────────────────
 // Renders at /d/:token — no auth required. Client opens this link to view
 // the drawing shared with them. View is tracked server-side.
+// 19 Oct 2026: PDF / photo DocViewer me (zoom), aur client khud drawing par
+// 📍 / ▭ / T se "yahan badlaav chahiye" bata sakta hai (naam ek baar). Client
+// ko sirf client ke mark dikhte hain — andar ki baatcheet nahi.
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { API_BASE } from "../config/api";
 import { t } from "../i18n";
+import DocViewer, { isPdfUrl } from "./DocViewer";
+import { MarkShape, Composer } from "./DrawingReview";
+
+const NAME_KEY = "pd_client_name";
+const readName = () => { try { return localStorage.getItem(NAME_KEY) || ""; } catch (_) { return ""; } };
 
 const T = {
   bg: "#0F172A",
@@ -21,6 +29,40 @@ export default function PublicDrawingPage() {
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [marks, setMarks] = useState([]);
+  const [tool, setTool] = useState(null);
+  const [draft, setDraft] = useState(null);
+  const [name, setName] = useState(readName());
+  const [askName, setAskName] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState("");
+  const [sel, setSel] = useState(null);
+
+  const loadMarks = useCallback(() => {
+    if (!token) return;
+    fetch(`${API_BASE}/design/public/drawings/${token}/marks`).then((r) => r.json())
+      .then((r) => { if (r && r.success) setMarks(r.data || []); }).catch(() => {});
+  }, [token]);
+  useEffect(() => { loadMarks(); }, [loadMarks]);
+
+  const pickTool = (k) => {
+    if (!name) { setAskName(k); return; }
+    setTool(tool === k ? null : k); setDraft(null);
+  };
+  const save = async (text) => {
+    if (!draft) return;
+    setBusy(true); setNote("");
+    const body = { client_name: name, kind: draft.kind, page: draft.page, x: draft.x, y: draft.y, note: text };
+    if (draft.kind === "box") { body.w = draft.w; body.h = draft.h; }
+    if (draft.kind === "text") { body.w = 0.2; body.h = 0.04; }
+    try {
+      const r = await fetch(`${API_BASE}/design/public/drawings/${token}/marks`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).then((x) => x.json());
+      if (r && r.success) { setDraft(null); setTool(null); setNote(t("public_drawing.mark_bhej_diya")); loadMarks(); }
+      else setNote((r && r.message) || t("common.network_error"));
+    } catch (_) { setNote(t("common.network_error")); }
+    setBusy(false);
+  };
 
   useEffect(() => {
     if (!token) { setError(t("public_drawing.invalid_link")); setLoading(false); return; }
@@ -54,8 +96,28 @@ export default function PublicDrawingPage() {
     );
   }
 
-  const isImage = /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(data.file_url || "");
-  const isPdf = /\.pdf$/i.test(data.file_url || "");
+  const viewSrc = data.pdf_url || data.file_url || "";
+  const isImage = /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(viewSrc);
+  const isPdf = isPdfUrl(viewSrc) && !/\.(dwg|dxf)(\?|$)/i.test(viewSrc);
+  const overlay = (page) => (
+    <>
+      {marks.filter((m) => m.page === page).map((m) => (
+        <MarkShape key={m.id} m={{ ...m, status: m.status || "open" }} selected={sel === m.id} onClick={(x) => setSel(x.id)} />
+      ))}
+      {draft && draft.page === page && (
+        <>
+          {draft.kind === "box"
+            ? <div style={{ position: "absolute", left: draft.x * 100 + "%", top: draft.y * 100 + "%", width: draft.w * 100 + "%", height: draft.h * 100 + "%", border: "2.5px dashed #2563EB", background: "rgba(37,99,235,.08)" }} />
+            : <div style={{ position: "absolute", left: draft.x * 100 + "%", top: draft.y * 100 + "%", width: 14, height: 14, marginLeft: -7, marginTop: -7, borderRadius: "50%", background: "#2563EB" }} />}
+        </>
+      )}
+    </>
+  );
+  const toolBtn = (k, label) => (
+    <button type="button" onClick={() => pickTool(k)}
+      style={{ border: "none", borderRadius: 8, height: 34, padding: "0 12px", fontSize: 13, fontWeight: 700, cursor: "pointer",
+        background: tool === k ? "#fff" : "rgba(255,255,255,.12)", color: tool === k ? "#111827" : "#fff" }}>{label}</button>
+  );
 
   return (
     <div style={{ minHeight: "100vh", background: T.bg, fontFamily: "system-ui, -apple-system, sans-serif", display: "flex", flexDirection: "column" }}>
@@ -78,13 +140,33 @@ export default function PublicDrawingPage() {
         </div>
       </div>
 
-      {/* Viewer */}
+      {(isImage || isPdf) && (
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", padding: "8px 18px", background: "rgba(15,23,42,0.95)", color: "#fff", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
+          <span style={{ fontSize: 12.5, fontWeight: 700, color: "rgba(255,255,255,.75)" }}>{t("public_drawing.badlaav_batao")}</span>
+          {toolBtn("pin", "📍 " + t("dmark.pin"))}{toolBtn("box", "▭ " + t("dmark.box"))}{toolBtn("text", "T " + t("dmark.text"))}
+          {marks.length > 0 && <span style={{ fontSize: 12, color: "rgba(255,255,255,.65)" }}>{t("public_drawing.mark_n", { n: marks.length })}</span>}
+          {name && <span style={{ marginLeft: "auto", fontSize: 12, color: "rgba(255,255,255,.6)" }}>{name}</span>}
+        </div>
+      )}
+      {tool && <div style={{ background: "#2563EB", color: "#fff", fontSize: 12.5, padding: "6px 18px" }}>{tool === "box" ? t("dmark.hint_box") : tool === "text" ? t("dmark.hint_text") : t("dmark.hint_pin")}</div>}
+      {note && <div style={{ background: "#ECFDF5", color: "#065F46", fontSize: 12.5, padding: "6px 18px" }}>{note}</div>}
+      {sel && (() => { const m = marks.find((x) => x.id === sel); return m ? (
+        <div style={{ background: "#fff", color: "#111827", fontSize: 13, padding: "8px 18px", borderBottom: "1px solid #E5E7EB" }}>
+          <b>#{m.seq}</b> · {m.client_name} · {m.note}
+          <button type="button" onClick={() => setSel(null)} style={{ marginLeft: 10, border: "none", background: "none", color: "#6B7280", cursor: "pointer" }}>✕</button>
+        </div>) : null; })()}
+      {(isImage || isPdf) ? (
+        <div style={{ flex: 1, minHeight: "60vh", height: "calc(100vh - 170px)" , position: "relative" }}>
+          {draft && (
+            <div style={{ position: "absolute", left: 14, bottom: 14, zIndex: 20 }}>
+              <Composer draft={draft} busy={busy} onSave={(text) => save(text)} onCancel={() => setDraft(null)} />
+            </div>
+          )}
+          <DocViewer src={viewSrc} kind={isPdf ? "pdf" : "image"} overlay={overlay} mode={tool && !draft ? tool : null} onPlace={(p) => setDraft(p)} />
+        </div>
+      ) : (
       <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "24px 16px" }}>
-        {isImage ? (
-          <img src={data.file_url} alt={data.title} style={{ maxWidth: "100%", maxHeight: "calc(100vh - 160px)", borderRadius: 10, boxShadow: "0 20px 60px rgba(0,0,0,0.4)" }} />
-        ) : isPdf ? (
-          <iframe src={data.file_url} title={data.title} style={{ width: "100%", maxWidth: 1000, height: "calc(100vh - 140px)", border: "none", borderRadius: 10, background: "#fff" }} />
-        ) : (
+        {/* PDF / photo nahi (jaise sirf DWG) — download hi */}
           <div style={{ background: T.surface, borderRadius: 12, padding: "30px 28px", maxWidth: 420, textAlign: "center" }}>
             <div style={{ fontSize: 26, marginBottom: 10 }}>📄</div>
             <div style={{ fontSize: 14, fontWeight: 700, color: T.text, marginBottom: 4 }}>{data.title}</div>
@@ -94,8 +176,26 @@ export default function PublicDrawingPage() {
              {t("public_drawing.download_file")}
             </a>
           </div>
-        )}
       </div>
+      )}
+
+      {askName && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16, zIndex: 50 }}>
+          <div style={{ background: "#fff", borderRadius: 12, padding: 18, width: 340, maxWidth: "100%" }}>
+            <div style={{ fontSize: 15, fontWeight: 800, color: "#111827", marginBottom: 4 }}>{t("public_drawing.aapka_naam")}</div>
+            <div style={{ fontSize: 12.5, color: "#6B7280", marginBottom: 10 }}>{t("public_drawing.naam_kyon")}</div>
+            <input autoFocus defaultValue={name} id="pd-name" style={{ width: "100%", boxSizing: "border-box", padding: 9, border: "1px solid #D1D5DB", borderRadius: 8, fontSize: 14 }}
+              onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.nextSibling.click(); }} />
+            <button type="button" style={{ marginTop: 10, width: "100%", border: "none", background: "#2563EB", color: "#fff", borderRadius: 8, padding: 10, fontSize: 14, fontWeight: 800, cursor: "pointer" }}
+              onClick={() => {
+                const v = String(document.getElementById("pd-name").value || "").trim();
+                if (v.length < 2) return;
+                try { localStorage.setItem(NAME_KEY, v); } catch (_) {}
+                setName(v); const k = askName; setAskName(false); setTool(k);
+              }}>{t("public_drawing.aage")}</button>
+          </div>
+        </div>
+      )}
 
       {/* Footer */}
       <div style={{ padding: "12px 18px", textAlign: "center", color: "rgba(255,255,255,0.35)", fontSize: 11, borderTop: "1px solid rgba(255,255,255,0.06)", flexShrink: 0 }}>

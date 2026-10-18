@@ -10,6 +10,11 @@ import { canApproveAction } from "../../utils/approvalAuthority";
 import { can, canEntry } from "../../utils/perms";
 import { useRoadAccess } from "../road/roadShared";
 import { t } from "../../i18n";
+import DrawingReview from "../../components/DrawingReview";
+import { currentUser } from "../../utils/perms";
+// DWG / DXF ke saath PDF zaroori (viewer + mark PDF par; server bhi rokta hai).
+const isCadFile = (f) => !!f && /\.(dwg|dxf)$/i.test(f.name || "");
+const isPdfFile = (f) => !!f && /\.pdf$/i.test(f.name || "");
 
 // Baar-baar aane wale inline styles — ek jagah, is file ke andar hi.
 const S = {
@@ -245,6 +250,8 @@ function TabDesign({ project, isAdmin }) {
   // Upload form state
   const [uForm, setUForm]   = useState({ title:"", category:"Architectural", drawing_type:"2D", approval_required:false, note:"" });
   const [uFile, setUFile]   = useState(null);
+  const [uPdf, setUPdf]     = useState(null);
+  const [review, setReview] = useState(null);   // DrawingReview khula
   const [uploading, setUploading] = useState(false);
   const [uploadPct, setUploadPct] = useState(0);
   const [uploadErr, setUploadErr] = useState("");
@@ -400,9 +407,11 @@ function TabDesign({ project, isAdmin }) {
   const handleUpload = async () => {
     if (!uForm.title.trim()) { setUploadErr("Title required"); return; }
     if (!uFile) { setUploadErr("File select karo"); return; }
+    if (isCadFile(uFile) && !isPdfFile(uPdf)) { setUploadErr(t("dmark.cad_pdf_zaroori")); return; }
     setUploading(true); setUploadErr(""); setUploadPct(5);
     try {
-      // 1. Upload to Cloudinary
+      // 1. Upload to Cloudinary (DWG ho to saath ki PDF pehle)
+      const pdfCld = isCadFile(uFile) ? await uploadToCloudinary(uPdf) : null;
       const cld = await uploadToCloudinary(uFile);
       setUploadPct(85);
       // 2. Save to backend
@@ -417,6 +426,7 @@ function TabDesign({ project, isAdmin }) {
         note:         uForm.note || null,
         file_url:     cld.secure_url,
         file_size:    Math.round(uFile.size / 1024) + " KB",
+        pdf_url:      pdfCld ? pdfCld.secure_url : null,
       });
       setUploadPct(100);
       if (res.success) {
@@ -439,15 +449,22 @@ function TabDesign({ project, isAdmin }) {
   };
 
   // ── New Version Upload ────────────────────────────────────────────
-  const handleNewVersion = async (drawingId, file, note) => {
+  const handleNewVersion = async (drawingId, files, note) => {
+    const list = Array.from(files || []);
+    const cad = list.find(isCadFile);
+    const file = cad || list[0];
     if (!file) return;
+    const pdf = cad ? list.find(isPdfFile) : null;
+    if (cad && !pdf) { setActionErr(t("dmark.cad_pdf_saath_chuno")); return; }
     setActing(p => ({...p, ["ver"+drawingId]: true}));
     try {
+      const pdfCld = pdf ? await uploadToCloudinary(pdf) : null;
       const cld = await uploadToCloudinary(file);
       const res = await api.post("/design/drawings/" + drawingId + "/versions", {
         file_url:  cld.secure_url,
         file_size: Math.round(file.size / 1024) + " KB",
         note:      note || null,
+        pdf_url:   pdfCld ? pdfCld.secure_url : null,
       });
       if (res.success) {
         // Force fresh reload from backend
@@ -484,22 +501,6 @@ function TabDesign({ project, isAdmin }) {
       }
     }
     setActing(p => ({...p, [id]: null}));
-  };
-
-  // ── Add Revision Pin ──────────────────────────────────────────────
-  const handleAddPin = async (drawingId) => {
-    if (!revForm.reason) return;
-    setRevSaving(true);
-    try {
-      await api.post("/design/drawings/" + drawingId + "/pins", {
-        label: revForm.reason,
-        x_pct: parseFloat(revForm.pinX) || 50,
-        y_pct: parseFloat(revForm.pinY) || 50,
-      });
-      setRevForm({ reason:"", pinX:"", pinY:"" });
-      loadDrawings();
-    } catch(e) {}
-    setRevSaving(false);
   };
 
   const fmtDate = d => d ? new Date(d).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}) : "—";
@@ -569,7 +570,7 @@ function TabDesign({ project, isAdmin }) {
             <label style={{display:"block",border:"2px dashed "+(uFile?T.grn:T.b2),borderRadius:9,padding:"20px 16px",
               textAlign:"center",background:uFile?T.grnL:T.surfaceB,cursor:"pointer",transition:"all 0.2s"}}>
               <input type="file" accept=".pdf,.png,.jpg,.jpeg,.dwg,.dxf,.svg" style={{display:"none"}}
-                onChange={e=>{ if(e.target.files[0]){ setUFile(e.target.files[0]); setUploadErr(""); }}}/>
+                onChange={e=>{ if(e.target.files[0]){ setUFile(e.target.files[0]); setUPdf(null); setUploadErr(""); }}}/>
               {uFile ? (
                 <div>
                   <div style={{fontSize:13,fontWeight:700,color:T.grn}}>✓ {uFile.name}</div>
@@ -582,6 +583,12 @@ function TabDesign({ project, isAdmin }) {
                 </div>
               )}
             </label>
+            {isCadFile(uFile) && (
+              <label style={{display:"flex",alignItems:"center",gap:8,marginTop:8,padding:"9px 12px",border:"1.5px dashed "+(uPdf?T.grn:T.amb),borderRadius:8,background:uPdf?T.grnL:T.ambL,cursor:"pointer"}}>
+                <input type="file" accept=".pdf" style={{display:"none"}} onChange={e=>{ if(e.target.files[0]){ setUPdf(e.target.files[0]); setUploadErr(""); }}}/>
+                <span style={{fontSize:12.5,fontWeight:700,color:uPdf?T.grn:T.amb}}>{uPdf?("✓ "+uPdf.name):t("dmark.cad_pdf_chuno")}</span>
+              </label>
+            )}
           </div>
 
           {/* Note */}
@@ -621,41 +628,6 @@ function TabDesign({ project, isAdmin }) {
     </>
   );
 
-  // ── Revision Pin Form ────────────────────────────────────────────
-  const RevPinForm = ({ drawingId, onAdded }) => {
-    const [pinNote, setPinNote] = useState("");
-    const [saving,  setSaving]  = useState(false);
-    const [added,   setAdded]   = useState(false);
-    const submit = async () => {
-      if (!pinNote.trim()) return;
-      setSaving(true);
-      try {
-        await api.post("/design/drawings/" + drawingId + "/pins", {
-          label: pinNote, x_pct: 50, y_pct: 50,
-        });
-        setPinNote(""); setAdded(true);
-        setTimeout(() => setAdded(false), 2000);
-        onAdded();
-      } catch(e) {}
-      setSaving(false);
-    };
-    return(
-      <div style={{marginTop:8}}>
-        <label style={S.label}>{t("design.add_revision_pin_comment")}</label>
-        <div style={{display:"flex",gap:6}}>
-          <input value={pinNote} onChange={e=>setPinNote(e.target.value)}
-            placeholder={t("design.e_g_column_dimension_ghalat_hai")}
-            style={{flex:1,padding:"6px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:11.5,outline:"none",fontFamily:"inherit"}}/>
-          <button onClick={submit} disabled={saving||!pinNote.trim()}
-            style={{padding:"6px 11px",borderRadius:6,background:pinNote.trim()?T.amb:T.b1,border:"none",color:"white",fontSize:11,fontWeight:700,cursor:pinNote.trim()?"pointer":"not-allowed",whiteSpace:"nowrap"}}>
-            {added?t("mom.added"):saving?"...":t("design.add_pin")}
-          </button>
-        </div>
-      </div>
-    );
-  };
-
-  // ── REVISION QUEUE PANEL ──────────────────────────────────────────
   const RevisionQueue = () => (
     <>
       <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:400}}/>
@@ -679,8 +651,11 @@ function TabDesign({ project, isAdmin }) {
               {d.note&&<div style={{fontSize:11.5,color:T.amb,marginTop:6,padding:"6px 9px",background:"rgba(217,119,6,0.08)",borderRadius:6,borderLeft:"3px solid "+T.amb}}>
                 💬 {d.note}
               </div>}
-              {/* Add Pin */}
-              <RevPinForm drawingId={d.id} onAdded={loadDrawings}/>
+              {/* Drawing par mark (DrawingReview) — purana "Add pin" kabhi chala hi nahi (400). */}
+              <button type="button" onClick={()=>setReview(d)}
+                style={{marginTop:8,padding:"6px 11px",borderRadius:6,background:T.ambL,border:"1px solid "+T.ambM,color:T.amb,fontSize:11.5,fontWeight:700,cursor:"pointer"}}>
+                📍 {t("dmark.dekho_mark")}{d.open_marks?" · "+t("dmark.khule_n",{n:d.open_marks}):""}
+              </button>
               {/* Upload new version — Design CREATE tick (server POST /drawings/:id/versions) */}
               {can("Design","create")&&<div style={{marginTop:10,paddingTop:8,borderTop:"1px solid "+T.b1}}>
                 <label style={S.labelLg}>{t("design.upload_revised_version")}</label>
@@ -688,9 +663,9 @@ function TabDesign({ project, isAdmin }) {
                   border:"1.5px dashed "+(acting["ver"+d.id]?T.blu:T.b2),borderRadius:6,
                   cursor:acting["ver"+d.id]?"not-allowed":"pointer",
                   background:acting["ver"+d.id]?T.bluL:T.surfaceB,transition:"all 0.2s"}}>
-                  <input type="file" accept=".pdf,.png,.jpg,.jpeg,.dwg,.dxf" style={{display:"none"}}
+                  <input type="file" multiple accept=".pdf,.png,.jpg,.jpeg,.dwg,.dxf" style={{display:"none"}}
                     disabled={!!acting["ver"+d.id]}
-                    onChange={e=>{ if(e.target.files[0]) handleNewVersion(d.id, e.target.files[0], null); }}/>
+                    onChange={e=>{ if(e.target.files&&e.target.files.length) handleNewVersion(d.id, e.target.files, null); e.target.value=""; }}/>
                   {acting["ver"+d.id] ? (
                     <div style={{width:"100%"}}>
                       <div style={{fontSize:11.5,color:T.blu,fontWeight:600,marginBottom:4}}>{t("design.uploading")}</div>
@@ -771,13 +746,13 @@ function TabDesign({ project, isAdmin }) {
             <div style={{fontSize:11,color:T.t4,marginTop:1}}>{d.category} · {d.current_version} · {d.uploaded_by_name||"—"} · {fmtDate(d.updated_at)}</div>
           </div>
           <div style={{display:"flex",gap:5,alignItems:"center",flexShrink:0}}>
-            {d.file_url&&<a href={d.file_url} target="_blank" rel="noreferrer"
-              style={{padding:"5px 10px",borderRadius:6,background:T.surface,border:`1px solid ${T.b1}`,color:T.blu,fontSize:11,fontWeight:600,textDecoration:"none",display:"inline-flex",alignItems:"center",gap:5,transition:"all .12s",fontFamily:"inherit"}}
+            {d.file_url&&<button type="button" onClick={()=>setReview(d)}
+              style={{padding:"5px 10px",borderRadius:6,background:T.surface,border:`1px solid ${T.b1}`,color:T.blu,fontSize:11,fontWeight:600,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:5,transition:"all .12s",fontFamily:"inherit"}}
               onMouseEnter={el=>{el.currentTarget.style.background=T.bluL;el.currentTarget.style.borderColor=T.bluM;}}
               onMouseLeave={el=>{el.currentTarget.style.background=T.surface;el.currentTarget.style.borderColor=T.b1;}}>
               <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-             {t("common.view_2")}
-            </a>}
+             {t("common.view_2")}{d.open_marks?" · "+d.open_marks:""}
+            </button>}
             {d.file_url&&<a href={d.file_url} download target="_blank" rel="noreferrer"
               style={{padding:"5px 10px",borderRadius:6,background:T.surface,border:`1px solid ${T.b1}`,color:T.t2,fontSize:11,fontWeight:600,textDecoration:"none",display:"inline-flex",alignItems:"center",gap:5,transition:"all .12s",fontFamily:"inherit"}}
               onMouseEnter={el=>{el.currentTarget.style.background=T.bluL;el.currentTarget.style.borderColor=T.bluM;el.currentTarget.style.color=T.blu;}}
@@ -917,6 +892,8 @@ function TabDesign({ project, isAdmin }) {
       {showUpload && <UploadModal />}
       {showRevQ   && <RevisionQueue />}
       {showVer    && <VersionModal drawing={showVer} />}
+      {review && <DrawingReview drawing={review} me={(currentUser()||{}).id} canDecide={canDecideDesign()}
+        onClose={()=>setReview(null)} onChanged={()=>loadDrawings()} />}
       <DesignRequestModal show={showReqForm} onClose={()=>setShowReqForm(false)} editReq={editReq} reqForm={reqForm} setReqForm={setReqForm} onSave={handleSaveRequest} saving={reqSaving} dbTitles={dbTitles} dbCats={dbCats} dbTypes={dbTypes}/>
 
       {/* Main tab switcher — segmented pill */}
