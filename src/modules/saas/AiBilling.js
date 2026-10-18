@@ -258,7 +258,7 @@ function ClientBilling({ clientId, defaults, onBack }) {
   const t = d && d.totals;
   const existing = d && d.invoices.find((i) => i.period_month === month && i.status !== "cancelled");
   const block = !d ? "" : !d.month_ended ? "Mahina abhi khatam nahi hua" : d.usd_inr_missing ? "USD→INR rate khaali hai"
-    : d.missing.length ? "Kuch model ka rate nahi" : existing ? "Is mahine ka invoice pehle se hai" : !d.calls ? "Is mahine koi AI call nahi" : "";
+    : d.missing.length ? "Kuch model ka rate nahi" : existing ? "Is mahine ka invoice pehle se hai" : !d.calls ? "Is mahine koi AI call nahi" : d.calls === d.legacy_calls ? "Sirf purani call — bill karne ko kuch nahi" : "";
 
   return (
     <div>
@@ -294,6 +294,9 @@ function ClientBilling({ clientId, defaults, onBack }) {
             <div style={{ width: 220 }}><SelectField value={month} onChange={setMonth} options={monthOptions()}/></div>
             <button onClick={load} title="Dobara" style={{ background: "none", border: "none", cursor: "pointer", display: "flex", color: T.t3 }}><IcRefresh size={14}/></button>
           </div>
+          {d.legacy_calls > 0 && <div style={{ fontSize: 12, color: T.t3, marginBottom: 8 }}>
+            {fmtNum(d.legacy_calls)} purani call (18 Oct 2026 ke central meter se pehle) me model darj nahi hua — unka asli rate pata nahi, isliye bill nahi hoti aur invoice ko rokti bhi nahi.
+          </div>}
           {d.missing.length > 0 && <div style={{ fontSize: 12.5, color: T.red, marginBottom: 8 }}>Rate nahi: {d.missing.map((m) => `${m.provider}/${m.model} (${m.calls} call)`).join(", ")} — inka ₹ neeche shaamil NAHI hai.</div>}
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
             {[["Sanchalan ki key — kharch", rs(t.platform_cost_inr), T.t3], ["Sanchalan ki key — bill", rs(t.platform_amount), T.amb], ["Apni key — service fee", rs(t.byok_amount), T.grn],
@@ -321,8 +324,8 @@ function ClientBilling({ clientId, defaults, onBack }) {
                     <td style={td}>{l.key_source === "company" ? <Badge text="Apni" color={T.grn}/> : <Badge text="Sanchalan" color={T.amb}/>}</td>
                     <td style={num}>{fmtNum(l.calls)}</td><td style={num}>{fmtNum(l.in_tokens)}</td><td style={num}>{fmtNum(l.out_tokens)}</td>
                     <td style={{ ...num, color: T.t3 }}>{fmtNum(l.cached_tokens)}</td>
-                    <td style={{ ...num, color: T.t3 }}>{l.missing_rate ? "rate nahi" : rs(l.cost_inr)}</td>
-                    <td style={{ ...num, fontWeight: 600 }}>{l.missing_rate ? "—" : rs(l.bill_inr)}</td>
+                    <td style={{ ...num, color: T.t3 }}>{l.legacy ? "purani" : l.missing_rate ? "rate nahi" : rs(l.cost_inr)}</td>
+                    <td style={{ ...num, fontWeight: 600, color: l.legacy ? T.t4 : undefined }}>{l.legacy ? "bill nahi" : l.missing_rate ? "—" : rs(l.bill_inr)}</td>
                   </tr>
                 ))}</tbody>
               </table>
