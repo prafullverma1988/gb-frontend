@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback, createContext, useContext } from "react";
+import { useState, useMemo, useEffect, useCallback, useRef, createContext, useContext } from "react";
 import PickSelect from "../components/PickSelect";
 import api from "../config/api";
 import SearchSelect from "../components/SearchSelect";
@@ -10,6 +10,9 @@ import { BackClose } from "../utils/backNav";
 import { loadPartyCategories, dropPartyCategoryCache, defaultCategories, partyCategoryKeys, catLabel,
   selectionToPayload, toRoleKey, PCAT_MAX } from "../utils/partyCategories";
 import { canAny } from "../utils/perms";
+import UnitCardEditor, { unitCardProblem, cleanCard } from "../components/UnitCardEditor";
+import { loadUnitCards } from "../components/grn/weigh";
+import { dropUnitCardCache } from "../components/UnitConv";
 
 // ─── ROLES & ACCESS (5 Oct 2026) ─────────────────────────────────────
 // Pehle is poore module me ek bhi tick check nahi tha — Library ka sirf View
@@ -841,6 +844,27 @@ function MaterialMasterSection() {
   const emptyForm = { name: "", code: "", category: "", unit: "Kg", hsnCode: "", gstRate: 18, baseRate: 0, lastRate: 0, supplier: "", minStock: 0 };
   const [form, setForm] = useState(emptyForm);
   const upd = (k, v) => setForm(p => ({ ...p, [k]: v }));
+  // ── Unit card (19 Oct 2026) — naam se: saved card + sujhaav (TMT / gitti / cement) ──
+  const [card, setCard] = useState({ stock_unit: "", puls: [] });
+  const [cardSug, setCardSug] = useState(null);
+  const [cardDirty, setCardDirty] = useState(false);
+  const cardLoadedFor = useRef("");
+  useEffect(() => {
+    if (!showModal) return undefined;
+    const nm = String(form.name || "").trim();
+    if (!nm) { setCardSug(null); return undefined; }
+    const tm = setTimeout(async () => {
+      const r = await loadUnitCards([nm]);
+      const e = r[nm.toLowerCase()] || {};
+      setCardSug(e.suggested || null);
+      if (e.card && !cardDirty && cardLoadedFor.current !== nm.toLowerCase()) {
+        cardLoadedFor.current = nm.toLowerCase();
+        setCard({ stock_unit: e.card.stock_unit || "", puls: (e.card.puls || []).map((p) => ({ ...p, n: p.n == null ? "" : p.n })) });
+      }
+    }, 400);
+    return () => clearTimeout(tm);
+  }, [showModal, form.name, cardDirty]);
+  const resetCard = () => { setCard({ stock_unit: "", puls: [] }); setCardSug(null); setCardDirty(false); cardLoadedFor.current = ""; };
 
   // Use real categories from backend, fallback to empty
   const catNames = matCats.map(c => c.name);
@@ -880,11 +904,13 @@ function MaterialMasterSection() {
 
   const openCreate = () => {
     setEditing(null);
+    resetCard();
     setForm({ ...emptyForm, category: catNames[0] || "", code: "MAT-" + String(materials.length + 1).padStart(3, "0") });
     setShowModal(true);
   };
   const openEdit = (m) => {
     setEditing(m);
+    resetCard();
     setForm({
       name: m.name || "", code: m.code || "", category: m.category_name || m.category || "",
       unit: m.unit || "Kg", hsnCode: m.hsn_code || m.hsnCode || "",
@@ -898,6 +924,8 @@ function MaterialMasterSection() {
   };
   const save = async () => {
     if (!form.name.trim()) return alert(t("master_library.material_name_required"));
+    const cardErr = unitCardProblem(card);
+    if (cardErr) return alert(cardErr);
     setSaving(true);
     // Find category_id from matCats
     const catObj = matCats.find(c => c.name === form.category);
@@ -914,6 +942,13 @@ function MaterialMasterSection() {
       min_stock: form.minStock,
     };
     const res = await apiSave(payload, editing?.id);
+    // Unit card alag save (naam se judta hai). Naam badla aur card hai to naye naam par bhi.
+    const renamed = editing && String(editing.name || "").trim().toLowerCase() !== form.name.trim().toLowerCase();
+    if (res.success && (cardDirty || (renamed && card.puls.length))) {
+      const r2 = await api.put("/library/unit-cards", { material_name: form.name.trim(), ...cleanCard(card) });
+      if (!r2.success) { setSaving(false); alert(r2.message || t("unitcard.save_failed")); return; }
+      dropUnitCardCache();
+    }
     setSaving(false);
     if (res.success) { setShowModal(false); }
     else alert(res.message || "Save failed");
@@ -996,6 +1031,10 @@ function MaterialMasterSection() {
         <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 14 }}>
           <FormField label={t("master_library.preferred_supplier")} value={form.supplier} onChange={v => upd("supplier", v)} placeholder={t("common.supplier_name")} half />
           <FormField label={t("master_library.minimum_stock_level")} value={form.minStock || ""} onChange={v => upd("minStock", parseInt(v) || 0)} type="number" half />
+        </div>
+        <div style={{ marginBottom: 14 }}>
+          <UnitCardEditor value={card} onChange={(c) => { setCard(c); setCardDirty(true); }} suggested={cardSug}
+            baseUnit={form.unit} unitList={baseUnitOpts.map((o) => o.value)} />
         </div>
         <ModalFooter onClose={() => setShowModal(false)} onSave={save} saveLabel={saving ? "Saving..." : editing ? "Update Material" : "Add Material"} />
       </Modal>

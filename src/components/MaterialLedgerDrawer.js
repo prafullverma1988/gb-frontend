@@ -22,6 +22,7 @@ import { BackClose } from "../utils/backNav";
 import { canEntry, currentUser } from "../utils/perms";
 import { loadLibUnits, unitOptions, sameStockUnit, kgPerUnit } from "./grn/weigh";
 import PickSelect from "./PickSelect";
+import { UsedUnitRow, stockQtyOf, factorOf } from "./UnitConv";
 
 const T = {
   surface: "#FFFFFF", surfaceB: "#F8F9FB",
@@ -58,6 +59,16 @@ export default function MaterialLedgerDrawer({ material, projectId, onClose, onC
   const [saving, setSaving] = useState(false);
   const [err, setErr]       = useState("");
   const [unitFix, setUnitFix] = useState(false);   // "Stock ki unit theek karo" (Admin, 13 Oct 2026)
+  // Mark used me card ki doosri unit (45 Mtr, 2 Bundle) — 19 Oct 2026.
+  const [usedSt, setUsedSt] = useState(null);
+  useEffect(() => {
+    if (!markUsed || !material || !projectId) return undefined;
+    let alive = true;
+    api.get(`/tasks/project/${projectId}/stock-units?names=` + encodeURIComponent(material.material_name))
+      .then(r => { if (alive && r?.success) setUsedSt((r.data || {})[String(material.material_name || "").trim().toLowerCase()] || null); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [markUsed, material, projectId]);
   const isAdmin = ["admin", "super_admin"].includes(String(currentUser().role || "").toLowerCase());
 
   // Reset on material change
@@ -146,12 +157,16 @@ export default function MaterialLedgerDrawer({ material, projectId, onClose, onC
     if (saving) return;
     const q = parseFloat(uForm.qty);
     if (!q || q <= 0) { setErr(t("material_ledger.qty_daalo")); return; }
-    if (q > Number(material.balance)) { setErr(t("material_ledger.balance_sirf_balance_unit_hai", { balance: material.balance, unit: material.unit })); return; }
+    const uu = uForm.unit || material.unit;
+    const sq = stockQtyOf(usedSt, uu, q, uForm.stock_factor);
+    if (sq == null) { setErr(t("unitcard.need_number", { unit: uu })); return; }
+    if (sq > Number(material.balance)) { setErr(t("material_ledger.balance_sirf_balance_unit_hai", { balance: material.balance, unit: material.unit })); return; }
     setSaving(true); setErr("");
     try {
+      const sf = factorOf(usedSt, uu, q, uForm.stock_factor);
       const res = await api.post(`/tasks/project/${projectId}/mark-used`, {
         material_name: material.material_name,
-        used_qty: q, unit: material.unit,
+        used_qty: q, unit: uu, ...(sf ? { stock_factor: sf } : {}),
         remark: uForm.remark || null, used_date: uForm.used_date,
       });
       if (res?.success === false) { setErr(res.message || "Failed"); setSaving(false); return; }
@@ -367,6 +382,9 @@ export default function MaterialLedgerDrawer({ material, projectId, onClose, onC
               </div>
               <input value={uForm.remark} onChange={e => setUForm(p => ({ ...p, remark: e.target.value }))}
                 placeholder={t("common.remark_optional")} style={{ ...inp, marginBottom: 8 }}/>
+              <UsedUnitRow st={usedSt} unit={uForm.unit || material.unit} qty={uForm.qty} factor={uForm.stock_factor}
+                onUnit={u => setUForm(p => ({ ...p, unit: u, stock_factor: "" }))}
+                onFactor={v => setUForm(p => ({ ...p, stock_factor: v }))}/>
             </div>
           )}
           <div style={{ padding: "11px 14px", display: "flex", gap: 8 }}>

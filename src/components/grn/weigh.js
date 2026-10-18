@@ -85,10 +85,12 @@ const UNIT_ALIAS = {
   mtr: ["mtr", "mtrs", "meter", "meters", "metre", "metres"],
   rft: ["rft", "runningft", "runningfeet", "runningfoot"],
   pcs: ["pc", "pcs", "piece", "pieces"],
+  // Gitti / GSB ki gadi — RATNA "GD" likhta hai (19 Oct 2026, unit card).
+  gadi: ["gadi", "gaadi", "gaddi", "gd"],
 };
 const ALIAS_OF = {};
 for (const [c, list] of Object.entries(UNIT_ALIAS)) for (const a of list) ALIAS_OF[a] = c;
-function canonUnit(u) {
+export function canonUnit(u) {
   const k = String(u || "").trim().toLowerCase().replace(/\./g, "").replace(/\s+/g, "");
   if (!k) return "";
   if (ALIAS_OF[k]) return ALIAS_OF[k];
@@ -110,9 +112,71 @@ export async function loadStockUnits(dest) {
   } catch (_) { return {}; }
 }
 
+// ── Material ka unit card (19 Oct 2026) — server utils/unitCard.js jaisa ──
+// card.puls = [{ a, n, b, kind }] = "1 a = n b". pakka (Nos = 12 Mtr,
+// Mtr = 0.889 kg) apne aap; lot (1 Bundle = __ Nos, 1 Gadi = __ CFT) ka
+// number user deta hai — card / aakhri lot ka number sirf pehle se bhara.
+function cardEdges(card, extra) {
+  const edges = [];
+  const puls = (card && card.puls) || [];
+  for (const p of puls) {
+    const a = canonUnit(p.a), b = canonUnit(p.b), n = Number(p.n) > 0 ? Number(p.n) : null;
+    edges.push({ x: a, y: b, m: n, kind: p.kind }, { x: b, y: a, m: n ? 1 / n : null, kind: p.kind });
+  }
+  const w = {};
+  for (const u of [...(extra || []), ...puls.flatMap((p) => [p.a, p.b])]) { const k = kgPerUnit(u); if (k) w[canonUnit(u)] = k; }
+  for (const a of Object.keys(w)) for (const b of Object.keys(w)) if (a !== b) edges.push({ x: a, y: b, m: w[a] / w[b], kind: "pakka" });
+  return edges;
+}
+function cardSearch(edges, from, to, allow) {
+  const seen = new Map([[from, { m: 1, kind: "pakka" }]]);
+  const queue = [from];
+  while (queue.length) {
+    const cur = queue.shift(), st = seen.get(cur);
+    if (cur === to) return st;
+    for (const e of edges) {
+      if (e.x !== cur || seen.has(e.y) || !allow(e)) continue;
+      seen.set(e.y, { m: st.m == null || e.m == null ? null : st.m * e.m, kind: st.kind === "lot" || e.kind === "lot" ? "lot" : "pakka" });
+      queue.push(e.y);
+    }
+  }
+  return null;
+}
+// { mult, kind } — mult null = raasta hai par number lot par tay hoga; null = raasta hi nahi.
+export function pathFactor(card, from, to) {
+  const a = canonUnit(from), b = canonUnit(to);
+  if (!a || !b) return null;
+  if (a === b) return { mult: 1, kind: "pakka" };
+  const edges = cardEdges(card, [from, to]);
+  const r6 = (n) => Math.round(n * 1e6) / 1e6;
+  const pk = cardSearch(edges, a, b, (e) => e.kind === "pakka" && e.m != null);
+  if (pk) return { mult: r6(pk.m), kind: "pakka" };
+  const kn = cardSearch(edges, a, b, (e) => e.m != null);
+  if (kn) return { mult: r6(kn.m), kind: "lot" };
+  return cardSearch(edges, a, b, () => true) ? { mult: null, kind: "lot" } : null;
+}
+// Card ki saari unit — stock wali pehle (dropdown ke liye).
+export function cardUnits(card, stockUnit) {
+  const out = [];
+  const add = (u) => { const v = String(u || "").trim(); if (v && !out.some((x) => sameStockUnit(x, v))) out.push(v); };
+  add(stockUnit);
+  for (const p of (card && card.puls) || []) { add(p.a); add(p.b); }
+  return out;
+}
+// Library ka card (aur bina card wale naam ka sujhaav): { key: { card, suggested } }.
+export async function loadUnitCards(names) {
+  const list = [...new Set((names || []).map((n) => String(n || "").trim()).filter(Boolean))];
+  if (!list.length) return {};
+  try {
+    const r = await api.get("/library/unit-cards?names=" + encodeURIComponent(list.join(",")));
+    return r && r.success && r.data && typeof r.data === "object" ? r.data : {};
+  } catch (_) { return {}; }
+}
+
 // Line (unit, qty, factor) vs stock — null = koi sawaal nahi (stock nahi, ya
-// wahi unit). { weight } = apne aap badlegi; { factor } = user ka bhara;
-// { need } = factor chahiye, warna save par rok.
+// wahi unit). { weight } = apne aap badlegi; { card } = card ke pakka pul se
+// apne aap; { factor } = user ka bhara; { need, suggest } = factor chahiye
+// (suggest = card / aakhri lot ka number), warna save par rok.
 export function stockConv(st, unit, qty, factor) {
   const stock = String((st && st.unit) || "").trim();
   const u = String(unit || "").trim();
@@ -122,7 +186,12 @@ export function stockConv(st, unit, qty, factor) {
   const r3 = (n) => Math.round(n * 1000) / 1000;
   if (ka && kb) return { stock, weight: true, qty: r3((q * ka) / kb) };
   const f = parseFloat(factor);
-  return f > 0 ? { stock, factor: f, qty: r3(q * f) } : { stock, need: true };
+  if (f > 0) return { stock, factor: f, qty: r3(q * f) };
+  const pf = st && st.card ? pathFactor(st.card, u, stock) : null;
+  if (pf && pf.kind === "pakka" && pf.mult > 0) return { stock, card: true, mult: pf.mult, qty: r3(q * pf.mult) };
+  const lotKey = st && st.lots ? Object.keys(st.lots).find((k) => sameStockUnit(k, u)) : null;
+  const suggest = lotKey ? Number(st.lots[lotKey]) : (pf && pf.mult > 0 ? pf.mult : null);
+  return { stock, need: true, suggest: suggest > 0 ? suggest : null, lot: !!pf };
 }
 
 export const fmtKg = (n) =>

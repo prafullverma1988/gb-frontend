@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import PickSelect from "../../components/PickSelect";
+import { UnitPickOrLock, StockConvLine, cardUnitOptions, needsFactor, factorOf } from "../../components/UnitConv";
 import api from "../../config/api";
 import apiCache from "../../utils/apiCache";
 import SearchSelect from "../../components/SearchSelect";
@@ -4073,7 +4074,9 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile,canDele
   const stockOfName=(n)=>stockUnitsOf(n)[0]||null;
   // Save hone wali unit: stock me ho to chuni hui tabhi jab wo stock ki units me
   // ho (purana mila-jula data), warna stock wali; stock me nahi to jo chuni.
-  const usedUnitOf=(f)=>{ const ok=stockUnitsOf(f.material_name); if(!ok.length) return f.unit; return ok.some(u=>ptSameStockUnit(u,f.unit))?f.unit:ok[0]; };
+  // Unit card (19 Oct 2026): card ki unit (Mtr, Bundle) bhi chalti hai — server pul se stock me badalta.
+  const stOfName=(n)=>stockU[ptStockKey(n)]||null;
+  const usedUnitOf=(f)=>{ const ok=stockUnitsOf(f.material_name); if(!ok.length) return f.unit; if(cardUnitOptions(stOfName(f.material_name)).some(u=>ptSameStockUnit(u,f.unit))) return f.unit; return ok.some(u=>ptSameStockUnit(u,f.unit))?f.unit:ok[0]; };
   const PRIORITIES=["Low","Medium","High","Critical"];
   const ISSUE_STATUS=["Open","In Progress","Resolved","Closed"];
   const priC={"Low":{c:"#64748B",bg:"#F1F5F9"},"Medium":{c:"#D97706",bg:"#FEF3C7"},"High":{c:"#DC2626",bg:"#FEE2E2"},"Critical":{c:"#7C3AED",bg:"#EDE9FE"}};
@@ -4469,9 +4472,10 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile,canDele
                           {t("common.unit")}{inStock && <span style={{marginLeft:5,fontSize:9,color:"#9CA3AF",textTransform:"none",fontWeight:500}}>· {t("unit.stock_unit")}</span>}
                         </label>
                         {inStock ? (
-                          <div title={t("unit.stock_unit")} style={{width:"100%",padding:"9px 10px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:13,color:"#374151",background:"#F8F9FB",fontFamily:"inherit",fontWeight:600,display:"flex",alignItems:"center",gap:6,height:39,boxSizing:"border-box"}}>
-                            <span>🔒</span>{usedUnitOf(usedLogForm)}
-                          </div>
+                          <UnitPickOrLock st={stOfName(matName)} unit={usedUnitOf(usedLogForm)}
+                            onChange={u=>setUsedLogForm(f=>({...f,unit:u,stock_factor:""}))}
+                            style={{width:"100%",padding:"9px 10px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",fontFamily:"inherit"}}
+                            lockStyle={{width:"100%",padding:"9px 10px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:13,color:"#374151",background:"#F8F9FB",fontFamily:"inherit",fontWeight:600,display:"flex",alignItems:"center",gap:6,height:39,boxSizing:"border-box"}}/>
                         ) : (
                           <PickSelect value={usedLogForm.unit} onChange={e=>setUsedLogForm(f=>({...f,unit:e.target.value}))}
                             style={{width:"100%",padding:"9px 10px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",fontFamily:"inherit"}}>
@@ -4488,6 +4492,11 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile,canDele
                     style={{width:"100%",padding:"9px 10px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
                 </div>
               </div>
+              {/* Unit card: "45 Mtr = 3.75 Nos", ya "1 Bundle = [5] Nos" (19 Oct 2026) */}
+              <div style={{marginTop:-4,marginBottom:8}}>
+                <StockConvLine st={stOfName(usedLogForm.material_name)} unit={usedUnitOf(usedLogForm)} qty={usedLogForm.used_qty}
+                  factor={usedLogForm.stock_factor} onFactor={v=>setUsedLogForm(f=>({...f,stock_factor:v}))}/>
+              </div>
               <input value={usedLogForm.remark} onChange={e=>setUsedLogForm(f=>({...f,remark:e.target.value}))} placeholder={t("common.remark_optional")}
                 style={{width:"100%",padding:"9px 10px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"inherit",marginBottom:10}}/>
               {/* Material Zimmedari — kis store issue (zimmedar) se laga; pehli khuli line default */}
@@ -4495,10 +4504,13 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile,canDele
                 <CustodyLinePick projectId={task.project_id||projectId} material={usedLogForm.material_name}
                   value={usedLogForm.custody_line_id} onChange={v=>setUsedLogForm(f=>({...f,custody_line_id:v}))}/>
               </div>
-              <button disabled={usedLogSaving||!usedLogForm.material_name||!usedLogForm.used_qty} onClick={async()=>{
+              <button disabled={usedLogSaving||!usedLogForm.material_name||!usedLogForm.used_qty||needsFactor(stOfName(usedLogForm.material_name),usedUnitOf(usedLogForm),usedLogForm.used_qty,usedLogForm.stock_factor)} onClick={async()=>{
                 if(!usedLogForm.material_name||!usedLogForm.used_qty) return;
                 setUsedLogSaving(true);
-                const res=await api.post("/tasks/"+task.id+"/used-log",{...usedLogForm,unit:usedUnitOf(usedLogForm)});
+                const uu=usedUnitOf(usedLogForm);
+                const sf=factorOf(stOfName(usedLogForm.material_name),uu,usedLogForm.used_qty,usedLogForm.stock_factor);
+                const {stock_factor:_sf,...uf}=usedLogForm;
+                const res=await api.post("/tasks/"+task.id+"/used-log",{...uf,unit:uu,...(sf?{stock_factor:sf}:{})});
                 if(res.success){
                   setUsedLog(p=>[res.data,...p]);
                   setUsedLogForm({material_name:"",used_qty:"",unit:"Nos",remark:"",used_date:todayISO()});

@@ -18,6 +18,7 @@ import { t } from "../../i18n";
 import { cld } from "../../utils/cloudinary";
 import { can, canAny, canEntry } from "../../utils/perms";
 import { isoDate, todayISO } from "../../utils/today";
+import { UsedUnitRow, stockQtyOf, factorOf } from "../../components/UnitConv";
 
 // Dual-unit billing toggle ab components/grn/DualUnitToggle.js me hai —
 // site aur godown dono ke GRN me wahi switch chalta hai.
@@ -237,6 +238,17 @@ function TabMaterial({ project }) {
   // bani to receive par stock alag judega, isliye peela hint (D.4). MR form
   // khulte hi ek baar.
   const [stockUnits, setStockUnits] = useState({});
+  // Mark used ke liye stock ki unit + unit card + aakhri lot (19 Oct 2026) —
+  // "45 Mtr" / "2 Bundle" likh sako, server pul se stock me badalta.
+  const [usedSt, setUsedSt] = useState({});
+  useEffect(() => {
+    if (!projectId) return undefined;
+    let alive = true;
+    api.get("/tasks/project/" + projectId + "/stock-units")
+      .then(r => { if (alive && r?.success && r.data && typeof r.data === "object") setUsedSt(r.data); }).catch(() => {});
+    return () => { alive = false; };
+  }, [projectId]);
+  const usedStOf = (n) => usedSt[String(n || "").trim().toLowerCase()] || null;
   useEffect(() => {
     if (!showModal || !project?.id) return;
     let alive = true;
@@ -1461,13 +1473,18 @@ function TabMaterial({ project }) {
                               </div>
                               <button onClick={async()=>{
                                 if(!uForm.qty||parseFloat(uForm.qty)<=0) return alert(t("material.qty_required"));
-                                if(parseFloat(uForm.qty)>mat.balance) return alert("Qty exceeds balance ("+mat.balance+")");
+                                const uu=uForm.unit||mat.unit, st=usedStOf(mat.material_name);
+                                const sq=stockQtyOf(st,uu,uForm.qty,uForm.stock_factor);
+                                if(sq==null) return alert(t("unitcard.need_number",{unit:uu}));
+                                if(sq>mat.balance) return alert("Qty exceeds balance ("+mat.balance+")");
                                 setInvUsedSaving(mat.material_name);
                                 try{
+                                  const sf=factorOf(st,uu,uForm.qty,uForm.stock_factor);
                                   const res=await api.post("/tasks/project/"+projectId+"/mark-used",{
                                     material_name:mat.material_name,
                                     used_qty:parseFloat(uForm.qty),
-                                    unit:mat.unit,
+                                    unit:uu,
+                                    ...(sf?{stock_factor:sf}:{}),
                                     remark:uForm.remark||null,
                                     used_date:uForm.used_date,
                                     custody_line_id:uForm.custody_line_id,
@@ -1484,6 +1501,9 @@ function TabMaterial({ project }) {
                                 {invUsedSaving===mat.material_name?t("common.saving"):t("material.save_used")}
                               </button>
                             </div>
+                            <UsedUnitRow st={usedStOf(mat.material_name)} unit={uForm.unit||mat.unit} qty={uForm.qty} factor={uForm.stock_factor}
+                              onUnit={u=>setInvUsedForm(p=>({...p,[mat.material_name]:{...uForm,unit:u,stock_factor:""}}))}
+                              onFactor={v=>setInvUsedForm(p=>({...p,[mat.material_name]:{...uForm,stock_factor:v}}))}/>
                             {/* Material Zimmedari — kis store issue se laga (14 Oct 2026) */}
                             <CustodyLinePick projectId={projectId} material={mat.material_name} value={uForm.custody_line_id}
                               onChange={v=>setInvUsedForm(p=>({...p,[mat.material_name]:{...(p[mat.material_name]||{}),custody_line_id:v}}))}/>
@@ -1698,15 +1718,25 @@ function TabMaterial({ project }) {
                             onChange={e=>setInvUsedForm(p=>({...p,[item.material_name]:{...uForm,remark:e.target.value}}))}
                             placeholder={t("common.remark_optional")}
                             style={{width:"100%",padding:"6px 8px",borderRadius:5,border:"1.5px solid "+T.grnM,fontSize:11,outline:"none",boxSizing:"border-box",fontFamily:"inherit",marginBottom:7}}/>
+                          <div style={{marginTop:-4,marginBottom:7}}>
+                            <UsedUnitRow st={usedStOf(item.material_name)} unit={uForm.unit||item.unit} qty={uForm.qty} factor={uForm.stock_factor}
+                              onUnit={u=>setInvUsedForm(p=>({...p,[item.material_name]:{...uForm,unit:u,stock_factor:""}}))}
+                              onFactor={v=>setInvUsedForm(p=>({...p,[item.material_name]:{...uForm,stock_factor:v}}))}/>
+                          </div>
                           <button onClick={async()=>{
                             if(!uForm.qty||parseFloat(uForm.qty)<=0) return alert(t("material.qty_required"));
-                            if(parseFloat(uForm.qty)>bal) return alert("Qty exceeds balance ("+bal+")");
+                            const uu=uForm.unit||item.unit, st=usedStOf(item.material_name);
+                            const sq=stockQtyOf(st,uu,uForm.qty,uForm.stock_factor);
+                            if(sq==null) return alert(t("unitcard.need_number",{unit:uu}));
+                            if(sq>bal) return alert("Qty exceeds balance ("+bal+")");
                             setInvUsedSaving(item.material_name);
                             try{
+                              const sf=factorOf(st,uu,uForm.qty,uForm.stock_factor);
                               const res=await api.post("/tasks/project/"+projectId+"/mark-used",{
                                 material_name:item.material_name,
                                 used_qty:parseFloat(uForm.qty),
-                                unit:item.unit,
+                                unit:uu,
+                                ...(sf?{stock_factor:sf}:{}),
                                 remark:uForm.remark||null,
                                 used_date:uForm.used_date,
                               });

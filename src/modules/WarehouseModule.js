@@ -18,6 +18,7 @@ import { WarehouseGintiTab, DisposalModal, DisposalsPanel } from "./WarehouseGin
 import { ConversionTab } from "./WarehouseConversion";
 import { JobWorkTab } from "./WarehouseJobWork";
 import { can, canAny, canEntry } from "../utils/perms";
+import { UnitPickOrLock, StockConvLine, cardUnitOptions, useUnitCards, stockQtyOf, factorOf, needsFactor } from "../components/UnitConv";
 
 // ── ICONS ──────────────────────────────────────────────────────────────
 const Ic=({d,size=18,color="currentColor",sw=1.8,fill="none"})=>(
@@ -419,12 +420,20 @@ function MaterialFormModal({material,library=[],onClose,onSaved}){
 }
 
 // ── LINE-ITEM ROW (used by GRN, Issue, MR, Transfer modals) ───────
-function LineItemRow({row,idx,stock,onChange,onRemove,mode,canRemove,lockMaterial}){
+function LineItemRow({row,idx,stock,onChange,onRemove,mode,canRemove,lockMaterial,cards}){
   // SearchSelect returns string keys; stock may have number ids — compare loosely
   const findStock=(id)=>stock.find(m=>String(m.id)===String(id));
   const matSel=findStock(row.material_id);
   const avail=matSel?Number(matSel.qty)||0:0;
-  const overStock=mode==="issue"&&row.qty&&Number(row.qty)>avail;
+  // Unit card (19 Oct 2026): stock wali row par card ki doosri unit (2 Bundle,
+  // 24 Mtr) — server pul se stock ki unit me badalta. MR wali (lockMaterial)
+  // line par nahi — wo raasta unit nahi samajhta.
+  const stockUnitOf=row._stockUnit||matSel?.unit||null;
+  const ucard=cards?cards[String(row.name||"").trim().toLowerCase()]:null;
+  const ust=stockUnitOf?{unit:stockUnitOf,card:ucard}:null;
+  const unitFree=!lockMaterial&&cardUnitOptions(ust).length>1;
+  const sq=ust?stockQtyOf(ust,row.unit||stockUnitOf,row.qty,row.stock_factor):Number(row.qty)||0;
+  const overStock=mode==="issue"&&row.qty&&sq!=null&&sq>avail;
   const stockOpts=stock.map(m=>({id:m.id,name:`${m.name} (${m.qty} ${m.unit} avail)`}));
 
   // Pick material — auto-fills unit + rate
@@ -438,7 +447,7 @@ function LineItemRow({row,idx,stock,onChange,onRemove,mode,canRemove,lockMateria
     // _fromStock: row stock se chuni gayi — unit wahi stock wali, band. Pehle
     // lock material_id par tha; project se aayi rows (material_id null) ki unit
     // badal jaati thi aur server ko doosri unit me issue/transfer jaata (10 Oct 2026, D).
-    onChange(idx,{material_id:matId,name:m?.name||v,unit:m?.unit||row.unit||"Nos",rate:m?.rate||row.rate||0,_fromStock:!!m});
+    onChange(idx,{material_id:matId,name:m?.name||v,unit:m?.unit||row.unit||"Nos",rate:m?.rate||row.rate||0,_fromStock:!!m,_stockUnit:m?.unit||null,stock_factor:""});
   };
 
   // Column templates per mode
@@ -448,6 +457,7 @@ function LineItemRow({row,idx,stock,onChange,onRemove,mode,canRemove,lockMateria
              :                     "2fr 60px 1fr 30px";
 
   return (
+    <>
     <div style={{display:"grid",gridTemplateColumns:cols,gap:6,alignItems:"center",marginBottom:6}}>
       {lockMaterial?(
         // MR-driven flow: material is decided by the parent MR — no change allowed.
@@ -467,9 +477,14 @@ function LineItemRow({row,idx,stock,onChange,onRemove,mode,canRemove,lockMateria
         <SearchSelect compact value={row.material_id||row.name} options={stockOpts}
           onChange={onPickMaterial} placeholder={t("warehouse.material_name_pick_or_type")}/>
       )}
-      <UnitLock unit={row.unit||"Nos"} compact
-        locked={!!(row._fromStock || row.material_id || row._unitLocked || lockMaterial)}
-        onChange={u=>onChange(idx,{unit:u})}/>
+      {unitFree?(
+        <UnitPickOrLock st={ust} unit={row.unit||stockUnitOf} onChange={u=>onChange(idx,{unit:u,stock_factor:""})}
+          style={{height:32,padding:"0 6px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:11.5,outline:"none",fontFamily:"inherit"}}/>
+      ):(
+        <UnitLock unit={row.unit||"Nos"} compact
+          locked={!!(row._fromStock || row.material_id || row._unitLocked || lockMaterial)}
+          onChange={u=>onChange(idx,{unit:u})}/>
+      )}
       {mode==="grn"&&(
         <input type="number" value={row.ordered_qty||""} onChange={e=>onChange(idx,{ordered_qty:e.target.value})} placeholder={t("warehouse.ord")}
           style={{height:32,padding:"0 8px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:11.5,outline:"none",fontFamily:"inherit"}}/>
@@ -495,8 +510,25 @@ function LineItemRow({row,idx,stock,onChange,onRemove,mode,canRemove,lockMateria
         </button>
       ):<span/>}
     </div>
+    {unitFree&&(
+      <div style={{margin:"-3px 0 8px 4px"}}>
+        <StockConvLine st={ust} unit={row.unit||stockUnitOf} qty={row.qty} factor={row.stock_factor}
+          onFactor={v=>onChange(idx,{stock_factor:v})} compact/>
+      </div>
+    )}
+    </>
   );
 }
+// Unit card ki line ka payload — stock wali unit hi ho to kuch nahi (purana jaisa).
+const unitPayloadOf=(it,cards)=>{
+  const su=it._stockUnit;
+  if(!su||!it.unit||it.unit===su) return {};
+  const st={unit:su,card:(cards||{})[String(it.name||"").trim().toLowerCase()]||null};
+  const sf=factorOf(st,it.unit,it.qty,it.stock_factor);
+  return {unit:it.unit,...(sf?{stock_factor:sf}:{})};
+};
+const unitMissingIn=(list,cards)=>list.find(it=>it._stockUnit&&it.unit&&it.unit!==it._stockUnit&&Number(it.qty)>0
+  &&needsFactor({unit:it._stockUnit,card:(cards||{})[String(it.name||"").trim().toLowerCase()]||null},it.unit,it.qty,it.stock_factor));
 
 // ── NEW GRN MODAL ─────────────────────────────────────────────────
 // New GRN modal — TABBED:
@@ -521,6 +553,7 @@ function NewGRNModal({stock,projects,users,library,warehouseId,warehouseName,onC
   const [retInv,setRetInv]=useState([]);
   const [retInvLoading,setRetInvLoading]=useState(false);
   const [retItems,setRetItems]=useState([{lib_id:null,material_id:null,name:"",unit:"",qty:"",rate:""}]);
+  const retCards=useUnitCards(retItems.map(it=>it.name));   // unit card (19 Oct 2026)
   const [retSaving,setRetSaving]=useState(false);
 
   // Load source project's available inventory when picked
@@ -566,13 +599,17 @@ function NewGRNModal({stock,projects,users,library,warehouseId,warehouseName,onC
   const overstockRow=retItems.find(it=>{
     if(!it.qty)return false;
     const inv=retInv.find(s=>String(s.id)===String(it.material_id)||s.name===it.name);
-    return inv && Number(it.qty)>Number(inv.qty);
+    // Card ki doosri unit (24 Mtr) — stock ki unit me badal kar milao (19 Oct 2026).
+    const sq=inv&&it._stockUnit?stockQtyOf({unit:it._stockUnit,card:retCards[String(it.name||"").trim().toLowerCase()]||null},it.unit||it._stockUnit,it.qty,it.stock_factor):Number(it.qty);
+    return inv && sq!=null && sq>Number(inv.qty);
   });
   const retValid=retF.from_project_id && !overstockRow && retItems.some(it=>(it.name||it.material_id)&&Number(it.qty)>0);
   const retTotal=retItems.reduce((s,it)=>s+Number(it.qty||0)*Number(it.rate||0),0);
   const fromName=projects.find(p=>p.id===retF.from_project_id)?.name;
 
   const submitReturn=async()=>{
+    const um=unitMissingIn(retItems,retCards);
+    if(um){ alert(t("unitcard.need_number",{unit:um.unit})); return; }
     setRetSaving(true);
     const cleanItems=retItems.filter(it=>(it.name||it.material_id)&&Number(it.qty)>0).map(it=>({
       material_id:it.material_id||null,
@@ -580,6 +617,7 @@ function NewGRNModal({stock,projects,users,library,warehouseId,warehouseName,onC
       unit:it.unit||"Nos",
       qty:Number(it.qty),
       rate:Number(it.rate)||0,
+      ...(unitPayloadOf(it,retCards).stock_factor?{stock_factor:unitPayloadOf(it,retCards).stock_factor}:{}),
     }));
     const res=await api.post("/warehouse/returns",{
       date:retF.date,
@@ -674,7 +712,7 @@ function NewGRNModal({stock,projects,users,library,warehouseId,warehouseName,onC
                 <span>{t("warehouse.material_avail")}</span><span>{t("common.unit")}</span><span>{t("common.qty")}</span><span>{t("warehouse.rate_u")}</span><span style={{textAlign:"right"}}>{t("fuel.value")}</span><span/>
               </div>
               {retItems.map((row,i)=>(
-                <LineItemRow key={i} row={row} idx={i} stock={retInv} onChange={updRetItem} onRemove={remRetItem} mode="transfer" canRemove={retItems.length>1}/>
+                <LineItemRow key={i} row={row} idx={i} stock={retInv} onChange={updRetItem} onRemove={remRetItem} mode="transfer" canRemove={retItems.length>1} cards={retCards}/>
               ))}
               <button onClick={addRetItem}
                 style={{marginTop:6,padding:"7px 12px",borderRadius:6,border:`1.5px dashed ${T.b2}`,background:"none",color:T.t3,fontSize:11.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:5,fontFamily:"inherit"}}>
@@ -776,6 +814,7 @@ function NewIssueModal({stock,projects,users,onClose,onSaved,prefill,fromMR}){
     })
     :[{material_id:null,name:"",unit:"Nos",qty:"",rate:"",selected_batches:null,_rateDirty:false}];
   const [items,setItems]=useState(initial);
+  const ucards=useUnitCards(items.map(it=>it.name));   // unit card (19 Oct 2026)
   const [saving,setSaving]=useState(false);
   const chPol=useChallanPol();
   const [chPhotos,setChPhotos]=useState([]);
@@ -930,11 +969,14 @@ function NewIssueModal({stock,projects,users,onClose,onSaved,prefill,fromMR}){
   const submit=async()=>{
     if(challanUploading()){ alert(t("warehouse.challan_photo_uploading")); return; }
     if(chPol.mode==="required"&&chPhotos.length===0){ alert(t("warehouse.challan_photo_required")); return; }
+    const um=!fromMR&&unitMissingIn(items,ucards);
+    if(um){ alert(t("unitcard.need_number",{unit:um.unit})); return; }
     setSaving(true);
     try{
       const cleanItems=items.filter(it=>it.material_id&&Number(it.qty)>0).map(it=>({
         material_id:it.material_id,
         qty:Number(it.qty),
+        ...(fromMR?{}:unitPayloadOf(it,ucards)),
         rate:Number(it.rate)||0,
         // selected_batches: if user manually picked specific batches via
         // the batch picker, send them so backend consumes in that order
@@ -942,7 +984,7 @@ function NewIssueModal({stock,projects,users,onClose,onSaved,prefill,fromMR}){
         selected_batches:Array.isArray(it.selected_batches)&&it.selected_batches.length>0?it.selected_batches:undefined,
       }));
       const url=fromMR?`/warehouse/mr/${fromMR}/issue`:"/warehouse/issues";
-      const res=await api.post(url,{...f,items:cleanItems,photo_urls:chPhotos.length?chPhotos:null});
+      const res=await api.post(url,{...f,items:cleanItems,photo_urls:chPhotos.length?chPhotos:null,...(fromMR?{}:{unit_card:true})});
       if(res.success){onSaved&&onSaved(res.data);onClose();}
       else alert(res.message||"Issue failed");
     }catch(e){alert(e.message);}
@@ -1029,7 +1071,7 @@ function NewIssueModal({stock,projects,users,onClose,onSaved,prefill,fromMR}){
         const usingFifo=preview&&preview.breakdown.length>1;
         return (
         <div key={i}>
-          <LineItemRow row={row} idx={i} stock={stock} onChange={updItem} onRemove={remItem}
+          <LineItemRow row={row} idx={i} stock={stock} onChange={updItem} onRemove={remItem} cards={ucards}
             mode="transfer"
             canRemove={!fromMR && items.length>1}
             lockMaterial={!!fromMR}/>
@@ -1604,6 +1646,7 @@ export function NewTransferModal({stock,projects,onClose,onSaved,defaultFromWare
     to_type:"project", to_id:null,
   });
   const [items,setItems]=useState([{material_id:null,name:"",unit:"Nos",qty:"",rate:""}]);
+  const ucards=useUnitCards(items.map(it=>it.name));   // unit card (19 Oct 2026)
   const [saving,setSaving]=useState(false);
   const [srcInv,setSrcInv]=useState([]);   // Source ka available stock
   const [srcLoading,setSrcLoading]=useState(false);
@@ -1686,7 +1729,9 @@ export function NewTransferModal({stock,projects,onClose,onSaved,defaultFromWare
   const overStockRow=items.find(it=>{
     if(!it.qty)return false;
     const inv=srcInv.find(s=>String(s.id)===String(it.material_id)||s.name===it.name);
-    return inv && Number(it.qty)>Number(inv.qty);
+    // Card ki doosri unit (36 Mtr) — stock ki unit me badal kar milao (19 Oct 2026).
+    const sq=inv&&it._stockUnit?stockQtyOf({unit:it._stockUnit,card:ucards[String(it.name||"").trim().toLowerCase()]||null},it.unit||it._stockUnit,it.qty,it.stock_factor):Number(it.qty);
+    return inv && sq!=null && sq>Number(inv.qty);
   });
   const valid=f.from_id&&f.to_id&&!sameSide&&!overStockRow&&items.some(it=>(it.name||it.material_id)&&Number(it.qty)>0);
 
@@ -1698,12 +1743,15 @@ export function NewTransferModal({stock,projects,onClose,onSaved,defaultFromWare
   const submit=async()=>{
     setSaving(true);
     try{
+      const um=unitMissingIn(items,ucards);
+      if(um){ alert(t("unitcard.need_number",{unit:um.unit})); setSaving(false); return; }
       const cleanItems=items.filter(it=>(it.name||it.material_id)&&Number(it.qty)>0).map(it=>({
         material_id:it.material_id||null,
         name:it.name||(stock.find(s=>s.id===it.material_id)?.name)||"Item",
         unit:it.unit||"Nos",
         qty:Number(it.qty),
         rate:Number(it.rate||0),
+        ...(unitPayloadOf(it,ucards).stock_factor?{stock_factor:unitPayloadOf(it,ucards).stock_factor}:{}),
       }));
       const res=await api.post("/warehouse/transfers",{
         date:f.date,
@@ -1805,7 +1853,7 @@ export function NewTransferModal({stock,projects,onClose,onSaved,defaultFromWare
             <span>{t("warehouse.material_avail_in_fromname", { fromName })}</span><span>{t("common.unit")}</span><span>{t("common.qty")}</span><span>{t("warehouse.rate_u")}</span><span style={{textAlign:"right"}}>{t("fuel.value")}</span><span/>
           </div>
           {items.map((row,i)=>(
-            <LineItemRow key={i} row={row} idx={i} stock={srcInv} onChange={updItem} onRemove={remItem} mode="transfer" canRemove={items.length>1}/>
+            <LineItemRow key={i} row={row} idx={i} stock={srcInv} onChange={updItem} onRemove={remItem} mode="transfer" canRemove={items.length>1} cards={ucards}/>
           ))}
           <button onClick={addItem}
             style={{marginTop:6,padding:"7px 12px",borderRadius:6,border:`1.5px dashed ${T.b2}`,background:"none",color:T.t3,fontSize:11.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:5,fontFamily:"inherit"}}>
