@@ -4,9 +4,11 @@ import { useState, useEffect, useCallback } from "react";
 import PickSelect from "../../components/PickSelect";
 import { API, tok, apiFetch, T, fmtDate, fmtDateTime, fmtNum, fmtMoney, DOMAIN_LABELS,
          IcBuilding, IcUsers, IcPuzzle, IcX, IcChk, IcDownload, IcShield,
-         IcActivity, IcDollar, IcEdit, IcClip, IcChevL, IcFolder, IcLock, IcPlus } from "./tokens";
+         IcActivity, IcDollar, IcEdit, IcClip, IcChevL, IcFolder, IcLock, IcPlus, IcCog } from "./tokens";
 import { Toast, Toggle, StatCard, Badge, Btn, InputField, SelectField, EmptyState, TableHeader } from "./ui";
 import { BundleView, TicketBadge, fmtTicketTime } from "../shared/TicketBundle";
+import { AiModelsPanel, AiUsagePanel } from "./AiModels";
+import { CompanyGpsPanel } from "./CompanyGps";
 
 // ── Bugs raised by THIS company ────────────────────────────────────────
 // The cross-tenant Bug Inbox answers "what is broken anywhere". A support
@@ -531,6 +533,8 @@ function CompanyDetailPage({ companyId, onBack }) {
     { id:"audit",       label:"Activity",            Icon:IcActivity },
     { id:"features",    label:`Requests (${feature_requests.length})`, Icon:IcClip },
     { id:"crm",         label:`Notes/CRM (${crm_notes.length})`, Icon:IcShield },
+    { id:"aimodels",    label:"AI Models",           Icon:IcCog      },
+    { id:"gps",         label:"GPS",                 Icon:IcActivity },
   ];
 
   return (
@@ -811,6 +815,13 @@ function CompanyDetailPage({ companyId, onBack }) {
       )}
 
       {/* TAB 7: CRM / Notes */}
+      {tab === "aimodels" && (
+        <div style={{ padding:"4px 0" }}>
+          <AiModelsPanel companyId={companyId}/>
+          <AiUsagePanel companyId={companyId}/>
+        </div>
+      )}
+      {tab === "gps" && <CompanyGpsPanel companyId={companyId}/>}
       {tab === "crm" && (
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1.3fr", gap:16 }}>
           <div style={{ background:T.surface, border:`1px solid ${T.b1}`, borderRadius:10, padding:"16px 20px" }}>

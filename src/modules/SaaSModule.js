@@ -12,6 +12,7 @@ import { apiFetch, T, fmtDate, fmtDateTime, fmtNum, fmtMoney,
          IcDollar, IcCog, IcChevR, IcChevL, IcFilter, IcLogin, th, td } from "./saas/tokens";
 import { Toast, Toggle, StatCard, Badge, Btn, EmptyState, TableHeader, PageHeader } from "./saas/ui";
 import CompanyDetailPage from "./saas/CompanyDetailPage";
+import { AiModelsPanel } from "./saas/AiModels";
 import TabCustomers from "./saas/Customers";
 import TabCompanies from "./saas/Companies";
 
@@ -1663,6 +1664,7 @@ const TABS = [
   { id:"bugs",      label:"Bug Inbox",        Icon:IcShield   },
   { id:"kbgaps",    label:"KB Gaps",          Icon:IcClip     },
   { id:"golive",    label:"Go-Live",          Icon:IcChk      },
+  { id:"aimodels",  label:"AI Models",        Icon:IcCog      },
 ];
 
 export default function SaaSModule() {
@@ -1736,6 +1738,12 @@ export default function SaaSModule() {
             {tab === "bugs"      && <TabBugInbox/>}
             {tab === "kbgaps"    && <TabKbGaps/>}
             {tab === "golive"    && <TabGoLive companies={companies}/>}
+            {tab === "aimodels"  && (
+              <div style={{ padding:"20px 24px", maxWidth:1100 }}>
+                <div style={{ fontSize:16, fontWeight:800, color:T.t1, marginBottom:4 }}>AI Models — sab company ka default</div>
+                <AiModelsPanel/>
+              </div>
+            )}
           </>
         )}
       </div>
