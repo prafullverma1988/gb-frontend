@@ -7,6 +7,7 @@ import SearchSelect from "../../components/SearchSelect";
 import { T } from "../shared/tokens";
 import { Pill, Panel, THead } from "../shared/ui";
 import { canApproveAction } from "../../utils/approvalAuthority";
+import { can, canEntry } from "../../utils/perms";
 import { useRoadAccess } from "../road/roadShared";
 import { t } from "../../i18n";
 
@@ -39,6 +40,12 @@ const RoadLevels = lazy(() => import("../road/RoadLevels"));
 
 // Wahi jaanch jo server lagata hai — PATCH /design/drawings/:id/status par
 // requireRole(admin/super_admin/manager/project_manager) + requirePerm("Design","edit").
+// "Approval Required" wali drawing abhi client ke paas (share baaki / jawab
+// baaki) aur andar ka faisla nahi hua — server ka utils/designClientStatus.js
+// (inClientReview) bhi yahi maanta hai aur tab tak approve rokta hai.
+const inClientReview = (d) => d.status === "Pending"
+  && (d.client_status === "PendingShare" || d.client_status === "SharedWithClient");
+
 const canDecideDesign = () => canApproveAction({
   roles: ["admin", "super_admin", "manager", "project_manager"],
   perm: ["Design", "edit"],
@@ -236,7 +243,7 @@ function TabDesign({ project, isAdmin }) {
   const [pendingReqId, setPendingReqId] = useState(null); // request to mark "Uploaded" after drawing saved
 
   // Upload form state
-  const [uForm, setUForm]   = useState({ title:"", category:"Architectural", drawing_type:"2D", note:"" });
+  const [uForm, setUForm]   = useState({ title:"", category:"Architectural", drawing_type:"2D", approval_required:false, note:"" });
   const [uFile, setUFile]   = useState(null);
   const [uploading, setUploading] = useState(false);
   const [uploadPct, setUploadPct] = useState(0);
@@ -258,14 +265,15 @@ function TabDesign({ project, isAdmin }) {
   };
 
   // Load drawings
-  const loadDrawings = async () => {
+  // quiet = list chhupaye bina taaza karo (approve/reject ke baad)
+  const loadDrawings = async (quiet) => {
     if (!projectId) return;
-    setLoading(true);
+    if (!quiet) setLoading(true);
     try {
       const res = await api.get("/design/drawings?project_id=" + projectId);
       if (res.success) setDrawings(res.data || []);
     } catch(e) {}
-    setLoading(false);
+    if (!quiet) setLoading(false);
   };
   const loadRequests = async () => {
     if (!projectId) return;
@@ -404,25 +412,19 @@ function TabDesign({ project, isAdmin }) {
         title:        uForm.title,
         category:     uForm.category,
         drawing_type: uForm.drawing_type,
+        // Tick = pehle client (Design module → Client Approval), uske baad andar ka approval
+        approval_required: !!uForm.approval_required,
         note:         uForm.note || null,
         file_url:     cld.secure_url,
         file_size:    Math.round(uFile.size / 1024) + " KB",
       });
       setUploadPct(100);
       if (res.success) {
-        api.post("/approvals/submit", {
-          module: "Design Approval",
-          ref_id: res.data.id,
-          ref_no: res.data.drawing_no || "",
-          title: res.data.title || uForm.title || "Drawing",
-          amount: 0,
-          project_id: projectId || res.data.project_id,
-          project_name: projectName || res.data.project_name || "",
-        }).catch(e => console.error("Approval submit:", e));
+        // Approval queue me server khud daalta hai (POST /design/drawings).
         apiCache.refreshApprovals();  // pre-warm Pending Approvals badge
         setDrawings(p => [res.data, ...p]);
         setShowUpload(false);
-        setUForm({ title:"", category:"Architectural", drawing_type:"2D", note:"" });
+        setUForm({ title:"", category:"Architectural", drawing_type:"2D", approval_required:false, note:"" });
         setUFile(null); setUploadPct(0);
         // Mark linked request as Uploaded
         if (pendingReqId) {
@@ -468,7 +470,9 @@ function TabDesign({ project, isAdmin }) {
     try {
       const res = await api.patch("/design/drawings/" + id + "/status", { status, note: note || null });
       if (res.success) {
-        setDrawings(p => p.map(d => d.id === id ? { ...d, status } : d));
+        // Server se dobara — multi-level me L1 ke baad bhi drawing Pending rehti
+        // hai, aur approve ke baad client_status server tay karta hai.
+        await loadDrawings(true);
         setSel(null);
       } else { setActionErr(res.message || "Failed to update status"); }
     } catch(e) {
@@ -543,6 +547,21 @@ function TabDesign({ project, isAdmin }) {
                 onChange={v=>setUForm(p=>({...p,drawing_type:v}))} placeholder={t("common.select_type")}/>
             </div>
           </div>
+
+          {/* Approval Required — Design module ke upload jaisa: client ki haan pehle */}
+          <div style={{marginBottom:8,padding:"9px 11px",background:T.surfaceB,border:`1px solid ${T.b1}`,borderRadius:7,display:"flex",alignItems:"center",gap:10}}>
+            <input type="checkbox" id="tdApprovalReq" checked={!!uForm.approval_required}
+              onChange={e=>setUForm(p=>({...p,approval_required:e.target.checked}))}
+              style={{width:15,height:15,cursor:"pointer"}}/>
+            <label htmlFor="tdApprovalReq" style={{flex:1,fontSize:12,color:T.t2,cursor:"pointer"}}>
+              <b>{t("design.approval_required")}</b> {t("design.drawing_client_consultant_approval_ke_liye")}
+            </label>
+          </div>
+          {uForm.approval_required && (
+            <div style={{marginBottom:12,padding:"9px 11px",background:T.bluL,border:`1px solid ${T.bluM}`,borderLeft:`3px solid ${T.blu}`,borderRadius:7,fontSize:11,color:T.t2,lineHeight:1.5}}>
+              {t("design.project_tick_client_approval_hint")}
+            </div>
+          )}
 
           {/* File drop zone */}
           <div style={{marginBottom:12}}>
@@ -662,8 +681,8 @@ function TabDesign({ project, isAdmin }) {
               </div>}
               {/* Add Pin */}
               <RevPinForm drawingId={d.id} onAdded={loadDrawings}/>
-              {/* Upload new version */}
-              <div style={{marginTop:10,paddingTop:8,borderTop:"1px solid "+T.b1}}>
+              {/* Upload new version — Design CREATE tick (server POST /drawings/:id/versions) */}
+              {can("Design","create")&&<div style={{marginTop:10,paddingTop:8,borderTop:"1px solid "+T.b1}}>
                 <label style={S.labelLg}>{t("design.upload_revised_version")}</label>
                 <label style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",
                   border:"1.5px dashed "+(acting["ver"+d.id]?T.blu:T.b2),borderRadius:6,
@@ -683,7 +702,7 @@ function TabDesign({ project, isAdmin }) {
                     <span style={{fontSize:11.5,color:T.blu,fontWeight:600}}>{t("design.upload_new_version")}</span>
                   )}
                 </label>
-              </div>
+              </div>}
             </div>
           ))}
         </div>
@@ -792,7 +811,7 @@ function TabDesign({ project, isAdmin }) {
 
         {/* Drawing is in client review — admin actions are gated until the
             client signs off. Show a status pill instead of Approve/Reject. */}
-        {d.status!=="Approved" && (d.client_status==="PendingShare" || d.client_status==="SharedWithClient") && (
+        {inClientReview(d) && (
           <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
             <span style={{display:"inline-flex",alignItems:"center",gap:5,padding:"5px 11px",borderRadius:14,
               border:`1px solid ${d.client_status==="PendingShare"?T.ambM:T.bluM}`,
@@ -808,7 +827,7 @@ function TabDesign({ project, isAdmin }) {
           </div>
         )}
 
-        {canDecideDesign() && d.status!=="Approved" && d.client_status!=="PendingShare" && d.client_status!=="SharedWithClient" && (
+        {canDecideDesign() && d.status!=="Approved" && !inClientReview(d) && (
           <div style={S.chipRow}>
             {/* Approve */}
             <button onClick={()=>handleStatus(d.id,"Approved",null)} disabled={!!acting[d.id]}
@@ -978,14 +997,15 @@ function TabDesign({ project, isAdmin }) {
               <span style={{background:T.amb,color:"white",fontSize:9.5,fontWeight:700,padding:"1px 6px",borderRadius:10,fontVariantNumeric:"tabular-nums"}}>{revQueue.length}</span>
             </button>
           )}
-          <button onClick={()=>setShowUpload(true)}
+          {/* Drawing upload = Design CREATE tick (server POST /design/drawings) */}
+          {can("Design","create")&&<button onClick={()=>setShowUpload(true)}
             style={{padding:"7px 14px",borderRadius:6,background:T.blu,border:"none",color:"white",
               fontSize:11.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:6,fontFamily:"inherit",boxShadow:`0 2px 6px ${T.blu}33`,transition:"all .12s"}}
             onMouseEnter={el=>el.currentTarget.style.background="#1D4ED8"}
             onMouseLeave={el=>el.currentTarget.style.background=T.blu}>
             <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
            {t("design.upload_drawing")}
-          </button>
+          </button>}
         </div>
       </div>
 
@@ -999,7 +1019,7 @@ function TabDesign({ project, isAdmin }) {
             <svg width={28} height={28} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>
           </div>
           <div style={S.title}>{t("design.no_drawings_yet")}</div>
-          <div style={S.emptyText}>{t("common.click")} <b>{t("design.upload_drawing")}</b> {t("design.to_add_the_first_drawing_for")}</div>
+          {can("Design","create")&&<div style={S.emptyText}>{t("common.click")} <b>{t("design.upload_drawing")}</b> {t("design.to_add_the_first_drawing_for")}</div>}
         </div>
       )}
 
@@ -1010,13 +1030,14 @@ function TabDesign({ project, isAdmin }) {
           {filtered.map(d=>{
             // When the drawing is still routing through client review, show
             // a client-flavoured pill instead of the generic admin status.
-            const inClientFlow = d.client_status === "PendingShare" || d.client_status === "SharedWithClient";
+            // Approved / Rejected ho chuki drawing par apna status hi.
+            const inClientFlow = inClientReview(d);
             const sm = inClientFlow
               ? { c: d.client_status === "PendingShare" ? T.amb : T.blu,
                   bg: d.client_status === "PendingShare" ? T.ambL : T.bluL }
               : (statusMeta[d.status] || statusMeta["Pending"]);
             const statusLabel = inClientFlow
-              ? (d.client_status === "PendingShare" ? "Pending Client Share" : "Pending Client Approval")
+              ? (d.client_status === "PendingShare" ? t("design.pending_client_share") : t("design.pending_client_approval"))
               : d.status;
             const isS = sel?.id===d.id;
             return(
@@ -1072,7 +1093,9 @@ function TabDesign({ project, isAdmin }) {
               <option value="All">{t("common.all_categories")}</option>
               {CATS.map(c=><option key={c}>{c}</option>)}
             </PickSelect>
-            {isAdmin&&<button onClick={()=>{setEditReq(null);setReqForm({title:"",category:"Architectural",description:"",priority:"Normal",due_date:""});setShowReqForm(true);}}
+            {/* Request bhejna = Design ENTRY (ya Create) tick — server ka entryOrCreate("Design").
+                Pehle sirf Admin/PM role ko dikhta tha, tick ho tab bhi. */}
+            {canEntry("Design")&&<button onClick={()=>{setEditReq(null);setReqForm({title:"",category:"Architectural",description:"",priority:"Normal",due_date:""});setShowReqForm(true);}}
               style={{padding:"7px 14px",borderRadius:6,background:T.blu,border:"none",color:"white",fontSize:11.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:5,fontFamily:"inherit",boxShadow:`0 2px 6px ${T.blu}33`,flexShrink:0,transition:"background .12s"}}
               onMouseEnter={el=>el.currentTarget.style.background="#1D4ED8"}
               onMouseLeave={el=>el.currentTarget.style.background=T.blu}>
@@ -1088,7 +1111,7 @@ function TabDesign({ project, isAdmin }) {
                 <svg width={28} height={28} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><path d="M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
               </div>
               <div style={S.title}>{t("common.no_design_requests_yet")}</div>
-              <div style={S.emptyText}>{t("common.click")} <b>{t("payment_request.new_request_2")}</b> {t("design.to_ask_for_a_drawing_from")}</div>
+              {canEntry("Design")&&<div style={S.emptyText}>{t("common.click")} <b>{t("payment_request.new_request_2")}</b> {t("design.to_ask_for_a_drawing_from")}</div>}
             </div>
           )}
 
@@ -1153,15 +1176,17 @@ function TabDesign({ project, isAdmin }) {
                     </div>
                     {/* Action buttons */}
                     <div style={S.chipRow}>
+                      {/* Server jo maange wahi tick: Assign = Design Edit, upload = Design Create.
+                          Sirf Entry wala (request bhejne wala) ye nahi dekhta — dabane par 403 aata. */}
                       {req.status==="Pending"&&<>
-                        <button onClick={(e)=>{e.stopPropagation();setEditReq(req);setReqForm({title:req.title,category:req.category,description:req.description||"",priority:req.priority,due_date:req.due_date||"",assigned_to:req.assigned_to||""});setShowReqForm(true);}}
+                        {can("Design","edit")&&<button onClick={(e)=>{e.stopPropagation();setEditReq(req);setReqForm({title:req.title,category:req.category,description:req.description||"",priority:req.priority,due_date:req.due_date||"",assigned_to:req.assigned_to||""});setShowReqForm(true);}}
                           style={{padding:"5px 11px",borderRadius:6,background:T.bluL,border:`1px solid ${T.bluM}`,color:T.blu,fontSize:11,fontWeight:600,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:5,fontFamily:"inherit"}}>
                           <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="8.5" cy="7" r="4"/><path d="M20 8v6M23 11h-6"/></svg>
                          {t("design.assign")}
-                        </button>
-                        <button onClick={(e)=>{
+                        </button>}
+                        {can("Design","create")&&<button onClick={(e)=>{
                           e.stopPropagation();
-                          setUForm({title:req.title+" Drawing",category:req.category,drawing_type:"2D",note:req.description||""});
+                          setUForm({title:req.title+" Drawing",category:req.category,drawing_type:"2D",approval_required:false,note:req.description||""});
                           setPendingReqId(req.id);
                           setMainTab("drawings"); setShowUpload(true);
                           handleUpdateReqStatus(req.id,"In Progress");
@@ -1171,12 +1196,12 @@ function TabDesign({ project, isAdmin }) {
                           onMouseLeave={el=>{el.currentTarget.style.background=T.surface; el.currentTarget.style.borderColor=T.b1;}}>
                           <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
                          {t("design.upload_direct_2")}
-                        </button>
+                        </button>}
                       </>}
-                      {req.status==="In Progress"&&(
+                      {req.status==="In Progress"&&can("Design","create")&&(
                         <button onClick={(e)=>{
                           e.stopPropagation();
-                          setUForm({title:req.title+" Drawing",category:req.category,drawing_type:"2D",note:req.description||""});
+                          setUForm({title:req.title+" Drawing",category:req.category,drawing_type:"2D",approval_required:false,note:req.description||""});
                           setPendingReqId(req.id);
                           setMainTab("drawings"); setShowUpload(true);
                         }}

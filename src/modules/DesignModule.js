@@ -8,6 +8,7 @@ import SearchSelect from "../components/SearchSelect";
 import { Avatar, Credit, fmtTimeAgo } from "../components/Credit";
 import RevisionNoteModal from "../components/RevisionNoteModal";
 import { canApproveAction } from "../utils/approvalAuthority";
+import { can } from "../utils/perms";
 import { t } from "../i18n";
 import { companyName } from "../utils/companyName";
 import { cld } from "../utils/cloudinary";
@@ -173,15 +174,9 @@ function UploadModal({ show, onClose, projects, dbTitles, dbCats, dbTypes, prefi
             linked_request_id: linkedRequestId,
           });
           if (res.success) {
-            api.post("/approvals/submit", {
-              module: "Design Approval",
-              ref_id: res.data.id,
-              ref_no: res.data.drawing_no || "",
-              title: res.data.title || capturedForm.title || "Drawing",
-              amount: 0,
-              project_id: capturedForm.project_id || res.data.project_id,
-              project_name: proj?.name || res.data.project_name || "",
-            }).catch(e => console.error("Approval submit:", e));
+            // Approval queue me server khud daalta hai (POST /design/drawings) —
+            // "Approval Required" wali client ke "Approved" ke baad. Yahan se
+            // /approvals/submit bhejne par wo client se pehle hi queue me aa jaati thi.
             // Pre-warm the approval badge: drawer's next open paints instantly.
             apiCache.refreshApprovals();
             // Auto-learn site location from live-camera presence
@@ -194,7 +189,8 @@ function UploadModal({ show, onClose, projects, dbTitles, dbCats, dbTypes, prefi
                 source: "drawing_photo",
               }).catch(() => {});
             }
-            onUploaded(res.data);
+            // POST ka jawab project ka naam nahi deta — list me "—" na dikhe
+            onUploaded({ ...res.data, project_name: res.data.project_name || proj?.name || null });
           }
         } catch (e) {
           console.error("Save drawing error:", e);
@@ -422,6 +418,21 @@ export default function DesignModule() {
 
   useEffect(()=>{ loadAll(); }, [loadAll]);
 
+  // Approve / reject ke baad sirf drawings server se dobara (list chhupaye bina) —
+  // multi-level me L1 ke baad drawing Pending hi rehti hai, aur approve par
+  // client_status server tay karta hai.
+  const reloadDrawings = useCallback(async () => {
+    try {
+      const r = await api.get("/design/drawings");
+      if (r.success) setDrawings(r.data||[]);
+    } catch(e) {}
+  }, []);
+
+  // "Approval Required" wali drawing client ke paas (share baaki / jawab baaki) —
+  // tab tak andar ka Approve nahi (server bhi rokta hai).
+  const inClientReview = (d) => d.status === "Pending"
+    && (d.client_status === "PendingShare" || d.client_status === "SharedWithClient");
+
   const CATS_LIST  = dbCats.length  > 0 ? dbCats.map(c=>c.name)  : CATS;
   const TYPES_LIST = dbTypes.length > 0 ? dbTypes.map(t=>t.name) : TYPES;
   const projectNames = ["All", ...projects.map(p=>p.name)];
@@ -431,7 +442,7 @@ export default function DesignModule() {
     setActing(p=>({...p,[id]:status})); setActionErr("");
     try {
       const res = await api.patch("/design/drawings/"+id+"/status", {status, note:note||null});
-      if (res.success) { setDrawings(p=>p.map(d=>d.id===id?{...d,status}:d)); setSelDraw(null); }
+      if (res.success) { await reloadDrawings(); setSelDraw(null); }
       else setActionErr(res.message||"Failed");
     } catch(e) { setActionErr(e.message); }
     setActing(p=>({...p,[id]:null}));
@@ -543,10 +554,10 @@ export default function DesignModule() {
             <SearchSelect value={f.val} options={f.opts.map(o=>({value:o,label:o==="All"?`All ${f.label}s`:o}))} onChange={f.set} placeholder={`All ${f.label}s`}/>
           </div>
         ))}
-        <button onClick={()=>setShowUpload(true)}
+        {can("Design","create")&&<button onClick={()=>setShowUpload(true)}
           style={{padding:"7px 14px",borderRadius:7,background:T.blu,border:"none",color:"white",fontSize:12,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:5,whiteSpace:"nowrap"}}>
           <IcUpload size={13} color="white"/> {t("design.upload_drawing")}
-        </button>
+        </button>}
       </div>
 
       <div style={S.hint}>{filteredDrawings.length} drawings</div>
@@ -590,7 +601,7 @@ export default function DesignModule() {
                     {d.file_url&&<a href={d.file_url} target="_blank" rel="noreferrer" style={S.linkBlue}>{t("common.view")}</a>}
                     {d.file_url&&<a href={d.file_url} download target="_blank" rel="noreferrer" style={S.linkGrey}>{t("design.download")}</a>}
                     <button onClick={()=>setShowVer(d)} style={{padding:"5px 10px",borderRadius:6,background:T.surfaceB,border:"1px solid "+T.b1,color:T.t3,fontSize:11,cursor:"pointer"}}><IcHist size={12}/> {t("common.history")}</button>
-                    {canDecideDesign()&&d.status!=="Approved"&&<button onClick={()=>handleStatus(d.id,"Approved")} disabled={!!acting[d.id]} style={{padding:"5px 11px",borderRadius:6,background:T.grn,border:"none",color:"white",fontSize:11,fontWeight:700,cursor:"pointer"}}>{t("common.approve")}</button>}
+                    {canDecideDesign()&&d.status!=="Approved"&&!inClientReview(d)&&<button onClick={()=>handleStatus(d.id,"Approved")} disabled={!!acting[d.id]} style={{padding:"5px 11px",borderRadius:6,background:T.grn,border:"none",color:"white",fontSize:11,fontWeight:700,cursor:"pointer"}}>{t("common.approve")}</button>}
                     {canDecideDesign()&&d.status!=="Revision"&&<button onClick={()=>{ const r=prompt(t("design.revision_reason")); if(r) handleStatus(d.id,"Revision",r); }} style={{padding:"5px 11px",borderRadius:6,background:T.ambL,border:"1px solid "+T.ambM,color:T.amb,fontSize:11,fontWeight:600,cursor:"pointer"}}>{t("design.revision")}</button>}
                     {canDecideDesign()&&d.status!=="Rejected"&&<button onClick={()=>{ const r=prompt(t("design.rejection_reason")); if(r) handleStatus(d.id,"Rejected",r); }} style={{padding:"5px 11px",borderRadius:6,background:T.redL,border:"1px solid "+T.redM,color:T.red,fontSize:11,fontWeight:600,cursor:"pointer"}}>{t("common.reject")}</button>}
                   </div>
@@ -692,12 +703,12 @@ export default function DesignModule() {
                      {t("design.assign_2")}
                     </button>
                   )}
-                  <button onClick={()=>{setUploadPrefill({project_id:projects.find(p=>p.name===req.project_name)?.id||"",title:req.title,category:req.category,drawing_type:"2D",note:req.description||"",linked_request_id:req.id});setShowUpload(true);updateReqStatus(req.id,"In Progress");}}
+                  {can("Design","create")&&<button onClick={()=>{setUploadPrefill({project_id:projects.find(p=>p.name===req.project_name)?.id||"",title:req.title,category:req.category,drawing_type:"2D",note:req.description||"",linked_request_id:req.id});setShowUpload(true);updateReqStatus(req.id,"In Progress");}}
                     style={S.btnGreen}>
                    {t("design.upload_direct")}
-                  </button>
+                  </button>}
                 </>}
-                {req.status==="In Progress"&&(
+                {req.status==="In Progress"&&can("Design","create")&&(
                   <button onClick={()=>{setUploadPrefill({project_id:projects.find(p=>p.name===req.project_name)?.id||"",title:req.title,category:req.category,drawing_type:"2D",note:req.description||"",linked_request_id:req.id});setShowUpload(true);}}
                     style={S.btnGreen}>
                    {t("design.upload_drawing_2")}
@@ -767,14 +778,15 @@ export default function DesignModule() {
               {d.file_url&&<a href={d.file_url} target="_blank" rel="noreferrer" style={{padding:"4px 9px",borderRadius:6,background:T.bluL,border:"1px solid "+T.bluM,color:T.blu,fontSize:11,fontWeight:600,textDecoration:"none"}}>{t("design.view_current")}</a>}
             </div>
           </div>
-          <div style={{paddingTop:8,borderTop:"1px solid "+T.b1}}>
+          {/* Naya version — Design CREATE tick (server POST /drawings/:id/versions) */}
+          {can("Design","create")&&<div style={{paddingTop:8,borderTop:"1px solid "+T.b1}}>
             <label style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:5}}>{t("design.upload_revised_version")}</label>
             <label style={{display:"flex",alignItems:"center",gap:8,padding:"8px 11px",border:"1.5px dashed "+(revUploading[d.id]?T.blu:T.b2),borderRadius:7,cursor:revUploading[d.id]?"not-allowed":"pointer",background:revUploading[d.id]?T.bluL:T.surfaceB}}>
               <input type="file" accept=".pdf,.png,.jpg,.jpeg,.dwg" style={{display:"none"}} disabled={revUploading[d.id]}
                 onChange={e=>{if(e.target.files[0])handleNewVersion(d.id,e.target.files[0]);}}/>
               <span style={{fontSize:11.5,color:T.blu,fontWeight:600}}>{revUploading[d.id]?t("design.uploading"):t("design.upload_new_version")}</span>
             </label>
-          </div>
+          </div>}
         </div>
       );})}
     </div>
@@ -1074,7 +1086,7 @@ export default function DesignModule() {
       setAprvActing(p=>({...p,[id]:"approving"}));
       try {
         const res = await api.patch("/design/drawings/"+id+"/status", {status:"Approved"});
-        if (res.success) setDrawings(p=>p.map(d=>d.id===id?{...d,status:"Approved"}:d));
+        if (res.success) await reloadDrawings();
       } catch(e) {}
       setAprvActing(p=>({...p,[id]:null}));
     };
@@ -1429,10 +1441,11 @@ export default function DesignModule() {
           <button onClick={loadAll} style={{padding:"7px 12px",borderRadius:7,background:T.surface,border:"1px solid "+T.b1,color:T.t3,fontSize:12,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
             <IcRefresh size={13}/> {t("common.refresh")}
           </button>
-          <button onClick={()=>{setUploadPrefill(null);setShowUpload(true);}}
+          {/* Drawing upload = Design CREATE tick (server POST /design/drawings) */}
+          {can("Design","create")&&<button onClick={()=>{setUploadPrefill(null);setShowUpload(true);}}
             style={{padding:"7px 16px",borderRadius:7,background:T.blu,border:"none",color:"white",fontSize:12.5,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
             <IcUpload size={14} color="white"/> {t("design.upload_drawing")}
-          </button>
+          </button>}
         </div>
       </div>
 

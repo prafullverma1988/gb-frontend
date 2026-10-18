@@ -1650,6 +1650,7 @@ function MachineDetail({ id, onBack, onChanged, onEdit, onRemoved, canRemove, pa
   const [svcEdit, setSvcEdit] = useState(null);   // khuli service jise band karna hai
   const [svcTemplates, setSvcTemplates] = useState([]);
   const [gps, setGps] = useState(null);
+  const [wq, setWq] = useState(null);   // "us samay ki jagah" (fill/drop par click)
   // 🛢 Oil (11 Oct 2026, AB) — form, tab ka data, cancel wali row
   const [oilOpen, setOilOpen] = useState(false);
   const [oil, setOil] = useState(null);
@@ -2046,12 +2047,8 @@ function MachineDetail({ id, onBack, onChanged, onEdit, onRemoved, canRemove, pa
                   ? <Pill label={"+" + fmtN(ev.litres) + " L"} c={T.grn} bg={T.grnL} />
                   : <Pill label={"−" + fmtN(ev.litres) + " L"} c={T.red} bg={T.redL} />}</span>
                 <span style={{ fontSize: 11.5, color: T.t3 }}>{ev.location_text || "—"}
-                  {/* Pin (P1): us samay ki jagah / us din ki parking / jagah ka naam se */}
-                  {ev.lat != null && (
-                    <a href={`https://www.google.com/maps?q=${ev.lat},${ev.lng}`} target="_blank" rel="noreferrer"
-                      title={ev.pin_source && ev.pin_source !== "snap" ? t("machinery.tel_pin_andaza") : undefined}
-                      style={{ marginLeft: 6, color: T.ind, fontWeight: 700, textDecoration: "none", whiteSpace: "nowrap" }}>{t("machinery.tel_naksha")}</a>
-                  )}
+                  {/* Us samay gaadi kahan thi — naksha + vendor ki pakki jagah (18 Oct 2026) */}
+                  <span onClick={() => setWq(teleEvQ(ev, gps.unit.id, m.name))} style={teleWhereLink}>{t("machinery.tw_btn")}</span>
                 </span>
                 <span style={{ fontSize: 11.5, color: T.t3 }}>
                   {ev.event_type === "fill"
@@ -2064,6 +2061,7 @@ function MachineDetail({ id, onBack, onChanged, onEdit, onRemoved, canRemove, pa
              {t("machinery.drop_engine_band_tha_aur_tank")}
             </div>
           </Panel>
+          {wq && <TeleWhere q={wq} onClose={() => setWq(null)} />}
         </>
       )}
 
@@ -6086,6 +6084,8 @@ const teleHrs = (sec) => {
   return s ? Math.floor(s / 3600) + ":" + String(Math.floor((s % 3600) / 60)).padStart(2, "0") : "—";
 };
 const teleName = (m) => (m && (m.machine_name || m.unit_name)) || "—";
+// Jagah naam se (chalti gaadi, 18 Oct 2026) — GPS pakka nahi
+const teleAndaza = (src) => (src === "name" ? " (" + t("machinery.tr_andaza") + ")" : "");
 const l1 = (x) => Math.round((Number(x) || 0) * 10) / 10;
 const teleMono = { fontFamily: "monospace", fontSize: 12 };
 const teleEll = { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
@@ -6193,6 +6193,7 @@ function TeleFleetDash({ fleet, ms, rg, onOpen, onAction, goTab }) {
   const unlinked = ms.filter((m) => !m.linked).length;
   const chali = ms.filter((m) => m.status === "chali").length;
   const dropsNew = sum("drops_new"), noEntry = sum("fills_no_entry");
+  const flagsNew = sum("flags_new"), flagsAll = sum("flags");
 
   const val = {
     name: (m) => teleName(m).toLowerCase(),
@@ -6256,6 +6257,10 @@ function TeleFleetDash({ fleet, ms, rg, onOpen, onAction, goTab }) {
           <StatCard label={t("machinery.tp_t_unlinked")} value={unlinked} icon={IcSliders}
             sub={t("machinery.tp_t_unlinked_sub")} color={unlinked ? T.amb : T.grn} />
         </div>
+        <div onClick={() => goTab && goTab("flags")} style={{ cursor: "pointer" }}>
+          <StatCard label={t("machinery.tf_tile")} value={flagsNew} icon={IcAlert}
+            sub={t("machinery.tf_tile_sub", { n: flagsAll })} color={flagsNew ? T.red : T.grn} />
+        </div>
       </div>
 
       <Panel title={t("machinery.tp_list_title", { n: rows.length })}
@@ -6286,6 +6291,7 @@ function TeleFleetDash({ fleet, ms, rg, onOpen, onAction, goTab }) {
                 {!m.linked && <span style={{ fontSize: 10, color: T.amb, fontWeight: 700 }}> {t("machinery.judi_nahi")}</span>}
                 {m.p.suspect_days > 0 && <span title={t("machinery.tel_engine_shak_hint")} style={{ fontSize: 10, color: T.amb, fontWeight: 700 }}> {t("machinery.tel_engine_shak")}</span>}
                 {m.link_warn && <span title={teleWarnText(m.link_warn)} style={{ fontSize: 10, color: T.red, fontWeight: 700 }}> {t("machinery.tel_jod_shak")}</span>}
+                {m.p.flags_new > 0 && <span title={t("machinery.tf_tile")} style={{ fontSize: 10, color: T.red, fontWeight: 700 }}> ⚑ {m.p.flags_new}</span>}
                 <div style={{ ...teleEll, fontSize: 10.5, color: T.t4 }}>
                   {[m.group_label, m.city_name, m.site && m.site.label, !m.has_fls ? t("machinery.tp_fls_nahi") : null].filter(Boolean).join(" · ")}
                 </div>
@@ -6307,7 +6313,7 @@ function TeleFleetDash({ fleet, ms, rg, onOpen, onAction, goTab }) {
               </span>
               <span style={{ fontSize: 11.5, color: T.t3, minWidth: 0 }}>
                 <div style={teleEll}>
-                  {m.last.location || "—"}
+                  {(m.last.location || "—") + teleAndaza(m.last.src)}
                   {m.last.data_at && <span style={{ color: m.fresh ? T.t4 : T.red }}> · {fmtD(m.last.data_at)}</span>}
                 </div>
                 {m.last_fill && (
@@ -6420,7 +6426,7 @@ function TeleMap({ ms, sites, rg, syncAt, onOpen, height = 520 }) {
         icon: { path: TELE_PIN, fillColor: st.c, fillOpacity: 1, strokeColor: m.unit_id === sel ? "#111827" : "#FFFFFF", strokeWeight: 2, scale: m.unit_id === sel ? 1.9 : 1.6, anchor: new g.maps.Point(12, 22) },
       });
       mk.addListener("click", () => {
-        infoRef.current.setContent(`<div style="font:12px 'Segoe UI',sans-serif;min-width:160px"><div style="font-weight:700">${teleName(m)}</div><div>${m.last.location || "—"}</div></div>`);
+        infoRef.current.setContent(`<div style="font:12px 'Segoe UI',sans-serif;min-width:160px"><div style="font-weight:700">${teleName(m)}</div><div>${m.last.location || "—"}${teleAndaza(m.last.src)}</div></div>`);
         infoRef.current.open(mapRef.current, mk);
         setSel(m.unit_id);
       });
@@ -6537,9 +6543,9 @@ function TeleMap({ ms, sites, rg, syncAt, onOpen, height = 520 }) {
       }
       pos.forEach((p) => {
         const c = new g.maps.Circle({ map: mapRef.current, center: { lat: p.lat, lng: p.lng }, radius: 25,
-          strokeColor: "#B27A0A", strokeWeight: 1, fillColor: "#B27A0A", fillOpacity: 0.35 });
+          strokeColor: "#B27A0A", strokeWeight: 1, fillColor: "#B27A0A", fillOpacity: p.src === "name" ? 0 : 0.35 });
         c.addListener("click", () => {
-          infoRef.current.setContent(`<div style="font:12px 'Segoe UI',sans-serif">${p.location_text || "—"}<div style="color:#6B7280">${localDT(p.first_seen_at).slice(11)} – ${localDT(p.last_seen_at).slice(11)}</div></div>`);
+          infoRef.current.setContent(`<div style="font:12px 'Segoe UI',sans-serif">${p.location_text || "—"}${teleAndaza(p.src)}<div style="color:#6B7280">${localDT(p.first_seen_at).slice(11)} – ${localDT(p.last_seen_at).slice(11)}</div></div>`);
           infoRef.current.setPosition({ lat: p.lat, lng: p.lng });
           infoRef.current.open(mapRef.current);
         });
@@ -6612,7 +6618,7 @@ function TeleMap({ ms, sites, rg, syncAt, onOpen, height = 520 }) {
             {t("machinery.tp_m_period", { h: teleHrs(selM.p.engine_sec), km: fmtN(l1(selM.p.km)), l: fmtN(l1(selM.p.consumed_l)), f: fmtN(l1(selM.p.filled_l)) })}
           </div>
           <div style={{ fontSize: 11.5, color: T.t3 }}>
-            {selM.last.location || "—"}{selM.last.data_at ? " · " + fmtD(selM.last.data_at) : ""}
+            {(selM.last.location || "—") + teleAndaza(selM.last.src)}{selM.last.data_at ? " · " + fmtD(selM.last.data_at) : ""}
             {selM.tank ? " · " + t("machinery.tel_tank_line", { l: Math.round(selM.tank.est_l) }) : ""}
             {selM.last_fill ? " · " + t("machinery.tel_last_fill", { at: fmtDT(selM.last_fill.at), l: l1(selM.last_fill.litres), loc: selM.last_fill.location || "—" }) : ""}
           </div>
@@ -6629,9 +6635,334 @@ function TeleMap({ ms, sites, rg, syncAt, onOpen, height = 520 }) {
   );
 }
 
+// ── Flags (P5, 17 Oct 2026): sensor ke din-data se "ye din dekho" ──────
+// services/telematicsFlags.js har sync ke baad banata hai. Ilzaam nahi —
+// faisla "Theek hai" / "Shak sahi" se aadmi ka (Machinery CREATE).
+const TELE_FLAG_KINDS = ["night", "fuel_no_engine", "lph_high", "idle"];
+const teleFlagKind = (k) => t("machinery.tf_k_" + k);
+const teleHm = (v) => (v ? localDT(v).slice(11) : "—");
+function teleFlagText(f) {
+  const d = f.detail || {};
+  if (f.kind === "night") return t("machinery.tf_d_night", { s: teleHm(d.start), e: teleHm(d.end), from: d.from || "—", to: d.to || "—", h: teleHrs(d.engine_sec) });
+  if (f.kind === "fuel_no_engine") {
+    return t("machinery.tf_d_fne", { l: fmtN(l1(d.consumed_l)), m: Math.round((Number(d.engine_sec) || 0) / 60) })
+      + (Number(d.drop_l) > 0 ? " · " + t("machinery.tf_d_fne_drop", { l: fmtN(l1(d.drop_l)) }) : "");
+  }
+  if (f.kind === "lph_high") {
+    return d.basis === "norm"
+      ? t("machinery.tf_d_lph_norm", { x: fmtN(d.lph), b: fmtN(d.base), p: d.pct })
+      : t("machinery.tf_d_lph_self", { x: fmtN(d.lph), b: fmtN(d.base), p: d.pct, n: d.base_days });
+  }
+  if (f.kind === "idle") return t("machinery.tf_d_idle", { h: teleHrs(d.engine_sec), km: fmtN(l1(d.km)), l: fmtN(l1(d.consumed_l)) });
+  return "";
+}
+const TELE_FLAG_ST = {
+  new:  { c: T.amb, bg: T.ambL, get l() { return t("machinery.tf_s_new"); } },
+  ok:   { c: T.grn, bg: T.grnL, get l() { return t("machinery.tf_s_ok"); } },
+  sahi: { c: T.red, bg: T.redL, get l() { return t("machinery.tf_s_sahi"); } },
+};
+async function teleFlagReview(f, status) {
+  let note = null;
+  if (status !== "new") {
+    note = window.prompt(t("machinery.tf_note_q"), f.note || "");
+    if (note === null) return false;   // Cancel
+  }
+  const r = await api.post(`/telematics/flags/${f.id}/review`, { status, note });
+  if (!r || r.success === false) { window.alert((r && r.message) || "—"); return false; }
+  return true;
+}
+
+// ── Us samay gaadi kahan thi (18 Oct 2026) ──────────────────────────
+// Flag / fill / drop par click → naksha + us pal ka haal. Pehle hamara record
+// (turant), phir vendor ki chhoti-khidki report (7–15 sec) se pakki jagah —
+// /telematics/unit/:id/where (backend services/telematicsWhere.js).
+// q = { unitId, name, eventId?, at?, day, what, tone: "fill" | "drop" | "flag" }
+const TELE_HOW_EXACT = ["park_now", "park_near", "park_later", "vendor", "park", "day_park"];
+const TELE_HOW_KEYS = ["park_now", "park_near", "vendor", "park", "snap", "day_park"];
+const TELE_TONE = { fill: "#1E8E5A", drop: "#C43A45", flag: "#B27A0A" };
+// Raat wale flag ka pal: trip 6 AM se pehle shuru hui to shuruaat, warna 10 PM
+// ke baad ka ant. Baaki flag poore din ke hain — unki jagah din ki jagah.
+function teleFlagAt(f) {
+  const d = f.detail || {};
+  if (f.kind !== "night") return null;
+  const min = (v) => { const x = new Date(new Date(v).getTime() + IST_OFF_MS); return x.getUTCHours() * 60 + x.getUTCMinutes(); };
+  if (d.start && min(d.start) < 360) return d.start;
+  return d.end || d.start || null;
+}
+const teleEvWhat = (e) => t(e.event_type === "fill" ? "machinery.tw_what_fill" : "machinery.tw_what_drop", { l: fmtN(l1(e.litres)) });
+const teleEvQ = (e, unitId, name) => ({ unitId: e.unit_id || unitId, name, eventId: e.id, at: e.event_time, day: null, what: teleEvWhat(e), tone: e.event_type });
+const teleFlagQ = (f, unitId, name) => ({ unitId: f.unit_id || unitId, name, at: teleFlagAt(f), day: f.day, what: teleFlagKind(f.kind), tone: "flag" });
+// Mukhya pin: vendor ka jawab > event ka apna pin > (poore din ka flag) din ki parking
+function teleWhereMain(d, moment) {
+  if (!d) return null;
+  const w = d.where, ev = d.event;
+  if (w && w.place && w.place.lat != null) return { lat: w.place.lat, lng: w.place.lng, how: w.place.how, at: w.place.at };
+  if (ev && ev.lat != null) return { lat: ev.lat, lng: ev.lng, how: ev.pin_source || "text" };
+  if (!moment && d.daily && d.daily.park_lat != null) return { lat: d.daily.park_lat, lng: d.daily.park_lng, how: "day_park" };
+  return null;
+}
+const teleWhereLink = { marginLeft: 6, color: T.ind, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" };
+
+function TeleWhere({ q: q0, onClose }) {
+  const boxRef = useRef(null);
+  const mapRef = useRef(null);
+  const objs = useRef([]);
+  const [q, setQ] = useState(q0);
+  const [fast, setFast] = useState(null);
+  const [full, setFull] = useState(null);
+  const [err, setErr] = useState(null);
+  const [mapSt, setMapSt] = useState("loading");
+  const apiKey = process.env.REACT_APP_GOOGLE_MAPS_KEY;
+  const moment = !!(q.eventId || q.at);
+  const tone = TELE_TONE[q.tone] || TELE_TONE.flag;
+
+  useEffect(() => {
+    let dead = false;
+    setFast(null); setFull(null); setErr(null);
+    const base = `/telematics/unit/${q.unitId}/where?`
+      + (q.eventId ? `event_id=${q.eventId}` : q.at ? `at=${encodeURIComponent(q.at)}` : `day=${q.day}`);
+    if (moment) api.get(base + "&vendor=0").then((r) => { if (!dead && r && r.success) setFast(r.data); }).catch(() => {});
+    // Vendor ki 1–2 report 7–20 sec leti hain — aam 15 s ki hadd yahan chhoti
+    api.get(base, { timeoutMs: 60000 }).then((r) => {
+      if (dead) return;
+      if (r && r.success) setFull(r.data); else setErr((r && r.message) || t("machinery.tw_err"));
+    }).catch(() => { if (!dead) setErr(t("machinery.tw_err")); });
+    return () => { dead = true; };
+  }, [q.unitId, q.eventId, q.at, q.day, moment]);
+
+  useEffect(() => {
+    if (!apiKey) { setMapSt("nokey"); return undefined; }
+    let dead = false;
+    loadGmapsTele(apiKey).then((g) => {
+      if (dead || !boxRef.current) return;
+      if (!mapRef.current) {
+        mapRef.current = new g.maps.Map(boxRef.current, {
+          center: { lat: 21.2, lng: 81.6 }, zoom: 11, streetViewControl: false, mapTypeControl: false, fullscreenControl: true,
+        });
+      }
+      setMapSt("ok");
+    }).catch(() => { if (!dead) setMapSt("err"); });
+    return () => { dead = true; };
+  }, [apiKey]);
+
+  useEffect(() => {
+    const d = full || fast;
+    if (mapSt !== "ok" || !d || !mapRef.current) return;
+    const g = window.google;
+    const map = mapRef.current;
+    objs.current.forEach((o) => o.setMap(null));
+    objs.current = [];
+    const evId = d.event ? d.event.id : null;
+    (d.events || []).filter((e) => e.lat != null && e.id !== evId).forEach((e) => {
+      const fill = e.event_type === "fill";
+      objs.current.push(new g.maps.Marker({ map, position: { lat: e.lat, lng: e.lng },
+        label: { text: fill ? "F" : "D", color: "#FFFFFF", fontSize: "10px", fontWeight: "700" },
+        icon: { path: g.maps.SymbolPath.CIRCLE, scale: 8, fillColor: TELE_TONE[e.event_type], fillOpacity: 0.85, strokeColor: "#FFFFFF", strokeWeight: 2 },
+        title: `${localDT(e.event_time).slice(11)} ${fill ? "+" : "−"}${l1(e.litres)} L` }));
+    });
+    const m = teleWhereMain(d, moment);
+    const dp = d.daily && d.daily.park_lat != null ? { lat: d.daily.park_lat, lng: d.daily.park_lng } : null;
+    if (dp && (!m || m.how !== "day_park")) {
+      objs.current.push(new g.maps.Marker({ map, position: dp, title: d.daily.park_location || "P",
+        label: { text: "P", color: "#FFFFFF", fontSize: "10px", fontWeight: "700" },
+        icon: { path: g.maps.SymbolPath.CIRCLE, scale: 8, fillColor: "#64748B", fillOpacity: 0.85, strokeColor: "#FFFFFF", strokeWeight: 2 } }));
+    }
+    if (m) {
+      const p = { lat: m.lat, lng: m.lng };
+      const exact = TELE_HOW_EXACT.includes(m.how);
+      // Andaze wali jagah — pin ke saath ~1.5 km ka ghera, taaki pakka na lage
+      if (!exact) {
+        objs.current.push(new g.maps.Circle({ map, center: p, radius: 1500,
+          strokeColor: tone, strokeOpacity: 0.7, strokeWeight: 1.5, fillColor: tone, fillOpacity: 0.08 }));
+      }
+      objs.current.push(new g.maps.Marker({ map, position: p, zIndex: 9,
+        icon: { path: TELE_PIN, fillColor: tone, fillOpacity: 1, strokeColor: "#FFFFFF", strokeWeight: 2, scale: 2, anchor: new g.maps.Point(12, 22) } }));
+      map.setCenter(p);
+      map.setZoom(exact ? 15 : 13);
+    } else if (dp) { map.setCenter(dp); map.setZoom(13); }
+  }, [mapSt, fast, full, moment, tone]);
+
+  const d = full || fast;
+  const w = full ? full.where : null;
+  const ev = d ? d.event : null;
+  const m = teleWhereMain(d, moment);
+  const exact = !!(m && TELE_HOW_EXACT.includes(m.how));
+  const hm = (v) => (v ? localDT(v).slice(11) : "—");
+  const mins = (s) => Math.round((Number(s) || 0) / 60);
+  const dl = d ? d.daily : null;
+  const placeText = (w && w.place.text) || (ev && ev.location_text) || (!moment && dl && dl.park_location) || null;
+  const howTxt = !m ? t("machinery.tw_how_none")
+    : m.how === "park_later" ? t("machinery.tw_how_park_later", { t: hm(m.at) })
+    : t("machinery.tw_how_" + (TELE_HOW_KEYS.includes(m.how) ? m.how : "name"));
+  const stTxt = w && w.state
+    ? t("machinery.tw_st_" + w.state, { km: fmtN(l1(w.stats && w.stats.km)) }) : null;
+  const others = d ? (d.events || []).filter((e) => !ev || e.id !== ev.id) : [];
+  const line = (label, txt, c) => (txt ? (
+    <div style={{ display: "flex", gap: 10, padding: "6px 0", borderBottom: `1px dashed ${T.b1}` }}>
+      <span style={{ width: 70, flexShrink: 0, color: T.t4, fontSize: 11 }}>{label}</span>
+      <span style={{ color: c || T.t2, fontWeight: c ? 700 : 400 }}>{txt}</span>
+    </div>
+  ) : null);
+
+  return (
+    <Modal open onClose={onClose} width={960} title={q.name}
+      sub={(moment ? fmtDT(q.at || (d && d.at)) : fmtD(q.day)) + (q.what ? " · " + q.what : "")}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 16 }}>
+        <div>
+          {mapSt === "nokey" ? <Empty>{t("machinery.map_ke_liye_react_app_google")}</Empty>
+            : mapSt === "err" ? <Empty>{t("machinery.google_maps_load_nahi_hua_internet")}</Empty>
+            : <div ref={boxRef} style={{ height: 340, borderRadius: 10, border: `1.5px solid ${T.b1}`, overflow: "hidden" }} />}
+          {m && (
+            <a href={`https://www.google.com/maps?q=${m.lat},${m.lng}`} target="_blank" rel="noreferrer"
+              style={{ display: "inline-block", marginTop: 8, fontSize: 12, color: T.ind, fontWeight: 700, textDecoration: "none" }}>{t("machinery.tw_gmaps")} ↗</a>
+          )}
+        </div>
+        <div style={{ fontSize: 12, color: T.t2, lineHeight: 1.5, minWidth: 0 }}>
+          {err && <ErrBox>{err}</ErrBox>}
+          {!d && !err && <div style={{ color: T.t4 }}>{t("common.loading")}</div>}
+          {d && (
+            <>
+              <div style={{ fontSize: 16, fontWeight: 800, color: T.t1 }}>{placeText || "—"}</div>
+              <div style={{ fontSize: 11.5, fontWeight: 600, color: exact ? T.grn : T.amb, marginTop: 2 }}>{howTxt}</div>
+              {moment && !full && !err && <div style={{ marginTop: 10, fontSize: 11.5, color: T.ind }}>{t("machinery.tw_loading_vendor")}</div>}
+              {w && w.vendor === "error" && <div style={{ marginTop: 10, fontSize: 11.5, color: T.amb }}>{t("machinery.tw_vendor_err", { x: w.vendor_error || "—" })}</div>}
+              {w && w.vendor === "unsupported" && <div style={{ marginTop: 10, fontSize: 11.5, color: T.t3 }}>{t("machinery.tw_vendor_none")}</div>}
+              {!moment && <div style={{ marginTop: 10, fontSize: 11.5, color: T.t3 }}>{t("machinery.tw_day_note")}</div>}
+              <div style={{ marginTop: 12 }}>
+                {line(t("machinery.tw_us_samay"), stTxt)}
+                {ev && line(t("machinery.tw_sensor"),
+                  teleEvWhat(ev) + (ev.level_before != null ? " · " + t("machinery.tw_level", { a: Math.round(ev.level_before), b: Math.round(ev.level_after) }) : ""),
+                  TELE_TONE[ev.event_type])}
+                {w && w.stats && line(t("machinery.tw_pm10"), t("machinery.tw_win", {
+                  s: hm(w.window.from), e: hm(w.window.to), m: mins(w.stats.engine_sec), km: fmtN(l1(w.stats.km)), l: fmtN(l1(w.stats.consumed_l)) }))}
+                {w && w.stop && line("", t("machinery.tw_stop", { s: hm(w.stop.start), e: hm(w.stop.end), m: mins(w.stop.duration_sec), loc: w.stop.location || "—" }))}
+                {w && w.trip && line("", t("machinery.tw_trip", { s: hm(w.trip.start), from: w.trip.from || "—", e: hm(w.trip.end), to: w.trip.to || "—", km: fmtN(l1(w.trip.km)) }))}
+                {w && w.park && line("", t("machinery.tw_park", { s: hm(w.park.start), e: hm(w.park.end), loc: w.park.location || "—" }))}
+                {w && w.later_park && line("", t("machinery.tw_later", { s: hm(w.later_park.start), loc: w.later_park.location || "—" }))}
+                {dl && line(t("machinery.tw_din"), [
+                  dl.trip_start_at ? t("machinery.tw_din_trip", { s: hm(dl.trip_start_at), from: dl.trip_from || "—", e: hm(dl.trip_end_at), to: dl.trip_to || "—" }) : null,
+                  dl.park_location ? t("machinery.tw_din_park", { loc: dl.park_location }) : null,
+                ].filter(Boolean).join(" · ") || "—")}
+              </div>
+              {others.length > 0 && (
+                <div style={{ marginTop: 12 }}>
+                  <div style={{ fontSize: 10.5, color: T.t4, marginBottom: 4 }}>{t("machinery.tw_other_ev")}</div>
+                  {others.map((e) => (
+                    <div key={e.id} onClick={() => setQ(teleEvQ(e, q.unitId, q.name))}
+                      style={{ display: "flex", gap: 8, padding: "4px 0", cursor: "pointer", fontSize: 11.5 }}>
+                      <span style={{ fontFamily: "monospace", color: T.t4 }}>{hm(e.event_time)}</span>
+                      <span style={{ fontWeight: 700, color: TELE_TONE[e.event_type] }}>{teleEvWhat(e)}</span>
+                      <span style={{ color: T.t3, ...teleEll }}>{e.location_text || "—"}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function TeleFlags({ rg, ms, onOpen, onAction }) {
+  const [rows, setRows] = useState(null);
+  const [wq, setWq] = useState(null);
+  const [kind, setKind] = useState("");
+  const [st, setSt] = useState("new");
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    let dead = false;
+    setRows(null);
+    api.get(`/telematics/flags?from=${rg.from}&to=${rg.to}`)
+      .then((r) => { if (!dead) setRows(r && r.success ? r.data.rows : []); })
+      .catch(() => { if (!dead) setRows([]); });
+    return () => { dead = true; };
+  }, [rg.from, rg.to, tick]);
+  const byUnit = new Map(ms.map((m) => [m.unit_id, m]));
+  const base = (rows || []).filter((f) => byUnit.has(f.unit_ref));
+  const inSt = base.filter((f) => !st || f.status === st);
+  const vis = inSt.filter((f) => !kind || f.kind === kind);
+  const nameOf = (f) => { const m = byUnit.get(f.unit_ref); return m ? teleName(m) : (f.machine_name || f.unit_name); };
+  const review = async (f, status) => { if (await teleFlagReview(f, status)) { setTick((x) => x + 1); onAction && onAction(); } };
+  const COLS = [
+    { key: "day", label: t("common.date"), w: 11, excel: (f) => f.day },
+    { key: "m", label: t("fuel.machine"), w: 28, excel: nameOf },
+    { key: "k", label: t("machinery.tf_kya"), w: 22, excel: (f) => teleFlagKind(f.kind) },
+    { key: "d", label: t("machinery.tf_detail"), w: 50, excel: teleFlagText },
+    { key: "s", label: t("machinery.tf_jaanch"), w: 12, excel: (f) => (TELE_FLAG_ST[f.status] || TELE_FLAG_ST.new).l },
+    { key: "n", label: t("machinery.tf_note"), w: 30, excel: (f) => f.note || "" },
+  ];
+  const cols = "92px 1.3fr 150px 2fr 1.3fr";
+
+  return (
+    <div style={{ display: "grid", gap: 12 }}>
+      <div style={{ fontSize: 11.5, color: T.t3, lineHeight: 1.55 }}>{t("machinery.tf_note_top")}</div>
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+        {[{ id: "new" }, { id: "ok" }, { id: "sahi" }, { id: "" }].map((x) => (
+          <button key={x.id || "all"} type="button" onClick={() => setSt(x.id)} style={teleChipBtn(st === x.id)}>
+            {(x.id ? TELE_FLAG_ST[x.id].l : t("machinery.tp_sab"))} ({x.id ? base.filter((f) => f.status === x.id).length : base.length})
+          </button>
+        ))}
+        <span style={{ width: 12 }} />
+        {["", ...TELE_FLAG_KINDS].map((k) => (
+          <button key={k || "all"} type="button" onClick={() => setKind(k)} style={teleChipBtn(kind === k)}>
+            {k ? teleFlagKind(k) : t("machinery.tf_sab_kism")} ({k ? inSt.filter((f) => f.kind === k).length : inSt.length})
+          </button>
+        ))}
+      </div>
+      <Panel title={t("machinery.tf_title", { n: vis.length })}
+        action={canMach("export") ? (
+          <Btn size="sm" ghost icon={IcSheet} disabled={!vis.length}
+            onClick={() => exportExcel(vis, COLS, `gps-flags-${rg.from}-to-${rg.to}`, "Flags")}>{t("common.excel")}</Btn>
+        ) : null}>
+        <Row head cols={cols}>
+          <span>{t("common.date")}</span><span>{t("fuel.machine")}</span><span>{t("machinery.tf_kya")}</span>
+          <span>{t("machinery.tf_detail")}</span><span>{t("machinery.tf_jaanch")}</span>
+        </Row>
+        {rows == null && <Empty>{t("common.loading")}</Empty>}
+        {rows != null && vis.length === 0 && <Empty>{t("machinery.tf_koi_nahi")}</Empty>}
+        {vis.map((f) => {
+          const s = TELE_FLAG_ST[f.status] || TELE_FLAG_ST.new;
+          return (
+            <Row key={f.id} cols={cols}>
+              <span style={{ fontSize: 11.5, color: T.t3 }}>{fmtD(f.day)}</span>
+              <span onClick={() => onOpen(f.unit_ref)} style={{ fontSize: 12, fontWeight: 600, color: T.ind, cursor: "pointer" }}>{nameOf(f)}</span>
+              <span><Pill label={teleFlagKind(f.kind)} c={f.severity === "high" ? T.red : T.amb} bg={f.severity === "high" ? T.redL : T.ambL} /></span>
+              <span style={{ fontSize: 11.5, color: T.t2 }}>
+                {teleFlagText(f)}
+                <span onClick={() => setWq(teleFlagQ(f, f.unit_ref, nameOf(f)))} style={teleWhereLink}>{t("machinery.tw_btn")}</span>
+              </span>
+              <span style={{ fontSize: 11 }}>
+                {f.status === "new" ? (
+                  canMach("create") ? (
+                    <span style={{ display: "inline-flex", gap: 5, flexWrap: "wrap" }}>
+                      <Btn size="sm" ghost onClick={() => review(f, "ok")}>{t("machinery.tf_b_ok")}</Btn>
+                      <Btn size="sm" ghost style={{ color: T.red }} onClick={() => review(f, "sahi")}>{t("machinery.tf_b_sahi")}</Btn>
+                    </span>
+                  ) : <Pill label={s.l} c={s.c} bg={s.bg} />
+                ) : (
+                  <span>
+                    <Pill label={s.l} c={s.c} bg={s.bg} />
+                    {f.reviewed_by_name ? <span style={{ color: T.t4 }}> · {f.reviewed_by_name}</span> : null}
+                    {canMach("create") && <span onClick={() => review(f, "new")} style={{ color: T.t4, cursor: "pointer", textDecoration: "underline", marginLeft: 6 }}>{t("machinery.tf_b_wapas")}</span>}
+                    {f.note ? <div style={{ color: T.t3, marginTop: 3 }}>{f.note}</div> : null}
+                  </span>
+                )}
+              </span>
+            </Row>
+          );
+        })}
+      </Panel>
+      {wq && <TeleWhere q={wq} onClose={() => setWq(null)} />}
+    </div>
+  );
+}
+
 // ── Fuel register: range ke saare fill/drop ──────────────────────────
 function TeleFuelRegister({ rg, ms, onOpen, onAction }) {
   const [rows, setRows] = useState(null);
+  const [wq, setWq] = useState(null);
   const [trunc, setTrunc] = useState(false);
   const [k, setK] = useState({ type: "", entry: "", jaanch: "" });
   const [tick, setTick] = useState(0);
@@ -6711,13 +7042,9 @@ function TeleFuelRegister({ rg, ms, onOpen, onAction }) {
               <span style={{ ...teleMono, fontSize: 11, color: T.t3 }}>
                 {r.level_before != null ? Math.round(r.level_before) + " → " + Math.round(r.level_after) : "—"}
               </span>
-              <span style={{ fontSize: 11.5, color: T.t3, ...teleEll }}>
-                {r.location_text || "—"}
-                {r.lat != null && (
-                  <a href={"https://www.google.com/maps?q=" + r.lat + "," + r.lng} target="_blank" rel="noreferrer"
-                    title={r.pin_source && r.pin_source !== "snap" ? t("machinery.tel_pin_andaza") : undefined}
-                    style={{ marginLeft: 6, color: T.ind, fontWeight: 700, textDecoration: "none", whiteSpace: "nowrap" }}>{t("machinery.tel_naksha")}</a>
-                )}
+              <span onClick={() => setWq(teleEvQ(r, r.unit_id, nameOf(r)))} title={t("machinery.tw_btn")}
+                style={{ fontSize: 11.5, color: T.ind, fontWeight: 600, cursor: "pointer", ...teleEll }}>
+                {r.location_text ? "📍 " + r.location_text : t("machinery.tw_btn")}
               </span>
               <span style={{ fontSize: 11, fontWeight: 600, color: !fill ? T.t4 : r.matched_fuel_entry_id ? T.grn : r.equipment_id ? T.amb : T.t4 }}>
                 {entryTxt(r)}
@@ -6734,6 +7061,7 @@ function TeleFuelRegister({ rg, ms, onOpen, onAction }) {
         })}
         {trunc && <div style={{ padding: "8px 15px", fontSize: 10.5, color: T.amb }}>{t("machinery.tp_r_truncated")}</div>}
       </Panel>
+      {wq && <TeleWhere q={wq} onClose={() => setWq(null)} />}
     </div>
   );
 }
@@ -6831,7 +7159,7 @@ function TeleBars({ data, title, color, fmt, sel, onPick }) {
   );
 }
 
-function TeleDayView({ unitId, day, row }) {
+function TeleDayView({ unitId, day, row, onWhere }) {
   const boxRef = useRef(null);
   const mapRef = useRef(null);
   const objs = useRef([]);
@@ -6877,7 +7205,7 @@ function TeleDayView({ unitId, day, row }) {
         strokeColor: "#B27A0A", strokeOpacity: 0.9, strokeWeight: 3 }));
     }
     pos.forEach((p) => add(new g.maps.Circle({ map: mapRef.current, center: { lat: p.lat, lng: p.lng }, radius: 25,
-      strokeColor: "#B27A0A", strokeWeight: 1, fillColor: "#B27A0A", fillOpacity: 0.35 }), { lat: p.lat, lng: p.lng }));
+      strokeColor: "#B27A0A", strokeWeight: 1, fillColor: "#B27A0A", fillOpacity: p.src === "name" ? 0 : 0.35 }), { lat: p.lat, lng: p.lng }));
     (tr.events || []).filter((e) => e.lat != null).forEach((e) => {
       const fill = e.event_type === "fill";
       add(new g.maps.Marker({ map: mapRef.current, position: { lat: e.lat, lng: e.lng },
@@ -6901,10 +7229,10 @@ function TeleDayView({ unitId, day, row }) {
   if (row && row.park_start_at) items.push({ at: row.park_start_at, c: T.slt, txt: t("machinery.tp_u_tl_park", { loc: row.park_location || "—" }) });
   ((tr && tr.positions) || []).forEach((p) => items.push({
     at: p.first_seen_at, c: T.amb,
-    txt: t("machinery.tp_u_tl_pos", { loc: p.location_text || "—" }) + " (" + localDT(p.first_seen_at).slice(11) + "–" + localDT(p.last_seen_at).slice(11) + ")",
+    txt: t("machinery.tp_u_tl_pos", { loc: p.location_text || "—" }) + teleAndaza(p.src) + " (" + localDT(p.first_seen_at).slice(11) + "–" + localDT(p.last_seen_at).slice(11) + ")",
   }));
   ((tr && tr.events) || []).forEach((e) => items.push({
-    at: e.event_time, c: e.event_type === "fill" ? T.grn : T.red, bold: true,
+    at: e.event_time, c: e.event_type === "fill" ? T.grn : T.red, bold: true, ev: e,
     txt: t(e.event_type === "fill" ? "machinery.tp_u_tl_fill" : "machinery.tp_u_tl_drop", { l: l1(e.litres), loc: e.location_text || "—" })
       + (e.level_before != null ? ` (${Math.round(e.level_before)} → ${Math.round(e.level_after)} L)` : ""),
   }));
@@ -6928,7 +7256,10 @@ function TeleDayView({ unitId, day, row }) {
           <div key={i} style={{ display: "flex", gap: 8, padding: "4px 0", borderBottom: `1px dashed ${T.b1}` }}>
             <span style={{ fontFamily: "monospace", color: T.t4, flexShrink: 0 }}>{localDT(x.at).slice(11)}</span>
             <span style={{ width: 7, height: 7, borderRadius: 4, background: x.c, marginTop: 5, flexShrink: 0 }} />
-            <span style={{ fontWeight: x.bold ? 700 : 400 }}>{x.txt}</span>
+            <span style={{ fontWeight: x.bold ? 700 : 400 }}>
+              {x.txt}
+              {x.ev && onWhere && <span onClick={() => onWhere(x.ev)} style={teleWhereLink}>{t("machinery.tw_btn")}</span>}
+            </span>
           </div>
         ))}
         {tr != null && (tr.positions || []).length === 0 && (
@@ -6943,6 +7274,7 @@ function TeleUnitPanel({ unitId, onClose }) {
   const [days, setDays] = useState(30);
   const [data, setData] = useState(null);
   const [selDay, setSelDay] = useState(null);
+  const [wq, setWq] = useState(null);
   useEffect(() => {
     let dead = false;
     setData(null);
@@ -6973,6 +7305,7 @@ function TeleUnitPanel({ unitId, onClose }) {
   const u = data && data.unit;
   const sub = u ? [u.machine_name ? u.unit_name : null, u.group_label, u.city_name, u.site && u.site.label].filter(Boolean).join(" · ") : "";
   const rowOf = (day) => (data && data.daily ? data.daily.find((d) => d.day === day) || null : null);
+  const flagDays = new Set(((data && data.flags) || []).map((f) => f.day));
   const over = data && data.lph != null && data.norm_lph != null && data.lph > data.norm_lph * 1.15;
   const dcols = "92px 64px 58px 72px 72px 64px 1.6fr 1.2fr";
 
@@ -6990,7 +7323,7 @@ function TeleUnitPanel({ unitId, onClose }) {
               <Pill label={t("machinery.tp_u_lph", { n: data.days, x: fmtN(data.lph) }) + (data.norm_lph != null ? " · " + t("machinery.tp_u_norm", { x: fmtN(data.norm_lph) }) : "")}
                 c={over ? T.red : T.ind} bg={over ? T.redL : T.indL} />
             )}
-            <span style={{ color: T.t3 }}>{u.last.location || "—"}{u.last.data_at ? " · " + t("machinery.tp_h_aakhri_data", { t: fmtD(u.last.data_at) }) : ""}</span>
+            <span style={{ color: T.t3 }}>{(u.last.location || "—") + teleAndaza(u.last.src)}{u.last.data_at ? " · " + t("machinery.tp_h_aakhri_data", { t: fmtD(u.last.data_at) }) : ""}</span>
             {(u.renamed_from || []).length > 0 && <span style={{ color: T.ind }}>{t("machinery.tel_renamed_from", { old: u.renamed_from.join(", ") })}</span>}
             <span style={{ marginLeft: "auto", display: "inline-flex", gap: 5 }}>
               {[14, 30, 60].map((n) => (
@@ -7010,7 +7343,19 @@ function TeleUnitPanel({ unitId, onClose }) {
                 warn: data.norm_lph != null && s.r && s.r.engine_sec >= 1800 && s.r.consumed_l / (s.r.engine_sec / 3600) > data.norm_lph * 1.15 }))} />
           </div>
 
-          {selDay && <TeleDayView unitId={unitId} day={selDay} row={rowOf(selDay)} />}
+          {selDay && (data.flags || []).filter((f) => f.day === selDay).map((f) => {
+            const fs2 = TELE_FLAG_ST[f.status] || TELE_FLAG_ST.new;
+            return (
+              <div key={f.id} style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", fontSize: 12, color: T.t2,
+                border: `1px solid ${f.severity === "high" ? T.red : T.amb}55`, background: f.severity === "high" ? T.redL : T.ambL, borderRadius: 8, padding: "7px 11px" }}>
+                <b>⚑ {teleFlagKind(f.kind)}</b><span>{teleFlagText(f)}</span>
+                <Pill label={fs2.l} c={fs2.c} bg={T.surface} />
+                {f.note ? <span style={{ color: T.t3 }}>— {f.note}</span> : null}
+                <span onClick={() => setWq(teleFlagQ(f, unitId, teleName(u)))} style={teleWhereLink}>{t("machinery.tw_btn")}</span>
+              </div>
+            );
+          })}
+          {selDay && <TeleDayView unitId={unitId} day={selDay} row={rowOf(selDay)} onWhere={(e) => setWq(teleEvQ(e, unitId, teleName(u)))} />}
 
           <Panel title={t("machinery.tp_u_table", { n: data.daily.length })}>
             <Row head cols={dcols}>
@@ -7021,7 +7366,7 @@ function TeleUnitPanel({ unitId, onClose }) {
             {data.daily.length === 0 && <Empty>{t("machinery.tp_u_koi_din")}</Empty>}
             {data.daily.slice().reverse().map((d) => (
               <Row key={d.day} cols={dcols} onClick={() => setSelDay(d.day)}>
-                <span style={{ fontSize: 11.5, fontWeight: selDay === d.day ? 700 : 400, color: selDay === d.day ? T.ind : T.t2 }}>{fmtD(d.day)}</span>
+                <span style={{ fontSize: 11.5, fontWeight: selDay === d.day ? 700 : 400, color: selDay === d.day ? T.ind : T.t2 }}>{fmtD(d.day)}{flagDays.has(d.day) ? <span style={{ color: T.red }}> ⚑</span> : null}</span>
                 <span style={{ ...teleMono, color: d.engine_suspect ? T.amb : T.t2 }} title={d.engine_suspect ? t("machinery.tel_engine_shak_hint") : undefined}>
                   {teleHrs(d.engine_sec)}{d.engine_suspect ? " ⚠" : ""}
                 </span>
@@ -7038,6 +7383,7 @@ function TeleUnitPanel({ unitId, onClose }) {
           </Panel>
         </div>
       )}
+      {wq && <TeleWhere q={wq} onClose={() => setWq(null)} />}
     </Modal>
   );
 }
@@ -7131,6 +7477,7 @@ function TelematicsTab({ data, onReload, onNewMachine }) {
   const machineById = Object.fromEntries(machines.map((m) => [m.id, m]));
   const fh = (fleet && fleet.health) || {};
   const healthN = ["silent", "engine_suspect", "fls_zero", "link_warn"].reduce((a, k) => a + (fh[k] || []).length, 0);
+  const flagsN = ms.reduce((a, m) => a + ((m.p && m.p.flags_new) || 0), 0);
 
   const doSync = async () => {
     const r = await api.post("/telematics/sync", {});
@@ -7212,6 +7559,7 @@ function TelematicsTab({ data, onReload, onNewMachine }) {
           { id: "dash", l: t("common.dashboard") },
           { id: "map", l: t("machinery.map") },
           { id: "fuel", l: t("machinery.tp_tab_fuel") },
+          { id: "flags", l: t("machinery.tf_tab"), badge: flagsN || null },
           { id: "health", l: t("machinery.tp_tab_health"), badge: healthN || null },
           { id: "jod", l: t("machinery.jodna_baaki"), badge: pending.length || null },
         ].map((x) => (
@@ -7228,13 +7576,16 @@ function TelematicsTab({ data, onReload, onNewMachine }) {
         ))}
       </div>
 
-      {(sub === "dash" || sub === "map" || sub === "fuel") && <TeleFilterBar f={f} setF={setF} fleet={fleet} busy={fleetBusy} />}
+      {(sub === "dash" || sub === "map" || sub === "fuel" || sub === "flags") && <TeleFilterBar f={f} setF={setF} fleet={fleet} busy={fleetBusy} />}
       {sub === "dash" && <TeleFleetDash fleet={fleet} ms={ms} rg={rg} onOpen={setOpenUnit} onAction={reloadAll} goTab={setSub} />}
       {sub === "map" && (fleet
         ? <TeleMap ms={ms} sites={fleet.sites || []} rg={rg} syncAt={st.last_at} onOpen={setOpenUnit} />
         : <Empty>{t("common.loading")}</Empty>)}
       {sub === "fuel" && (fleet
         ? <TeleFuelRegister rg={rg} ms={ms} onOpen={setOpenUnit} onAction={reloadAll} />
+        : <Empty>{t("common.loading")}</Empty>)}
+      {sub === "flags" && (fleet
+        ? <TeleFlags rg={rg} ms={ms} onOpen={setOpenUnit} onAction={reloadAll} />
         : <Empty>{t("common.loading")}</Empty>)}
       {sub === "health" && <TeleHealth fleet={fleet} onOpen={setOpenUnit} goJod={() => setSub("jod")} />}
       {openUnit != null && <TeleUnitPanel unitId={openUnit} onClose={() => setOpenUnit(null)} />}
