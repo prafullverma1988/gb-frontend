@@ -207,7 +207,19 @@ function InvoiceRow({ inv, onChanged, toast }) {
   );
 }
 
-function ClientBilling({ clientId, defaults, onBack }) {
+// Export — company ke page (CompanyDetailPage → "AI Billing") par bhi yahi.
+// Wahan `defaults` nahi milte to khud la leta hai; `onBack` na ho to "Sab
+// client" button nahi; `companyName` ho to upar batata hai ki bill CLIENT par
+// banta hai (us client ki sab company ka jod), sirf is company par nahi.
+export function ClientBilling({ clientId, defaults: defaultsProp, onBack, companyName }) {
+  const [fetchedDefaults, setFetchedDefaults] = useState(null);
+  const defaults = defaultsProp || fetchedDefaults;
+  useEffect(() => {
+    if (defaultsProp) return;
+    apiFetch("/saas-admin/ai-billing/settings")
+      .then((r) => { if (r && r.success) setFetchedDefaults(r.data.settings); })
+      .catch(() => {});
+  }, [defaultsProp]);
   const [month, setMonth] = useState(monthOptions()[1].value);   // pichhla (khatam) mahina
   const [d, setD] = useState(null);
   const [err, setErr] = useState("");
@@ -263,13 +275,22 @@ function ClientBilling({ clientId, defaults, onBack }) {
   return (
     <div>
       {toastMsg && <Toast msg={toastMsg.msg} type={toastMsg.type} onClose={() => setToastMsg(null)}/>}
-      <button onClick={onBack} style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", color: T.blu, fontSize: 12.5, fontWeight: 600, cursor: "pointer", padding: 0, marginBottom: 12, fontFamily: "inherit" }}>
-        <IcChevL size={13}/> Sab client
-      </button>
+      {onBack && (
+        <button onClick={onBack} style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", color: T.blu, fontSize: 12.5, fontWeight: 600, cursor: "pointer", padding: 0, marginBottom: 12, fontFamily: "inherit" }}>
+          <IcChevL size={13}/> Sab client
+        </button>
+      )}
       {err && <div style={{ color: T.red, fontSize: 13, marginBottom: 10 }}>{err}</div>}
-      {!d && !err && <div style={{ color: T.t3, fontSize: 13 }}>Load ho raha…</div>}
-      {d && (<>
-        <div style={{ fontSize: 16, fontWeight: 800, color: T.t1, marginBottom: 14 }}>{d.terms.client.name}</div>
+      {(!d || !defaults) && !err && <div style={{ color: T.t3, fontSize: 13 }}>Load ho raha…</div>}
+      {d && defaults && (<>
+        {companyName ? (
+          <div style={{ fontSize: 12.5, color: T.t2, marginBottom: 14, lineHeight: 1.6, maxWidth: 860 }}>
+            AI ka bill <b>client</b> ko jaata hai, company ko nahi. <b>{companyName}</b> client <b>{d.terms.client.name}</b> ki company hai —
+            neeche ki sharten aur bill us client ki <b>sab company</b> par lagte hain.
+          </div>
+        ) : (
+          <div style={{ fontSize: 16, fontWeight: 800, color: T.t1, marginBottom: 14 }}>{d.terms.client.name}</div>
+        )}
 
         <div style={card}>
           <div style={h2}>Is client ki sharten</div>
@@ -398,7 +419,8 @@ export default function TabAiBilling() {
           {ov && !ov.month_ended && <div style={{ fontSize: 11.5, color: T.t3, marginLeft: "auto" }}>Chalu mahina — abhi tak ka; invoice mahina khatam hone ke baad</div>}
         </div>
         {!ov && <div style={{ color: T.t3, fontSize: 13 }}>Load ho raha…</div>}
-        {ov && !ov.clients.length && <div style={{ color: T.t3, fontSize: 13 }}>Is mahine kisi client ki AI call nahi.</div>}
+        {ov && !ov.clients.length && <div style={{ color: T.t3, fontSize: 13 }}>Abhi koi client nahi.</div>}
+        {ov && ov.clients.length > 0 && <div style={{ fontSize: 11.5, color: T.t3, marginBottom: 8 }}>Sab client dikhte hain — jiski abhi call nahi hui uske bhi markup / quota / limit pehle se set kar sakte ho (client par click karo).</div>}
         {ov && ov.clients.length > 0 && (
           <div style={{ overflowX: "auto", border: `1px solid ${T.b1}`, borderRadius: 8 }}>
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
@@ -409,7 +431,7 @@ export default function TabAiBilling() {
               <tbody>{ov.clients.map((c) => (
                 <tr key={c.client_id} onClick={() => setClientId(c.client_id)} style={{ cursor: "pointer" }}
                   onMouseEnter={(e) => (e.currentTarget.style.background = T.surfaceB)} onMouseLeave={(e) => (e.currentTarget.style.background = "")}>
-                  <td style={{ ...td, fontWeight: 600, color: T.blu }}>{c.name}{c.missing_rates > 0 && <span style={{ marginLeft: 6 }}><Badge text={c.missing_rates + " rate nahi"} color={T.red}/></span>}</td>
+                  <td style={{ ...td, fontWeight: 600, color: T.blu }}>{c.name}{c.is_internal && <span style={{ marginLeft: 6 }}><Badge text="internal" color={T.slt}/></span>}{c.missing_rates > 0 && <span style={{ marginLeft: 6 }}><Badge text={c.missing_rates + " rate nahi"} color={T.red}/></span>}</td>
                   <td style={num}>{fmtNum(c.calls)}</td>
                   <td style={num}>{rs(c.platform_amount)}</td>
                   <td style={num}>{rs(c.byok_amount)}</td>

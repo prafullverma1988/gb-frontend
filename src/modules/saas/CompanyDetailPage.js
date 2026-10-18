@@ -8,6 +8,7 @@ import { API, tok, apiFetch, T, fmtDate, fmtDateTime, fmtNum, fmtMoney, DOMAIN_L
 import { Toast, Toggle, StatCard, Badge, Btn, InputField, SelectField, EmptyState, TableHeader } from "./ui";
 import { BundleView, TicketBadge, fmtTicketTime } from "../shared/TicketBundle";
 import { AiModelsPanel, AiUsagePanel } from "./AiModels";
+import { ClientBilling } from "./AiBilling";
 import { CompanyGpsPanel } from "./CompanyGps";
 import ClientDocuments from "./ClientDocuments";
 
@@ -536,6 +537,7 @@ function CompanyDetailPage({ companyId, onBack }) {
     { id:"features",    label:`Requests (${feature_requests.length})`, Icon:IcClip },
     { id:"crm",         label:`Notes/CRM (${crm_notes.length})`, Icon:IcShield },
     { id:"aimodels",    label:"AI Models",           Icon:IcCog      },
+    { id:"aibilling",   label:"AI Billing",          Icon:IcDollar   },
     { id:"gps",         label:"GPS",                 Icon:IcActivity },
   ];
 
@@ -825,6 +827,11 @@ function CompanyDetailPage({ companyId, onBack }) {
           <AiUsagePanel companyId={companyId}/>
         </div>
       )}
+      {/* AI ka bill CLIENT par banta hai — is company ke client ki sharten,
+          hisaab aur invoice. Wahi panel jo AI Billing tab me hai. */}
+      {tab === "aibilling" && (company.client_id
+        ? <ClientBilling clientId={company.client_id} companyName={company.name}/>
+        : <div style={{ padding:30, textAlign:"center", color:T.t4, fontSize:12.5 }}>Ye company kisi client se judi nahi — AI billing client par hoti hai.</div>)}
       {tab === "gps" && <CompanyGpsPanel companyId={companyId}/>}
 
       {/* Agreement — the paying client's deal papers; same list on every
