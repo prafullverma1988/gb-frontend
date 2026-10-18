@@ -9,6 +9,7 @@
 //   <img src={cld(url, "tile")}/>    do-teen column ka grid       (~480 px)
 //   <img src={cld(url, "card")}/>    feed card / poori chaudai    (~720 px)
 //   <img src={cld(url, "view")}/>    poori screen ka viewer       (~1600 px)
+//   <img src={cld(url, "full")}/>    zoom / detail (slip, site)   (jitni upload hui)
 //
 // Sirf width par bandhte hain (c_limit): photo kabhi bada nahi hota (chhoti
 // photo waise hi aati hai) aur crop wahi rehta hai jo CSS objectFit:cover
@@ -25,6 +26,8 @@ export const CLD_PRESETS = {
   tile:  "w_480,c_limit,q_auto,f_auto",
   card:  "w_720,c_limit,q_auto,f_auto",
   view:  "w_1600,c_limit,q_auto,f_auto",
+  // Zoom karne par — jitni upload hui utni badi (19 Oct 2026 se 2560 px), detail ke liye q_auto:good.
+  full:  "q_auto:good,f_auto",
 };
 
 // /upload/ ke turant baad pehle se transformation ho (w_240,c_fill / q_auto ..)

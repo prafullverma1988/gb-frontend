@@ -3128,7 +3128,7 @@ function IssueDetailDrawer({issue,onClose,canCancel,canReceive,onDeleted,onRecei
                 <div style={{fontSize:9.5,color:T.t4,marginBottom:6,fontWeight:700,textTransform:"uppercase",letterSpacing:".4px"}}>{t("warehouse.challan_photo")}</div>
                 <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
                   {detail.challan_photos.map((u,i)=>(
-                    <a key={i} href={cld(u,"view")} target="_blank" rel="noopener noreferrer">
+                    <a key={i} href={cld(u, "full")} target="_blank" rel="noopener noreferrer">
                       <img src={cld(u,"thumb")} alt="" style={{width:64,height:64,objectFit:"cover",borderRadius:6,border:`1px solid ${T.b1}`,display:"block"}}/>
                     </a>
                   ))}
@@ -3735,7 +3735,7 @@ export function TransferDetailDrawer({transfer,onClose,canDelete,canReceive,onDe
                     <div style={{fontSize:11.5,fontWeight:700,color:T.t1}}>{g.title}</div>
                     <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:6}}>
                       {g.urls.map((u,i)=>(
-                        <a key={i} href={cld(u,"view")} target="_blank" rel="noopener noreferrer">
+                        <a key={i} href={cld(u, "full")} target="_blank" rel="noopener noreferrer">
                           <img src={cld(u,"thumb")} alt="" style={{width:56,height:56,objectFit:"cover",borderRadius:6,border:`1px solid ${T.b1}`,display:"block"}}/>
                         </a>
                       ))}

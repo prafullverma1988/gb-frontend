@@ -931,7 +931,7 @@ function Section({ color, bg, icon, title, rows = [], empty = false, emptyText =
       {zoom && (
         <div 
           style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 2000, display: "flex", alignItems: "center", justifyContent: "center", cursor: "zoom-out" }}>
-          <img src={cld(zoom, "view")} alt="" style={{ maxWidth: "92vw", maxHeight: "92vh", borderRadius: 8, boxShadow: "0 20px 60px rgba(0,0,0,0.5)" }}/>
+          <img src={cld(zoom, "full")} alt="" style={{ maxWidth: "92vw", maxHeight: "92vh", borderRadius: 8, boxShadow: "0 20px 60px rgba(0,0,0,0.5)" }}/>
         </div>
       )}
     </div>

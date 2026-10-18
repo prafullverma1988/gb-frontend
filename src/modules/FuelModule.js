@@ -588,7 +588,7 @@ function FuelEntryDrawer({ entry, onClose, onChanged }) {
         <div onClick={() => setShot(null)}
           style={{ position: "fixed", inset: 0, zIndex: 10002, background: "rgba(0,0,0,.85)",
             display: "flex", alignItems: "center", justifyContent: "center", cursor: "zoom-out" }}>
-          <img src={cld(shot, "view")} alt="" style={{ maxWidth: "94vw", maxHeight: "94vh", borderRadius: 8 }} />
+          <img src={cld(shot, "full")} alt="" style={{ maxWidth: "94vw", maxHeight: "94vh", borderRadius: 8 }} />
         </div>
       )}
     </div>
@@ -1289,7 +1289,7 @@ function DipActions({ row, onAsk }) {
   return (
     <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", padding: "5px 15px 7px", borderBottom: `1px solid ${T.b1}`, background: T.surfaceB }}>
       {photos.map((u, i) => (
-        <a key={i} href={cld(u, "view")} target="_blank" rel="noreferrer" title={t("fuel.dip_photo_label")}>
+        <a key={i} href={cld(u, "full")} target="_blank" rel="noreferrer" title={t("fuel.dip_photo_label")}>
           <img src={cld(u, "thumb")} alt="" style={{ height: 30, width: 30, objectFit: "cover", borderRadius: 5, border: `1px solid ${T.b1}`, display: "block" }} />
         </a>
       ))}
@@ -2324,7 +2324,7 @@ function UnbilledTab({ onReload }) {
         <div onClick={() => setShot(null)}
           style={{ position: "fixed", inset: 0, zIndex: 10000, background: "rgba(0,0,0,.8)",
             display: "flex", alignItems: "center", justifyContent: "center", cursor: "zoom-out" }}>
-          <img src={cld(shot, "view")} alt="" style={{ maxWidth: "92vw", maxHeight: "92vh", borderRadius: 8 }} />
+          <img src={cld(shot, "full")} alt="" style={{ maxWidth: "92vw", maxHeight: "92vh", borderRadius: 8 }} />
         </div>
       )}
     </div>

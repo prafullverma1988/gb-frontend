@@ -1554,7 +1554,7 @@ function PhotoStrip({ photos, accent = "#2563EB" }) {
       {zoom && (
         <div 
           style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:2500,display:"flex",alignItems:"center",justifyContent:"center",cursor:"zoom-out"}}>
-          <img src={cld(zoom, "view")} alt="" style={{maxWidth:"92vw",maxHeight:"92vh",borderRadius:8,boxShadow:"0 20px 60px rgba(0,0,0,0.5)"}}/>
+          <img src={cld(zoom, "full")} alt="" style={{maxWidth:"92vw",maxHeight:"92vh",borderRadius:8,boxShadow:"0 20px 60px rgba(0,0,0,0.5)"}}/>
         </div>
       )}
     </>
@@ -4377,7 +4377,7 @@ function IssuesDrawer({issues, loading, filter, setFilter, onClose, onIssueClose
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:300,backdropFilter:"blur(2px)",animation:"fadeIn .25s ease"}}/>
     {fullPhoto&&(
       <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.92)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center",cursor:"zoom-out"}}>
-        <img src={cld(fullPhoto, "view")} style={{maxWidth:"95vw",maxHeight:"90vh",objectFit:"contain",borderRadius:8}}/>
+        <img src={cld(fullPhoto, "full")} style={{maxWidth:"95vw",maxHeight:"90vh",objectFit:"contain",borderRadius:8}}/>
         <button onClick={()=>setFullPhoto(null)} style={{position:"absolute",top:16,right:16,background:"rgba(255,255,255,.15)",border:"none",borderRadius:"50%",width:36,height:36,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
           <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg>
         </button>

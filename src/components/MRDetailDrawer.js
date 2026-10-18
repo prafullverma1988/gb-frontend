@@ -245,7 +245,7 @@ export default function MRDetailDrawer({ mr, onClose, onChanged, isAdmin: allowE
                     <div style={{ fontSize: 9.5, fontWeight: 700, color: T.t4, textTransform: "uppercase", letterSpacing: ".4px", marginBottom: 6 }}>{t("common.photos")}</div>
                     <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                       {list.map((u, i) => (
-                        <a key={i} href={cld(u, "view")} target="_blank" rel="noopener noreferrer">
+                        <a key={i} href={cld(u, "full")} target="_blank" rel="noopener noreferrer">
                           <img src={cld(u, "thumb")} alt="" style={{ width: 64, height: 64, objectFit: "cover", borderRadius: 6, border: `1px solid ${T.b1}`, display: "block" }}/>
                         </a>
                       ))}

@@ -782,7 +782,7 @@ function MediaLightbox({items, index, onIndex, onClose, isVid, onRemove}){
           cursor: isVid(m) ? "default" : (z>1 ? (drag.current?"grabbing":"grab") : "zoom-in")}}>
         {isVid(m)
           ? <video src={m.url} controls autoPlay style={{maxWidth:"92%", maxHeight:"100%"}}/>
-          : <img src={cld(m.url, "view")} alt="" draggable={false}
+          : <img src={cld(m.url, "full")} alt="" draggable={false}
               style={{maxWidth:"92%", maxHeight:"100%", objectFit:"contain",
                 transform:`translate(${off.x}px,${off.y}px) scale(${z})`,
                 transition: drag.current?"none":"transform .12s ease-out"}}/>}

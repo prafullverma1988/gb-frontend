@@ -244,7 +244,7 @@ function TbZoom({ photo, onClose }) {
   if (!photo || !photo.url) return null;
   return (
     <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 10050, background: "rgba(0,0,0,0.85)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 16, cursor: "zoom-out" }}>
-      <img src={cld(photo.url, "view")} alt={photo.label || ""} style={{ maxWidth: "96vw", maxHeight: "82vh", objectFit: "contain", borderRadius: 8 }} />
+      <img src={cld(photo.url, "full")} alt={photo.label || ""} style={{ maxWidth: "96vw", maxHeight: "82vh", objectFit: "contain", borderRadius: 8 }} />
       {photo.label && <div style={{ color: "#fff", fontSize: 12.5, marginTop: 10, fontWeight: 600 }}>{photo.label}</div>}
       <a href={photo.url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} style={{ color: "#C7D2FE", fontSize: 11.5, marginTop: 6 }}>{t("tripbill.open_original")}</a>
     </div>

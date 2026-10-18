@@ -30,7 +30,7 @@ export function photoList(v) {
 }
 
 // Vendor ke liye photo link — 1600px wala halka version (asli 3-12 MB hoti hai).
-export const photoLinks = (m) => photoList(m && (m.photo_urls != null ? m.photo_urls : m.photos)).map((u) => cld(u, "view"));
+export const photoLinks = (m) => photoList(m && (m.photo_urls != null ? m.photo_urls : m.photos)).map((u) => cld(u, "full"));
 
 // Vendor ko dikhne wala naam. Asset ki maang ka MR naam "asset + spec" jod kar
 // banta hai; wahi ho to sirf asset ka naam (spec apni line me jaata hai).

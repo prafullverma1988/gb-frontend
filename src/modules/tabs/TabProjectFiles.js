@@ -336,7 +336,7 @@ function PhotoViewer({ items, index, onIndex, onClose, onRemove, busy }) {
       </div>
       <div onClick={(e) => e.stopPropagation()} style={{ flex: 1, overflow: "hidden", display: "flex",
         alignItems: "center", justifyContent: "center" }}>
-        <img src={cld(m.url, "view")} alt="" style={{ maxWidth: "92%", maxHeight: "100%", objectFit: "contain" }} />
+        <img src={cld(m.url, "full")} alt="" style={{ maxWidth: "92%", maxHeight: "100%", objectFit: "contain" }} />
       </div>
       <div onClick={(e) => e.stopPropagation()} style={{ display: "flex", justifyContent: "center", gap: 16,
         padding: "10px 0 16px", flexShrink: 0 }}>
