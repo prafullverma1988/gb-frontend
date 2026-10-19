@@ -18,7 +18,7 @@ import { WarehouseGintiTab, DisposalModal, DisposalsPanel } from "./WarehouseGin
 import { ConversionTab } from "./WarehouseConversion";
 import { JobWorkTab } from "./WarehouseJobWork";
 import { can, canAny, canEntry } from "../utils/perms";
-import { UnitPickOrLock, StockConvLine, cardUnitOptions, useUnitCards, stockQtyOf, factorOf, needsFactor } from "../components/UnitConv";
+import { UnitPickOrLock, StockConvLine, cardUnitOptions, useUnitCards, stockQtyOf, factorOf, needsFactor, UnitViewChip } from "../components/UnitConv";
 
 // ── ICONS ──────────────────────────────────────────────────────────────
 const Ic=({d,size=18,color="currentColor",sw=1.8,fill="none"})=>(
@@ -2175,6 +2175,11 @@ function LocLine({m,style}){
 }
 function StockTab({stock,grns,issues,onSelect,onAddMaterial,onAddStock,onIssue,onQuickRequest,onDispose,onHidden}){
   const [search,setSearch]=useState("");
+  // Hissa D (19 Oct 2026): stock doosri unit me dekhna — unit card wale material par "⇄".
+  const ucards=useUnitCards(stock.map(m=>m.name));
+  const cardOf=(m)=>ucards[String(m.name||"").trim().toLowerCase()]||null;
+  const anyCard=stock.some(m=>cardOf(m));
+  const [allUnits,setAllUnits]=useState(false);
   const [cat,setCat]=useState("All");
   const [showLow,setShowLow]=useState(false);
   const [view,setView]=useState("group");
@@ -2291,6 +2296,12 @@ function StockTab({stock,grns,issues,onSelect,onAddMaterial,onAddStock,onIssue,o
           style={{height:33,padding:"0 11px",borderRadius:7,border:`1.5px solid ${showLow?"#EF4444":T.b1}`,background:showLow?"#FEF2F2":T.surface,color:showLow?"#EF4444":T.t3,fontSize:12,fontWeight:showLow?700:400,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
           <IcAlert size={12} color={showLow?"#EF4444":T.t4}/> {t("warehouse.low_stock")}
         </button>
+        {anyCard&&(
+          <button onClick={()=>setAllUnits(s=>!s)} title={t("unitcard.view_other")}
+            style={{height:33,padding:"0 11px",borderRadius:7,border:`1.5px solid ${allUnits?T.blu:T.b1}`,background:allUnits?T.bluL:T.surface,color:allUnits?T.blu:T.t3,fontSize:12,fontWeight:allUnits?700:500,cursor:"pointer",fontFamily:"inherit"}}>
+            ⇄ {t("unitcard.view_all")}
+          </button>
+        )}
         <PickSelect value={sort} onChange={e=>setSort(e.target.value)}
           style={{height:33,padding:"0 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,background:T.surface,fontSize:12,color:T.t2,outline:"none",cursor:"pointer",fontFamily:"inherit"}}>
           <option value="name">{t("warehouse.sort_name")}</option>
@@ -2392,6 +2403,7 @@ function StockTab({stock,grns,issues,onSelect,onAddMaterial,onAddStock,onIssue,o
                       <div style={{textAlign:"right",paddingRight:14}}>
                         <span style={{fontSize:16,fontWeight:600,color:h.label==="Out"?"#EF4444":h.label==="Low"?T.amb:T.t1,letterSpacing:"-0.1px",lineHeight:1}}>{fmtN(m.qty)}</span>
                         <span style={{fontSize:10,color:T.t4,marginLeft:3}}>{m.unit}</span>
+                        <UnitViewChip card={cardOf(m)} qty={m.qty} unit={m.unit} open={allUnits}/>
                         {h.label!=="OK"&&<div style={{fontSize:8.5,color:h.c,fontWeight:700,marginTop:2,textTransform:"uppercase",letterSpacing:".3px"}}>{h.label==="Out"?t("warehouse.out_of_stock"):h.label==="Low"?t("warehouse.below_min"):h.label}</div>}
                       </div>
 
@@ -2489,6 +2501,7 @@ function StockTab({stock,grns,issues,onSelect,onAddMaterial,onAddStock,onIssue,o
                             <span style={{fontSize:10.5,color:T.t4}}>{m.unit}</span>
                             {h.label!=="OK"&&<span style={{fontSize:8.5,color:h.c,fontWeight:700,background:h.bg,padding:"1px 5px",borderRadius:5,marginLeft:"auto"}}>{h.label==="Out"?"OUT":h.label.toUpperCase()}</span>}
                           </div>
+                          <UnitViewChip card={cardOf(m)} qty={m.qty} unit={m.unit} open={allUnits} align="left"/>
 
                           <LocLine m={m} style={{marginBottom:6}}/>
                           <BucketChips m={m} style={{marginBottom:6}}/>
@@ -2562,6 +2575,7 @@ function StockTab({stock,grns,issues,onSelect,onAddMaterial,onAddStock,onIssue,o
                 <div>
                   <span style={{fontSize:13,fontWeight:700,color:h.label==="Out"?"#EF4444":h.label==="Low"?T.amb:T.t1}}>{fmtN(m.qty)}</span>
                   <span style={{fontSize:10,color:T.t4,marginLeft:3}}>{m.unit}</span>
+                  <UnitViewChip card={cardOf(m)} qty={m.qty} unit={m.unit} open={allUnits} align="left"/>
                 </div>
                 <span style={{fontSize:12.5,fontWeight:600,color:T.blu}}>₹{fmt(m.value||0)}</span>
                 {h.label!=="OK"

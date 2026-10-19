@@ -12426,6 +12426,10 @@ const dict = {
   "unitcard.lot_hint": "यह हर लॉट / गाड़ी में अलग होता है — इस बार की संख्या लिखें",
   "unitcard.one_unit_eq": "1 {unit} =",
   "unitcard.use_suggest": "{n} लगाएँ",
+
+  "unitcard.view_other": "दूसरी यूनिट में देखें",
+
+  "unitcard.view_all": "सब दूसरी यूनिट में",
   "unitcard.preview": "= {qty} {stock}",
   "unitcard.need_number": "1 {unit} = कितने? संख्या लिखें",
   "unitcard.stock_in_unit": "स्टॉक किस यूनिट में",

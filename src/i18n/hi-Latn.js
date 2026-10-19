@@ -12429,6 +12429,10 @@ const dict = {
   "unitcard.lot_hint": "Ye har lot / gadi me alag hota hai — is baar ka number likho",
   "unitcard.one_unit_eq": "1 {unit} =",
   "unitcard.use_suggest": "{n} lagao",
+
+  "unitcard.view_other": "Doosri unit me dekho",
+
+  "unitcard.view_all": "Sab doosri unit me",
   "unitcard.preview": "= {qty} {stock}",
   "unitcard.need_number": "1 {unit} = kitne? number likho",
   "unitcard.stock_in_unit": "Stock kis unit me",

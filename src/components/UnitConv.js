@@ -8,7 +8,7 @@
 import { useState, useEffect } from "react";
 import PickSelect from "./PickSelect";
 import { t } from "../i18n";
-import { stockConv, cardUnits, pathFactor, sameStockUnit, loadUnitCards } from "./grn/weigh";
+import { stockConv, cardUnits, pathFactor, sameStockUnit, loadUnitCards, convList } from "./grn/weigh";
 
 const fmt = (n) => (Math.round((Number(n) || 0) * 1000) / 1000).toLocaleString("en-IN", { maximumFractionDigits: 3 });
 
@@ -57,6 +57,28 @@ export function StockConvLine({ st, unit, qty, factor, onFactor, compact }) {
         </button>
       )}
       {hasF && <span style={{ color: "#64748B", fontWeight: 600 }}>{t("unitcard.preview", { qty: fmt(cv.qty), stock: cv.stock })}</span>}
+    </div>
+  );
+}
+
+// ── Stock doosri unit me dekhna (Hissa D, 19 Oct 2026) ──
+// Qty ke paas chhota "⇄" — dabao to "≈ 5.01 Ton · 5,013 kg · ≈ 47 Bundle".
+// Sirf dekhne ke liye, kuch save nahi hota. open = bahar se sab khol do.
+const fmtView = (n) => { const v = Number(n) || 0; const a = Math.abs(v);
+  return v.toLocaleString("en-IN", { maximumFractionDigits: a >= 100 ? 0 : a >= 1 ? 2 : 3 }); };
+export const viewText = (list) => list.map((x) => (x.approx ? "≈ " : "") + fmtView(x.qty) + " " + x.unit).join(" · ");
+export function UnitViewChip({ card, lots, qty, unit, open: forceOpen, dark, align = "right" }) {
+  const [own, setOwn] = useState(false);
+  const list = convList(card, lots, qty, unit);
+  if (!list.length) return null;
+  const open = own || !!forceOpen;
+  return (
+    <div style={{ marginTop: 3, textAlign: align }} onClick={(e) => e.stopPropagation()}>
+      <button type="button" onClick={(e) => { e.stopPropagation(); setOwn((o) => !o); }} title={t("unitcard.view_other")}
+        style={{ padding: "0 6px", height: 17, borderRadius: 9, border: "1px solid " + (dark ? "rgba(255,255,255,0.35)" : "#CBD5E1"),
+          background: open ? (dark ? "rgba(255,255,255,0.15)" : "#EFF6FF") : "transparent", color: dark ? "#E2E8F0" : "#2563EB",
+          fontSize: 10, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", lineHeight: "15px" }}>⇄</button>
+      {open && <div style={{ fontSize: 10, color: dark ? "rgba(255,255,255,0.75)" : "#475569", fontWeight: 600, marginTop: 2, whiteSpace: "normal" }}>{viewText(list)}</div>}
     </div>
   );
 }

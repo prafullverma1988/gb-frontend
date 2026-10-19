@@ -163,6 +163,29 @@ export function cardUnits(card, stockUnit) {
   for (const p of (card && card.puls) || []) { add(p.a); add(p.b); }
   return out;
 }
+// Stock ki qty card ki baaki unit me — sirf DEKHNE ke liye (Hissa D, 19 Oct 2026).
+// Pakka pul → seedha; lot wala (Bundle, Gadi, CFT≈kg) → site ka aakhri lot
+// (lots: { unit: 1 unit = n stock }) ya card ka number, aur "≈". kg tak raasta
+// ho to Ton / kg dono. → [{ unit, qty, approx }]
+export function convList(card, lots, qty, fromUnit) {
+  const q = Number(qty) || 0;
+  if (!card || !fromUnit) return [];
+  const units = cardUnits(card, fromUnit).filter((u) => !sameStockUnit(u, fromUnit));
+  if (kgPerUnit(fromUnit) || units.some((u) => kgPerUnit(u)) || pathFactor(card, fromUnit, "kg")) {
+    for (const w of ["kg", "Ton"]) if (!sameStockUnit(w, fromUnit) && !units.some((u) => sameStockUnit(u, w))) units.push(w);
+  }
+  const out = [];
+  for (const u of units) {
+    const pf = pathFactor(card, fromUnit, u);
+    if (!pf) continue;
+    if (pf.kind === "pakka" && pf.mult > 0) { out.push({ unit: u, qty: q * pf.mult, approx: false }); continue; }
+    const lk = lots ? Object.keys(lots).find((k) => sameStockUnit(k, u)) : null;
+    if (lk && Number(lots[lk]) > 0) { out.push({ unit: u, qty: q / Number(lots[lk]), approx: true }); continue; }
+    if (pf.mult > 0) out.push({ unit: u, qty: q * pf.mult, approx: true });
+  }
+  return out;
+}
+
 // Library ka card (aur bina card wale naam ka sujhaav): { key: { card, suggested } }.
 export async function loadUnitCards(names) {
   const list = [...new Set((names || []).map((n) => String(n || "").trim()).filter(Boolean))];

@@ -18,7 +18,7 @@ import { t } from "../../i18n";
 import { cld } from "../../utils/cloudinary";
 import { can, canAny, canEntry } from "../../utils/perms";
 import { isoDate, todayISO } from "../../utils/today";
-import { UsedUnitRow, stockQtyOf, factorOf } from "../../components/UnitConv";
+import { UsedUnitRow, stockQtyOf, factorOf, UnitViewChip } from "../../components/UnitConv";
 
 // Dual-unit billing toggle ab components/grn/DualUnitToggle.js me hai —
 // site aur godown dono ke GRN me wahi switch chalta hai.
@@ -1412,6 +1412,8 @@ function TabMaterial({ project }) {
                         <div style={{textAlign:"right"}}>
                           <div style={{fontSize:10,color:isOpen?"rgba(255,255,255,0.4)":T.t4}}>{t("common.balance")}</div>
                           <div style={{fontSize:14,fontWeight:800,color:mat.balance<=0?"#F87171":isOpen?"white":balColor}}>{mat.balance}</div>
+                          {/* Hissa D: doosri unit me dekhna */}
+                          <UnitViewChip card={usedStOf(mat.material_name)?.card} lots={usedStOf(mat.material_name)?.lots} qty={mat.balance} unit={mat.unit} dark={isOpen}/>
                         </div>
                       </div>
                     </div>
@@ -1683,6 +1685,7 @@ function TabMaterial({ project }) {
                         <div style={{textAlign:"center"}}>
                           <div style={{fontSize:15,fontWeight:800,color:stC}}>{bal}</div>
                           <div style={{fontSize:8.5,color:T.t4}}>{t("common.balance")}</div>
+                          <UnitViewChip card={usedStOf(item.material_name)?.card} lots={usedStOf(item.material_name)?.lots} qty={bal} unit={item.unit} align="center"/>
                         </div>
                       </div>
                       {rec>0&&<div style={{height:4,background:T.b1,borderRadius:2,overflow:"hidden",marginBottom:8}}>

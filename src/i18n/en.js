@@ -12427,6 +12427,10 @@ const dict = {
   "unitcard.lot_hint": "This differs per lot / truck — enter this time's number",
   "unitcard.one_unit_eq": "1 {unit} =",
   "unitcard.use_suggest": "Use {n}",
+
+  "unitcard.view_other": "View in other units",
+
+  "unitcard.view_all": "Show other units",
   "unitcard.preview": "= {qty} {stock}",
   "unitcard.need_number": "1 {unit} = how many? Enter the number",
   "unitcard.stock_in_unit": "Stock in unit",
