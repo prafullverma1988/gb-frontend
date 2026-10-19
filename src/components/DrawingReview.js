@@ -180,7 +180,7 @@ function MarkCard({ m, events, me, selected, onSelect, onAct, onDelete, busy, ol
   );
 }
 
-export default function DrawingReview({ drawing, me, canDecide, onClose, onChanged }) {
+export default function DrawingReview({ drawing, me, canDecide, onClose, onChanged, onDecide }) {
   const [full, setFull] = useState(null);       // /design/drawings/:id (versions)
   const [data, setData] = useState({ marks: [], events: [] });
   const [version, setVersion] = useState(drawing.current_version || "v1");
@@ -288,14 +288,21 @@ export default function DrawingReview({ drawing, me, canDecide, onClose, onChang
 
   const status = (full && full.status) || drawing.status;
   const openNow = data.marks.filter((m) => m.status === "open" || m.status === "declined");
+  const canApprove = canDecide && isCurrent && status !== "Approved";
+  const canRevise = canDecide && isCurrent && status !== "Revision";
+  const approveNow = () => { if (!openNow.length || window.confirm(t("dmark.khule_hain_phir_bhi", { n: openNow.length }))) decide("Approved"); };
   const startRevise = () => {
     const lines = openNow.map((m) => "#" + m.seq + " (" + t("dmark.page_n", { n: m.page }) + "): " + m.note);
     setRevise(lines.length ? t("dmark.revise_note_shuru", { n: lines.length }) + "\n" + lines.join("\n") : "");
   };
+  // onDecide = Approvals screen se khula (wahi approval request, engine se) — parent band karta hai.
   const decide = async (st, note) => {
     setBusy(true); setMsg("");
-    const r = await api.patch("/design/drawings/" + drawing.id + "/status", { status: st, note: note || null }).catch((e) => ({ message: e.message }));
+    const r = onDecide
+      ? await Promise.resolve(onDecide(st, note)).catch((e) => ({ message: e.message }))
+      : await api.patch("/design/drawings/" + drawing.id + "/status", { status: st, note: note || null }).catch((e) => ({ message: e.message }));
     setBusy(false);
+    if (r && r.success && onDecide) return;
     if (r && r.success) { setRevise(null); await load(); if (onChanged) onChanged(); }
     else setMsg((r && r.message) || t("dmark.galti"));
   };
@@ -373,11 +380,11 @@ export default function DrawingReview({ drawing, me, canDecide, onClose, onChang
           <button type="button" onClick={() => setPdf({ title: t("dmark.approved_copy"), path: "/design/drawings/" + drawing.id + "/approved-pdf", filename: drawing.title + " " + current + " APPROVED.pdf" })}
             style={{ border: "none", background: "rgba(5,150,105,.25)", color: "#A7F3D0", borderRadius: 8, height: 34, padding: "0 12px", fontSize: 13, fontWeight: 800, cursor: "pointer", flex: "none" }}>✅ {t("dmark.approved_copy")}</button>
         )}
-        {canDecide && isCurrent && status !== "Approved" && (
-          <button type="button" disabled={busy} onClick={() => { if (!openNow.length || window.confirm(t("dmark.khule_hain_phir_bhi", { n: openNow.length }))) decide("Approved"); }}
+        {!narrow && canApprove && (
+          <button type="button" disabled={busy} onClick={approveNow}
             style={{ border: "none", background: C.resolved, color: "#fff", borderRadius: 8, height: 34, padding: "0 12px", fontSize: 13, fontWeight: 800, cursor: "pointer", flex: "none" }}>{t("common.approve")}</button>
         )}
-        {canDecide && isCurrent && status !== "Revision" && (
+        {!narrow && canRevise && (
           <button type="button" disabled={busy} onClick={startRevise}
             style={{ border: "none", background: C.fixed, color: "#fff", borderRadius: 8, height: 34, padding: "0 12px", fontSize: 13, fontWeight: 800, cursor: "pointer", flex: "none" }}>{t("dmark.revise_bhejo")}</button>
         )}
@@ -462,6 +469,19 @@ export default function DrawingReview({ drawing, me, canDecide, onClose, onChang
           )}
         </aside>
       </div>
+      {narrow && (canApprove || canRevise) && (
+        <div style={{ flex: "none", display: "flex", gap: 8, padding: "8px 10px calc(env(safe-area-inset-bottom, 0px) + 8px)", background: "#fff", borderTop: "1px solid " + C.line }}>
+          {msg && !sheet && <div style={{ position: "absolute", left: 10, right: 10, bottom: 64, padding: "7px 10px", background: "#FEF2F2", color: C.open, borderRadius: 8, fontSize: 12.5 }}>{msg}</div>}
+          {canRevise && (
+            <button type="button" disabled={busy} onClick={startRevise}
+              style={{ flex: 1, border: "1.5px solid " + C.fixed, background: "#fff", color: C.fixed, borderRadius: 10, height: 44, fontSize: 14, fontWeight: 800, cursor: "pointer" }}>{t("dmark.revise_bhejo")}</button>
+          )}
+          {canApprove && (
+            <button type="button" disabled={busy} onClick={approveNow}
+              style={{ flex: 1.4, border: "none", background: C.resolved, color: "#fff", borderRadius: 10, height: 44, fontSize: 14, fontWeight: 800, cursor: "pointer" }}>{t("common.approve")}</button>
+          )}
+        </div>
+      )}
 
       {pdf && <PdfModal title={pdf.title} path={pdf.path} filename={pdf.filename} onClose={() => setPdf(null)} />}
       {compare && (() => {
