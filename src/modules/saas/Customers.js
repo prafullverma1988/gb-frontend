@@ -4,10 +4,11 @@ import { useState, useEffect, useCallback } from "react";
 import { apiFetch, T, fmtDate, fmtNum, fmtMoney, fmtAmt, DOMAIN_LABELS,
          limitStr, limitColor, SUB_COLORS, INV_COLORS, CYCLE_LABELS,
          IcUsers, IcX, IcChk, IcPlus, IcEdit, IcSearch, IcActivity,
-         IcDollar, IcTrend, IcRefresh, IcChevL, th, td } from "./tokens";
+         IcDollar, IcTrend, IcRefresh, IcChevL, IcDownload, th, td } from "./tokens";
 import { Toast, StatCard, Badge, Btn, InputField, SelectField, EmptyState, TableHeader, PageHeader } from "./ui";
 import DeleteCompanyModal from "./DeleteCompany";
 import ClientDocuments, { uploadDocFile } from "./ClientDocuments";
+import { openPdf, COMM_TYPES, commText } from "./Partners";
 import { todayISO } from "../../utils/today";
 
 // Customer buckets. The backend derives these (utils/clientLifecycle.js) and
@@ -618,6 +619,94 @@ function AddonModal({ sub, onClose, onSaved, setToast }) {
   );
 }
 
+// ── DEAL: kaun laya, kaun bill karta hai, commission ──────────────────
+// Commission client ka paisa aane par banta hai (Partners tab). Terms
+// badalne se pehle se bani lines nahi badalti.
+function DealModal({ sub, onClose, onSaved, setToast }) {
+  const [partners, setPartners] = useState([]);
+  const [f, setF] = useState({
+    sourced_by_partner_id: sub.sourced_by_partner_id || "",
+    billed_by_partner_id: sub.billed_by_partner_id || "",
+    commission_type: sub.commission_type || "none",
+    commission_mode: sub.commission_mode || "percent",
+    commission_value: parseFloat(sub.commission_value) || 0,
+  });
+  const [saving, setSaving] = useState(false);
+  useEffect(() => {
+    apiFetch("/saas-admin/partners").then(res => { if (res.success) setPartners(res.data.filter(p => p.is_active)); });
+  }, []);
+  const owner = partners.find(p => p.is_owner);
+  const others = partners.filter(p => !p.is_owner);
+  const opts = [{ value: "", label: `${owner ? owner.name : "Blackbox"} (direct)` }, ...others.map(p => ({ value: String(p.id), label: p.name }))];
+  const billOpts = [{ value: "", label: owner ? owner.name : "Blackbox" }, ...others.map(p => ({ value: String(p.id), label: p.name }))];
+
+  // naya partner chuna aur commission khaali hai to uska default bhar do
+  const pickSourced = (v) => setF(prev => {
+    const p = others.find(x => String(x.id) === String(v));
+    const next = { ...prev, sourced_by_partner_id: v };
+    if (!v) return { ...next, commission_type: "none", commission_value: 0 };
+    if (p && prev.commission_type === "none") {
+      return { ...next, commission_type: p.default_commission_type, commission_mode: p.default_commission_mode,
+        commission_value: parseFloat(p.default_commission_value) || 0 };
+    }
+    return next;
+  });
+
+  const save = async () => {
+    setSaving(true);
+    const res = await apiFetch(`/saas-admin/client-subscriptions/${sub.id}/deal`, { method: "PUT", body: f });
+    if (!res.success) { setSaving(false); return setToast({ msg: res.message || "Failed", type: "error" }); }
+    const n = res.data?.paid_without_lines || 0;
+    if (n && window.confirm(`${n} bill pehle se paid hain aur unki partner line nahi bani.\n\nUnki line abhi isi deal ke hisaab se banani hai?`)) {
+      const bf = await apiFetch(`/saas-admin/client-subscriptions/${sub.id}/partner-backfill`, { method: "POST", body: {} });
+      setToast({ msg: bf.message || "Deal save ho gayi", type: bf.success ? undefined : "error" });
+    } else setToast({ msg: res.message });
+    setSaving(false); onSaved(); onClose();
+  };
+
+  const sourcedName = others.find(p => String(p.id) === String(f.sourced_by_partner_id))?.name;
+  const billedName = others.find(p => String(p.id) === String(f.billed_by_partner_id))?.name;
+  return (
+    <>
+      <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:400, backdropFilter:"blur(2px)" }}/>
+      <div style={{ position:"fixed", top:"50%", left:"50%", transform:"translate(-50%,-50%)", width:520, maxWidth:"calc(100vw - 32px)", background:T.surface, borderRadius:16, zIndex:401, boxShadow:"0 24px 64px rgba(0,0,0,0.25)" }}>
+        <div style={{ padding:"18px 22px", background:"#0D1B2A", borderRadius:"16px 16px 0 0", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+          <div>
+            <div style={{ fontSize:15, fontWeight:700, color:"white" }}>Deal</div>
+            <div style={{ fontSize:10, color:"rgba(255,255,255,0.4)", marginTop:2 }}>Kaun laya, bill kiske naam se, commission — client ka paisa aane par line banegi</div>
+          </div>
+          <button onClick={onClose} style={{ background:"none", border:"none", cursor:"pointer", color:"rgba(255,255,255,0.5)", display:"flex" }}><IcX size={16}/></button>
+        </div>
+        <div style={{ padding:"18px 22px", display:"flex", flexDirection:"column", gap:12 }}>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+            <SelectField label="Client ko kaun laya" value={String(f.sourced_by_partner_id || "")} onChange={pickSourced} options={opts}/>
+            <SelectField label="Bill kiske naam se" value={String(f.billed_by_partner_id || "")} onChange={v => setF(p => ({ ...p, billed_by_partner_id: v }))} options={billOpts}/>
+          </div>
+          {f.sourced_by_partner_id ? (
+            <div style={{ display:"grid", gridTemplateColumns:"1.4fr 1fr 1fr", gap:10 }}>
+              <SelectField label="Commission" value={f.commission_type} onChange={v => setF(p => ({ ...p, commission_type: v }))} options={COMM_TYPES}/>
+              <SelectField label="Kaise" value={f.commission_mode} onChange={v => setF(p => ({ ...p, commission_mode: v }))}
+                options={[{ value:"percent", label:"% of bill" }, { value:"fixed", label:"Fixed ₹" }]}/>
+              <InputField label={f.commission_mode === "fixed" ? "₹" : "%"} type="number" value={f.commission_value} onChange={v => setF(p => ({ ...p, commission_value: v }))}/>
+            </div>
+          ) : <div style={{ fontSize:11.5, color:T.t3 }}>Direct deal — commission nahi.</div>}
+          <div style={{ fontSize:11.5, color:T.t2, padding:"9px 12px", background:T.surfaceB, border:`1px solid ${T.b1}`, borderRadius:8, lineHeight:1.5 }}>
+            {sourcedName ? <>{sourcedName}: {commText(f.commission_type, f.commission_mode, f.commission_value)} (bill ki rakam GST chhod kar). </> : null}
+            {billedName
+              ? <>Client {billedName} ko paisa dega; {billedName} Blackbox ko {sourcedName === billedName ? "bill − commission" : "poora bill (GST chhod kar)"} dega.</>
+              : <>Client Blackbox ko paisa dega{sourcedName ? `; Blackbox ${sourcedName} ko commission dega` : ""}.</>}
+            {" "}Bill / Statement PDF par "{billedName || (owner ? owner.name : "Blackbox")}" ka naam, GSTIN aur bank chhapega.
+          </div>
+        </div>
+        <div style={{ padding:"14px 22px", borderTop:`1px solid ${T.b1}`, display:"flex", gap:9, background:T.surfaceB, borderRadius:"0 0 16px 16px" }}>
+          <Btn onClick={onClose} variant="outline" style={{ flex:1 }}>Cancel</Btn>
+          <Btn onClick={save} disabled={saving} style={{ flex:2 }}>{saving ? "Saving..." : "Deal save karo"}</Btn>
+        </div>
+      </div>
+    </>
+  );
+}
+
 // One invoice as a table row, plus — when opened — its full breakdown line
 // by line, so anyone can see (and explain to the client) how the total came
 // about: base share, each add-on pack, extra users from the slab, GST.
@@ -880,6 +969,7 @@ function ClientDetail({ clientId, onBack, onOpenCompany }) {
   const [delCompany, setDelCompany] = useState(null);
   const [showLifecycle, setShowLifecycle] = useState(false);
   const [showAddon, setShowAddon] = useState(false);
+  const [showDeal, setShowDeal] = useState(false);
   const [openInv, setOpenInv] = useState(null); // invoice id whose breakdown is open
   const [busy, setBusy] = useState(false);
 
@@ -1093,6 +1183,14 @@ function ClientDetail({ clientId, onBack, onOpenCompany }) {
                   )}
                 </div>
 
+                {/* Deal: who brought the client, who bills, commission */}
+                <div style={{ marginTop:10, display:"flex", alignItems:"center", gap:12, flexWrap:"wrap", fontSize:11.5, color:T.t2 }}>
+                  <span>Laya: <strong style={{ color:T.t1 }}>{currentSub.sourced_by_name || "Blackbox (direct)"}</strong></span>
+                  <span>Bill: <strong style={{ color:T.t1 }}>{currentSub.billed_by_name || "Blackbox"}</strong></span>
+                  {currentSub.sourced_by_partner_id ? <span>Commission: <strong style={{ color:T.t1 }}>{commText(currentSub.commission_type, currentSub.commission_mode, currentSub.commission_value)}</strong></span> : null}
+                  <button onClick={() => setShowDeal(true)} style={{ padding:"3px 10px", borderRadius:6, border:`1px solid ${T.b1}`, background:T.surface, color:T.t2, fontSize:11, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>Deal badlo</button>
+                </div>
+
                 {/* User add-ons on this contract */}
                 {currentSub.addons?.length > 0 && (
                   <div style={{ marginTop:12 }}>
@@ -1140,6 +1238,12 @@ function ClientDetail({ clientId, onBack, onOpenCompany }) {
       <div style={{ marginTop:16, background:T.surface, border:`1px solid ${T.b1}`, borderRadius:12, overflow:"hidden" }}>
         <div style={{ padding:"12px 16px", borderBottom:`1px solid ${T.b1}`, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
           <div style={{ fontSize:12.5, fontWeight:700, color:T.t1 }}>Invoices ({invoices.filter(i => i.status !== "cancelled").length})</div>
+          <div style={{ display:"flex", gap:8 }}>
+          {invoices.length > 0 && (
+            <Btn variant="outline" onClick={() => openPdf(`/saas-admin/clients/${client.id}/statement.pdf`, setToast)} style={{ padding:"5px 10px", fontSize:11.5 }}>
+              <IcDownload size={12}/> Statement PDF
+            </Btn>
+          )}
           {currentSub && (
             <Btn variant="outline" onClick={async () => {
               const label = window.prompt("Invoice label (e.g. 'Pro-rata 5 users Aug–Oct')");
@@ -1149,6 +1253,7 @@ function ClientDetail({ clientId, onBack, onOpenCompany }) {
               await act(`/saas-admin/client-subscriptions/${currentSub.id}/invoices`, { period_label: label || "Manual invoice", base_amount: parseFloat(amt) || 0 }, "Manual invoice added");
             }} style={{ padding:"5px 10px", fontSize:11.5 }}><IcPlus size={12}/> Manual Invoice</Btn>
           )}
+          </div>
         </div>
         {invoices.length === 0 ? (
           <div style={{ padding:"20px 16px", fontSize:12, color:T.t4 }}>Koi invoice nahi — subscription activate hone par schedule auto-ban jayega.</div>
@@ -1170,6 +1275,7 @@ function ClientDetail({ clientId, onBack, onOpenCompany }) {
                     <td style={td}>{fmtDate(inv.due_date)}</td>
                     <td style={td} onClick={e => e.stopPropagation()}>{/* buttons must not open the breakdown */}
                       <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+                        {inv.status !== "cancelled" && <Btn variant="outline" onClick={() => openPdf(`/saas-admin/client-invoices/${inv.id}/pdf`, setToast)} style={{ padding:"3px 8px", fontSize:10.5 }} title="Bill PDF — client ko bhejne ke liye">PDF</Btn>}
                         {inv.status === "scheduled" && <Btn variant="outline" onClick={() => act(`/saas-admin/client-invoices/${inv.id}/issue`, {}, "Invoice issued")} style={{ padding:"3px 8px", fontSize:10.5 }}>Issue</Btn>}
                         {["scheduled", "issued"].includes(inv.status) && <Btn color={T.grn} onClick={() => { setPayInv(inv); setPayRef(""); setPayDate(todayISO()); }} style={{ padding:"3px 8px", fontSize:10.5 }}>Mark Paid</Btn>}
                         {["scheduled", "issued"].includes(inv.status) && <Btn variant="outline" onClick={() => setEditInv(inv)} style={{ padding:"3px 8px", fontSize:10.5 }}><IcEdit size={10}/></Btn>}
@@ -1192,6 +1298,7 @@ function ClientDetail({ clientId, onBack, onOpenCompany }) {
 
       {/* Modals */}
       {showAddon && currentSub && <AddonModal sub={currentSub} onClose={() => setShowAddon(false)} onSaved={load} setToast={setToast}/>}
+      {showDeal && currentSub && <DealModal sub={currentSub} onClose={() => setShowDeal(false)} onSaved={load} setToast={setToast}/>}
       {editClient && <ClientFormModal initial={client} onClose={() => setEditClient(false)} onSaved={load} setToast={setToast}/>}
       {showAddCompany && <AddCompanyModal client={client} onClose={() => setShowAddCompany(false)} onSaved={load} setToast={setToast}/>}
       {delCompany && <DeleteCompanyModal company={delCompany} onClose={() => setDelCompany(null)} onDone={load} setToast={setToast}/>}
@@ -1339,11 +1446,12 @@ function TabCustomers({ onOpenCompany }) {
         </>}/>
 
       {/* Billing KPIs */}
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(4, 1fr)", gap:12, marginBottom:16 }}>
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(5, 1fr)", gap:12, marginBottom:16 }}>
         <StatCard label="Active Subscriptions" value={fmtNum(kpi.active_subs)} sub={`${fmtNum(kpi.pending_subs)} pending activation`} color={T.grn} Icon={IcDollar}/>
         <StatCard label="Annual Contract Value" value={"₹" + fmtMoney(kpi.active_acv)} sub={"live contracts, excl. GST" + (kpi.suspended_acv > 0 ? ` · excl. ₹${fmtMoney(kpi.suspended_acv)} suspended` : "")} color={T.blu} Icon={IcTrend}/>
         <StatCard label="Collected" value={"₹" + fmtMoney(kpi.collected)} sub="all-time, incl. GST" color={T.cyn} Icon={IcChk}/>
         <StatCard label="Outstanding" value={"₹" + fmtMoney(kpi.outstanding)} sub={(kpi.overdue_count > 0 ? `${kpi.overdue_count} overdue · ₹${fmtMoney(kpi.overdue_amount)}` : "nothing overdue") + (kpi.outstanding_suspended > 0 ? ` · ₹${fmtMoney(kpi.outstanding_suspended)} from suspended clients` : "")} color={kpi.overdue_count > 0 ? T.red : T.amb} Icon={IcActivity}/>
+        <StatCard label="Partner settlement" value={"₹" + fmtMoney(kpi.partner_collect_due || 0)} sub={`partners se lena · dena ₹${fmtMoney(kpi.partner_pay_due || 0)}` + (kpi.partner_review > 0 ? ` · ${kpi.partner_review} dhyan` : "")} color={kpi.partner_review > 0 ? T.red : T.pur} Icon={IcUsers}/>
       </div>
 
       {/* Billing-gap strip — customer live but nothing to bill against.

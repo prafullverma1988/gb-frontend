@@ -15,6 +15,7 @@ import CompanyDetailPage from "./saas/CompanyDetailPage";
 import { AiModelsPanel } from "./saas/AiModels";
 import TabAiBilling from "./saas/AiBilling";
 import TabCustomers from "./saas/Customers";
+import TabPartners from "./saas/Partners";
 import TabCompanies from "./saas/Companies";
 
 
@@ -1657,6 +1658,7 @@ function TabBugInbox() {
 const TABS = [
   { id:"stats",     label:"Dashboard",        Icon:IcTrend    },
   { id:"customers", label:"Customers",        Icon:IcDollar   },
+  { id:"partners",  label:"Partners",         Icon:IcUsers    },
   { id:"companies", label:"Companies",        Icon:IcBuilding },
   { id:"users",     label:"All Users",        Icon:IcUsers    },
   { id:"features",  label:"Feature Requests", Icon:IcClip     },
@@ -1732,6 +1734,7 @@ export default function SaaSModule() {
           <>
             {tab === "stats"     && <><WeeklyWork onJump={setTab}/><TabStats/></>}
             {tab === "customers" && <TabCustomers onOpenCompany={handleOpenDetail}/>}
+            {tab === "partners" && <TabPartners/>}
             {tab === "companies" && <TabCompanies onOpenCompany={handleOpenDetail}/>}
             {tab === "users"     && <TabUsers/>}
             {tab === "features"  && <TabFeatureRequests/>}
