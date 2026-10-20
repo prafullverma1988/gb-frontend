@@ -13,6 +13,7 @@ import { canAny } from "../utils/perms";
 import UnitCardEditor, { unitCardProblem, cleanCard } from "../components/UnitCardEditor";
 import { loadUnitCards } from "../components/grn/weigh";
 import { dropUnitCardCache } from "../components/UnitConv";
+import uploadManager from "../utils/uploadManager";
 
 // ─── ROLES & ACCESS (5 Oct 2026) ─────────────────────────────────────
 // Pehle is poore module me ek bhi tick check nahi tha — Library ka sirf View
@@ -7210,12 +7211,244 @@ function CitySection() {
   );
 }
 
+// ─── CONVERSION ITEMS (20 Oct 2026, Conversion v2) ───────────────────
+// Prafull: "1 pcs 8mm ring 7×10 inch — 8mm TMT, wastage 0.1 m, kul 0.4 m".
+// Store keeper ko seedha dikhe: 50 ring → kitna TMT. Har item: naam, size,
+// unit (Pcs), raw material (Library ka) — ek piece me LAGTA + WASTAGE alag,
+// apni unit me; drawing upload ya Design module ki drawing se. Server:
+// gb-backend routes/conversion-items.js (/api/conversion-items).
+const CI_MAX = 8;
+const CI_UNIT = "Pcs";   // default unit (chinh — anuvaad nahi)
+const ciBlankInput = () => ({ material_name: "", qty_net: "", waste_qty: "", unit: "" });
+const ciNum = (v) => Number(v) || 0;
+const ciFmt = (n) => (Math.round((Number(n) || 0) * 10000) / 10000).toLocaleString("en-IN", { maximumFractionDigits: 4 });
+const ciInputText = (i) => (ciNum(i.waste_qty) > 0
+  ? t("master_library.ci_input_text", { name: i.material_name, net: ciFmt(i.qty_net), waste: ciFmt(i.waste_qty), total: ciFmt(ciNum(i.qty_net) + ciNum(i.waste_qty)), unit: i.unit })
+  : t("master_library.ci_input_text_nw", { name: i.material_name, total: ciFmt(i.qty_net), unit: i.unit }));
+const ciIsPdf = (u) => /\.(pdf|dwg|dxf)(\?|$)/i.test(String(u || "")) || /\/raw\/upload\//.test(String(u || ""));
+
+function ConversionItemSection() {
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [mats, setMats] = useState([]);
+  const [uoms, setUoms] = useState([]);
+  const [drawings, setDrawings] = useState(null);
+  const [showModal, setShowModal] = useState(false);
+  const [editing, setEditing] = useState(null);
+  const [form, setForm] = useState(null);
+  const [tryQty, setTryQty] = useState("50");
+  const [err, setErr] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [upBusy, setUpBusy] = useState(0);
+
+  const reload = useCallback(() => {
+    api.get("/conversion-items").then((r) => { setItems(r && r.success ? r.data || [] : []); setLoading(false); }).catch(() => setLoading(false));
+  }, []);
+  useEffect(() => {
+    reload();
+    api.get("/library/materials").then((r) => { if (r && r.success) setMats(r.data || []); }).catch(() => {});
+    api.get("/library/uom").then((r) => { if (r && r.success) setUoms(r.data || []); }).catch(() => {});
+  }, [reload]);
+  const loadDrawings = () => {
+    if (drawings) return;
+    api.get("/design/drawings").then((r) => setDrawings(r && r.success && Array.isArray(r.data) ? r.data : [])).catch(() => setDrawings([]));
+  };
+
+  const matByName = useMemo(() => new Map(mats.map((m) => [String(m.name || "").trim().toLowerCase(), m])), [mats]);
+  const unitOpts = useMemo(() => {
+    const out = [];
+    for (const u of uoms) {
+      const v = String(u.symbol || u.name || "").trim();
+      // Chhota label (tang khaane me "Nos — Nu…" na kate); poora naam neeche.
+      if (v && !out.some((o) => o.value.toLowerCase() === v.toLowerCase())) out.push({ value: v, label: v, sub: u.name && u.name !== v ? u.name : "" });
+    }
+    for (const v of ["Pcs", "Nos", "Mtr", "Kg"]) if (!out.some((o) => o.value.toLowerCase() === v.toLowerCase())) out.push({ value: v, label: v });
+    return out;
+  }, [uoms]);
+  const matOpts = useMemo(() => mats.map((m) => ({ value: m.name, label: m.name, sub: m.unit || "" })), [mats]);
+
+  const filtered = items.filter((i) => {
+    const q = search.trim().toLowerCase();
+    if (!q) return true;
+    return [i.name, i.size_spec, ...(i.inputs || []).map((x) => x.material_name)].some((s) => String(s || "").toLowerCase().includes(q));
+  });
+
+  const openCreate = () => {
+    setEditing(null); setErr("");
+    setForm({ name: "", size_spec: "", out_unit: CI_UNIT, note: "", drawing_id: "", drawing_urls: [], inputs: [ciBlankInput()] });
+    setShowModal(true);
+  };
+  const openEdit = (it) => {
+    setEditing(it); setErr("");
+    setForm({ name: it.name || "", size_spec: it.size_spec || "", out_unit: it.out_unit || CI_UNIT, note: it.note || "",
+      drawing_id: it.drawing_id ? String(it.drawing_id) : "", drawing_urls: it.drawing_urls || [],
+      inputs: (it.inputs || []).length ? it.inputs.map((x) => ({ material_name: x.material_name, qty_net: String(x.qty_net), waste_qty: x.waste_qty ? String(x.waste_qty) : "", unit: x.unit })) : [ciBlankInput()] });
+    if (it.drawing_id) loadDrawings();
+    setShowModal(true);
+  };
+  const upd = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+  const updIn = (i, patch) => setForm((f) => ({ ...f, inputs: f.inputs.map((x, j) => (j === i ? { ...x, ...patch } : x)) }));
+  const pickMat = (i, name) => {
+    const m = matByName.get(String(name || "").trim().toLowerCase());
+    updIn(i, { material_name: name, ...(m && m.unit ? { unit: m.unit } : {}) });
+  };
+  const upload = (files) => {
+    Array.from(files || []).forEach((file) => {
+      setUpBusy((n) => n + 1);
+      uploadManager.add({
+        file, folder: "gb_buildcon/conversion_drawing", label: t("master_library.ci_upload_label", { name: file.name }),
+        onDone: (url) => { setUpBusy((n) => Math.max(0, n - 1)); setForm((f) => (f ? { ...f, drawing_urls: [...(f.drawing_urls || []), url].slice(0, 6) } : f)); },
+        onError: () => setUpBusy((n) => Math.max(0, n - 1)),
+      });
+    });
+  };
+
+  const save = async () => {
+    setErr("");
+    if (!form.name.trim()) { setErr(t("master_library.ci_err_name")); return; }
+    if (upBusy > 0) { setErr(t("master_library.ci_err_uploading")); return; }
+    setSaving(true);
+    const body = { ...form, drawing_id: form.drawing_id ? Number(form.drawing_id) : null,
+      inputs: form.inputs.map((x) => ({ material_name: x.material_name.trim(), qty_net: x.qty_net, waste_qty: x.waste_qty === "" ? 0 : x.waste_qty, unit: x.unit })) };
+    const r = await (editing ? api.put("/conversion-items/" + editing.id, body) : api.post("/conversion-items", body)).catch((e) => ({ success: false, message: e.message }));
+    setSaving(false);
+    if (!r || !r.success) { setErr((r && r.message) || t("master_library.ci_err_save")); return; }
+    setShowModal(false);
+    reload();
+  };
+  const del = async (id) => {
+    if (!await window.confirmAsync(t("master_library.ci_delete_q"))) return;
+    const r = await api.del("/conversion-items/" + id).catch((e) => ({ success: false, message: e.message }));
+    if (r && r.success === false) window.alert(r.message || t("master_library.ci_err_save"));
+    reload();
+  };
+
+  const columns = [
+    { key: "name", label: t("master_library.ci_col_item"), minW: 180, render: (r) => (
+      <div>
+        <div style={{ fontWeight: 700 }}>{r.name}</div>
+        {r.size_spec && <div style={{ fontSize: 11.5, color: T.textMid }}>{r.size_spec}</div>}
+      </div>
+    ) },
+    { key: "inputs", label: t("master_library.ci_col_inputs"), minW: 260, render: (r) => (
+      <div style={{ fontSize: 12.5, color: T.textMid }}>
+        <span style={{ color: T.textLight }}>{t("master_library.ci_one", { unit: r.out_unit || CI_UNIT })} </span>
+        {(r.inputs || []).map(ciInputText).join(" · ")}
+      </div>
+    ) },
+    { key: "out_unit", label: t("master_library.ci_col_unit"), minW: 70 },
+    { key: "drawing", label: t("master_library.ci_col_drawing"), minW: 110, render: (r) => {
+      const n = (r.drawing ? 1 : 0) + (r.drawing_urls || []).length;
+      return n ? <Badge text={r.drawing ? r.drawing.title : t("master_library.ci_files", { n })} color={T.indigo} bg={T.indigoSoft} /> : <span style={{ color: T.textLight }}>—</span>;
+    } },
+  ];
+
+  const dr = form && form.drawing_id && drawings ? drawings.find((d) => String(d.id) === String(form.drawing_id)) : null;
+  const drOpts = (drawings || []).map((d) => ({ value: String(d.id), label: d.title || ("#" + d.id), sub: [d.project_name, d.category].filter(Boolean).join(" · ") }));
+  const tq = ciNum(tryQty);
+  const lbl2 = { fontSize: 12, fontWeight: 600, color: T.textMid, display: "block", marginBottom: 6 };
+  const cell = { width: "100%", padding: "8px 10px", borderRadius: T.radiusSm, border: `1.5px solid ${T.border}`, fontSize: 13, color: T.text, background: "white", outline: "none", boxSizing: "border-box", fontFamily: T.font };
+
+  return (
+    <div>
+      <div style={{ fontSize: 12.5, color: T.textMid, marginBottom: 12, lineHeight: 1.5 }}>{t("master_library.ci_intro")}</div>
+      <Toolbar search={search} setSearch={setSearch} count={filtered.length} label={t("master_library.ci_label")} onAdd={openCreate} addLabel={t("master_library.ci_add")} />
+      {loading ? <div style={{ padding: "40px", textAlign: "center", color: T.textLight }}>{t("common.loading")}</div>
+        : <DataTable columns={columns} data={filtered} onEdit={openEdit} onDelete={del} emptyMsg={t("master_library.ci_empty")} />}
+
+      <Modal open={showModal && !!form} onClose={() => setShowModal(false)} width={760}
+        title={editing ? t("master_library.ci_edit") : t("master_library.ci_add")} desc={t("master_library.ci_desc")}>
+        {form && <>
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+            <div style={{ flex: 2, minWidth: 220 }}><FormField label={t("master_library.ci_name")} value={form.name} onChange={(v) => upd("name", v)} placeholder={t("master_library.ci_name_ph")} required /></div>
+            <div style={{ flex: 1, minWidth: 140 }}><FormField label={t("master_library.ci_size")} value={form.size_spec} onChange={(v) => upd("size_spec", v)} placeholder={t("master_library.ci_size_ph")} /></div>
+            <div style={{ width: 130 }}>
+              <label style={lbl2}>{t("master_library.ci_out_unit")}</label>
+              <SearchSelect value={form.out_unit} options={unitOpts} onChange={(v) => upd("out_unit", v)} placeholder={CI_UNIT} />
+            </div>
+          </div>
+
+          <div style={{ marginTop: 16, border: `1px solid ${T.border}`, borderRadius: 10, padding: "12px 14px" }}>
+            <div style={{ fontSize: 12.5, fontWeight: 700, color: T.text }}>{t("master_library.ci_inputs_title", { unit: form.out_unit || CI_UNIT })}</div>
+            <div style={{ fontSize: 11.5, color: T.textLight, marginBottom: 10 }}>{t("master_library.ci_inputs_hint")}</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 90px 90px 110px 80px 28px", gap: 8, fontSize: 10.5, fontWeight: 700, color: T.textLight, textTransform: "uppercase", marginBottom: 4 }}>
+              <span>{t("master_library.ci_raw")}</span><span>{t("master_library.ci_net")}</span><span>{t("master_library.ci_waste")}</span>
+              <span>{t("master_library.ci_unit")}</span><span style={{ textAlign: "right" }}>{t("master_library.ci_total")}</span><span />
+            </div>
+            {form.inputs.map((x, i) => (
+              <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 90px 90px 110px 80px 28px", gap: 8, alignItems: "center", marginBottom: 6 }}>
+                <SearchSelect value={x.material_name} options={matOpts} onChange={(v) => pickMat(i, v)} placeholder={t("master_library.ci_raw_pick")} />
+                <input type="number" min="0" step="any" value={x.qty_net} onChange={(e) => updIn(i, { qty_net: e.target.value })} style={cell} />
+                <input type="number" min="0" step="any" value={x.waste_qty} onChange={(e) => updIn(i, { waste_qty: e.target.value })} placeholder="0" style={cell} />
+                <SearchSelect value={x.unit} options={unitOpts} onChange={(v) => updIn(i, { unit: v })} placeholder={t("master_library.ci_unit")} />
+                <span style={{ textAlign: "right", fontSize: 13, fontWeight: 700, color: T.text }}>{ciNum(x.qty_net) + ciNum(x.waste_qty) > 0 ? `${ciFmt(ciNum(x.qty_net) + ciNum(x.waste_qty))} ${x.unit || ""}` : "—"}</span>
+                <button onClick={() => setForm((f) => ({ ...f, inputs: f.inputs.length > 1 ? f.inputs.filter((_, j) => j !== i) : [ciBlankInput()] }))}
+                  style={{ border: "none", background: "none", color: T.textLight, cursor: "pointer", fontSize: 16 }}>×</button>
+              </div>
+            ))}
+            {form.inputs.length < CI_MAX && (
+              <button onClick={() => setForm((f) => ({ ...f, inputs: [...f.inputs, ciBlankInput()] }))}
+                style={{ padding: "5px 12px", borderRadius: 7, border: `1.5px solid ${T.border}`, background: "white", fontSize: 12, fontWeight: 600, color: T.indigo, cursor: "pointer" }}>{t("master_library.ci_add_raw")}</button>
+            )}
+            {form.inputs.some((x) => x.material_name && ciNum(x.qty_net) > 0) && (
+              <div style={{ marginTop: 12, paddingTop: 10, borderTop: `1px solid ${T.borderLight}`, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", fontSize: 12.5, color: T.textMid }}>
+                <span>{t("master_library.ci_try")}</span>
+                <input type="number" min="0" value={tryQty} onChange={(e) => setTryQty(e.target.value)} style={{ ...cell, width: 80 }} />
+                <span>{form.out_unit || CI_UNIT} →</span>
+                <b style={{ color: T.text }}>{form.inputs.filter((x) => x.material_name && ciNum(x.qty_net) > 0)
+                  .map((x) => `${x.material_name} ${ciFmt(tq * (ciNum(x.qty_net) + ciNum(x.waste_qty)))} ${x.unit || ""}`).join(" · ")}</b>
+              </div>
+            )}
+          </div>
+
+          <div style={{ marginTop: 16, border: `1px solid ${T.border}`, borderRadius: 10, padding: "12px 14px" }}>
+            <div style={{ fontSize: 12.5, fontWeight: 700, color: T.text, marginBottom: 8 }}>{t("master_library.ci_drawing")}</div>
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
+              <div style={{ flex: 1, minWidth: 240 }} onMouseDown={loadDrawings} onFocus={loadDrawings}>
+                <label style={lbl2}>{t("master_library.ci_from_design")}</label>
+                <SearchSelect value={form.drawing_id} options={[{ value: "", label: t("master_library.ci_no_drawing") }, ...drOpts]} onChange={(v) => upd("drawing_id", v ? String(v) : "")}
+                  placeholder={drawings === null ? t("common.loading") : t("master_library.ci_pick_drawing")} />
+              </div>
+              <label style={{ padding: "9px 14px", borderRadius: 8, border: `1.5px solid ${T.border}`, background: "white", fontSize: 12.5, fontWeight: 600, color: T.textMid, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
+                <IcUpload size={14} color={T.textMid} /> {upBusy > 0 ? t("master_library.ci_uploading") : t("master_library.ci_upload")}
+                <input type="file" accept="image/*,application/pdf" multiple style={{ display: "none" }} onChange={(e) => { upload(e.target.files); e.target.value = ""; }} />
+              </label>
+            </div>
+            {dr && (dr.file_url || dr.pdf_url) && (
+              <a href={dr.pdf_url || dr.file_url} target="_blank" rel="noreferrer" style={{ display: "inline-block", marginTop: 8, fontSize: 12, color: T.indigo, fontWeight: 600 }}>{t("master_library.ci_open_drawing", { name: dr.title || "" })}</a>
+            )}
+            {(form.drawing_urls || []).length > 0 && (
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
+                {form.drawing_urls.map((u, i) => (
+                  <div key={i} style={{ position: "relative", width: 64, height: 64, borderRadius: 8, overflow: "hidden", border: `1px solid ${T.border}`, background: T.bg }}>
+                    <a href={u} target="_blank" rel="noreferrer" style={{ display: "flex", width: "100%", height: "100%", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, color: T.textMid, textDecoration: "none" }}>
+                      {ciIsPdf(u) ? "PDF" : <img src={u} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
+                    </a>
+                    <button onClick={() => upd("drawing_urls", form.drawing_urls.filter((_, j) => j !== i))}
+                      style={{ position: "absolute", top: 2, right: 2, width: 17, height: 17, borderRadius: "50%", background: "rgba(0,0,0,.6)", color: "#fff", border: "none", fontSize: 10, cursor: "pointer", padding: 0 }}>×</button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div style={{ marginTop: 14 }}><FormTextarea label={t("master_library.ci_note")} value={form.note} onChange={(v) => upd("note", v)} rows={2} /></div>
+          {!!err && <div style={{ marginTop: 10, fontSize: 12.5, color: T.red, background: T.redSoft, borderRadius: 7, padding: "8px 11px" }}>{err}</div>}
+          <ModalFooter onClose={() => setShowModal(false)} onSave={save} saveLabel={saving ? t("common.saving") : (editing ? t("common.update") : t("common.create"))} />
+        </>}
+      </Modal>
+    </div>
+  );
+}
+
 const masterSections = [
   // ── ITEM LIBRARY ──────────────────────────────────────────────────
   { id: "project_type",  get label() { return t("master_library.project_type"); },        Icon: IcFolder,    Comp: ProjectTypeSection,       section: "ITEM LIBRARY", countKey: null, color: T.indigo },
   { id: "work_cat",      get label() { return t("master_library.work_category"); },       Icon: IcTool,      Comp: WorkCategorySection,      section: null, countKey: "work_categories", color: T.purple },
   { id: "material_cat",  get label() { return t("master_library.material_category"); },   Icon: IcFolder,    Comp: MaterialCategorySection,  section: null, countKey: "material_categories", color: T.blue },
   { id: "materials",     get label() { return t("master_library.material_master"); },     Icon: IcBox,       Comp: MaterialMasterSection,    section: null, countKey: "materials", color: T.teal },
+  { id: "conv_items",    get label() { return t("master_library.conv_items"); },          Icon: IcTool,      Comp: ConversionItemSection,    section: null, countKey: null, color: T.indigo },
   { id: "boq_items",     get label() { return t("master_library.boq_item_library"); },    Icon: IcBox,       Comp: BoqItemLibrarySection,    section: null, countKey: null, color: T.purple, perm: { base: ESTIMATE_ROWS } },
   // ── PEOPLE ────────────────────────────────────────────────────────
   { id: "party",         get label() { return t("master_library.party_supplier"); },    Icon: IcUsers,     Comp: PartyMasterSection,       section: "PEOPLE", countKey: "parties", color: T.green, perm: { base: PARTY_ROWS, export: ["Party", "Library"] } },

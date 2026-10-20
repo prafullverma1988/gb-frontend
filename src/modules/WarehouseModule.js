@@ -16,7 +16,6 @@ import { MaterialLedgerHistory, StockUnitFixModal } from "./WarehouseLedger";
 import { AllGodownsView } from "./WarehouseConsolidated";
 import { WarehouseGintiTab, DisposalModal, DisposalsPanel } from "./WarehouseGinti";
 import { ConversionTab } from "./WarehouseConversion";
-import { JobWorkTab } from "./WarehouseJobWork";
 import { can, canAny, canEntry } from "../utils/perms";
 import { UnitPickOrLock, StockConvLine, cardUnitOptions, useUnitCards, stockQtyOf, factorOf, needsFactor, UnitViewChip } from "../components/UnitConv";
 
@@ -4148,10 +4147,9 @@ function WarehouseModule({deepLink,onDeepLinkDone}={}){
     {id:"ginti",  l:t("warehouse.gt_tab"),     I:IcChk,  badge:gintiPending>0?gintiPending:null, bc:T.amb},
     {id:"grn",    l:t("material.material_in"),   I:IcIn,   badge:pendingInMRs>0?pendingInMRs:null, bc:T.pur},
     {id:"issue",  l:t("warehouse.material_out"),  I:IcOut,  badge:pendingOutMRs>0?pendingOutMRs:null, bc:T.cyn},
-    // 🔄 Conversion (11 Oct 2026, Conversion) — TMT se Ring jaisa; Material In/Out ke saath.
-    {id:"conversion", l:t("conversion.tab"), I:IcTrns, badge:null},
-    // 🚚 Job Work (11 Oct 2026, Job Work) — vendor ke yard par banwana (TMT → Ring), Conversion ke baad.
-    {id:"jobwork", l:t("jobwork.tab"), I:IcOut, badge:null},
+    // Conversion (20 Oct 2026, Conversion v2) — TMT se Ring: apni labour / subcon /
+    // bahar ka vendor, ek hi flow (purana ek-step Conversion + Job Work isi me mile).
+    {id:"conversion", l:t("jobwork.tab2"), I:IcTrns, badge:null},
     {id:"mr",     l:t("common.requests"),      I:IcMR,   badge:pendingMRs>0?pendingMRs:null, bc:T.amb},
     {id:"transfer",l:t("common.transfers"),    I:IcTrns, badge:null},
   ];
@@ -4329,9 +4327,7 @@ function WarehouseModule({deepLink,onDeepLinkDone}={}){
               else alert(r.message||"Pass-to-procurement failed");
             },
           }}/>}
-        {tab==="conversion"&&<ConversionTab key={whId} whId={whId} whName={activeWh?.name} stock={stock} library={library}
-          canEntry={whEntry} isAdmin={isAdmin} onStockChanged={()=>loadAll()}/>}
-        {tab==="jobwork"&&<JobWorkTab key={whId} whId={whId} whName={activeWh?.name} stock={stock} library={library}
+        {tab==="conversion"&&<ConversionTab key={whId} whId={whId} whName={activeWh?.name} stock={stock}
           canEntry={whEntry} isAdmin={isAdmin} onStockChanged={()=>loadAll()}/>}
         {tab==="transfer"&&<TransfersTab transfers={transfers} onNew={whRecv?()=>setTransferNewOpen(true):undefined} onSelect={t=>setTransferDetail(t)}/>}
       </div>
