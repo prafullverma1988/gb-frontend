@@ -544,7 +544,7 @@ function Modal({ open, onClose, title, desc, width = 560, children }) {
 function LocationsSettings() {
   const KINDS = [
     { v: "office",    label: "🏢 Office",    c: T.blue },
-    { v: "warehouse", label: "📦 Warehouse", c: T.amber },
+    { v: "warehouse", label: "📦 Store", c: T.amber },
   ];
   // whId = wo stock-side godown jise jagah di ja rahi hai (uska geofence
   // abhi nahi hai). Isse save naya godown nahi banata, purane ko jodta hai.
@@ -705,10 +705,10 @@ function LocationsSettings() {
   const I = { width:"100%", padding:"8px 10px", borderRadius:7, border:`1.5px solid ${T.border}`, fontSize:12.5, color:T.text, background:"white", outline:"none", boxSizing:"border-box", fontFamily:"inherit" };
 
   return (
-    <SectionCard title="Office & Warehouse Locations" desc="Add company offices and warehouses with geo-location. Mobile punch-in is geofenced to these sites (alongside project locations).">
+    <SectionCard title="Office & Store Locations" desc="Add company offices and stores with geo-location. Mobile punch-in is geofenced to these sites (alongside project locations).">
       {/* Existing list */}
       {loading ? <div style={{ padding:"14px 0", color:T.textLight, fontSize:12.5 }}>Loading…</div> :
-        rows.length === 0 && orphanWhs.length === 0 ? <div style={{ padding:"18px", textAlign:"center", color:T.textLight, fontSize:12.5, background:T.bg, borderRadius:9, marginBottom:16 }}>Koi office/warehouse location nahi — niche se add karo.</div> :
+        rows.length === 0 && orphanWhs.length === 0 ? <div style={{ padding:"18px", textAlign:"center", color:T.textLight, fontSize:12.5, background:T.bg, borderRadius:9, marginBottom:16 }}>Koi office/store location nahi — niche se add karo.</div> :
         <div style={{ marginBottom:18 }}>
           {orphanWhs.length > 0 && (
             <div style={{ fontSize:11.5, color:T.amber, fontWeight:600, background:T.amber+"12", border:`1px solid ${T.amber}33`, borderRadius:8, padding:"9px 12px", marginBottom:8 }}>
@@ -717,7 +717,7 @@ function LocationsSettings() {
           )}
           {orphanWhs.map(w => (
             <div key={"wh" + w.id} style={{ display:"flex", alignItems:"center", gap:12, padding:"11px 13px", border:`1px solid ${T.amber}55`, borderRadius:9, marginBottom:8, background:"white" }}>
-              <span style={{ fontSize:11, fontWeight:700, color:T.amber, background:T.amber+"15", padding:"3px 9px", borderRadius:12, whiteSpace:"nowrap" }}>📦 Warehouse</span>
+              <span style={{ fontSize:11, fontWeight:700, color:T.amber, background:T.amber+"15", padding:"3px 9px", borderRadius:12, whiteSpace:"nowrap" }}>📦 Store</span>
               <div style={{ flex:1, minWidth:0 }}>
                 {/* "Default" ka nishaan ab nahi dikhate (3 Oct 2026, Prafull): koi
                     form ya dashboard store pehle se nahi chunta, to user ke liye
@@ -762,7 +762,7 @@ function LocationsSettings() {
 
       {/* Add / edit form */}
       <div style={{ background:T.bg, border:`1px solid ${T.border}`, borderRadius:10, padding:"14px 16px" }}>
-        <div style={{ fontSize:12.5, fontWeight:800, color:T.text, marginBottom:12 }}>{form.id ? "✏️ Edit Location" : "➕ Add Office / Warehouse"}</div>
+        <div style={{ fontSize:12.5, fontWeight:800, color:T.text, marginBottom:12 }}>{form.id ? "✏️ Edit Location" : "➕ Add Office / Store"}</div>
         <div style={{ display:"flex", gap:8, marginBottom:12 }}>
           {KINDS.map(k => (
             <button key={k.v} onClick={()=>setForm(f=>({...f,kind:k.v}))}
@@ -771,7 +771,7 @@ function LocationsSettings() {
             </button>
           ))}
         </div>
-        <div style={{ marginBottom:10 }}><label style={L}>Name *</label><input value={form.label} onChange={e=>setForm(f=>({...f,label:e.target.value}))} placeholder={form.kind==="office"?"e.g. Head Office":"e.g. Main Warehouse"} style={I}/></div>
+        <div style={{ marginBottom:10 }}><label style={L}>Name *</label><input value={form.label} onChange={e=>setForm(f=>({...f,label:e.target.value}))} placeholder={form.kind==="office"?"e.g. Head Office":"e.g. Main Store"} style={I}/></div>
         <div style={{ marginBottom:10 }}><label style={L}>Address</label><input value={form.address} onChange={e=>setForm(f=>({...f,address:e.target.value}))} placeholder="Full address" style={I}/></div>
         {form.kind === "warehouse" && (
           <div style={{ marginBottom:10 }}>
@@ -3674,7 +3674,7 @@ const AUDIT_WHERE = [
   [/^party|^client|^vendor/, "Finance > Party"],
   [/^customer_invoice|^invoice|^estimate/, "Billing"],
   [/^mr\b|^material_request|^po\b|^purchase|^rfq|^quotation/, "Procurement"],
-  [/^grn|^wh_|^warehouse|^stock|^material/, "Warehouse"],
+  [/^grn|^wh_|^warehouse|^stock|^material/, "Store"],
   [/^attendance|^punch|^geofence/, "Attendance"],
   [/^payroll|^salary|^advance/, "Payroll"],
   [/^staff|^user|^role|^permission/, "Team & HR"],
@@ -3685,7 +3685,7 @@ const AUDIT_WHERE = [
   [/^trip/, "Trips"],
   [/^mom|^meeting/, "MOM"],
   [/^structure/, "Tenders > Map"],
-  [/^item$|^pending_pr/, "Warehouse"],
+  [/^item$|^pending_pr/, "Store"],
   [/^ra-bill|^mb-commit/, "Tenders > MB / RA Bill"],
   [/^change-route/, "Trips"],
   [/^practice/, "Settings"],
@@ -3694,7 +3694,7 @@ const AUDIT_WHERE = [
   [/^ping|^presence/, "Live Location"],
   [/^fleet|^truck|^route|^load|^unload/, "Trips"],
   [/^service|^meter/, "Machinery & Fuel"],
-  [/^store|^bundle|^batche|^add-stock|^reservation|^uom|^item/, "Warehouse"],
+  [/^store|^bundle|^batche|^add-stock|^reservation|^uom|^item/, "Store"],
   [/^worker|^labour_vendor/, "Sub-Con"],
   [/^categorie|^work-categorie|^master|^construction-type|^citie|^template/, "Master / Library"],
   [/^document/, "Documents"],
@@ -3994,7 +3994,7 @@ function FeatureRequests() {
                 { value:"projects", label:"Projects" },
                 { value:"finance", label:"Finance" },
                 { value:"procurement", label:"Procurement" },
-                { value:"warehouse", label:"Warehouse" },
+                { value:"warehouse", label:"Store" },
                 { value:"payroll", label:"Payroll" },
                 { value:"crm", label:"CRM" },
                 { value:"reports", label:"Reports" },
@@ -4291,8 +4291,8 @@ function WarehouseSettings({ onGoto }) {
 
   return (
     <div>
-      <SectionCard title="Warehouse Procurement Mode"
-        desc="Warehouse MR admin se Approve hone ke baad order kaise place hoga — warehouse khud kare ya procurement team ke through."
+      <SectionCard title="Store Procurement Mode"
+        desc="Store MR admin se Approve hone ke baad order kaise place hoga — store khud kare ya procurement team ke through."
         action={
           <button onClick={save} disabled={saving}
             style={{ padding: "8px 18px", borderRadius: 8, background: savedTick ? T.green : `linear-gradient(135deg, ${T.blue}, ${T.blueMid})`, color: "white", fontSize: 13, fontWeight: 600, border: "none", cursor: saving ? "wait" : "pointer", opacity: saving ? 0.7 : 1 }}>
@@ -4301,10 +4301,10 @@ function WarehouseSettings({ onGoto }) {
         }>
         <div style={{ display: "flex", flexDirection: "column", gap: 10, paddingTop: 4 }}>
           {[
-            { v: "direct",          label: "Direct — Warehouse khud orders place karta hai",
-              sub: "Approved → Warehouse module me 'Place Order' button → Ordered → Receive (GRN) → stock update. Procurement team involve nahi hoti." },
+            { v: "direct",          label: "Direct — Store khud orders place karta hai",
+              sub: "Approved → Store module me 'Place Order' button → Ordered → Receive (GRN) → stock update. Procurement team involve nahi hoti." },
             { v: "via_procurement", label: "Via Procurement Team",
-              sub: "Approved → 'Send to Procurement' button → procurement queue me MR aata hai → procurement PO place karti hai → vendor delivery par procurement Mark Received karta hai → warehouse stock automatically update ho jaata hai." },
+              sub: "Approved → 'Send to Procurement' button → procurement queue me MR aata hai → procurement PO place karti hai → vendor delivery par procurement Mark Received karta hai → store stock automatically update ho jaata hai." },
           ].map(opt => (
             <label key={opt.v} style={{ display: "flex", gap: 10, padding: "12px 14px", borderRadius: 9, border: `1.5px solid ${whProcMode===opt.v ? "#2563EB" : "#E5E7EB"}`, background: whProcMode===opt.v ? "#EFF6FF" : "white", cursor: "pointer", alignItems: "flex-start" }}>
               <input type="radio" checked={whProcMode===opt.v} onChange={() => setWhProcMode(opt.v)}
@@ -4319,15 +4319,15 @@ function WarehouseSettings({ onGoto }) {
       </SectionCard>
 
       <SectionCard title="MR Fulfillment Flow"
-        desc="Project se aaye MRs ko warehouse se fulfill karne ka decision kaun lega — procurement team ya warehouse staff.">
+        desc="Project se aaye MRs ko store se fulfill karne ka decision kaun lega — procurement team ya store staff.">
         <div style={{ display: "flex", flexDirection: "column", gap: 10, paddingTop: 4 }}>
           {[
             { v: "procurement_driven",
               label: "Procurement-driven — Procurement team decide karti hai (default)",
-              sub: "Approved MR → Procurement deklhti hai warehouse stock available hai ya nahi → 'Issue from Warehouse' click karke wh_mr banata hai → warehouse issue karta hai. Net-available check + soft-hold TTL same stock ko double-allocate hone se rokte hain." },
+              sub: "Approved MR → Procurement deklhti hai store stock available hai ya nahi → 'Issue from Store' click karke wh_mr banata hai → store issue karta hai. Net-available check + soft-hold TTL same stock ko double-allocate hone se rokte hain." },
             { v: "warehouse_driven",
-              label: "Warehouse-driven — Warehouse staff decide karta hai (recommended for central godown setups)",
-              sub: "Approved MR auto-route ho ke warehouse queue me aata hai → warehouse staff [Issue from Stock] OR [Pass to Procurement] decide karta hai. Single decision-maker = race conditions structurally impossible." },
+              label: "Store-driven — Store staff decide karta hai (recommended for central store setups)",
+              sub: "Approved MR auto-route ho ke store queue me aata hai → store staff [Issue from Stock] OR [Pass to Procurement] decide karta hai. Single decision-maker = race conditions structurally impossible." },
           ].map(opt => (
             <label key={opt.v} style={{ display: "flex", gap: 10, padding: "12px 14px", borderRadius: 9, border: `1.5px solid ${mrFlow===opt.v ? "#2563EB" : "#E5E7EB"}`, background: mrFlow===opt.v ? "#EFF6FF" : "white", cursor: "pointer", alignItems: "flex-start" }}>
               <input type="radio" checked={mrFlow===opt.v} onChange={() => setMrFlow(opt.v)}
@@ -4342,7 +4342,7 @@ function WarehouseSettings({ onGoto }) {
         {mrFlow === "procurement_driven" && (
           <div style={{ marginTop: 12, padding: "10px 13px", background: "#F8FAFC", border: "1px solid #E2E8F0", borderRadius: 7 }}>
             <div style={{ fontSize: 11.5, fontWeight: 700, color: "#374151", marginBottom: 6 }}>Soft-Hold TTL (days)</div>
-            <div style={{ fontSize: 11, color: "#6B7280", marginBottom: 8 }}>Procurement ne warehouse pe stock reserve kiya — kitne din me warehouse use issue karna chahiye? TTL expire hone par reservation auto-release, stock wapas open ho jata hai.</div>
+            <div style={{ fontSize: 11, color: "#6B7280", marginBottom: 8 }}>Procurement ne store pe stock reserve kiya — kitne din me store use issue karna chahiye? TTL expire hone par reservation auto-release, stock wapas open ho jata hai.</div>
             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
               {[1, 2, 3, 5, 7].map(d => (
                 <button key={d} onClick={() => setHoldTtl(d)}
@@ -5596,12 +5596,12 @@ const settingsSections = [
   { id: "backdate",      label: "Back-Date Control",    Icon: IcCalendar,  Comp: BackDateControl,        section: null },
   { id: "photo",         label: "Photo Settings",       Icon: IcCamera,    Comp: PhotoSettings,          section: null },
   { id: "attendance",    label: "Attendance Settings",  Icon: IcCalendar,  Comp: AttendanceSettings,     section: null },
-  { id: "locations",     label: "Office & Warehouse",   Icon: IcBuilding,  Comp: LocationsSettings,      section: null },
+  { id: "locations",     label: "Office & Store",   Icon: IcBuilding,  Comp: LocationsSettings,      section: null },
   { id: "appearance",    label: "Appearance",           Icon: IcLayout,    Comp: UIPreferences,          section: "PERSONALIZATION" },
   { id: "bank",          label: "Bank Details",         Icon: IcBank,      Comp: BankDetails,            section: "FINANCE & MATERIAL" },
   { id: "material",      label: "Material Settings",    Icon: IcBox,       Comp: MaterialSettings,       section: null },
   { id: "finance",       label: "Finance Settings",     Icon: IcDollar,    Comp: FinanceSettings,        section: null },
-  { id: "warehouse",     label: "Warehouse Settings",   Icon: IcBox,       Comp: WarehouseSettings,      section: null },
+  { id: "warehouse",     label: "Store Settings",   Icon: IcBox,       Comp: WarehouseSettings,      section: null },
   // Kaante ki settings apne tab me (2 Oct 2026) — naam t() se, baaki sidebar abhi English hai.
   { id: "weighbridge",   labelKey: "weigh.settings_tab", Icon: IcScale,     Comp: WeighbridgeSettings,    section: null },
   { id: "tripmaterial",  labelKey: "trip_stock.settings_tab", Icon: IcBox,  Comp: TripMaterialSettings,   section: null },

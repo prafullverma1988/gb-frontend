@@ -2220,7 +2220,7 @@ function ProcurementModule(){
     // In that case we want the PO vendor, NOT "Warehouse".
     vendor: m.po_vendor_name
             || m.linked_vendor
-            || (m.warehouse_mr_id && !m.po_id ? "Warehouse" : null),
+            || (m.warehouse_mr_id && !m.po_id ? "Store" : null),
     isFromWarehouse: !!m.warehouse_mr_id && !m.po_id,
     // True when the MR was *originated* by the warehouse team to restock
     // their own stock (project_id NULL + warehouse_mr_id set). The bulk-
@@ -3456,7 +3456,7 @@ function ProcurementModule(){
       />
       {showBulkOrder&&selectedItems.length>0&&<BulkOrderModal items={selectedItems} onSave={saveBulkOrder} onClose={()=>setShowBulkOrder(false)} dbVendors={dbVendors}
         onWarehouseIssued={async(mrNos)=>{
-          alert(`${mrNos.length} warehouse MR(s) created — Warehouse → Requests tab me approve+issue karein:\n${mrNos.join(", ")}`);
+          alert(`${mrNos.length} store MR(s) created — Store → Requests tab me approve+issue karein:\n${mrNos.join(", ")}`);
           setShowBulkOrder(false);
           // Selection state is `selected` (object map), not `selectedIds` —
           // earlier reference threw: "setSelectedIds is not defined".

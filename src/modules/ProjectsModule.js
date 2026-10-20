@@ -1979,7 +1979,7 @@ function GRNCard({grn}){
           :<div style={{fontSize:11.5,color:T.t3}}>{t("projects.materials_received_on_fmtdate", { fmtDate: fmtDate(grn.date||grn.created_at) })}</div>
         }
         {grn.items?.length>3&&<div style={{fontSize:10.5,color:T.t4,fontStyle:"italic"}}>{t("projects.grn_more_items", { grn: grn.items.length-3 })}</div>}
-        <div style={{fontSize:10.5,color:T.t4,marginTop:5}}>{t("projects.by_grn_fmtdate", { grn: grn.received_by_name||grn.received_by||"Warehouse", fmtDate: fmtDate(grn.date||grn.created_at) })}</div>
+        <div style={{fontSize:10.5,color:T.t4,marginTop:5}}>{t("projects.by_grn_fmtdate", { grn: grn.received_by_name||grn.received_by||"Store", fmtDate: fmtDate(grn.date||grn.created_at) })}</div>
       </div>
     </div>
   );
@@ -2070,7 +2070,7 @@ function TransferCard({tr}){
           </div>
         ))}
         {tr.items?.length>3&&<div style={{fontSize:10.5,color:T.t4,fontStyle:"italic"}}>+{tr.items.length-3} more</div>}
-        <div style={{fontSize:10.5,color:T.t4,marginTop:5}}>{t("projects.by_tr_fmtdate", { tr: tr.transferred_by_name||"Warehouse", fmtDate: fmtDate(tr.date||tr.created_at) })}</div>
+        <div style={{fontSize:10.5,color:T.t4,marginTop:5}}>{t("projects.by_tr_fmtdate", { tr: tr.transferred_by_name||"Store", fmtDate: fmtDate(tr.date||tr.created_at) })}</div>
       </div>
     </div>
   );
@@ -3552,7 +3552,7 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
             </div>
             <div style={{padding:"6px 14px 10px",display:"flex",flexDirection:"column",gap:10}}>
               {whPendingMRs.length===0
-                ?<EmptyState msg="Koi pending warehouse request nahi!" sub={t("projects.site_se_koi_material_request_nahi")}/>
+                ?<EmptyState msg="Koi pending store request nahi!" sub={t("projects.site_se_koi_material_request_nahi")}/>
                 :whPendingMRs.map(mr=>(
                     <WHMRCard key={mr.id} mr={mr} acting={acting}
                       rejectId={rejectId} setRejectId={setRejectId} rejectNote={rejectNote} setRejectNote={setRejectNote}

@@ -531,7 +531,7 @@ const AUDIT_WHERE = [
   [/^party|^client|^vendor/, "Finance > Party"],
   [/^customer_invoice|^invoice|^estimate/, "Billing"],
   [/^mr\b|^material_request|^po\b|^purchase|^rfq|^quotation/, "Procurement"],
-  [/^grn|^wh_|^warehouse|^stock|^material/, "Warehouse"],
+  [/^grn|^wh_|^warehouse|^stock|^material/, "Store"],
   [/^attendance|^punch|^geofence/, "Attendance"],
   [/^payroll|^salary|^advance/, "Payroll"],
   [/^staff|^user|^role|^permission/, "Team & HR"],
@@ -542,7 +542,7 @@ const AUDIT_WHERE = [
   [/^trip/, "Trips"],
   [/^mom|^meeting/, "MOM"],
   [/^structure/, "Tenders > Map"],
-  [/^item$|^pending_pr/, "Warehouse"],
+  [/^item$|^pending_pr/, "Store"],
   [/^ra-bill|^mb-commit/, "Tenders > MB / RA Bill"],
   [/^change-route/, "Trips"],
   [/^practice/, "Settings"],
@@ -551,7 +551,7 @@ const AUDIT_WHERE = [
   [/^ping|^presence/, "Live Location"],
   [/^fleet|^truck|^route|^load|^unload/, "Trips"],
   [/^service|^meter/, "Machinery & Fuel"],
-  [/^store|^bundle|^batche|^add-stock|^reservation|^uom|^item/, "Warehouse"],
+  [/^store|^bundle|^batche|^add-stock|^reservation|^uom|^item/, "Store"],
   [/^worker|^labour_vendor/, "Sub-Con"],
   [/^categorie|^work-categorie|^master|^construction-type|^citie|^template/, "Master / Library"],
   [/^document/, "Documents"],
@@ -1071,7 +1071,7 @@ function TabSanchalan({ onOpenDetail }) {
   };
 
   const runFactoryReset = async (c) => {
-    if (!await window.confirmAsync(`⚠️ FACTORY RESET "${c.name}"?\n\nThis will delete ALL operational data — projects, finance, CRM, procurement, warehouse, payroll, tasks — real and demo both. Company login, users, subscription stay intact.\n\nThis cannot be undone. Continue?`)) return;
+    if (!await window.confirmAsync(`⚠️ FACTORY RESET "${c.name}"?\n\nThis will delete ALL operational data — projects, finance, CRM, procurement, store, payroll, tasks — real and demo both. Company login, users, subscription stay intact.\n\nThis cannot be undone. Continue?`)) return;
     const r = await apiFetch("/saas-admin/sanchalan/" + c.id + "/factory-reset", { method: "POST" });
     if (r.success) {
       setToast({ msg: r.message, type: "success" });

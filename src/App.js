@@ -272,7 +272,7 @@ const ALWAYS_ON = ["dashboard","projects","finance","procurement","reports","lib
 // download na ho (PERF-05).
 const MODULE_MAP_NAV={
   dashboard:"Dashboard",projects:"Projects",design:"Design",
-  finance:"Finance",procurement:"Procurement",warehouse:"Warehouse",
+  finance:"Finance",procurement:"Procurement",warehouse:"Store",
   reports:"Reports",library:"Library",settings:"Settings",
   crm:"CRM",mom:"MOM",payroll:"Team & HR",team:"Team & HR",
   township:"Township CRM",tenders:"Tenders",

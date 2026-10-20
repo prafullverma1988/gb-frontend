@@ -2670,7 +2670,7 @@ function GRNDetailDrawer({grn,onClose,onVerify}){
             <div style={{flex:1}}>
               <div style={{fontSize:12.5,fontWeight:700,color:ss.c}}>{t("warehouse.status_status", { status: grn.status })}</div>
               <div style={{fontSize:11,color:ss.c,marginTop:2}}>
-                {grn.cancelled_at?t("warehouse.grnc_cancelled_line",{reason:grn.cancel_reason||"—"}):isReturn?`Return GRN — material project se warehouse me wapas aaya`:`Vendor receipt — material warehouse stock me add ho gaya`}
+                {grn.cancelled_at?t("warehouse.grnc_cancelled_line",{reason:grn.cancel_reason||"—"}):isReturn?`Return GRN — material project se store me wapas aaya`:`Vendor receipt — material store stock me add ho gaya`}
               </div>
             </div>
           </div>
@@ -3976,7 +3976,7 @@ function WarehouseModule({deepLink,onDeepLinkDone}={}){
       lines.push(`📦 ${matName} — stock check`);
       lines.push("");
       lines.push(`   This MR needs:    ${need} ${s.unit || mr.items?.[0]?.unit || ""}`);
-      lines.push(`   Warehouse stock:  ${s.available || 0} ${s.unit || ""}`);
+      lines.push(`   Store stock:  ${s.available || 0} ${s.unit || ""}`);
       if (Number(s.rate) > 0) lines.push(`   Master rate:      ₹${Number(s.rate).toFixed(2)} / ${s.unit || ""}`);
       lines.push("");
       if (p.in_pipeline && p.entries?.length > 0) {
@@ -4071,7 +4071,7 @@ function WarehouseModule({deepLink,onDeepLinkDone}={}){
       // Hatayi gayi GRN (12 Oct 2026, khaate se "GRN hatao") — status "Cancelled" dikhe.
       if(gRes.success) setGrns((gRes.data||[]).map(g=>({...g,status:g.cancelled_at?"Cancelled":g.status,id:g.grn_no||`GRN-${g.id}`,dbId:g.id,date:fmtDate(g.date),poNo:g.po_no||"—",vendor:g.vendor||"—",by:g.received_by_name||"—",total:Number(g.total)||0,items:(g.items||[]).map(it=>({...it,name:it.material_name||it.name||"—",matId:it.material_id,ordQty:Number(it.ordered_qty)||0,recQty:Number(it.received_qty)||0,rate:Number(it.rate)||0,amount:Number(it.amount)||0,unit:it.unit||""}))})));
       if(iRes.success) setIssues((iRes.data||[]).map(i=>({...i,id:i.issue_no||`ISS-${i.id}`,dbId:i.id,date:fmtDate(i.date),project:i.project_name||"—",issuedTo:i.issued_to_name||"—",by:i.issued_by_name||"—",zimmedar:i.custodian_name||"",zimParty:i.custody_party_name||"",zimId:i.custodian_user_id||null,total:Number(i.total)||0,remarks:i.remarks||"",status:i.status||"Pending",items:(i.items||[]).map(it=>({...it,name:it.material_name||it.name||"—",matId:it.material_id,qty:Number(it.qty)||0,rate:Number(it.rate)||0,unit:it.unit||""}))})));
-      if(mRes.success) setMrs((mRes.data||[]).map(m=>({...m,project:m.project_name||(m.project_id?"—":(m.warehouse_name?`${m.warehouse_name} ${t("warehouse.internal_request")}`:"Warehouse (internal)")),requestedBy:m.requested_by_name||"—",id:m.mr_no||`MR-${m.id}`,dbId:m.id,date:fmtDate(m.date),items:m.items||[]})));
+      if(mRes.success) setMrs((mRes.data||[]).map(m=>({...m,project:m.project_name||(m.project_id?"—":(m.warehouse_name?`${m.warehouse_name} ${t("warehouse.internal_request")}`:"Store (internal)")),requestedBy:m.requested_by_name||"—",id:m.mr_no||`MR-${m.id}`,dbId:m.id,date:fmtDate(m.date),items:m.items||[]})));
       if(tRes.success) setTransfers((tRes.data||[]).map(t=>({...t,from:t.from_warehouse_name||t.from_project_name||t.from_location||"—",to:t.to_warehouse_name||t.to_project_name||t.to_location||"—",by:t.transferred_by_name||"—",id:t.transfer_no||`TRF-${t.id}`,dbId:t.id,date:fmtDate(t.date),items:t.items||[],total_value:Number(t.total_value)||0})));
       if(pRes.success) setProjects((pRes.data||[]).map(p=>({id:p.id,name:p.name})));
       if(uRes.success) setUsers((uRes.data||[]).map(u=>({id:u.id,name:u.name})));
