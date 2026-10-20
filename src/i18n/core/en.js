@@ -247,7 +247,7 @@ const dict = {
   "common.type": "Type",
   "common.unbilled": "Unbilled",
   "common.user": "User",
-  "common.warehouse": "Warehouse",
+  "common.warehouse": "Store",
   "confirm_dialog.continue": "Continue",
   "confirm_dialog.yes_cancel": "Yes, Cancel",
   "notification_bell.mark_all_read": "Mark all read",

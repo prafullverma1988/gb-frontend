@@ -735,7 +735,7 @@ function ChallanModule(){
   const avgUnit=rateRowCount?totalAmt/rateRowCount:0;
 
   const dlExcel=()=>{
-    const viewLabel = view==="all"?"All Flows (a+b+c+d)":view==="vendor"?"Vendor Purchases (a+b)":view==="project"?"Project Receipts (a+c)":"Warehouse Flow (b+c+d)";
+    const viewLabel = view==="all"?"All Flows (a+b+c+d)":view==="vendor"?"Vendor Purchases (a+b)":view==="project"?"Project Receipts (a+c)":"Store Flow (b+c+d)";
     const xRows=[
       [companyName()+" — Material Register"],
       [`View: ${viewLabel}  |  Period: ${fFrom} to ${fTo}  |  Site: ${fSite}  |  Generated: ${TODAY}`],[],
@@ -984,7 +984,7 @@ function ChallanModule(){
             counts only direct (a) flows because (c) is qty-only. */}
         <div style={{display:"grid",gridTemplateColumns:"75px 115px 90px 95px 100px 1fr 90px 80px 85px 90px 75px",
           padding:"9px 14px",background:T.surfaceB,borderTop:`2px solid ${T.b2}`,gap:7}}>
-          <span style={{fontSize:12,fontWeight:700,color:T.t1,gridColumn:"1/10"}}>{t("reports.total_filtered_entries_view", { filtered: filtered.length, view: view==="all"?"All Flows":view==="vendor"?"Vendor Purchases":view==="project"?"Project Receipts":"Warehouse Flow" })}</span>
+          <span style={{fontSize:12,fontWeight:700,color:T.t1,gridColumn:"1/10"}}>{t("reports.total_filtered_entries_view", { filtered: filtered.length, view: view==="all"?"All Flows":view==="vendor"?"Vendor Purchases":view==="project"?"Project Receipts":"Store Flow" })}</span>
           <span style={{fontSize:13,fontWeight:800,color:T.grn,textAlign:"right"}}>{fmtRs(totalAmt)}</span>
           <span style={{fontSize:10.5,color:T.t3}}>{view==="all"?t("reports.vendor_a_b_only"):view==="project"?t("reports.direct_only"):t("reports.billed_only")}</span>
         </div>
