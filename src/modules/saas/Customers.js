@@ -7,6 +7,7 @@ import { apiFetch, T, fmtDate, fmtNum, fmtMoney, fmtAmt, DOMAIN_LABELS,
          IcDollar, IcTrend, IcRefresh, IcChevL, th, td } from "./tokens";
 import { Toast, StatCard, Badge, Btn, InputField, SelectField, EmptyState, TableHeader, PageHeader } from "./ui";
 import DeleteCompanyModal from "./DeleteCompany";
+import ClientDocuments, { uploadDocFile } from "./ClientDocuments";
 import { todayISO } from "../../utils/today";
 
 // Customer buckets. The backend derives these (utils/clientLifecycle.js) and
@@ -438,8 +439,8 @@ function InvoiceEditModal({ invoice, onClose, onSaved, setToast }) {
           </div>
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:10 }}>
             <InputField label="Base Amount (₹)" type="number" value={f.base_amount} onChange={set("base_amount")}/>
-            <InputField label="Addl. Users" type="number" value={f.addl_users} onChange={set("addl_users")}/>
-            <InputField label="Addl. Amount (₹)" type="number" value={f.addl_amount} onChange={v => { setAddlDirty(true); set("addl_amount")(v); }}/>
+            <InputField label="Extra Users (slab)" type="number" value={f.addl_users} onChange={set("addl_users")}/>
+            <InputField label="Extra Amount (₹)" type="number" value={f.addl_amount} onChange={v => { setAddlDirty(true); set("addl_amount")(v); }}/>
           </div>
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:10 }}>
             <InputField label="Adjustment ± (₹)" type="number" value={f.adjustment} onChange={set("adjustment")}/>
@@ -447,13 +448,251 @@ function InvoiceEditModal({ invoice, onClose, onSaved, setToast }) {
             <InputField label="Due Date" type="date" value={f.due_date} onChange={set("due_date")}/>
           </div>
           <InputField label="Notes" value={f.notes} onChange={set("notes")}/>
-          <div style={{ fontSize:11, color:T.t4 }}>Addl. Amount blank chhodne par slabs se auto-calculate hota hai; type karne par manual override.</div>
+          {invoice.addon_users > 0 && (
+            <div style={{ fontSize:11.5, color:T.t2, padding:"8px 10px", background:T.surfaceB, border:`1px solid ${T.b1}`, borderRadius:8 }}>
+              User Add-on: {invoice.addon_users} users · {fmtRs(invoice.addon_amount)} — ye line add-on se aati hai, yahan nahi badalti. Farak ho to Adjustment use karo.
+            </div>
+          )}
+          <div style={{ fontSize:11, color:T.t4 }}>Extra Amount blank chhodne par slabs se auto-calculate hota hai (add-on seats ke baad se); type karne par manual override.</div>
         </div>
         <div style={{ padding:"14px 22px", borderTop:`1px solid ${T.b1}`, display:"flex", gap:9, background:T.surfaceB }}>
           <Btn onClick={onClose} variant="outline" style={{ flex:1 }}>Cancel</Btn>
           <Btn onClick={save} disabled={saving} style={{ flex:2 }}>{saving ? "Saving..." : "Save Invoice"}</Btn>
         </div>
       </div>
+    </>
+  );
+}
+
+// Rupees with paisa when there are any — bills must add up to the last paisa.
+const fmtRs = n => "₹" + (parseFloat(n) || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 });
+const PERIOD_WORD = { monthly: "mahina", quarterly: "quarter", half_yearly: "chhamahi", yearly: "saal" };
+
+// ── USER ADD-ON ───────────────────────────────────────────────────────
+// Extra seats on a live contract, priced from its own slab table. Every
+// number here is the server's preview — the same function that saves — so
+// the popup can never show one amount and bill another.
+function AddonModal({ sub, onClose, onSaved, setToast }) {
+  const [qty, setQty] = useState("10");
+  const [mode, setMode] = useState("next_period");
+  const [startDate, setStartDate] = useState(todayISO());
+  const [notes, setNotes] = useState("");
+  const [file, setFile] = useState(null);
+  const [pv, setPv] = useState(null);
+  const [pvErr, setPvErr] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    const n = parseInt(qty);
+    if (!n || n < 1) { setPv(null); setPvErr(""); return; }
+    let live = true;
+    const t = setTimeout(() => {
+      const qs = new URLSearchParams({ qty: String(n), mode, ...(mode === "prorata" ? { start_date: startDate } : {}) });
+      apiFetch(`/saas-admin/client-subscriptions/${sub.id}/addons/preview?${qs}`).then(res => {
+        if (!live) return;
+        if (res.success) { setPv(res.data); setPvErr(""); }
+        else { setPv(null); setPvErr(res.message || "Preview nahi bana"); }
+      }).catch(() => live && setPvErr("Network error — dobara try karo"));
+    }, 300);
+    return () => { live = false; clearTimeout(t); };
+  }, [qty, mode, startDate, sub.id]);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      const document = file ? await uploadDocFile(file) : undefined;
+      const res = await apiFetch(`/saas-admin/client-subscriptions/${sub.id}/addons`, {
+        method: "POST",
+        body: { qty: parseInt(qty), mode, start_date: mode === "prorata" ? startDate : undefined, notes, document },
+      });
+      if (res.success) { setToast({ msg: res.message }); onSaved(); onClose(); }
+      else setToast({ msg: res.message || "Failed", type: "error" });
+    } catch (e) {
+      setToast({ msg: e.message || "Upload failed", type: "error" });
+    }
+    setSaving(false);
+  };
+
+  const word = PERIOD_WORD[sub.billing_cycle] || "period";
+  const row = (label, value, sub2, strong) => (
+    <div style={{ display:"flex", justifyContent:"space-between", gap:12, padding:"7px 0", borderTop:`1px solid ${T.b1}` }}>
+      <div>
+        <div style={{ fontSize:12, color:T.t2, fontWeight: strong ? 700 : 500 }}>{label}</div>
+        {sub2 && <div style={{ fontSize:10.5, color:T.t4 }}>{sub2}</div>}
+      </div>
+      <div style={{ fontSize:12.5, color:T.t1, fontWeight: strong ? 800 : 600, textAlign:"right", whiteSpace:"nowrap" }}>{value}</div>
+    </div>
+  );
+  const radio = (value, title, hint) => (
+    <label style={{ flex:1, display:"flex", gap:8, padding:"10px 12px", border:`1px solid ${mode === value ? T.blu : T.b1}`,
+      background: mode === value ? T.bluL : T.surface, borderRadius:9, cursor:"pointer" }}>
+      <input type="radio" checked={mode === value} onChange={() => setMode(value)} style={{ marginTop:2 }}/>
+      <div>
+        <div style={{ fontSize:12, fontWeight:700, color:T.t1 }}>{title}</div>
+        <div style={{ fontSize:10.5, color:T.t3 }}>{hint}</div>
+      </div>
+    </label>
+  );
+
+  return (
+    <>
+      <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:400, backdropFilter:"blur(2px)" }}/>
+      <div style={{ position:"fixed", top:"50%", left:"50%", transform:"translate(-50%,-50%)", width:600, maxWidth:"calc(100vw - 32px)", maxHeight:"92vh", display:"flex", flexDirection:"column", background:T.surface, borderRadius:16, zIndex:401, boxShadow:"0 24px 64px rgba(0,0,0,0.25)" }}>
+        <div style={{ padding:"18px 22px", borderBottom:`1px solid ${T.b1}`, display:"flex", alignItems:"center", justifyContent:"space-between", background:"#0D1B2A", borderRadius:"16px 16px 0 0" }}>
+          <div>
+            <div style={{ fontSize:15, fontWeight:700, color:"white" }}>User Add-on</div>
+            <div style={{ fontSize:10, color:"rgba(255,255,255,0.4)", marginTop:2 }}>Contract ke upar extra users — rate contract ke slab se, contract ke saath khatam</div>
+          </div>
+          <button onClick={onClose} style={{ background:"none", border:"none", cursor:"pointer", color:"rgba(255,255,255,0.5)", display:"flex" }}><IcX size={16}/></button>
+        </div>
+
+        <div style={{ padding:"18px 22px", display:"flex", flexDirection:"column", gap:13, overflowY:"auto" }}>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 2fr", gap:10, alignItems:"end" }}>
+            <InputField label="Kitne users" type="number" required value={qty} onChange={setQty}/>
+            <div style={{ fontSize:11, color:T.t3, paddingBottom:9 }}>
+              Abhi: {sub.committed_users} committed{sub.addon_users ? ` + ${sub.addon_users} add-on` : ""} = {sub.licensed_users ?? sub.committed_users} licensed
+            </div>
+          </div>
+
+          <div>
+            <div style={{ fontSize:11, fontWeight:600, color:T.t3, marginBottom:6 }}>Bill kab se</div>
+            <div style={{ display:"flex", gap:10 }}>
+              {radio("next_period", "Agle period se", `Users aaj se chalu, bill agle ${word} ke bill me`)}
+              {radio("prorata", "Pro-rata (date se)", `Is ${word} ke bache din ka alag bill, phir har bill me`)}
+            </div>
+            {mode === "prorata" && (
+              <div style={{ marginTop:10, maxWidth:220 }}>
+                <InputField label="Kis date se" type="date" value={startDate} onChange={setStartDate}/>
+              </div>
+            )}
+          </div>
+
+          {pvErr && <div style={{ padding:"9px 12px", background:T.redL, border:`1px solid ${T.redM}`, borderRadius:8, fontSize:12, color:T.red }}>{pvErr}</div>}
+
+          {pv && (
+            <div style={{ border:`1px solid ${T.b1}`, borderRadius:10, padding:"10px 14px" }}>
+              <div style={{ fontSize:10.5, fontWeight:700, color:T.t3, textTransform:"uppercase", letterSpacing:"0.5px", marginBottom:4 }}>Hisaab (save se pehle)</div>
+              {pv.bands.map(b => row(
+                `Seat ${b.from}–${b.to}`, `${fmtRs(b.annual)} / saal`, `${b.seats} users × ${fmtRs(b.rate)} (slab rate)`
+              ))}
+              {pv.prorata && row(
+                `Pro-rata: ${fmtDate(pv.prorata.from)} – ${fmtDate(pv.prorata.to)}`,
+                `${fmtRs(pv.prorata.amount)} + GST = ${fmtRs(pv.prorata.with_gst)}`,
+                `${pv.prorata.days} din × ${fmtRs(pv.annual)} ÷ 365 — alag bill banega`
+              )}
+              {row(
+                `Har ${word} ke bill me`, `${fmtRs(pv.per_period)} + GST = ${fmtRs(pv.per_period_with_gst)}`,
+                pv.full_periods.length
+                  ? `${fmtDate(pv.full_periods[0].start)} se ${pv.full_periods.length} ${word} (${fmtDate(pv.end_date)} tak — contract ke saath khatam)`
+                  : "Contract me aage koi poora period nahi bacha"
+              )}
+              {row("Contract end tak kul", `${fmtRs(pv.term_total)} + GST = ${fmtRs(pv.term_total_with_gst)}`, null, true)}
+              {row("Max Users (limit)",
+                pv.max_users_after > 0 ? `${pv.max_users_before} → ${pv.max_users_after}` : "Unlimited (waisa hi)",
+                `Licensed: ${pv.committed} committed + ${pv.addon_seats_before + pv.qty} add-on = ${pv.licensed_after}`)}
+              <div style={{ fontSize:10.5, color:T.t4, paddingTop:7, borderTop:`1px solid ${T.b1}` }}>
+                Contract slab: {pv.slabs.map(x => `${x.from_users}–${x.to_users || "∞"} @ ${fmtRs(x.annual_rate_per_user)}`).join(" · ")} (per user / saal)
+              </div>
+              {pv.frozen_bills.length > 0 && (
+                <div style={{ marginTop:8, padding:"8px 10px", background:T.ambL, border:`1px solid ${T.ambM}`, borderRadius:8, fontSize:11, color:T.amb }}>
+                  Ye bill pehle hi issue ho chuke hain, unme add-on line apne aap nahi judegi: {pv.frozen_bills.join(", ")}. Zaroorat ho to bill Edit karke Adjustment me jodo.
+                </div>
+              )}
+            </div>
+          )}
+
+          <InputField label="Note" value={notes} onChange={setNotes} placeholder="Optional — jaise 'client ne 18 Oct ko WhatsApp par maanga'"/>
+          <div>
+            <div style={{ fontSize:11, fontWeight:600, color:T.t3, marginBottom:5 }}>Client ki approval (PO / email / WhatsApp screenshot) — optional</div>
+            <input type="file" accept=".pdf,.doc,.docx,image/*" onChange={e => setFile(e.target.files?.[0] || null)} style={{ fontSize:12, color:T.t2 }}/>
+            <div style={{ fontSize:10.5, color:T.t4, marginTop:3 }}>Agreement & Documents me "Add-on Approval" ke naam se rahegi.</div>
+          </div>
+        </div>
+
+        <div style={{ padding:"14px 22px", borderTop:`1px solid ${T.b1}`, display:"flex", gap:9, background:T.surfaceB, borderRadius:"0 0 16px 16px" }}>
+          <Btn onClick={onClose} variant="outline" style={{ flex:1 }}>Cancel</Btn>
+          <Btn onClick={save} disabled={saving || !pv} style={{ flex:2 }}>{saving ? "Saving..." : pv ? `+${pv.qty} users jodo` : "Add-on jodo"}</Btn>
+        </div>
+      </div>
+    </>
+  );
+}
+
+// One invoice as a table row, plus — when opened — its full breakdown line
+// by line, so anyone can see (and explain to the client) how the total came
+// about: base share, each add-on pack, extra users from the slab, GST.
+const KIND_LABEL = { addon_prorata: "Add-on pro-rata", manual: "Manual" };
+function InvoiceRows({ inv, sub, open, onToggle, children }) {
+  let addonLines = [];
+  try { addonLines = JSON.parse(inv.addon_detail || "[]") || []; } catch (_) {}
+  const net = (parseFloat(inv.base_amount) || 0) + (parseFloat(inv.addl_amount) || 0)
+    + (parseFloat(inv.addon_amount) || 0) + (parseFloat(inv.adjustment) || 0);
+  const months = { monthly: 1, quarterly: 3, half_yearly: 6, yearly: 12 }[sub?.billing_cycle] || 12;
+  const line = (label, amount, hint, strong) => (
+    <div style={{ display:"flex", justifyContent:"space-between", gap:16, padding:"4px 0", fontSize:11.5 }}>
+      <span style={{ color: strong ? T.t1 : T.t2, fontWeight: strong ? 700 : 400 }}>
+        {label}{hint && <span style={{ color:T.t4 }}> — {hint}</span>}
+      </span>
+      <span style={{ color:T.t1, fontWeight: strong ? 800 : 600, whiteSpace:"nowrap" }}>{fmtRs(amount)}</span>
+    </div>
+  );
+  return (
+    <>
+      <tr onClick={onToggle} style={{ borderTop:`1px solid ${T.b1}`, opacity: inv.status === "cancelled" ? 0.45 : 1, cursor:"pointer", background: open ? T.surfaceB : "transparent" }}
+        title="Click — poora hisaab">
+        <td style={td}>
+          <div style={{ fontWeight:600, color:T.t1, display:"flex", alignItems:"center", gap:6 }}>
+            <span style={{ color:T.t4, fontSize:10 }}>{open ? "▾" : "▸"}</span>{inv.period_label}
+          </div>
+          <div style={{ fontSize:10, color:T.t4 }}>
+            {[inv.invoice_no, KIND_LABEL[inv.kind]].filter(Boolean).join(" · ")}
+          </div>
+        </td>
+        <td style={td}>{parseFloat(inv.base_amount) ? fmtAmt(inv.base_amount) : "--"}</td>
+        <td style={td}>{inv.addon_users > 0 ? <>{inv.addon_users}u · {fmtAmt(inv.addon_amount)}</> : "--"}</td>
+        <td style={td}>
+          {inv.addl_users > 0 ? `${inv.addl_users}u · ${fmtAmt(inv.addl_amount)}` : "--"}
+          {parseFloat(inv.adjustment) ? <div style={{ fontSize:10, color:T.amb }}>adj {fmtAmt(inv.adjustment)}</div> : null}
+        </td>
+        <td style={td}>{fmtAmt(inv.gst_amount)}</td>
+        {children}
+      </tr>
+      {open && (
+        <tr style={{ background:T.surfaceB }}>
+          <td colSpan={9} style={{ padding:"4px 16px 14px 34px" }}>
+            <div style={{ maxWidth:560 }}>
+              {parseFloat(inv.base_amount) !== 0 && line(
+                "Base", inv.base_amount,
+                sub && (inv.kind || "period") === "period"
+                  ? `contract ${fmtRs(sub.base_annual_value)}/saal × ${months}/12 (${sub.committed_users} committed users)`
+                  : null)}
+              {addonLines.map((l, i) => line(
+                `User Add-on seat ${l.seat_from}–${l.seat_to} (${l.qty} users)`, l.amount,
+                l.days ? `${fmtRs(l.annual)}/saal × ${l.days} din ÷ 365` : `${fmtRs(l.annual)}/saal × ${months}/12`
+              ))}
+              {inv.addl_users > 0 && line(
+                `Extra users (${inv.addl_users})`, inv.addl_amount,
+                "licensed seats ke upar, contract slab rate se")}
+              {inv.status === "scheduled" && (inv.kind || "period") === "period" && !inv.addl_users && (
+                <div style={{ fontSize:10.5, color:T.t4, padding:"3px 0" }}>Extra users (licensed se upar) ka hisaab bill issue hote waqt live users se judega.</div>
+              )}
+              {parseFloat(inv.adjustment) !== 0 && line("Adjustment", inv.adjustment)}
+              <div style={{ borderTop:`1px solid ${T.b2}`, marginTop:4 }}/>
+              {line("Net (GST se pehle)", net, null, true)}
+              {line(`GST ${parseFloat(inv.gst_rate)}%`, inv.gst_amount)}
+              {line("Total", inv.total_amount, null, true)}
+              <div style={{ fontSize:10.5, color:T.t4, marginTop:4 }}>
+                {[
+                  inv.period_start && `Period ${fmtDate(inv.period_start)} – ${fmtDate(inv.period_end)}`,
+                  inv.issued_at && `issue ${fmtDate(inv.issued_at)}`,
+                  inv.paid_at && `paid ${fmtDate(inv.paid_at)}${inv.payment_ref ? ` (${inv.payment_ref})` : ""}`,
+                  inv.notes,
+                ].filter(Boolean).join(" · ")}
+              </div>
+            </div>
+          </td>
+        </tr>
+      )}
     </>
   );
 }
@@ -640,6 +879,8 @@ function ClientDetail({ clientId, onBack, onOpenCompany }) {
   const [showAddCompany, setShowAddCompany] = useState(false);
   const [delCompany, setDelCompany] = useState(null);
   const [showLifecycle, setShowLifecycle] = useState(false);
+  const [showAddon, setShowAddon] = useState(false);
+  const [openInv, setOpenInv] = useState(null); // invoice id whose breakdown is open
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(() => {
@@ -808,12 +1049,13 @@ function ClientDetail({ clientId, onBack, onOpenCompany }) {
           </div>
         </div>
 
-        {/* Subscription + invoices */}
+        {/* Subscription — contract, seats, add-ons */}
         <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
           <div style={{ background:T.surface, border:`1px solid ${T.b1}`, borderRadius:12, overflow:"hidden" }}>
             <div style={{ padding:"12px 16px", borderBottom:`1px solid ${T.b1}`, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
               <div style={{ fontSize:12.5, fontWeight:700, color:T.t1 }}>Subscription</div>
               <div style={{ display:"flex", gap:8 }}>
+                {currentSub?.status === "active" && <Btn onClick={() => setShowAddon(true)} style={{ padding:"5px 10px", fontSize:11.5 }}><IcPlus size={12}/> User Add-on</Btn>}
                 {currentSub && <Btn variant="outline" onClick={() => setShowSub(currentSub)} style={{ padding:"5px 10px", fontSize:11.5 }}><IcEdit size={12}/> Edit</Btn>}
                 {!currentSub && <Btn onClick={() => setShowSub("new")} style={{ padding:"5px 10px", fontSize:11.5 }}><IcPlus size={12}/> New Subscription</Btn>}
               </div>
@@ -840,68 +1082,116 @@ function ClientDetail({ clientId, onBack, onOpenCompany }) {
                     Slabs: {currentSub.slabs.map(s => `${s.from_users}–${s.to_users || "∞"} @ ${fmtAmt(s.annual_rate_per_user)}/user`).join(" · ")}
                   </div>
                 )}
-              </div>
-            )}
-          </div>
 
-          {/* Invoices */}
-          <div style={{ background:T.surface, border:`1px solid ${T.b1}`, borderRadius:12, overflow:"hidden" }}>
-            <div style={{ padding:"12px 16px", borderBottom:`1px solid ${T.b1}`, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-              <div style={{ fontSize:12.5, fontWeight:700, color:T.t1 }}>Invoices ({invoices.filter(i => i.status !== "cancelled").length})</div>
-              {currentSub && (
-                <Btn variant="outline" onClick={async () => {
-                  const label = window.prompt("Invoice label (e.g. 'Pro-rata 5 users Aug–Oct')");
-                  if (label === null) return;
-                  const amt = window.prompt("Base amount ₹ (excl. GST)", "0");
-                  if (amt === null) return;
-                  await act(`/saas-admin/client-subscriptions/${currentSub.id}/invoices`, { period_label: label || "Manual invoice", base_amount: parseFloat(amt) || 0 }, "Manual invoice added");
-                }} style={{ padding:"5px 10px", fontSize:11.5 }}><IcPlus size={12}/> Manual Invoice</Btn>
-              )}
-            </div>
-            {invoices.length === 0 ? (
-              <div style={{ padding:"20px 16px", fontSize:12, color:T.t4 }}>Koi invoice nahi — subscription activate hone par schedule auto-ban jayega.</div>
-            ) : (
-              <div style={{ overflowX:"auto" }}>
-                <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
-                  <thead><tr style={{ background:T.surfaceB }}>
-                    {["Period", "Base", "Addl.", "GST", "Total", "Status", "Due", "Actions"].map(h => <th key={h} style={th}>{h}</th>)}
-                  </tr></thead>
-                  <tbody>
-                    {invoices.map(inv => (
-                      <tr key={inv.id} style={{ borderTop:`1px solid ${T.b1}`, opacity: inv.status === "cancelled" ? 0.45 : 1 }}>
-                        <td style={td}>
-                          <div style={{ fontWeight:600, color:T.t1 }}>{inv.period_label}</div>
-                          {inv.invoice_no && <div style={{ fontSize:10, color:T.t4 }}>{inv.invoice_no}</div>}
-                        </td>
-                        <td style={td}>{fmtAmt(inv.base_amount)}</td>
-                        <td style={td}>{inv.addl_users > 0 ? `${inv.addl_users}u · ${fmtAmt(inv.addl_amount)}` : "--"}{parseFloat(inv.adjustment) ? <div style={{ fontSize:10, color:T.amb }}>adj {fmtAmt(inv.adjustment)}</div> : null}</td>
-                        <td style={td}>{fmtAmt(inv.gst_amount)}</td>
-                        <td style={{ ...td, fontWeight:700, color:T.t1 }}>{fmtAmt(inv.total_amount)}</td>
-                        <td style={td}>
-                          <Badge text={inv.is_overdue ? "OVERDUE" : inv.status.toUpperCase()} color={inv.is_overdue ? T.red : (INV_COLORS[inv.status] || T.slt)}/>
-                          {inv.status === "paid" && inv.paid_at && <div style={{ fontSize:10, color:T.t4, marginTop:2 }}>{fmtDate(inv.paid_at)}{inv.payment_ref ? ` · ${inv.payment_ref}` : ""}</div>}
-                        </td>
-                        <td style={td}>{fmtDate(inv.due_date)}</td>
-                        <td style={td}>
-                          <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
-                            {inv.status === "scheduled" && <Btn variant="outline" onClick={() => act(`/saas-admin/client-invoices/${inv.id}/issue`, {}, "Invoice issued")} style={{ padding:"3px 8px", fontSize:10.5 }}>Issue</Btn>}
-                            {["scheduled", "issued"].includes(inv.status) && <Btn color={T.grn} onClick={() => { setPayInv(inv); setPayRef(""); setPayDate(todayISO()); }} style={{ padding:"3px 8px", fontSize:10.5 }}>Mark Paid</Btn>}
-                            {["scheduled", "issued"].includes(inv.status) && <Btn variant="outline" onClick={() => setEditInv(inv)} style={{ padding:"3px 8px", fontSize:10.5 }}><IcEdit size={10}/></Btn>}
-                            {["scheduled", "issued"].includes(inv.status) && <Btn variant="outline" color={T.red} onClick={() => window.confirm("Cancel this invoice?") && act(`/saas-admin/client-invoices/${inv.id}/cancel`, {}, "Invoice cancelled")} style={{ padding:"3px 8px", fontSize:10.5 }}><IcX size={10}/></Btn>}
-                            {inv.status === "paid" && <Btn variant="outline" color={T.amb} onClick={() => window.confirm("Revert this payment?") && act(`/saas-admin/client-invoices/${inv.id}/revert-paid`, {}, "Payment reverted")} style={{ padding:"3px 8px", fontSize:10.5 }}>Revert</Btn>}
+                {/* Seats: what is paid for vs what is in use */}
+                <div style={{ marginTop:12, padding:"9px 12px", background:T.surfaceB, border:`1px solid ${T.b1}`, borderRadius:8, display:"flex", gap:18, flexWrap:"wrap", fontSize:11.5, color:T.t2 }}>
+                  <span>Licensed: <strong style={{ color:T.t1 }}>{currentSub.committed_users} committed{currentSub.addon_users ? ` + ${currentSub.addon_users} add-on` : ""} = {currentSub.licensed_users ?? currentSub.committed_users}</strong></span>
+                  <span>Live users: <strong style={{ color: usage.users > (currentSub.licensed_users ?? currentSub.committed_users) ? T.amb : T.t1 }}>{usage.users}</strong></span>
+                  <span>Max Users: <strong style={{ color:T.t1 }}>{client.max_users > 0 ? client.max_users : "Unlimited"}</strong></span>
+                  {usage.users > (currentSub.licensed_users ?? currentSub.committed_users) && (
+                    <span style={{ color:T.amb }}>{usage.users - (currentSub.licensed_users ?? currentSub.committed_users)} extra — agle bill me slab se lagenge</span>
+                  )}
+                </div>
+
+                {/* User add-ons on this contract */}
+                {currentSub.addons?.length > 0 && (
+                  <div style={{ marginTop:12 }}>
+                    <div style={{ fontSize:10.5, fontWeight:700, color:T.t3, textTransform:"uppercase", letterSpacing:"0.5px", marginBottom:4 }}>User Add-ons</div>
+                    {currentSub.addons.map(a => {
+                      let bands = [];
+                      try { bands = JSON.parse(a.rate_detail || "[]"); } catch (_) {}
+                      const off = a.status !== "active";
+                      return (
+                        <div key={a.id} style={{ padding:"8px 0", borderTop:`1px solid ${T.b1}`, display:"flex", alignItems:"center", gap:10, opacity: off ? 0.5 : 1 }}>
+                          <div style={{ flex:1, minWidth:0 }}>
+                            <div style={{ fontSize:12, fontWeight:700, color:T.t1, display:"flex", alignItems:"center", gap:8 }}>
+                              +{a.qty} users · seat {a.seat_from}–{a.seat_to} · {fmtRs(a.annual_amount)}/saal
+                              {off && <Badge text="BAND" color={T.slt}/>}
+                            </div>
+                            <div style={{ fontSize:10.5, color:T.t4 }}>
+                              {bands.map(b => `${b.seats} × ${fmtRs(b.rate)}`).join(" + ")}
+                              {" · "}{a.bill_mode === "prorata" ? `${fmtDate(a.start_date)} se pro-rata` : `users ${fmtDate(a.start_date)} se`}
+                              {", poora bill "}{fmtDate(a.bill_from)} se · {fmtDate(a.end_date)} tak (contract ke saath)
+                            </div>
+                            <div style={{ fontSize:10.5, color:T.t4 }}>
+                              {a.created_by_name || "--"}, {fmtDate(a.created_at)}{a.notes ? ` · ${a.notes}` : ""}
+                              {off && a.cancel_reason ? ` · band: ${a.cancel_reason}` : ""}
+                            </div>
                           </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                          {!off && (
+                            <button title="Galti se bana ho to band karo" onClick={async () => {
+                              const reason = window.prompt(`+${a.qty} users wala add-on band karna hai? Wajah likho (agle bills se line hat jayegi):`);
+                              if (reason === null) return;
+                              await act(`/saas-admin/client-addons/${a.id}/cancel`, { reason });
+                            }} style={{ padding:"3px 8px", borderRadius:6, border:`1px solid ${T.redM}`, background:T.redL, color:T.red, fontSize:10.5, fontWeight:600, cursor:"pointer" }}>Band karo</button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             )}
           </div>
         </div>
       </div>
 
+      {/* Invoices — full width, so every column of the breakdown stays readable */}
+      <div style={{ marginTop:16, background:T.surface, border:`1px solid ${T.b1}`, borderRadius:12, overflow:"hidden" }}>
+        <div style={{ padding:"12px 16px", borderBottom:`1px solid ${T.b1}`, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+          <div style={{ fontSize:12.5, fontWeight:700, color:T.t1 }}>Invoices ({invoices.filter(i => i.status !== "cancelled").length})</div>
+          {currentSub && (
+            <Btn variant="outline" onClick={async () => {
+              const label = window.prompt("Invoice label (e.g. 'Pro-rata 5 users Aug–Oct')");
+              if (label === null) return;
+              const amt = window.prompt("Base amount ₹ (excl. GST)", "0");
+              if (amt === null) return;
+              await act(`/saas-admin/client-subscriptions/${currentSub.id}/invoices`, { period_label: label || "Manual invoice", base_amount: parseFloat(amt) || 0 }, "Manual invoice added");
+            }} style={{ padding:"5px 10px", fontSize:11.5 }}><IcPlus size={12}/> Manual Invoice</Btn>
+          )}
+        </div>
+        {invoices.length === 0 ? (
+          <div style={{ padding:"20px 16px", fontSize:12, color:T.t4 }}>Koi invoice nahi — subscription activate hone par schedule auto-ban jayega.</div>
+        ) : (
+          <div style={{ overflowX:"auto" }}>
+            <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
+              <thead><tr style={{ background:T.surfaceB }}>
+                {["Period", "Base", "Add-on", "Extra users", "GST", "Total", "Status", "Due", "Actions"].map(h => <th key={h} style={th}>{h}</th>)}
+              </tr></thead>
+              <tbody>
+                {invoices.map(inv => (
+                  <InvoiceRows key={inv.id} inv={inv} sub={subscriptions.find(x => x.id === inv.subscription_id)}
+                    open={openInv === inv.id} onToggle={() => setOpenInv(openInv === inv.id ? null : inv.id)}>
+                    <td style={{ ...td, fontWeight:700, color:T.t1 }}>{fmtAmt(inv.total_amount)}</td>
+                    <td style={td}>
+                      <Badge text={inv.is_overdue ? "OVERDUE" : inv.status.toUpperCase()} color={inv.is_overdue ? T.red : (INV_COLORS[inv.status] || T.slt)}/>
+                      {inv.status === "paid" && inv.paid_at && <div style={{ fontSize:10, color:T.t4, marginTop:2 }}>{fmtDate(inv.paid_at)}{inv.payment_ref ? ` · ${inv.payment_ref}` : ""}</div>}
+                    </td>
+                    <td style={td}>{fmtDate(inv.due_date)}</td>
+                    <td style={td} onClick={e => e.stopPropagation()}>{/* buttons must not open the breakdown */}
+                      <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+                        {inv.status === "scheduled" && <Btn variant="outline" onClick={() => act(`/saas-admin/client-invoices/${inv.id}/issue`, {}, "Invoice issued")} style={{ padding:"3px 8px", fontSize:10.5 }}>Issue</Btn>}
+                        {["scheduled", "issued"].includes(inv.status) && <Btn color={T.grn} onClick={() => { setPayInv(inv); setPayRef(""); setPayDate(todayISO()); }} style={{ padding:"3px 8px", fontSize:10.5 }}>Mark Paid</Btn>}
+                        {["scheduled", "issued"].includes(inv.status) && <Btn variant="outline" onClick={() => setEditInv(inv)} style={{ padding:"3px 8px", fontSize:10.5 }}><IcEdit size={10}/></Btn>}
+                        {["scheduled", "issued"].includes(inv.status) && <Btn variant="outline" color={T.red} onClick={() => window.confirm("Cancel this invoice?") && act(`/saas-admin/client-invoices/${inv.id}/cancel`, {}, "Invoice cancelled")} style={{ padding:"3px 8px", fontSize:10.5 }}><IcX size={10}/></Btn>}
+                        {inv.status === "paid" && <Btn variant="outline" color={T.amb} onClick={() => window.confirm("Revert this payment?") && act(`/saas-admin/client-invoices/${inv.id}/revert-paid`, {}, "Payment reverted")} style={{ padding:"3px 8px", fontSize:10.5 }}>Revert</Btn>}
+                      </div>
+                    </td>
+                  </InvoiceRows>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Agreement & documents — the deal on paper */}
+      <div style={{ marginTop:16 }}>
+        <ClientDocuments key={client.id + ":" + (data.documents?.length || 0)} clientId={client.id} setToast={setToast}/>
+      </div>
+
       {/* Modals */}
+      {showAddon && currentSub && <AddonModal sub={currentSub} onClose={() => setShowAddon(false)} onSaved={load} setToast={setToast}/>}
       {editClient && <ClientFormModal initial={client} onClose={() => setEditClient(false)} onSaved={load} setToast={setToast}/>}
       {showAddCompany && <AddCompanyModal client={client} onClose={() => setShowAddCompany(false)} onSaved={load} setToast={setToast}/>}
       {delCompany && <DeleteCompanyModal company={delCompany} onClose={() => setDelCompany(null)} onDone={load} setToast={setToast}/>}

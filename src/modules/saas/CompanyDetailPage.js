@@ -9,6 +9,7 @@ import { Toast, Toggle, StatCard, Badge, Btn, InputField, SelectField, EmptyStat
 import { BundleView, TicketBadge, fmtTicketTime } from "../shared/TicketBundle";
 import { AiModelsPanel, AiUsagePanel } from "./AiModels";
 import { CompanyGpsPanel } from "./CompanyGps";
+import ClientDocuments from "./ClientDocuments";
 
 // ── Bugs raised by THIS company ────────────────────────────────────────
 // The cross-tenant Bug Inbox answers "what is broken anywhere". A support
@@ -527,6 +528,7 @@ function CompanyDetailPage({ companyId, onBack }) {
   const TABS_DET = [
     { id:"overview",    label:"Overview",            Icon:IcBuilding },
     { id:"subscription",label:"Subscription",        Icon:IcDollar   },
+    { id:"agreement",   label:"Agreement",           Icon:IcFolder   },
     { id:"users",       label:`Users (${users.length})`, Icon:IcUsers },
     { id:"modules",     label:"Module Access",       Icon:IcPuzzle   },
     { id:"bugs",        label:"Bugs",                Icon:IcShield   },
@@ -693,7 +695,9 @@ function CompanyDetailPage({ companyId, onBack }) {
                 <div style={{ fontSize:16, fontWeight:700, color:T.blu }}>₹{fmtMoney(current_sub.base_annual_value)}<span style={{ fontSize:11, fontWeight:500, color:T.t4 }}> / yr</span></div>
                 <div style={{ fontSize:11, color:T.t4, marginBottom:10 }}>{current_sub.billing_cycle} · <Badge text={current_sub.status} color={current_sub.status === "active" ? T.grn : T.amb}/></div>
                 <div style={{ fontSize:11, color:T.t3 }}>Valid till <strong style={{ color:T.t1 }}>{fmtDate(current_sub.end_date)}</strong></div>
-                <div style={{ fontSize:11, color:T.t3 }}>{current_sub.committed_users} committed users</div>
+                <div style={{ fontSize:11, color:T.t3 }}>
+                  {current_sub.committed_users} committed{current_sub.addon_users ? ` + ${current_sub.addon_users} add-on` : ""} users
+                </div>
                 <div style={{ fontSize:10.5, color:T.t4, marginTop:6 }}>{current_sub.client_name} · invoices under Customers</div>
               </div>
             ) : <div style={{ fontSize:12, color:T.t4 }}>No contract on this company's client</div>}
@@ -717,7 +721,7 @@ function CompanyDetailPage({ companyId, onBack }) {
               </div>
               <div><Badge text={s.status} color={s.status === "active" ? T.grn : s.status === "pending" ? T.amb : T.slt}/></div>
               <div style={{ fontSize:11, color:T.t3 }}>{fmtDate(s.start_date)} → {fmtDate(s.end_date)}</div>
-              <div style={{ fontSize:12, color:T.t2 }}>{s.committed_users} users</div>
+              <div style={{ fontSize:12, color:T.t2 }}>{s.committed_users}{s.addon_users ? ` + ${s.addon_users} add-on` : ""} users</div>
               <div style={{ fontSize:11, color:T.t4 }}>{s.order_ref || "--"}</div>
             </div>
           ))}
@@ -822,6 +826,14 @@ function CompanyDetailPage({ companyId, onBack }) {
         </div>
       )}
       {tab === "gps" && <CompanyGpsPanel companyId={companyId}/>}
+
+      {/* Agreement — the paying client's deal papers; same list on every
+          company of that client and on the Customers page */}
+      {tab === "agreement" && (company.client_id
+        ? <ClientDocuments clientId={company.client_id} setToast={setToast}/>
+        : <div style={{ padding:30, textAlign:"center", color:T.t4, fontSize:12, background:T.surface, border:`1px solid ${T.b1}`, borderRadius:10 }}>
+            Ye company kisi paying customer (client) se judi nahi hai — pehle Customers me assign karo.
+          </div>)}
       {tab === "crm" && (
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1.3fr", gap:16 }}>
           <div style={{ background:T.surface, border:`1px solid ${T.b1}`, borderRadius:10, padding:"16px 20px" }}>
