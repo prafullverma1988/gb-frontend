@@ -12,6 +12,7 @@ import { PromptProvider } from "./components/PromptDialog";
 import NotificationBell from "./components/NotificationBell";
 import AppErrorBoundary from "./components/AppErrorBoundary";
 import SahayakFab from "./components/SahayakFab";
+import ExpenseNudge from "./modules/tabs/ExpenseNudge";
 import { t, loadFullPack } from "./i18n";
 import { visiblePoll } from "./utils/poll";
 
@@ -2394,6 +2395,8 @@ function App(){
       {isMobile&&!hideAppShell&&<MobileBottomNav active={nav} setActive={setNav} enabledModules={enabledModules} user={user}/>}
       {/* Background Upload Toast — always visible */}
       <UploadToast/>
+      {/* Mahine ke kharche — zimmedaar ko checklist tareekh / nikli tareekh par popup */}
+      <ExpenseNudge/>
     </div>
     </PromptProvider>
     </ConfirmProvider>

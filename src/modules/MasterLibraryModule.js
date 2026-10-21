@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useCallback, useRef, createContext, useContext } from "react";
+import ExpenseLibrarySection from "./library/ExpenseLibrarySection";
 import PickSelect from "../components/PickSelect";
 import api from "../config/api";
 import SearchSelect from "../components/SearchSelect";
@@ -7471,6 +7472,8 @@ const masterSections = [
   // list ka jhootha bharosa de raha tha. Ab ye list mobile ke Quick expense
   // ka zaroori dropdown bharti hai, isliye sahi ginti dikhna maayne rakhta hai.
   { id: "expense_head",  get label() { return t("master_library.expense_heads"); },       Icon: IcDollar,    Comp: ExpenseHeadSection,       section: null, countKey: "expense_heads", color: T.amber },
+  // Har mahine dohrane wale company kharche (21 Oct 2026) — Finance ka hissa, apni file me
+  { id: "expense_library", get label() { return t("master_library.expense_library"); }, Icon: IcClipboard, Comp: ExpenseLibrarySection,    section: null, countKey: null, color: T.amber, perm: { base: "Finance" } },
 ];
 
 export default function MasterLibraryModule() {

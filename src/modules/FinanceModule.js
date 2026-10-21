@@ -19,6 +19,7 @@ import { isoDate, todayISO, daysAgoISO } from "../utils/today";
 import { cashMoveOf, isTransferIn, round2, partyTypeBucket, PARTY_TYPE_BUCKETS } from "../utils/moneyRules";
 import { BackClose } from "../utils/backNav";
 import CompanyExpenseModal from "./tabs/CompanyExpenseModal";
+import ExpenseChecklistModal from "./tabs/ExpenseChecklistModal";
 import { cld } from "../utils/cloudinary";
 import { loadPartyCategories, defaultCategories, partyCategoryKeys, catLabel, selectionToPayload } from "../utils/partyCategories";
 
@@ -4050,6 +4051,13 @@ function FinanceModule(){
   const [showCreateTxn,setShowCreateTxn]=useState(false);
   const [showP2P,setShowP2P]=useState(false);   // Party-to-Party Settlement modal
   const [showCExp,setShowCExp]=useState(false); // Company Expense modal (21 Oct 2026)
+  // Mahine ke kharche (Expense Library checklist) — button par is mahine ke baaki ki ginti
+  const [showExpList,setShowExpList]=useState(false);
+  const [expPending,setExpPending]=useState(0);
+  useEffect(()=>{
+    if(showExpList) return;
+    api.get("/company-expenses/checklist").then(r=>{ if(r&&r.success&&r.data) setExpPending((r.data.summary&&r.data.summary.pending)||0); }).catch(()=>{});
+  },[showExpList]);
   // ── CREATE TRANSACTION MODAL state ──────────────────────────
   const [createTxnType,setCreateTxnType]=useState(null);
   const [createTxnParty,setCreateTxnParty]=useState("");
@@ -5205,6 +5213,12 @@ Status: ${ledgerRow.status||"unpaid"}`;
             })}
           </div>
           <div style={{display:"flex",gap:6,padding:"2px 0",alignItems:"center",flexShrink:0}}>
+            {/* Mahine ke kharche — Expense Library ka is mahine ka hisaab */}
+            <button onClick={()=>setShowExpList(true)} title={t("ecl.btn_tip")}
+              style={{display:"flex",alignItems:"center",gap:5,padding:"6px 11px",borderRadius:6,border:"1px solid #CBD5E1",background:"#FFFFFF",fontSize:11,color:"#475569",cursor:"pointer",fontFamily:"inherit",fontWeight:500}}>
+              {t("ecl.btn")}
+              {expPending>0&&<span style={{fontSize:10,fontWeight:700,color:"#fff",background:T.red,borderRadius:9,padding:"0 6px",lineHeight:"16px"}}>{expPending}</span>}
+            </button>
             {/* Mera wallet — PC se wallet kharch. Refresh upar header me pehle se hai. */}
             {canEntry("Finance")&&(
               <button onClick={()=>setShowWallet(true)} title={t("wallet_web.btn_tip")}
@@ -7154,6 +7168,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
         />
       )}
       {showCExp&&<CompanyExpenseModal onClose={()=>setShowCExp(false)} onSaved={()=>{refreshTxns();refreshAccounts();}}/>}
+      {showExpList&&<ExpenseChecklistModal initialMine={false} onClose={()=>{setShowExpList(false);refreshTxns();}}/>}
       {showP2P&&(
         <P2PSettlementModal
           onClose={()=>setShowP2P(false)}

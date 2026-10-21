@@ -41,16 +41,25 @@ const MODES = [
 ];
 const MOPS = ["cash", "upi", "neft", "cheque"];
 
-export default function CompanyExpenseModal({ onClose, onSaved }) {
+// preset = Expense Library checklist ki row ("Bana do") — khaake se pehle se bhara,
+// aur server ko instance_id jaata hai taaki checklist me "ho gaya" lage.
+export default function CompanyExpenseModal({ onClose, onSaved, preset }) {
   const [heads, setHeads] = useState([]);
   const [locs, setLocs] = useState([]);
   const [projects, setProjects] = useState([]);
   const [accounts, setAccounts] = useState([]);
   const [parties, setParties] = useState([]);
+  const P = preset || null;
+  const sv = (v) => (v == null ? "" : String(v));
   const [f, setF] = useState({
-    head: "", where: "loc", loc: "", project: "", date: todayLocal(), period: todayLocal().slice(0, 7), amount: "",
-    mode: "paid", account: "", mop: "cash", payee: "", party: "", due: "", bill_no: "", photo: "",
-    gst: "", itc: false, tds: "", note: "",
+    head: sv(P && P.expense_head_id), where: P ? (P.location_id ? "loc" : P.project_id ? "project" : "company") : "loc",
+    loc: sv(P && P.location_id), project: sv(P && P.project_id), date: todayLocal(),
+    period: (P && P.period) || todayLocal().slice(0, 7),
+    amount: P && P.amount_type === "fixed" && P.amount ? String(Number(P.amount)) : "",
+    mode: (P && P.expense_mode) || "paid", account: sv(P && P.account_id), mop: "cash", payee: (P && P.payee_text) || "",
+    party: sv(P && P.party_id), due: P && P.expense_mode === "payable" && P.due_date ? String(P.due_date).slice(0, 10) : "",
+    bill_no: "", photo: "", gst: "", itc: false, tds: "",
+    note: P ? [P.name, P.ref_no].filter(Boolean).join(" · ") : "",
   });
   const [newHead, setNewHead] = useState(null); // null = band, "" = likh rahe
   const [showTax, setShowTax] = useState(false);
@@ -134,6 +143,7 @@ export default function CompanyExpenseModal({ onClose, onSaved }) {
       ...(f.gst !== "" ? { gst_amount: Number(f.gst) || 0, itc_eligible: !!f.itc } : {}),
       ...(f.tds !== "" ? { tds_amount: Number(f.tds) || 0 } : {}),
       ...(dup && force ? { force: true, force_reason: forceWhy.trim() } : {}),
+      ...(P ? { instance_id: P.id } : {}),
     };
     try {
       const r = await api.post("/company-expenses", body);
@@ -189,6 +199,12 @@ export default function CompanyExpenseModal({ onClose, onSaved }) {
           </div>
         ) : (<>
           <div style={{ padding: "16px 18px", overflowY: "auto", flex: 1 }}>
+            {P && (
+              <div style={{ marginBottom: 12, padding: "8px 12px", borderRadius: 8, background: T.bluL, border: "1px solid " + T.bluM, fontSize: 12, color: T.t2 }}>
+                {t("cexp.from_library", { name: P.name, period: (() => { const [y, m] = String(P.period).split("-").map(Number); return new Date(y, m - 1, 1).toLocaleDateString("en-IN", { month: "long", year: "numeric" }); })() })}
+                {P.amount_type !== "fixed" && P.amount ? " · " + t("cexp.estimate", { amt: inr(P.amount) }) : ""}
+              </div>
+            )}
             {/* 1. Head */}
             <div style={{ marginBottom: 12 }}>
               <label style={L}>{t("cexp.head")} *</label>
