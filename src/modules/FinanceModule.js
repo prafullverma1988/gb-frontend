@@ -21,6 +21,7 @@ import { BackClose } from "../utils/backNav";
 import CompanyExpenseModal from "./tabs/CompanyExpenseModal";
 import ExpenseChecklistModal from "./tabs/ExpenseChecklistModal";
 import PartyChargeModal from "./tabs/PartyChargeModal";
+import LoanRegisterModal from "./tabs/LoanRegisterModal";
 import { cld } from "../utils/cloudinary";
 import { loadPartyCategories, defaultCategories, partyCategoryKeys, catLabel, selectionToPayload } from "../utils/partyCategories";
 
@@ -4056,6 +4057,7 @@ function FinanceModule(){
   // Mahine ke kharche (Expense Library checklist) — button par is mahine ke baaki ki ginti
   const [showExpList,setShowExpList]=useState(false);
   const [showPCharge,setShowPCharge]=useState(false); // Party par charge (H4)
+  const [showLoans,setShowLoans]=useState(false);     // Udhaar register (H5a)
   const [expPending,setExpPending]=useState(0);
   useEffect(()=>{
     if(showExpList) return;
@@ -5255,6 +5257,13 @@ Status: ${ledgerRow.status||"unpaid"}`;
                           <button onClick={()=>{setShowAccPanel(false);setShowAcctAccess(true);}}
                             style={{width:"100%",display:"flex",alignItems:"center",gap:7,padding:"7px 10px",marginBottom:6,borderRadius:7,border:`1px dashed ${T.bluM}`,background:T.bluL,color:T.blu,fontSize:11.5,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
                             <IcBank size={13} color="currentColor"/> {accessBtnLabel()}
+                          </button>
+                        )}
+                        {/* Udhaar register — diya udhaar + har mahine ka byaaj (21 Oct 2026) */}
+                        {cFinCreate&&(
+                          <button onClick={()=>{setShowAccPanel(false);setShowLoans(true);}}
+                            style={{width:"100%",display:"flex",alignItems:"center",gap:7,padding:"7px 10px",marginBottom:6,borderRadius:7,border:`1px dashed ${T.grnM}`,background:T.grnL,color:T.grn,fontSize:11.5,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
+                            <IcBank size={13} color="currentColor"/> {t("loan.btn")}
                           </button>
                         )}
                         {activeAccounts.map(a=>(
@@ -7173,6 +7182,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
       {showCExp&&<CompanyExpenseModal onClose={()=>setShowCExp(false)} onSaved={()=>{refreshTxns();refreshAccounts();}}/>}
       {showExpList&&<ExpenseChecklistModal initialMine={false} onClose={()=>{setShowExpList(false);refreshTxns();}}/>}
       {showPCharge&&<PartyChargeModal onClose={()=>setShowPCharge(false)} onSaved={()=>{refreshTxns();}}/>}
+      {showLoans&&<LoanRegisterModal onClose={()=>{setShowLoans(false);refreshTxns();}}/>}
       {showP2P&&(
         <P2PSettlementModal
           onClose={()=>setShowP2P(false)}
