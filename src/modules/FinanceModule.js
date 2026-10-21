@@ -18,6 +18,7 @@ import AccountAccessModal from "./tabs/AccountAccessModal";
 import { isoDate, todayISO, daysAgoISO } from "../utils/today";
 import { cashMoveOf, isTransferIn, round2, partyTypeBucket, PARTY_TYPE_BUCKETS } from "../utils/moneyRules";
 import { BackClose } from "../utils/backNav";
+import CompanyExpenseModal from "./tabs/CompanyExpenseModal";
 import { cld } from "../utils/cloudinary";
 import { loadPartyCategories, defaultCategories, partyCategoryKeys, catLabel, selectionToPayload } from "../utils/partyCategories";
 
@@ -1380,6 +1381,7 @@ const LEDGER_TYPE_LABELS={"material_purchase":"Material Purchase","payment":"Pay
 // khaate me "Material Purchase" (server display_type="wallet_material").
 // Ledger ki row, Type filter aur Excel — teeno yahi label padhte hain.
 const ledgerLabelOf=(txn)=>txn.tripBillId!=null?t("tripbill.ledger_label")
+  :txn.expenseMode?t("cexp.label")
   :txn.displayType==="fuel_given"?t("finance.fuel_given_label")
   :(LEDGER_TYPE_LABELS[txn.displayType==="wallet_material"?"material_purchase":txn.txnType]||txn.type||txn.txnType||"Transaction");
 const ledgerProjOf=(txn)=>txn.project||txn.project_name||"";
@@ -4047,6 +4049,7 @@ function FinanceModule(){
   const [showAccPanel,setShowAccPanel]=useState(false);const [accTab,setAccTab]=useState("accounts");
   const [showCreateTxn,setShowCreateTxn]=useState(false);
   const [showP2P,setShowP2P]=useState(false);   // Party-to-Party Settlement modal
+  const [showCExp,setShowCExp]=useState(false); // Company Expense modal (21 Oct 2026)
   // ── CREATE TRANSACTION MODAL state ──────────────────────────
   const [createTxnType,setCreateTxnType]=useState(null);
   const [createTxnParty,setCreateTxnParty]=useState("");
@@ -4378,6 +4381,9 @@ function FinanceModule(){
       note:t.note||null,
       // Kis cheez ke liye — Library → Expense Heads (party payment par bhi)
       expenseHead:t.expense_head_name||null,
+      // Company Expense (21 Oct 2026) — kisne bhara + kis office / store ka
+      expenseMode:t.expense_mode||null,
+      location:t.location_name||null,
       to_account_name:t.to_account_name||null,
       mop:t.mop||"",
       entryBy:t.created_by_name||t.entry_by||"",
@@ -5315,6 +5321,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
                       {l:t("common.payment_made"),sub:t("finance.pay_vendor_labour"),Icon:IcSend,c:T.red,bg:T.redL},
                       {l:t("common.bank_transfer"),sub:t("finance.account_to_account"),Icon:IcBank,c:T.blu,bg:T.bluL},
                       {l:t("finance.petty_cash_expense"),sub:t("finance.site_misc_expense"),Icon:IcWallet,c:T.amb,bg:T.ambL},
+                      {l:t("cexp.menu"),sub:t("cexp.menu_sub"),Icon:IcBillDue,c:T.ind,bg:T.indL,cexp:true},
                     ]},
                     {section:"Billing & Purchases",items:[
                       {l:t("common.material_purchase_bill"),sub:t("finance.record_supplier_bill"),Icon:IcBillDue,c:T.blu,bg:T.bluL},
@@ -5334,7 +5341,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
                       </div>
                       {grp.items.map((item,ii)=>{const ItemIcon=item.Icon;return(
                         <button key={ii}
-                          onClick={()=>{setShowCreateTxn(false); item.p2p?setShowP2P(true):openTxn(item.l);}}
+                          onClick={()=>{setShowCreateTxn(false); item.p2p?setShowP2P(true):item.cexp?setShowCExp(true):openTxn(item.l);}}
                           style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"7px 12px",border:"none",background:"none",cursor:"pointer",textAlign:"left"}}
                           onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB}
                           onMouseLeave={e=>e.currentTarget.style.background="none"}>
@@ -7146,6 +7153,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
           dbProjects={[...new Set([...apiProjects,...activeTxns.map(t=>t.project)].filter(Boolean))]}
         />
       )}
+      {showCExp&&<CompanyExpenseModal onClose={()=>setShowCExp(false)} onSaved={()=>{refreshTxns();refreshAccounts();}}/>}
       {showP2P&&(
         <P2PSettlementModal
           onClose={()=>setShowP2P(false)}

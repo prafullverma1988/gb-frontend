@@ -548,8 +548,10 @@ function LocationsSettings() {
   ];
   // whId = wo stock-side godown jise jagah di ja rahi hai (uska geofence
   // abhi nahi hai). Isse save naya godown nahi banata, purane ko jodta hai.
-  const blank = { id: null, whId: null, kind: "office", label: "", address: "", lat: "", lng: "", radius: 100, incharges: [] };
+  const blank = { id: null, whId: null, kind: "office", label: "", address: "", lat: "", lng: "", radius: 100, incharges: [], city: "" };
   const [rows, setRows] = useState([]);
+  // City Library — office / store kis city ka (company kharche ki city isi se, 21 Oct 2026)
+  const [cities, setCities] = useState([]);
   // Location list sach me aayi ya nahi — na aayi ho to har store "bina
   // location" na dikhe (neeche orphanWhs).
   const [geoLoaded, setGeoLoaded] = useState(false);
@@ -575,6 +577,7 @@ function LocationsSettings() {
     // scope=all: ye company ki config hai — saare store (Roles & Access wala niyam yahan nahi).
     api.get("/warehouse/warehouses?scope=all").then(r => { if (r.success) setWhs(r.data || []); }).catch(()=>{});
     api.get("/projects/team-members").then(r => { if (r.success) setStaff(r.data || []); }).catch(()=>{});
+    api.get("/library/cities").then(r => { if (r && r.success) setCities((r.data || []).filter(c => Number(c.is_active) !== 0)); }).catch(()=>{});
   };
   useEffect(load, []);
 
@@ -629,7 +632,8 @@ function LocationsSettings() {
     setBusy(true); setMsg("");
     try {
       const body = { project_id: null, kind: form.kind, label: form.label.trim(),
-                     address: form.address || null, center_lat: lat, center_lng: lng, radius_m: Number(form.radius) || 100 };
+                     address: form.address || null, center_lat: lat, center_lng: lng, radius_m: Number(form.radius) || 100,
+                     city_id: form.city ? Number(form.city) : null };
       const r = form.id ? await api.put("/geofences/" + form.id, body) : await api.post("/geofences", body);
       // Purana godown ko jagah mili — naya godown mat banao, usi ko jod do,
       // warna wahi stock do godown me bat jaata.
@@ -673,11 +677,11 @@ function LocationsSettings() {
     || whs.flatMap(w => w.incharges || []).find(i => String(i.user_id) === String(id))?.name || "#" + id;
   const edit = (g) => setForm({ id: g.id, kind: g.kind || "office", label: g.label || "", address: g.address || "",
                                 lat: String(g.center_lat), lng: String(g.center_lng), radius: g.radius_m || 100,
-                                incharges: inchargeIds(whFor(g)) });
+                                incharges: inchargeIds(whFor(g)), city: g.city_id ? String(g.city_id) : "" });
   // Stock-side godown ko jagah dena — naam/incharge wahi rehta hai.
   const editWh = (w) => setForm({ id: null, whId: w.id, kind: "warehouse", label: w.name || "",
                                   address: w.address || "", lat: "", lng: "", radius: 100,
-                                  incharges: inchargeIds(w) });
+                                  incharges: inchargeIds(w), city: "" });
 
   // Hataana nahi, band karna — jisme stock ka kaam pada ho use haath nahi lagate.
   // Server bhi yahi rokta hai (409, saath me kya pada hai).
@@ -743,7 +747,7 @@ function LocationsSettings() {
               <div key={g.id} style={{ display:"flex", alignItems:"center", gap:12, padding:"11px 13px", border:`1px solid ${T.border}`, borderRadius:9, marginBottom:8, background:"white" }}>
                 <span style={{ fontSize:11, fontWeight:700, color:k.c, background:k.c+"15", padding:"3px 9px", borderRadius:12, whiteSpace:"nowrap" }}>{k.label}</span>
                 <div style={{ flex:1, minWidth:0 }}>
-                  <div style={{ fontSize:13, fontWeight:700, color:T.text }}>{g.label}</div>
+                  <div style={{ fontSize:13, fontWeight:700, color:T.text }}>{g.label}{g.city_name ? <span style={{ fontSize:11, fontWeight:600, color:T.textMid }}> · {g.city_name}</span> : null}</div>
                   <div style={{ fontSize:11, color:T.textMid, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{g.address || "—"}</div>
                   <div style={{ fontSize:10.5, color:T.textLight, marginTop:1 }}>📍 {Number(g.center_lat).toFixed(5)}, {Number(g.center_lng).toFixed(5)} · {g.radius_m}m</div>
                   {g.kind === "warehouse" && (
@@ -773,6 +777,14 @@ function LocationsSettings() {
         </div>
         <div style={{ marginBottom:10 }}><label style={L}>Name *</label><input value={form.label} onChange={e=>setForm(f=>({...f,label:e.target.value}))} placeholder={form.kind==="office"?"e.g. Head Office":"e.g. Main Store"} style={I}/></div>
         <div style={{ marginBottom:10 }}><label style={L}>Address</label><input value={form.address} onChange={e=>setForm(f=>({...f,address:e.target.value}))} placeholder="Full address" style={I}/></div>
+        <div style={{ marginBottom:10 }}>
+          <label style={L}>{t("settings.loc_city")}</label>
+          <PickSelect value={form.city} onChange={e=>setForm(f=>({...f,city:String(e.target.value||"")}))} style={{...I, cursor:"pointer"}}>
+            <option value="">{t("settings.loc_city_none")}</option>
+            {cities.map(c => <option key={c.id} value={c.id}>{c.name}{c.state ? ` · ${c.state}` : ""}</option>)}
+          </PickSelect>
+          <div style={{ fontSize:10.5, color:T.textLight, marginTop:4 }}>{t("settings.loc_city_help")}</div>
+        </div>
         {form.kind === "warehouse" && (
           <div style={{ marginBottom:10 }}>
             <label style={L}>{t("settings.wh_incharges_label")}</label>
@@ -2686,6 +2698,7 @@ function ApprovalSettings() {
     // server chalu kar deta hai, aur daalne wala approver ho tab bhi pending.
     { id: 0,  module: "Bank Statement Import",       cat: "FINANCE",   enabled: true,  levels: [{ role: "Admin", limit: null }] },
     { id: 0,  module: "Bank Statement Change",       cat: "FINANCE",   enabled: true,  levels: [{ role: "Admin", limit: null }] },
+    { id: 0,  module: "Company Expense",             cat: "FINANCE",   enabled: true,  levels: [{ role: "Admin", limit: null }] },
     { id: 0,  module: "Fuel Entry Delete",           cat: "FINANCE",   enabled: true,  levels: [{ role: "Admin", limit: null }] },
   ];
 
