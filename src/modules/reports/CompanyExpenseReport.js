@@ -11,6 +11,7 @@
 import { useEffect, useMemo, useState } from "react";
 import api from "../../config/api";
 import { T } from "../shared/tokens";
+import SearchSelect from "../../components/SearchSelect";
 import { t } from "../../i18n";
 
 const inr = (n) => "₹" + Math.round(Number(n) || 0).toLocaleString("en-IN");
@@ -29,12 +30,104 @@ const RANGES = {
 };
 const BUCKET = { overdue: "red", week: "amb", month: "blu", later: "slt", no_date: "slt" };
 
+// ── Budget vs asal (H5b) — har budget line: mahine-dar budget / asal / farak ──
+function BudgetSection({ budgets, months, onChanged, card, inr, monthName }) {
+  const [form, setForm] = useState(null);
+  const [heads, setHeads] = useState([]);
+  const [locs, setLocs] = useState([]);
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [edit, setEdit] = useState(null); // { id, amount }
+  const openForm = () => {
+    setForm({ head: "", loc: "", amount: "", from: months[months.length - 1] || "" }); setErr("");
+    const ok = (r) => (r && r.success ? r.data || [] : []);
+    api.get("/library/expense-heads").then((r) => setHeads(ok(r).filter((h) => Number(h.is_active) !== 0))).catch(() => {});
+    api.get("/geofences").then((r) => setLocs(ok(r).filter((g) => g.project_id == null && (g.kind === "office" || g.kind === "warehouse")))).catch(() => {});
+  };
+  const act = async (fn) => { setBusy(true); setErr(""); const r = await fn().catch((e) => ({ message: e.message })); setBusy(false);
+    if (r && r.success) { onChanged(); return true; } setErr((r && r.message) || t("cxr.b_fail")); return false; };
+  const save = async () => {
+    if (!form.head || !(Number(form.amount) > 0)) { setErr(t("cxr.b_need")); return; }
+    if (await act(() => api.post("/company-expenses/budgets", { expense_head_id: Number(form.head), location_id: form.loc ? Number(form.loc) : null, amount: Number(form.amount), from_month: form.from }))) setForm(null);
+  };
+  const I = { height: 30, padding: "0 8px", borderRadius: 6, border: `1.5px solid ${T.b1}`, fontSize: 12.5, fontFamily: "inherit", color: T.t1, background: T.surface, boxSizing: "border-box" };
+  const btn = (k, off) => ({ padding: "5px 11px", borderRadius: 6, fontSize: 12, fontWeight: 600, fontFamily: "inherit", cursor: off ? "default" : "pointer", whiteSpace: "nowrap",
+    border: k === "ghost" ? `1px solid ${T.b2}` : "none", background: k === "ghost" ? T.surface : off ? T.b2 : T.blu, color: k === "ghost" ? T.t2 : "#fff" });
+  const th = { fontSize: 10.5, fontWeight: 700, color: T.t4, textTransform: "uppercase", padding: "7px 10px", textAlign: "right", background: T.surfaceB, whiteSpace: "nowrap" };
+  const td = { fontSize: 12, padding: "7px 10px", borderTop: `1px solid ${T.b1}`, textAlign: "right", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" };
+  return (
+    <div style={{ ...card, padding: 0, overflow: "auto" }}>
+      <div style={{ padding: "10px 14px", display: "flex", alignItems: "center", gap: 10 }}>
+        <span style={{ fontSize: 13, fontWeight: 700, color: T.t1, flex: 1 }}>{t("cxr.b_title")}</span>
+        {!form && <button onClick={openForm} style={btn("primary")}>+ {t("cxr.b_add")}</button>}
+      </div>
+      {err && <div style={{ padding: "6px 14px", fontSize: 12, color: T.red }}>{err}</div>}
+      {form && (
+        <div style={{ padding: "8px 14px 12px", display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", borderTop: `1px solid ${T.b1}`, background: T.bluL }}>
+          <div style={{ width: 200 }}><SearchSelect compact value={form.head} options={heads.map((h) => ({ key: h.id, label: h.name }))} onChange={(k) => setForm({ ...form, head: k })} placeholder={t("cxr.b_head")} theme={T} /></div>
+          <div style={{ width: 200 }}><SearchSelect compact value={form.loc} options={[{ key: "", label: t("cxr.b_all_places") }, ...locs.map((g) => ({ key: g.id, label: g.label, sub: g.city_name || "" }))]} onChange={(k) => setForm({ ...form, loc: k })} theme={T} /></div>
+          <input type="number" min="0" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} placeholder={t("cxr.b_amount")} style={{ ...I, width: 130 }} />
+          <input type="month" value={form.from} onChange={(e) => setForm({ ...form, from: e.target.value })} title={t("cxr.b_from")} style={{ ...I, width: 150 }} />
+          <button onClick={save} disabled={busy} style={btn("primary", busy)}>{t("cxr.b_save")}</button>
+          <button onClick={() => setForm(null)} style={btn("ghost")}>{t("cxr.b_cancel")}</button>
+        </div>
+      )}
+      {!budgets.length ? <div style={{ padding: "4px 14px 14px", fontSize: 12.5, color: T.t4 }}>{t("cxr.b_empty")}</div> : (
+        <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 220 + months.length * 110 }}>
+          <thead><tr>
+            <th style={{ ...th, textAlign: "left" }}>{t("cxr.b_line")}</th>
+            {months.map((m) => <th key={m} style={th}>{monthName(m)}</th>)}
+            <th style={th}>{t("cxr.total")}</th><th style={th} />
+          </tr></thead>
+          <tbody>
+            {budgets.map((b) => (
+              <tr key={b.id}>
+                <td style={{ ...td, textAlign: "left" }}>
+                  <div style={{ fontWeight: 600, color: T.t1 }}>{b.head}</div>
+                  <div style={{ fontSize: 11, color: T.t4 }}>{b.location || t("cxr.b_all_places")} · {edit && edit.id === b.id ? null : t("cxr.b_per_month", { amt: inr(b.amount) })}</div>
+                  {edit && edit.id === b.id && (
+                    <div style={{ display: "flex", gap: 5, marginTop: 4 }}>
+                      <input type="number" min="0" value={edit.amount} onChange={(e) => setEdit({ ...edit, amount: e.target.value })} style={{ ...I, width: 100, height: 26 }} />
+                      <button onClick={async () => { if (await act(() => api.put(`/company-expenses/budgets/${b.id}`, { amount: Number(edit.amount) }))) setEdit(null); }} style={btn("primary", busy)}>{t("cxr.b_save")}</button>
+                    </div>
+                  )}
+                </td>
+                {months.map((m) => {
+                  const x = b.months.find((y) => y.ym === m);
+                  if (!x) return <td key={m} style={{ ...td, color: T.t4 }}>—</td>;
+                  const over = x.diff < -0.005;
+                  return (
+                    <td key={m} style={td}>
+                      <div style={{ fontWeight: 600, color: over ? T.red : T.t1 }}>{inr(x.actual)}</div>
+                      <div style={{ fontSize: 10.5, color: over ? T.red : T.grn }}>{over ? t("cxr.b_over", { amt: inr(-x.diff) }) : t("cxr.b_left", { amt: inr(x.diff) })}</div>
+                    </td>
+                  );
+                })}
+                <td style={{ ...td, fontWeight: 700 }}>
+                  <div style={{ color: b.total_actual > b.total_budget ? T.red : T.t1 }}>{inr(b.total_actual)}</div>
+                  <div style={{ fontSize: 10.5, color: T.t4 }}>/ {inr(b.total_budget)}</div>
+                </td>
+                <td style={td}>
+                  <button onClick={() => setEdit(edit && edit.id === b.id ? null : { id: b.id, amount: String(b.amount) })} style={btn("ghost")}>{t("cxr.b_edit")}</button>{" "}
+                  <button onClick={async () => { if (await window.confirmAsync(t("cxr.b_stop_confirm"))) act(() => api.put(`/company-expenses/budgets/${b.id}`, { is_active: 0 })); }} style={btn("ghost")}>{t("cxr.b_stop")}</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      <div style={{ padding: "8px 14px", fontSize: 11, color: T.t4, borderTop: `1px solid ${T.b1}` }}>{t("cxr.b_note")}</div>
+    </div>
+  );
+}
+
 export default function CompanyExpenseReport() {
   const [[from, to], setRange] = useState(RANGES.last6());
   const [group, setGroup] = useState("head");
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
+  const [reload, setReload] = useState(0);
 
   useEffect(() => {
     let alive = true;
@@ -44,7 +137,7 @@ export default function CompanyExpenseReport() {
       .catch((e) => alive && setErr(e.message))
       .finally(() => alive && setLoading(false));
     return () => { alive = false; };
-  }, [from, to]);
+  }, [from, to, reload]);
 
   const months = useMemo(() => monthsIn(from, to), [from, to]);
   const keyOf = (r) => group === "head" ? (r.head || t("cxr.no_head"))
@@ -178,6 +271,8 @@ export default function CompanyExpenseReport() {
           )}
           <div style={{ padding: "8px 14px", fontSize: 11, color: T.t4, borderTop: `1px solid ${T.b1}` }}>{t("cxr.t_note")}</div>
         </div>
+
+        <BudgetSection budgets={(data && data.budgets) || []} months={months} onChanged={() => setReload((n) => n + 1)} card={card} inr={inr} monthName={monthName} />
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(380px,1fr))", gap: 12 }}>
           {/* Aage kya dena */}
