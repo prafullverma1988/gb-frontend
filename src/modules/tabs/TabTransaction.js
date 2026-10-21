@@ -251,7 +251,6 @@ function TabTransaction({projectId, projectName}) {
                     {l:t("finance.advance_payment"),         sub:t("finance.advance_to_party"),     c:T.pur, bg:T.purL},
                   ]},
                   {section:"Adjustments",items:[
-                    {l:t("finance.journal_entry"), sub:t("finance.manual_debit_credit"), c:T.slt, bg:T.sltL},
                     {l:t("finance.credit_note"),   sub:t("finance.party_balance_adjust"),  c:T.pur, bg:T.purL},
                   ]},
                 ].map((grp,gi)=>(

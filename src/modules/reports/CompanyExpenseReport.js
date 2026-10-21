@@ -74,6 +74,8 @@ export default function CompanyExpenseReport() {
   const dueKnown = dues.reduce((s, d) => s + (Number(d.amount) || 0), 0);
   const missed = (data && data.missed) || [];
   const pnl = data && data.pnl;
+  // Range ki doosri aamdani (Party par charge — byaaj / kiraya / aur)
+  const incomeSum = ((data && data.income) || []).reduce((s, x) => s + (Number(x.amount) || 0), 0);
   const thisYm = iso(new Date()).slice(0, 7);
 
   const exportXlsx = async () => {
@@ -201,6 +203,7 @@ export default function CompanyExpenseReport() {
               <div style={card}>
                 <div style={{ fontSize: 13, fontWeight: 700, color: T.t1, marginBottom: 8 }}>{t("cxr.p_title")}</div>
                 {[[t("cxr.p_rev"), pnl.project_revenue, T.t2], [t("cxr.p_cost"), -pnl.project_cost, T.t2], [t("cxr.p_proj"), pnl.project_pnl, pnl.project_pnl < 0 ? T.red : T.grn],
+                  ...(pnl.other_income != null ? [[t("cxr.p_oi"), pnl.other_income, T.grn]] : []),
                   [t("cxr.p_oh"), -pnl.overhead, T.red]].map(([l, v, c]) => (
                   <div key={l} style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, padding: "3px 0", color: T.t3 }}>
                     <span>{l}</span><b style={{ color: c, fontVariantNumeric: "tabular-nums" }}>{v < 0 ? "−" : ""}{inr(Math.abs(v))}</b>
@@ -210,6 +213,7 @@ export default function CompanyExpenseReport() {
                   <b style={{ color: T.t1 }}>{t("cxr.p_net")}</b>
                   <b style={{ color: pnl.net < 0 ? T.red : T.grn, fontVariantNumeric: "tabular-nums" }}>{pnl.net < 0 ? "−" : ""}{inr(Math.abs(pnl.net))}</b>
                 </div>
+                {incomeSum > 0 && <div style={{ fontSize: 11.5, color: T.t3, marginTop: 6 }}>{t("cxr.p_oi_range", { amt: inr(incomeSum) })}</div>}
                 <div style={{ fontSize: 11, color: T.t4, marginTop: 6, lineHeight: 1.5 }}>{t("cxr.p_note")}</div>
               </div>
             )}

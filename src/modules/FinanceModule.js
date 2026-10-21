@@ -20,6 +20,7 @@ import { cashMoveOf, isTransferIn, round2, partyTypeBucket, PARTY_TYPE_BUCKETS }
 import { BackClose } from "../utils/backNav";
 import CompanyExpenseModal from "./tabs/CompanyExpenseModal";
 import ExpenseChecklistModal from "./tabs/ExpenseChecklistModal";
+import PartyChargeModal from "./tabs/PartyChargeModal";
 import { cld } from "../utils/cloudinary";
 import { loadPartyCategories, defaultCategories, partyCategoryKeys, catLabel, selectionToPayload } from "../utils/partyCategories";
 
@@ -1382,6 +1383,7 @@ const LEDGER_TYPE_LABELS={"material_purchase":"Material Purchase","payment":"Pay
 // khaate me "Material Purchase" (server display_type="wallet_material").
 // Ledger ki row, Type filter aur Excel — teeno yahi label padhte hain.
 const ledgerLabelOf=(txn)=>txn.tripBillId!=null?t("tripbill.ledger_label")
+  :txn.expenseMode==="party_charge"?t("pch.label")
   :txn.expenseMode?t("cexp.label")
   :txn.displayType==="fuel_given"?t("finance.fuel_given_label")
   :(LEDGER_TYPE_LABELS[txn.displayType==="wallet_material"?"material_purchase":txn.txnType]||txn.type||txn.txnType||"Transaction");
@@ -4053,6 +4055,7 @@ function FinanceModule(){
   const [showCExp,setShowCExp]=useState(false); // Company Expense modal (21 Oct 2026)
   // Mahine ke kharche (Expense Library checklist) — button par is mahine ke baaki ki ginti
   const [showExpList,setShowExpList]=useState(false);
+  const [showPCharge,setShowPCharge]=useState(false); // Party par charge (H4)
   const [expPending,setExpPending]=useState(0);
   useEffect(()=>{
     if(showExpList) return;
@@ -5344,7 +5347,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
                       {l:t("finance.advance_payment"),sub:t("finance.advance_to_party"),Icon:IcArrow,c:T.pur,bg:T.purL},
                     ]},
                     {section:"Adjustments",items:[
-                      {l:t("finance.journal_entry"),sub:t("finance.manual_debit_credit"),Icon:IcFileInv,c:T.slt,bg:T.sltL},
+                      {l:t("pch.menu"),sub:t("pch.menu_sub"),Icon:IcFileInv,c:T.grn,bg:T.grnL,pcharge:true},
                       {l:t("finance.credit_note"),sub:t("finance.party_balance_adjust"),Icon:IcCopy,c:T.pur,bg:T.purL},
                       {l:t("finance.party_to_party_settlement"),sub:t("finance.ek_party_ka_paisa_doosri_ko"),Icon:IcArrow,c:T.ind,bg:T.indL,p2p:true},
                     ]},
@@ -5355,7 +5358,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
                       </div>
                       {grp.items.map((item,ii)=>{const ItemIcon=item.Icon;return(
                         <button key={ii}
-                          onClick={()=>{setShowCreateTxn(false); item.p2p?setShowP2P(true):item.cexp?setShowCExp(true):openTxn(item.l);}}
+                          onClick={()=>{setShowCreateTxn(false); item.p2p?setShowP2P(true):item.cexp?setShowCExp(true):item.pcharge?setShowPCharge(true):openTxn(item.l);}}
                           style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"7px 12px",border:"none",background:"none",cursor:"pointer",textAlign:"left"}}
                           onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB}
                           onMouseLeave={e=>e.currentTarget.style.background="none"}>
@@ -7169,6 +7172,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
       )}
       {showCExp&&<CompanyExpenseModal onClose={()=>setShowCExp(false)} onSaved={()=>{refreshTxns();refreshAccounts();}}/>}
       {showExpList&&<ExpenseChecklistModal initialMine={false} onClose={()=>{setShowExpList(false);refreshTxns();}}/>}
+      {showPCharge&&<PartyChargeModal onClose={()=>setShowPCharge(false)} onSaved={()=>{refreshTxns();}}/>}
       {showP2P&&(
         <P2PSettlementModal
           onClose={()=>setShowP2P(false)}
