@@ -111,6 +111,8 @@ const FLAG_META = {
   gps_missing:      { get label() { return t("trip_tracking.gps_missing"); },      tone: "amber" },
   // GPS se raaste ki km bharosemand nahi bani — route ki lead km lagi (3 Oct 2026).
   km_andaza:        { get label() { return t("trip_tracking.km_andaza"); },        tone: "amber" },
+  // Route par loading zaroori thi par gaadi sirf unloading se darj hui (21 Oct 2026).
+  load_missing:     { get label() { return t("trip_tracking.load_missing"); },     tone: "amber" },
 };
 const flagMeta = (f) => FLAG_META[f] || { label: String(f || "").toUpperCase(), tone: "amber" };
 const parseFlags = (raw) => { try { return Array.isArray(raw) ? raw : (raw ? JSON.parse(raw) : []); } catch { return []; } };
@@ -482,7 +484,7 @@ function MonitorTab({ projectId, onChange }) {
                       <div style={{ fontSize: 12, color: T.t2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item4.route_name || "—"}</div>
                       {item4.task_name && <div style={{ fontSize: 10.5, color: T.t4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item4.task_name}</div>}
                     </div>
-                    <span style={{ fontSize: 11.5, color: T.t2 }}>{fmtClock(item4.load_at)}</span>
+                    <span style={{ fontSize: 11.5, color: T.t2 }}>{Number(item4.unload_only) === 1 ? <span style={{ fontSize: 10.5, fontWeight: 700, color: T.amb }}>{t("trip_tracking.unload_only_chip")}</span> : fmtClock(item4.load_at)}</span>
                     <span style={{ fontSize: 11.5, color: T.t2, fontVariantNumeric: "tabular-nums" }}>{item4.travel_min != null ? t("trip_tracking.n_min", { n: item4.travel_min }) : "—"}</span>
                     <span style={{ fontSize: 12.5, fontWeight: 700, color: T.t1, fontVariantNumeric: "tabular-nums" }}>
                       {item4.billing_snap === "monthly" || item4.billing_snap === "own"
@@ -533,7 +535,9 @@ function MonitorTab({ projectId, onChange }) {
                         <div style={{ flex: 1, fontSize: 11.5, color: T.t2, lineHeight: 1.9 }}>
                           <TripLoadDetails trip={item4} />
                           <div><Rich k="trip_tracking.travel_t_t2" params={{ t: item4.travel_min != null ? t("trip_tracking.n_min", { n: item4.travel_min }) : "—", t2: item4.expected_travel_min != null ? t("trip_tracking.expected_pm", { exp: item4.expected_travel_min, tol: item4.tolerance_min || 0 }) : "" }} /></div>
-                          <div>{t("trip_tracking.loaded_by_t_fmtclock", { t: item4.load_by_name || "—", fmtClock: fmtClock(item4.load_at) })}</div>
+                          {Number(item4.unload_only) === 1
+                            ? <div style={{ color: T.amb, fontWeight: 600 }}>{t("trip_tracking.unload_only_line")}</div>
+                            : <div>{t("trip_tracking.loaded_by_t_fmtclock", { t: item4.load_by_name || "—", fmtClock: fmtClock(item4.load_at) })}</div>}
                           {/* Manual close hui trip me unload ka punch hota hi nahi — wahan
                               "Unloaded by: — ·" likhne se behtar hai wajah likhna. */}
                           {item4.unload_at
@@ -706,6 +710,8 @@ function RouteForm({ projectId, tasks, route, onCancel, onSaved }) {
     material_name: route?.material_name || "",
     // Is route ka material Auto used / Mark used (15 Oct 2026) — "" = company ki setting.
     material_use: route?.material_use === "auto" || route?.material_use === "mark" ? route.material_use : "",
+    // Loading entry zaroori? (21 Oct 2026) — purana / naya route = zaroori.
+    load_required: route && Number(route.load_required) === 0 ? "0" : "1",
   });
   const [saving, setSaving] = useState(false);
   // Route ka material (5 Oct 2026) — Library se; app ke loading form me pehle se bhara.
@@ -779,6 +785,7 @@ function RouteForm({ projectId, tasks, route, onCancel, onSaved }) {
       material_id: f.material_id || null,
       material_name: f.material_name || null,
       material_use: f.material_use || null,
+      load_required: f.load_required === "0" ? 0 : 1,
       load_lat: a ? a.lat : numf(f.load_lat), load_lng: a ? a.lng : numf(f.load_lng),
       unload_lat: b ? b.lat : numf(f.unload_lat), unload_lng: b ? b.lng : numf(f.unload_lng),
       load_radius: f.load_radius, unload_radius: f.load_radius,
@@ -884,6 +891,14 @@ function RouteForm({ projectId, tasks, route, onCancel, onSaved }) {
           <option value="mark">{t("trip_stock.mark")}</option>
         </PickSelect>
         <div style={{ fontSize: 10.5, color: T.t4, marginTop: 3 }}>{t("trip_stock.route_hint")}</div>
+      </div>
+      <div style={{ marginTop: 10 }}>
+        <div style={lblS}>{t("trip_tracking.load_req_label")}</div>
+        <PickSelect value={f.load_required} onChange={e => upd("load_required", e.target.value)} style={inp}>
+          <option value="1">{t("trip_tracking.load_req_yes")}</option>
+          <option value="0">{t("trip_tracking.load_req_no")}</option>
+        </PickSelect>
+        <div style={{ fontSize: 10.5, color: T.t4, marginTop: 3 }}>{t("trip_tracking.load_req_hint")}</div>
       </div>
       <div style={{ marginTop: 10 }}>
         <div style={lblS}>{t("trip_tracking.default_task_optional")}</div>
