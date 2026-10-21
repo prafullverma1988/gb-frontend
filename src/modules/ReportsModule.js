@@ -9,6 +9,7 @@ import CompanyDay from "./reports/CompanyDay";
 import PartyLedger from "./reports/PartyLedger";
 import ProjectPnl from "./reports/ProjectPnl";
 import AccountStatement from "./reports/AccountStatement";
+import CompanyExpenseReport from "./reports/CompanyExpenseReport";
 import { daysAgoISO } from "../utils/today";
 
 
@@ -1310,6 +1311,8 @@ export default function ReportsModule(){
     ...(can("Finance","view") ? [{id:"pledger",l:t("reports.party_ledger"),desc:t("reports.party_ledger_desc"),icon:IcXLS}] : []),
     // Finance ke "Reports" tab se yahan (14 Oct 2026). P&L = Financial Reports ki ijazat.
     ...(canSeeFinancials() ? [{id:"pnl",l:t("reports.pnl_tab"),desc:t("reports.pnl_desc"),icon:IcBar}] : []),
+    // Company ka kharcha (bina project) + aage ki dues + chhoote + company P&L (21 Oct 2026)
+    ...(can("Finance","view") ? [{id:"cexp",l:t("cxr.tab"),desc:t("cxr.tab_desc"),icon:IcSheet}] : []),
     // Khaate ka hisaab (kisne kya daala) — sirf admin; khaata-access wala hisaab yahin se
     ...(["admin","super_admin"].includes(currentUser()?.role) ? [{id:"acctstmt",l:t("acctstmt.title"),desc:t("acctstmt.desc"),icon:IcSheet}] : []),
   ];
@@ -1349,6 +1352,7 @@ export default function ReportsModule(){
         {tab==="coday"    && <CompanyDay/>}
         {tab==="pledger"  && <PartyLedger/>}
         {tab==="pnl"      && <ProjectPnl/>}
+        {tab==="cexp"     && <CompanyExpenseReport/>}
         {tab==="acctstmt" && <AccountStatement/>}
         {!tab && <div style={{padding:"60px 20px",textAlign:"center",color:T.t4,fontSize:13}}>{t("reports.no_report_access")}</div>}
       </div>
