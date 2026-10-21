@@ -14676,6 +14676,20 @@ const dict = {
   "machinery.tr_andaza":                                       "अंदाज़ा",
   "machinery.vg_wapas":                                        "वेंडर ने वापस लिया",
   "machinery.vg_where_note":                                   "वेंडर ने ये ड्रॉप बाद में वापस ले लिया ({t} पर पकड़ा) — अब वेंडर की रिपोर्ट में नहीं है। सिर्फ़ रिकॉर्ड के लिए रखा है।",
+  "wpay.to": "किसको दिया",
+  "wpay.by": "किसने",
+  "wpay.site": "साइट",
+  "wpay.spent_on": "खर्च की तारीख",
+  "wpay.sent_on": "भेजा",
+  "wpay.mode": "तरीका",
+  "wpay.note": "नोट",
+  "wpay.no_note": "नोट नहीं लिखा",
+  "wpay.photo": "बिल फ़ोटो",
+  "wpay.site_exp": "साइट खर्च",
+  "wpay.party_pay": "पार्टी पेमेंट",
+  "wpay.mop_cash": "कैश",
+  "wpay.mop_bank": "बैंक / ऑनलाइन",
+  "wpay.mop_upi": "UPI",
 };
 
 export default dict;

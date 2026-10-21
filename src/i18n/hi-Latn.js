@@ -14679,6 +14679,20 @@ const dict = {
   "machinery.tr_andaza":                                       "andaza",
   "machinery.vg_wapas":                                        "Vendor ne wapas liya",
   "machinery.vg_where_note":                                   "Vendor ne ye drop baad me wapas le liya ({t} par pakda) — ab vendor ki report me nahi hai. Sirf record ke liye rakha hai.",
+  "wpay.to": "Kisko diya",
+  "wpay.by": "Kisne",
+  "wpay.site": "Site",
+  "wpay.spent_on": "Kharch ki date",
+  "wpay.sent_on": "Bheja",
+  "wpay.mode": "Tarika",
+  "wpay.note": "Note",
+  "wpay.no_note": "Note nahi likha",
+  "wpay.photo": "Bill photo",
+  "wpay.site_exp": "Site kharch",
+  "wpay.party_pay": "Party payment",
+  "wpay.mop_cash": "Cash",
+  "wpay.mop_bank": "Bank / online",
+  "wpay.mop_upi": "UPI",
 };
 
 export default dict;

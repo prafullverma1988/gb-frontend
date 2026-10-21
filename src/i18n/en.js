@@ -14677,6 +14677,20 @@ const dict = {
   "machinery.tr_andaza":                                       "approx.",
   "machinery.vg_wapas":                                        "Taken back by vendor",
   "machinery.vg_where_note":                                   "The vendor took this drop back later (noticed {t}) — it is no longer in the vendor's report. Kept only for the record.",
+  "wpay.to": "Paid to",
+  "wpay.by": "By",
+  "wpay.site": "Site",
+  "wpay.spent_on": "Spent on",
+  "wpay.sent_on": "Sent on",
+  "wpay.mode": "Mode",
+  "wpay.note": "Note",
+  "wpay.no_note": "No note",
+  "wpay.photo": "Bill photo",
+  "wpay.site_exp": "Site expense",
+  "wpay.party_pay": "Party payment",
+  "wpay.mop_cash": "Cash",
+  "wpay.mop_bank": "Bank / online",
+  "wpay.mop_upi": "UPI",
 };
 
 export default dict;

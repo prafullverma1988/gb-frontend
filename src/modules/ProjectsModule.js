@@ -3173,6 +3173,9 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
   };
   // WAL-16: category chip user ki bhasha me (pehle English map seedha likha tha)
   const WCAT_LBL={site_exp:t("projects.wcat_site_exp"),party_pay:t("projects.wcat_party_pay"),salary:t("projects.wcat_salary"),petrol:t("projects.wcat_petrol"),fuel:t("projects.wcat_fuel"),service:t("projects.wcat_service"),generic:t("projects.wcat_generic")};
+  // "2026-10-18" → "18 Oct"; submitted_at (UTC datetime) ko local din me
+  const wDay=(v,dt)=>{ if(!v)return "—"; let d; if(dt){d=new Date(v);}else{const s=String(v).slice(0,10);const p=s.split("-").map(Number);d=p.length===3?new Date(p[0],p[1]-1,p[2]):new Date(NaN);} return isNaN(d)?"—":d.toLocaleDateString("en-IN",{day:"2-digit",month:"short"}); };
+  const WMOP={cash:t("wpay.mop_cash"),bank:t("wpay.mop_bank"),online:t("wpay.mop_bank"),upi:t("wpay.mop_upi")};
   const WalletApprovalCard=({item:it})=>{
     const act=acting["w"+it.txn_id];
     // Clarification thread — admin's "Ask info" question + staff's reply.
@@ -3198,8 +3201,14 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
           {it.limit_exceeded&&<span style={{fontSize:9,fontWeight:700,color:T.red,background:T.redL,padding:"1px 7px",borderRadius:10}}>{t("projects.limit_breach")}</span>}
         </div>
         <div style={{fontSize:12.5,fontWeight:700,color:T.t1}}>₹{Number(it.amount||0).toLocaleString("en-IN")}</div>
-        <div style={{fontSize:10.5,color:T.t4,marginTop:2}}><b style={{color:T.t3}}>{it.sender_name}</b> → {it.party_name}{it.project_name?" · "+it.project_name:""}</div>
-        {it.note&&<div style={{fontSize:10.5,color:T.t4,marginTop:2,fontStyle:"italic"}}>"{it.note}"</div>}
+        {/* Approver ko saaf: kisko gaya, note, kis din ka kharch (21 Oct 2026) */}
+        <div style={{fontSize:12,color:T.t1,marginTop:3}}><span style={{fontSize:10.5,color:T.t4}}>{t("wpay.to")}: </span><b>{it.party_name}</b></div>
+        <div style={{fontSize:11,color:it.note?T.t2:T.t4,marginTop:3,fontStyle:it.note?"normal":"italic"}}>{it.note?"“"+it.note+"”":t("wpay.no_note")}</div>
+        <div style={{display:"grid",gridTemplateColumns:"auto 1fr",gap:"2px 8px",marginTop:5,fontSize:10.5,color:T.t3}}>
+          <span style={{color:T.t4}}>{t("wpay.spent_on")}</span><b style={{color:T.t2}}>{wDay(it.txn_date)}{it.mop?" · "+(WMOP[String(it.mop).toLowerCase()]||it.mop):""}</b>
+          <span style={{color:T.t4}}>{t("wpay.by")}</span><span>{it.sender_name} · {t("wpay.sent_on")} {wDay(it.submitted_at,true)}</span>
+          {it.project_name&&<><span style={{color:T.t4}}>{t("wpay.site")}</span><span>{it.project_name}</span></>}
+        </div>
         {(it.photo_url||it.photo_pending||(it.extra_photos||[]).length>0)&&(
           <div style={{display:"flex",gap:8,marginTop:5,alignItems:"center",flexWrap:"wrap"}}>
             {it.photo_url&&<a href={it.photo_url} target="_blank" rel="noreferrer" style={{fontSize:10.5,color:T.blu,fontWeight:600}}>{t("projects.photo_dekhein")}</a>}
