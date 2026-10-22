@@ -15123,6 +15123,7 @@ const dict = {
   "cxr.b_stop_confirm": "Ye budget band karein?",
   "cxr.b_note": "Asal = company kharcha jo kisi project ka nahi (upar wala hi). Mahine ka kharcha budget paar kare to admin ko ghanti.",
   "settings.mlay_i_expense_list": "Mahine ke kharche",
+  "settings.mlay_q_machinery":                                 "Machinery",
 };
 
 export default dict;

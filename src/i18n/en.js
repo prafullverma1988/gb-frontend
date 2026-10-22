@@ -15121,6 +15121,7 @@ const dict = {
   "cxr.b_stop_confirm": "Stop this budget?",
   "cxr.b_note": "Actual = company expenses not tied to a project (same as above). Admin gets a bell when a month's spend crosses the budget.",
   "settings.mlay_i_expense_list": "Monthly expenses",
+  "settings.mlay_q_machinery":                                 "Machinery",
 };
 
 export default dict;
