@@ -778,6 +778,8 @@ function ReviewCreate({ active, accountId, rows, matched, accounts, tol, decide 
           note: x.note.trim() || (x.elsewhere && decide[draft.indexOf(x)] ? t("stmt.force_note", { why: decide[draft.indexOf(x)].reason, acc: x.elsewhere.account_name }) : null),
           force: !!x.force || !!(x.elsewhere && decide[draft.indexOf(x)] && decide[draft.indexOf(x)].kind === "create"),
         })),
+        // Milaan me judi kitaab ki entry — approve par inhe dohri nahi maana jaata (23 Oct 2026)
+        claimed_txn_ids: (matched || []).map((m) => m.txn_id).filter(Boolean),
         batch_note: ((batchNote || "").trim() + (parts.length > 1 ? ` (${pi + 1}/${parts.length})` : "")) || null,
         // FIN-24: server ka duplicate-guard milaan wali hi ±din ki chhoot lagaye
         ...(Number.isFinite(Number(tol)) ? { tolerance_days: Number(tol) } : {}),

@@ -694,7 +694,7 @@ export default function TabAccounts() {
     )}
     <div style={{ flex: 1, overflow: "auto", paddingBottom: 20 }}>
       {/* Statement batch — approval me / draft / reject (approve hone par hi khaate me) */}
-      <StmtBatchPanel key={importOpen ? "o" : "c"} onChanged={load} />
+      <StmtBatchPanel key={importOpen ? "o" : "c"} onChanged={load} accountIds={selected} accounts={allAcc} />
       {/* Khaate chuno — ek se zyada chuno to wo ek hi timeline par chalte hain */}
       <Panel style={{ marginBottom: 10 }}>
         <PHead title={t("finance.accounts")} action={

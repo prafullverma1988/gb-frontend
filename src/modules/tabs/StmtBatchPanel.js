@@ -22,7 +22,42 @@ const ST = () => ({
   undone: [T.slt, T.sltL, t("stb.st_undone")],
 });
 
-export default function StmtBatchPanel({ onChanged }) {
+// Passbook vs Kitaab (23 Oct 2026) — statement milaate waqt passbook ka aakhri
+// balance yaad rehta hai; yahan kitaab ka USI din ka balance ABHI dikhta hai.
+// Farak ≠ 0 = kahin koi payment chhooti / dohri hai — bharose ki pakki jaanch.
+function BalanceMarks({ accountIds, accounts }) {
+  const [marks, setMarks] = useState([]);
+  const key = (accountIds || []).slice(0, 8).join(",");
+  useEffect(() => {
+    if (!key) { setMarks([]); return; }
+    let alive = true;
+    Promise.all(key.split(",").map((id) => api.get(`/finance/accounts/${id}/statement/balance-mark`)
+      .then((r) => (r && r.success && r.data ? { ...r.data, account_id: Number(id) } : null)).catch(() => null)))
+      .then((xs) => { if (alive) setMarks(xs.filter(Boolean)); });
+    return () => { alive = false; };
+  }, [key]);
+  if (!marks.length) return null;
+  const nm = (id) => ((accounts || []).find((a) => Number(a.id) === id) || {}).name || "#" + id;
+  return (
+    <div style={{ marginBottom: 10, display: "flex", flexDirection: "column", gap: 6 }}>
+      {marks.map((m) => {
+        const bad = m.difference != null && Math.abs(m.difference) >= 1;
+        return (
+          <div key={m.account_id} title={t("stb.bm_tip")} style={{ padding: "8px 13px", borderRadius: 8, fontSize: 12.5, display: "flex", gap: 14, flexWrap: "wrap", alignItems: "center",
+            background: bad ? T.redL : T.grnL, border: `1px solid ${bad ? T.red : T.grn}44`, color: T.t2 }}>
+            <b style={{ color: T.t1 }}>{nm(m.account_id)}</b>
+            <span>{t("stb.bm_on", { date: dmy(m.as_on) })}</span>
+            <span>{t("stb.bm_passbook")}: <b>{inr(m.statement_balance)}</b></span>
+            <span>{t("stb.bm_book")}: <b>{m.book_now == null ? "—" : inr(m.book_now)}</b></span>
+            <b style={{ color: bad ? T.red : T.grn, marginLeft: "auto" }}>{bad ? t("stb.bm_diff", { amt: inr(m.difference) }) : t("stb.bm_ok")}</b>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+export default function StmtBatchPanel({ onChanged, accountIds, accounts }) {
   const [list, setList] = useState([]);
   const [open, setOpen] = useState(null);       // batch id
   const load = useCallback(() => {
@@ -32,20 +67,37 @@ export default function StmtBatchPanel({ onChanged }) {
   // Koi batch na ho to bhi chhota button — "Statement approval (0)" (16 Oct 2026)
   if (!list.length && !open) {
     return (
+      <>
+      <BalanceMarks accountIds={accountIds} accounts={accounts} />
       <div style={{ marginBottom: 10, display: "flex", justifyContent: "flex-end" }}>
         <span title={t("stb.none_tip")} style={{ fontSize: 11.5, fontWeight: 600, color: T.t3, padding: "4px 10px", borderRadius: 14, border: `1px solid ${T.b1}`, background: T.surface }}>
           {t("stb.btn_count", { n: 0 })}
         </span>
       </div>
+      </>
     );
   }
-  const isOpen = (b) => ["draft", "pending", "rejected"].includes(b.status) || Number(b.pending_changes) > 0;
+  // Approve ke baad bhi jo line nahi bani (dohri ka shaq) — faisla hone tak khula
+  const isOpen = (b) => ["draft", "pending", "rejected"].includes(b.status) || Number(b.pending_changes) > 0 || Number(b.skipped_open) > 0;
+  const skipN = list.reduce((a, b) => a + (Number(b.skipped_open) || 0), 0);
   const openList = list.filter(isOpen), oldList = list.filter((b) => !isOpen(b));
   const n = (s) => list.filter((b) => b.status === s).length;
   const nChg = list.filter((b) => Number(b.pending_changes) > 0).length;
   const st = ST();
   return (
     <>
+      <BalanceMarks accountIds={accountIds} accounts={accounts} />
+      {skipN > 0 && (
+        <div style={{ marginBottom: 10, padding: "9px 13px", borderRadius: 8, background: T.redL, border: `1px solid ${T.red}55`, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+          <b style={{ fontSize: 12.5, color: T.red }}>{t("stb.skip_banner", { n: skipN })}</b>
+          <span style={{ fontSize: 12, color: T.t2, flex: 1, minWidth: 200 }}>{t("stb.skip_banner_sub")}</span>
+          {list.filter((b) => Number(b.skipped_open) > 0).slice(0, 6).map((b) => (
+            <button key={b.id} onClick={() => setOpen(b.id)} style={{ fontSize: 11.5, fontWeight: 700, padding: "4px 10px", borderRadius: 6, cursor: "pointer", fontFamily: "inherit", border: `1px solid ${T.red}`, background: T.surface, color: T.red }}>
+              #{b.id} · {t("stb.skip_n", { n: b.skipped_open })}
+            </button>
+          ))}
+        </div>
+      )}
       <div style={{ marginBottom: 10, padding: "9px 13px", borderRadius: 8, background: T.purL, border: `1px solid ${T.pur}44`, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
         <b style={{ fontSize: 12.5, color: T.pur }}>{t("stb.btn_count", { n: n("pending") + nChg })}</b>
         {["pending", "draft", "rejected"].filter((s) => n(s)).map((s) => (
@@ -82,6 +134,15 @@ function BatchModal({ id, onClose }) {
   const [edits, setEdits] = useState({});
   const [cnote, setCnote] = useState("");
   const [parties, setParties] = useState([]);
+  // Chhooti line: chuni hui idx + wajah
+  const [skSel, setSkSel] = useState({});
+  const [skNote, setSkNote] = useState("");
+  const skipDo = (action) => {
+    const idx = Object.keys(skSel).filter((k) => skSel[k]).map(Number);
+    if (!idx.length) { setErr(t("stb.skip_pick")); return; }
+    if (skNote.trim().length < 3) { setErr(t("stmt.batch_note_req")); return; }
+    act(() => api.post(`/finance/statement/batches/${id}/skipped`, { action, idx, note: skNote })).then(() => { setSkSel({}); setSkNote(""); }).catch(() => {});
+  };
   useEffect(() => { api.get("/finance/parties").then((r) => { if (r && r.success) setParties(r.data || []); }).catch(() => {}); }, []);
   const setEdit = (id, v) => setEdits((p) => { const n = { ...p }; if (!v) delete n[id]; else n[id] = v; return n; });
   const sendChange = (kind) => {
@@ -170,6 +231,47 @@ function BatchModal({ id, onClose }) {
                   ))}
                 </div>
               </details>
+              {b.status === "approved" && b.results && Array.isArray(b.results.results) && (() => {
+                // Approve par jo line nahi bani — har ek dikhe, kabhi chupchaap nahi (23 Oct 2026)
+                const sk = b.results.results.map((x, i) => ({ ...x, idx: i, e: b.entries[i] || {} }))
+                  .filter((x) => x.outcome === "duplicate_suspect" || x.outcome === "invalid");
+                if (!sk.length) return null;
+                const openN = sk.filter((x) => !x.followup).length;
+                return (
+                  <div style={{ marginBottom: 12, border: `1px solid ${openN ? T.red : T.b1}`, borderRadius: 8, overflow: "hidden" }}>
+                    <div style={{ padding: "8px 10px", background: openN ? T.redL : T.surfaceB, fontSize: 12, fontWeight: 700, color: openN ? T.red : T.t1 }}>
+                      {t("stb.skip_title", { n: sk.length, o: openN })}
+                      <div style={{ fontSize: 11.5, fontWeight: 400, color: T.t2, marginTop: 2 }}>{t("stb.skip_help")}</div>
+                    </div>
+                    {sk.map((x) => {
+                      const fu = x.followup;
+                      return (
+                        <label key={x.idx} style={{ padding: "6px 10px", borderTop: `1px solid ${T.b1}`, display: "grid", gridTemplateColumns: "22px 70px minmax(0,1fr) 110px", gap: 8, alignItems: "center", fontSize: 12, cursor: fu ? "default" : "pointer", opacity: fu ? 0.6 : 1 }}>
+                          {fu ? <span /> : <input type="checkbox" checked={!!skSel[x.idx]} onChange={(ev) => setSkSel((s) => ({ ...s, [x.idx]: ev.target.checked }))} />}
+                          <span style={{ color: T.t3 }}>{dmy(x.e.date)}</span>
+                          <span style={{ minWidth: 0 }}>
+                            <span style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: T.t1 }} title={x.e.description || ""}>{x.e.description || "—"}</span>
+                            <span style={{ color: T.t3 }}>
+                              {x.outcome === "invalid" ? t("stb.skip_invalid")
+                                : t("stb.skip_dup", { id: x.txn_id, desc: x.existing_description || "—" }) + (x.other_account ? " · " + x.other_account : "")}
+                              {fu ? " · " + (fu.kind === "resend" ? t("stb.skip_resent", { id: fu.batch_id }) : t("stb.skip_acked")) + ` — “${fu.note}” (${fu.by_name || "—"})` : ""}
+                            </span>
+                          </span>
+                          <b style={{ textAlign: "right", color: x.e.dir === "in" ? T.grn : T.red }}>{x.e.dir === "in" ? "+" : "−"}{inr(x.e.amount)}</b>
+                        </label>
+                      );
+                    })}
+                    {openN > 0 && (
+                      <div style={{ padding: "9px 10px", borderTop: `1px solid ${T.b1}`, background: T.surfaceB, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                        <input value={skNote} onChange={(ev) => setSkNote(ev.target.value)} maxLength={500} placeholder={t("stb.skip_note_ph")}
+                          style={{ flex: "1 1 240px", fontSize: 12.5, padding: "6px 10px", borderRadius: 6, border: `1.5px solid ${skNote.trim().length >= 3 ? T.grnM : T.ambM}`, fontFamily: "inherit" }} />
+                        <button disabled={busy} onClick={() => skipDo("ack")} style={btn(T.slt, false)}>{t("stb.skip_ack")}</button>
+                        <button disabled={busy} onClick={() => skipDo("resend")} style={btn(T.blu, true)}>{t("stb.skip_resend")}</button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
               {b.status === "approved" && Array.isArray(b.created) && b.created.length > 0 && (() => {
                 const pend = (b.changes || []).some((c) => c.status === "pending");
                 const live = b.created.filter((x) => Number(x.is_active) !== 0);
