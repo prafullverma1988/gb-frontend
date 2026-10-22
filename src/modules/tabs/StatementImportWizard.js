@@ -680,6 +680,9 @@ function ReviewCreate({ active, accountId, rows, matched, accounts, tol, decide 
   const [done, setDone] = useState(null);
   // null = list; { onlyForce } = save se pehle ki preview khuli hai
   const [preview, setPreview] = useState(null);
+  // Project (23 Oct 2026): har line project ki hai ya company ki — server andaza
+  // deta hai (vivran me naam / client / party ka purana project), user badal sakta hai.
+  const [projects, setProjects] = useState([]);
 
   useEffect(() => {
     let dead = false;
@@ -702,6 +705,7 @@ function ReviewCreate({ active, accountId, rows, matched, accounts, tol, decide 
           const top = s.suggestions[0];
           return {
             ...r, include: true, force: false, outcome: null, txn_id: null, note: "",
+            proj: "", proj_why: null, proj_touched: false,
             bank_own: s.bank_own, confidence: s.confidence, suggestions: s.suggestions,
             // Sirf "strong" pehle se bharta hai. "maybe" dikhata hai par
             // chunta nahi — galat party par entry do ledger ek saath bigaadti hai.
@@ -734,6 +738,32 @@ function ReviewCreate({ active, accountId, rows, matched, accounts, tol, decide 
   }, [accounts, accountId, parties]);
 
   const upd = useCallback((i, patch) => setDraft((d) => d.map((x, j) => (j === i ? { ...x, ...patch } : x))), []);
+
+  // Party badli to project ka andaza dobara — sirf un line ka jinka project user
+  // ne khud nahi chuna. Party ke bina bhi chalta hai (vivran me project ka naam).
+  const pickSig = draft.map((x) => x.pick || "").join("|");
+  useEffect(() => {
+    if (!draft.length) return undefined;
+    let dead = false;
+    const tm = setTimeout(async () => {
+      try {
+        const lines = draft.map((x) => ({ party_id: x.pick && x.pick.startsWith("p:") ? Number(x.pick.slice(2)) : null, description: x.description, dir: x.dir }));
+        const r = await api.post(`/finance/accounts/${accountId}/statement/project-suggest`, { lines });
+        if (dead || !r || !r.success) return;
+        setProjects(r.data.projects || []);
+        const sg = r.data.lines || [];
+        setDraft((d) => d.map((x, i) => (x.proj_touched || !sg[i] ? x
+          : { ...x, proj: sg[i].project_id ? String(sg[i].project_id) : "", proj_why: sg[i].why ? sg[i] : null })));
+      } catch (_) { /* andaza na aaye to Company — user khud chun sakta hai */ }
+    }, 400);
+    return () => { dead = true; clearTimeout(tm); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pickSig, accountId]);
+  const projOpts = useMemo(() => [
+    { key: "", label: t("stmt.proj_company") },
+    ...projects.map((p) => ({ key: String(p.id), label: p.name, group: t("stmt.proj_grp") })),
+  ], [projects]);
+  const projName = useCallback((k) => (k ? ((projects.find((p) => String(p.id) === String(k)) || {}).name || "#" + k) : t("stmt.proj_company")), [projects]);
   const pending = draft.filter((x, i) => shown(x, i) && x.include && x.outcome !== "created" && x.outcome !== "already_imported" && x.outcome !== "queued");
 
   const sendable = (x) => withNoParty || !!x.pick;
@@ -775,6 +805,7 @@ function ReviewCreate({ active, accountId, rows, matched, accounts, tol, decide 
           date: x.date, amount: x.amount, dir: x.dir, description: x.description, ref: x.ref || null,
           party_id: x.pick.startsWith("p:") ? Number(x.pick.slice(2)) : null,
           transfer_account_id: x.pick.startsWith("a:") ? Number(x.pick.slice(2)) : null,
+          project_id: !x.pick.startsWith("a:") && x.proj ? Number(x.proj) : null,
           note: x.note.trim() || (x.elsewhere && decide[draft.indexOf(x)] ? t("stmt.force_note", { why: decide[draft.indexOf(x)].reason, acc: x.elsewhere.account_name }) : null),
           force: !!x.force || !!(x.elsewhere && decide[draft.indexOf(x)] && decide[draft.indexOf(x)].kind === "create"),
         })),
@@ -821,7 +852,7 @@ function ReviewCreate({ active, accountId, rows, matched, accounts, tol, decide 
       <div>
         {err && <div style={{ padding: "8px 13px", fontSize: 12, color: T.red, background: T.redL }}>{err}</div>}
         <PreviewCreate slot={slot} rows={pickFor(preview.onlyForce)} nameOf={nameOf} force={preview.onlyForce} busy={busy}
-          parties={parties} acctName={acctName} acctClosing={acctClosing}
+          parties={parties} acctName={acctName} acctClosing={acctClosing} projName={projName}
           onBack={() => { setPreview(null); setErr(""); }}
           onConfirm={(note) => create(preview.onlyForce, note, true)}
           onDraft={(note) => create(preview.onlyForce, note, false)} />
@@ -872,7 +903,7 @@ function ReviewCreate({ active, accountId, rows, matched, accounts, tol, decide 
               <span style={{ fontSize: 11.5, color: T.t3 }}>{sub === "left" ? t("stmt.sub_left_help", { m: maybe }) : t("stmt.sub_picked_help")}</span>
             </div>
             {list.length === 0 && <div style={{ padding: "18px 13px", fontSize: 12.5, color: T.t4, textAlign: "center" }}>{sub === "left" ? t("stmt.sub_left_empty") : t("stmt.sub_picked_empty")}</div>}
-            {list.map(([r, i]) => <ReviewRow key={i} r={r} i={i} baseOpts={baseOpts} upd={upd} />)}
+            {list.map(([r, i]) => <ReviewRow key={i} r={r} i={i} baseOpts={baseOpts} upd={upd} projOpts={projOpts} />)}
             {draft.filter((r, i) => shown(r, i) && (r.outcome === "created" || r.outcome === "already_imported" || r.outcome === "queued")).length > 0 && (
               <div style={{ padding: "8px 13px", fontSize: 11.5, color: T.t4, borderTop: `1px solid ${T.b1}` }}>
                 {t("stmt.sub_done_hidden", { n: draft.filter((r, i) => shown(r, i) && (r.outcome === "created" || r.outcome === "already_imported" || r.outcome === "queued")).length })}
@@ -959,7 +990,7 @@ function ElsewhereList({ accountId, accountName, rows, idx, decide, setDecide })
 // ab seedha save nahi karta — pehle ye dikhata hai ki KIS party ke khaate me
 // kitna jayega, kaunsi line doosre khaate me transfer banegi, aur kaunsi bina
 // party ke (sirf bank khaate me) — phir hi save.
-function PreviewCreate({ slot, rows, nameOf, force, busy, onBack, onConfirm, onDraft, parties = [], acctName, acctClosing }) {
+function PreviewCreate({ slot, rows, nameOf, force, busy, onBack, onConfirm, onDraft, parties = [], acctName, acctClosing, projName }) {
   const [note, setNote] = useState("");
   const noteOk = note.trim().length >= 3;
   // Party ka balance: >0 = party hume degi, <0 = hum denge. Khaate se paisa gaya
@@ -979,6 +1010,15 @@ function PreviewCreate({ slot, rows, nameOf, force, busy, onBack, onConfirm, onD
     bucket[r.dir === "in" ? "in" : "out"] += amt;
   }
   const byName = (o) => Object.values(o).sort((x, y) => (y.in + y.out) - (x.in + x.out));
+  // Project-wise (transfer ke bina) — kitna paisa kis project / company par
+  const pj = {};
+  for (const r of rows) {
+    if ((r.pick || "").startsWith("a:")) continue;
+    const k = "j:" + (r.proj || "");
+    const g = (pj[k] = pj[k] || { key: k, name: projName ? projName(r.proj) : (r.proj || ""), n: 0, in: 0, out: 0 });
+    g.n += 1; g[r.dir === "in" ? "in" : "out"] += Number(r.amount) || 0;
+  }
+  const projList = byName(pj);
   const partyList = byName(grp.p);
   const transfers = byName(grp.a);
 
@@ -1057,6 +1097,7 @@ function PreviewCreate({ slot, rows, nameOf, force, busy, onBack, onConfirm, onD
           </div>
         )}
         <Group title={t("stmt.pv_party")} list={partyList} withBal />
+        <Group title={t("stmt.pv_project")} list={projList} />
         <Group title={t("stmt.pv_transfer")} list={transfers} />
         {none.n > 0 && (
           <div style={{ marginBottom: 12, padding: "9px 12px", borderRadius: 8, background: T.ambL, border: `1px solid ${T.amb}55`, fontSize: 12, color: T.t2, lineHeight: 1.5 }}>
@@ -1098,7 +1139,17 @@ function PreviewCreate({ slot, rows, nameOf, force, busy, onBack, onConfirm, onD
 
 
 // Ek line — memo, taaki ek line ka remark likhte waqt baaki 499 dobara na banein.
-const ReviewRow = React.memo(function ReviewRow({ r, i, baseOpts, upd }) {
+// Project andaze ka "kyun"
+function projWhy(s) {
+  if (!s) return "";
+  if (s.why === "narration") return t("stmt.proj_why_narration", { word: s.word || "" });
+  if (s.why === "client") return t("stmt.proj_why_client");
+  if (s.why === "history") return t("stmt.proj_why_history", { m: s.m, n: s.n });
+  if (s.why === "history_company") return t("stmt.proj_why_history_company", { m: s.m, n: s.n });
+  return "";
+}
+
+const ReviewRow = React.memo(function ReviewRow({ r, i, baseOpts, upd, projOpts }) {
   const opts = useMemo(() => [
     { key: "", label: t("stmt.party_none") },
     ...(r.suggestions || []).map((s) => ({
@@ -1155,6 +1206,18 @@ const ReviewRow = React.memo(function ReviewRow({ r, i, baseOpts, upd }) {
           <input value={r.note} maxLength={500} onChange={(e) => upd(i, { note: e.target.value })}
             placeholder={t("stmt.remark_ph")} aria-label={t("stmt.remark_ph")}
             style={{ flex: "1 1 220px", maxWidth: 380, height: 28, fontSize: 11.5, padding: "0 9px", border: `1px solid ${T.b1}`, borderRadius: 6, background: T.surface, color: T.t1, boxSizing: "border-box", fontFamily: "inherit" }} />
+        )}
+        {!(r.pick || "").startsWith("a:") && (
+          <div style={{ display: "flex", alignItems: "center", gap: 6, flex: "0 1 auto" }}>
+            <span style={{ fontSize: 11, fontWeight: 600, color: T.t3 }}>{t("stmt.proj_label")}</span>
+            <div style={{ width: 210 }}>
+              <SearchSelect compact value={r.proj || ""} options={projOpts} disabled={locked} theme={T}
+                onChange={(k) => upd(i, { proj: k || "", proj_touched: true })} placeholder={t("stmt.proj_company")} />
+            </div>
+            {!locked && (r.proj_touched
+              ? <span style={{ fontSize: 10.5, color: T.t4 }}>{t("stmt.proj_yours")}</span>
+              : r.proj_why && <span title={t("stmt.proj_why_tip")} style={{ fontSize: 10.5, fontWeight: 600, padding: "2px 7px", borderRadius: 10, background: T.bluL, color: T.blu, whiteSpace: "nowrap" }}>{projWhy(r.proj_why)}</span>)}
+          </div>
         )}
         {top && !r.bank_own && r.confidence !== "none" && (
           <span style={{ flex: "2 1 260px", fontSize: 11, color: T.t4, lineHeight: 1.5 }}>

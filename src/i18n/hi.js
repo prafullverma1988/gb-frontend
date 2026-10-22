@@ -15140,6 +15140,16 @@ const dict = {
   "stb.skip_ack": "दोहरी थी — बंद करें",
   "stb.skip_resend": "अलग पेमेंट — अप्रूवल के लिए भेजें",
   "stb.skip_pick": "पहले लाइन पर टिक करें",
+  "stmt.proj_company": "कंपनी (कोई प्रोजेक्ट नहीं)",
+  "stmt.proj_grp": "प्रोजेक्ट",
+  "stmt.proj_label": "प्रोजेक्ट",
+  "stmt.proj_why_narration": "विवरण में \"{word}\"",
+  "stmt.proj_why_client": "इस प्रोजेक्ट का क्लाइंट",
+  "stmt.proj_why_history": "पिछली {n} में से {m} इसी प्रोजेक्ट पर",
+  "stmt.proj_why_history_company": "पिछली {n} में से {m} कंपनी स्तर पर",
+  "stmt.proj_yours": "आपने चुना",
+  "stmt.proj_why_tip": "अपने आप भरा — गलत हो तो बदलें",
+  "stmt.pv_project": "प्रोजेक्ट-वार",
 };
 
 export default dict;

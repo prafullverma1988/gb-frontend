@@ -226,6 +226,7 @@ function BatchModal({ id, onClose }) {
                     <div key={i} style={{ padding: "5px 10px", borderTop: i ? `1px solid ${T.b1}` : "none", display: "flex", gap: 10, fontSize: 12 }}>
                       <span style={{ width: 62, color: T.t3 }}>{dmy(e.date)}</span>
                       <span style={{ flex: 1, color: T.t2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={e.description || ""}>{e.description || "—"}{e.note ? ` · “${e.note}”` : ""}</span>
+                      {e.project_id && <span style={{ color: T.blu, fontSize: 11.5, whiteSpace: "nowrap" }}>{(b.project_names && b.project_names[e.project_id]) || "#" + e.project_id}</span>}
                       <b style={{ color: e.dir === "in" ? T.grn : T.red }}>{e.dir === "in" ? "+" : "−"}{inr(e.amount)}</b>
                     </div>
                   ))}

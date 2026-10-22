@@ -15141,6 +15141,16 @@ const dict = {
   "stb.skip_ack": "Was a duplicate — close",
   "stb.skip_resend": "Separate payment — send for approval",
   "stb.skip_pick": "Tick the lines first",
+  "stmt.proj_company": "Company (no project)",
+  "stmt.proj_grp": "Projects",
+  "stmt.proj_label": "Project",
+  "stmt.proj_why_narration": "name in narration: \"{word}\"",
+  "stmt.proj_why_client": "client of this project",
+  "stmt.proj_why_history": "{m} of last {n} on this project",
+  "stmt.proj_why_history_company": "{m} of last {n} at company level",
+  "stmt.proj_yours": "your choice",
+  "stmt.proj_why_tip": "Filled automatically — change it if wrong",
+  "stmt.pv_project": "Project-wise",
 };
 
 export default dict;

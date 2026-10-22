@@ -15143,6 +15143,16 @@ const dict = {
   "stb.skip_ack": "Dohri thi — band karo",
   "stb.skip_resend": "Alag payment — approval ke liye bhejo",
   "stb.skip_pick": "Pehle line par tick karo",
+  "stmt.proj_company": "Company (koi project nahi)",
+  "stmt.proj_grp": "Project",
+  "stmt.proj_label": "Project",
+  "stmt.proj_why_narration": "vivran me \"{word}\"",
+  "stmt.proj_why_client": "is project ka client",
+  "stmt.proj_why_history": "pichhli {n} me se {m} isi project par",
+  "stmt.proj_why_history_company": "pichhli {n} me se {m} company level par",
+  "stmt.proj_yours": "aapne chuna",
+  "stmt.proj_why_tip": "Apne aap bhara — galat ho to badlo",
+  "stmt.pv_project": "Project-wise",
 };
 
 export default dict;
