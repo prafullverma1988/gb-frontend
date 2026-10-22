@@ -99,11 +99,26 @@ export default function PickField({
     setPos(up ? { bottom: vh - r.top + 4, left, width, maxH, font } : { top: r.bottom + 4, left, width, maxH, font });
   };
 
-  const openPanel = (seed) => {
+  // Chhoti list (khoj nahi) me akshar = us akshar se shuru hone wala agla
+  // option (23 Oct 2026). "— chuno —" jaise shuru ke chinh chhod kar milate hain.
+  const startsWith = (o, ch) => String(o.label || "").replace(/^[^\p{L}\p{N}]+/u, "").toLowerCase().startsWith(ch);
+  const typeAhead = (from, ch) => {
+    for (let k = 1; k <= list.length; k++) {
+      const i = (from + k + list.length) % list.length;
+      if (startsWith(list[i], ch)) return i;
+    }
+    return -1;
+  };
+
+  const openPanel = (seed, ch) => {
     if (disabled) return;
     place();
     setQ(seed || "");
-    setHi(-1);
+    // Khulte hi highlight chune hue par — ↓ seedha agle par jaaye, Enter wahi
+    // rakhe (pehle -1 tha: pehla ↓ chune hue par hi rukta tha).
+    const curI = seed ? -1 : list.findIndex((o) => o.key === String(value ?? ""));
+    const t = ch ? typeAhead(curI, ch) : -1;
+    setHi(t >= 0 ? t : curI);
     setOpen(true);
   };
 
@@ -178,8 +193,15 @@ export default function PickField({
         openPanel("");
       } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
         e.preventDefault();
-        openPanel(many ? e.key : "");
+        if (many) openPanel(e.key);
+        else openPanel("", e.key.toLowerCase());
       }
+      return;
+    }
+    if (!many && e.key.length === 1 && e.key !== " " && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      e.preventDefault();
+      const i = typeAhead(hi, e.key.toLowerCase());
+      if (i >= 0) setHi(i);
       return;
     }
     if (e.key === "Escape") {

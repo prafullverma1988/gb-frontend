@@ -13,7 +13,7 @@
 // Sabse pehla aankda "Closing balance" wala hai, line-wise milaan nahi. Wo do
 // number ek hon to aage ka kaam sirf safai hai; alag hon to farak utna hi hai
 // jitni entry kahin gum hai — aur wahi asli sawaal hai.
-import React, { useState, useCallback, useEffect, useMemo, useContext, createContext } from "react";
+import React, { useState, useCallback, useEffect, useMemo, useContext, createContext, useRef } from "react";
 import { createPortal } from "react-dom";
 import PickSelect from "../../components/PickSelect";
 import api from "../../config/api";
@@ -182,6 +182,35 @@ const footBtn = (kind, off) => ({
   color: kind === "ghost" ? T.t2 : "#fff",
 });
 
+// Keyboard (23 Oct 2026): khidki ke andar hi Tab ghoome — aakhri se pehle par,
+// Shift+Tab pehle se aakhri par. PickField ka khula panel Tab khud sambhalta hai.
+function trapTab(e, root) {
+  if (e.key !== "Tab" || e.defaultPrevented || !root) return;
+  const f = [...root.querySelectorAll('button:not([disabled]),input:not([disabled]),textarea:not([disabled]),select:not([disabled]),a[href],[tabindex]:not([tabindex="-1"])')]
+    .filter((el) => el.offsetParent !== null);
+  if (!f.length) return;
+  const first = f[0], last = f[f.length - 1];
+  if (e.shiftKey && (document.activeElement === first || !root.contains(document.activeElement))) { e.preventDefault(); last.focus(); }
+  else if (!e.shiftKey && (document.activeElement === last || !root.contains(document.activeElement))) { e.preventDefault(); first.focus(); }
+}
+
+// Button kaam ke waqt disabled hota hai to focus chupchaap <body> par gir jaata
+// hai — tab khidki ka onKeyDown kuch nahi sunta. Us haalat me bhi Esc = band,
+// Tab = wapas khidki me.
+function useStrayKeys(dlgRef, onEsc) {
+  const escRef = useRef(onEsc);
+  escRef.current = onEsc;
+  useEffect(() => {
+    const h = (e) => {
+      if (e.defaultPrevented || document.activeElement !== document.body || !dlgRef.current) return;
+      if (e.key === "Escape") { e.preventDefault(); escRef.current(); }
+      else if (e.key === "Tab") { e.preventDefault(); dlgRef.current.focus(); }
+    };
+    document.addEventListener("keydown", h);
+    return () => document.removeEventListener("keydown", h);
+  }, [dlgRef]);
+}
+
 function PreviewTable({ rows }) {
   return (
     <div style={{ overflowX: "auto", border: `1px solid ${T.b1}`, borderRadius: 7 }}>
@@ -224,6 +253,19 @@ export default function StatementImportWizard({ accounts, onClose }) {
   const [hideBack, setHideBack] = useState(false);
   const footCtx = useMemo(() => ({ slot: footSlot, setHideBack }), [footSlot]);
   const [step, setStep] = useState(1);
+  // Keyboard: Esc = band (file chun li ho to pehle poochho — kaam na jaaye),
+  // focus khidki me, band hone par wahin wapas jahan se khula tha.
+  const dlgRef = useRef(null);
+  const askClose = useCallback(() => {
+    if (step > 1 && !window.confirm(t("stmt.close_confirm"))) return;
+    onClose();
+  }, [step, onClose]);
+  useStrayKeys(dlgRef, askClose);
+  useEffect(() => {
+    const prev = document.activeElement;
+    if (dlgRef.current) dlgRef.current.focus();
+    return () => { if (prev && prev.focus && document.contains(prev)) prev.focus(); };
+  }, []);
   // Pehle se koi khaata nahi (15 Oct 2026) — pehle Khaata Ledger ka pehla
   // chuna khaata (aksar Cash on Hand) apne aap lag jaata tha aur PNB ka
   // statement galat khaate par chal jaata. File ke baad user khud chunta hai.
@@ -344,8 +386,13 @@ export default function StatementImportWizard({ accounts, onClose }) {
 
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.55)", zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div style={{ background: T.surface, borderRadius: 12, width: "min(980px,100%)", maxHeight: "92vh", display: "flex", flexDirection: "column", overflow: "hidden", boxShadow: "0 24px 60px rgba(0,0,0,.3)" }}>
+      onClick={(e) => { if (e.target === e.currentTarget) askClose(); }}>
+      <div ref={dlgRef} role="dialog" aria-modal="true" aria-label={t("stmt.title")} tabIndex={-1}
+        onKeyDown={(e) => {
+          if (e.key === "Escape" && !e.defaultPrevented) { e.preventDefault(); askClose(); return; }
+          trapTab(e, dlgRef.current);
+        }}
+        style={{ background: T.surface, borderRadius: 12, width: "min(980px,100%)", maxHeight: "92vh", display: "flex", flexDirection: "column", overflow: "hidden", boxShadow: "0 24px 60px rgba(0,0,0,.3)", outline: "none" }}>
 
         {/* Header */}
         <div style={{ padding: "14px 18px", borderBottom: `1px solid ${T.b1}`, display: "flex", alignItems: "center", gap: 12 }}>
@@ -1057,15 +1104,25 @@ function PreviewCreate({ slot, rows, nameOf, force, busy, onBack, onConfirm, onD
     </div>
   );
 
+  // Keyboard: Esc = "Wapas, theek karo"; Ctrl/Cmd+Enter = approval ke liye bhejo
+  const onPvKey = (e) => {
+    if (e.defaultPrevented || busy) return;
+    if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); onBack(); }
+    else if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      if (noteOk && rows.length) onConfirm(note);
+    }
+  };
   return (
-    <div>
+    <div onKeyDown={onPvKey}>
       <div style={{ position: "sticky", top: 0, zIndex: 2, padding: "11px 13px", background: T.surfaceB, borderBottom: `1px solid ${T.b1}` }}>
         <div style={{ fontSize: 13.5, fontWeight: 700, color: T.t1 }}>{t("stmt.preview_title")}</div>
         <div style={{ fontSize: 12, color: T.t3, marginTop: 2 }}>
           {t("stmt.preview_sub", { n: rows.length, in: inr(tot.in), out: inr(tot.out) })}
         </div>
         {force && <div style={{ fontSize: 11.5, color: T.amb, marginTop: 4 }}>{t("stmt.pv_force_note")}</div>}
-        <input value={note} onChange={(e) => setNote(e.target.value)} placeholder={t("stmt.batch_note_ph")} maxLength={500} autoFocus
+        <div style={{ fontSize: 11, color: T.t4, marginTop: 4 }}>{t("stmt.pv_keys")}</div>
+        <input value={note} onChange={(e) => setNote(e.target.value)} placeholder={t("stmt.batch_note_ph")} maxLength={500} autoFocus aria-label={t("stmt.batch_note_ph")}
           style={{ display: "block", width: "100%", boxSizing: "border-box", marginTop: 9, fontSize: 13, padding: "8px 11px", borderRadius: 7, border: `1.5px solid ${noteOk ? T.grnM : T.b2}`, outline: "none", fontFamily: "inherit", background: T.surface, color: T.t1 }} />
       </div>
       {(() => {

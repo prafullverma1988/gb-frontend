@@ -15150,6 +15150,11 @@ const dict = {
   "stmt.proj_yours": "आपने चुना",
   "stmt.proj_why_tip": "अपने आप भरा — गलत हो तो बदलें",
   "stmt.pv_project": "प्रोजेक्ट-वार",
+  "stmt.close_confirm": "स्टेटमेंट बंद करें? इस स्क्रीन का काम चला जाएगा।",
+  "stmt.pv_keys": "कीबोर्ड: Ctrl+Enter = अप्रूवल के लिए भेजें · Esc = वापस",
+  "stb.close": "बंद करें (Esc)",
+  "stb.skip_all_btn": "सब चुनें",
+  "stb.skip_none_btn": "चुनाव हटाएँ",
 };
 
 export default dict;

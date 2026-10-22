@@ -6,7 +6,7 @@
 // hai — daalne wala khud approver ho tab bhi. Ye patti batata hai kitne batch
 // approval me / draft / reject hain; kholo to party-wise asar, lines aur
 // Approve / Reject (engine: PATCH /approvals/:id/action — jiski baari, wahi).
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import api from "../../config/api";
 import SearchSelect from "../../components/SearchSelect";
 import PickSelect from "../../components/PickSelect";
@@ -55,6 +55,35 @@ function BalanceMarks({ accountIds, accounts }) {
       })}
     </div>
   );
+}
+
+// Keyboard (23 Oct 2026): khidki ke andar hi Tab ghoome — aakhri se pehle par,
+// Shift+Tab pehle se aakhri par. PickField ka khula panel Tab khud sambhalta hai.
+function trapTab(e, root) {
+  if (e.key !== "Tab" || e.defaultPrevented || !root) return;
+  const f = [...root.querySelectorAll('button:not([disabled]),input:not([disabled]),textarea:not([disabled]),select:not([disabled]),a[href],[tabindex]:not([tabindex="-1"])')]
+    .filter((el) => el.offsetParent !== null);
+  if (!f.length) return;
+  const first = f[0], last = f[f.length - 1];
+  if (e.shiftKey && (document.activeElement === first || !root.contains(document.activeElement))) { e.preventDefault(); last.focus(); }
+  else if (!e.shiftKey && (document.activeElement === last || !root.contains(document.activeElement))) { e.preventDefault(); first.focus(); }
+}
+
+// Button kaam ke waqt disabled hota hai to focus chupchaap <body> par gir jaata
+// hai — tab khidki ka onKeyDown kuch nahi sunta. Us haalat me bhi Esc = band,
+// Tab = wapas khidki me.
+function useStrayKeys(dlgRef, onEsc) {
+  const escRef = useRef(onEsc);
+  escRef.current = onEsc;
+  useEffect(() => {
+    const h = (e) => {
+      if (e.defaultPrevented || document.activeElement !== document.body || !dlgRef.current) return;
+      if (e.key === "Escape") { e.preventDefault(); escRef.current(); }
+      else if (e.key === "Tab") { e.preventDefault(); dlgRef.current.focus(); }
+    };
+    document.addEventListener("keydown", h);
+    return () => document.removeEventListener("keydown", h);
+  }, [dlgRef]);
 }
 
 export default function StmtBatchPanel({ onChanged, accountIds, accounts }) {
@@ -137,6 +166,14 @@ function BatchModal({ id, onClose }) {
   // Chhooti line: chuni hui idx + wajah
   const [skSel, setSkSel] = useState({});
   const [skNote, setSkNote] = useState("");
+  // Keyboard: khulte hi focus khidki me, Esc = band, Tab andar hi; band par focus wapas
+  const dlgRef = useRef(null);
+  useEffect(() => {
+    const prev = document.activeElement;
+    if (dlgRef.current) dlgRef.current.focus();
+    return () => { if (prev && prev.focus && document.contains(prev)) prev.focus(); };
+  }, []);
+  useStrayKeys(dlgRef, () => onClose(changed));
   const skipDo = (action) => {
     const idx = Object.keys(skSel).filter((k) => skSel[k]).map(Number);
     if (!idx.length) { setErr(t("stb.skip_pick")); return; }
@@ -179,14 +216,19 @@ function BatchModal({ id, onClose }) {
 
   return (
     <div onClick={() => onClose(changed)} style={{ position: "fixed", inset: 0, zIndex: 420, background: "rgba(15,23,42,.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
-      <div onClick={(e) => e.stopPropagation()} style={{ background: T.surface, borderRadius: 12, width: "min(920px,100%)", maxHeight: "88vh", display: "flex", flexDirection: "column", overflow: "hidden", boxShadow: "0 20px 60px rgba(0,0,0,.25)" }}>
+      <div ref={dlgRef} role="dialog" aria-modal="true" aria-label={t("stb.batch_n", { id })} tabIndex={-1} onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => {
+          if (e.key === "Escape" && !e.defaultPrevented) { e.preventDefault(); onClose(changed); return; }
+          trapTab(e, dlgRef.current);
+        }}
+        style={{ background: T.surface, borderRadius: 12, width: "min(920px,100%)", maxHeight: "88vh", display: "flex", flexDirection: "column", overflow: "hidden", boxShadow: "0 20px 60px rgba(0,0,0,.25)", outline: "none" }}>
         <div style={{ padding: "13px 18px", borderBottom: `1px solid ${T.b1}`, display: "flex", gap: 10, alignItems: "center" }}>
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 15, fontWeight: 700, color: T.t1 }}>{t("stb.batch_n", { id })}{b ? " · " + b.account_name : ""}</div>
             {b && <div style={{ fontSize: 11.5, color: T.t3, marginTop: 2 }}>{t("stb.by_on", { name: b.created_by_name || "—", date: dmy(b.created_at) })} · {b.line_count} {t("stb.lines")}</div>}
           </div>
           {b && st[b.status] && <span style={{ fontSize: 11.5, fontWeight: 700, color: st[b.status][0], background: st[b.status][1], padding: "3px 10px", borderRadius: 12 }}>{st[b.status][2]}</span>}
-          <button onClick={() => onClose(changed)} style={{ border: "none", background: "none", fontSize: 20, color: T.t4, cursor: "pointer" }}>×</button>
+          <button onClick={() => onClose(changed)} aria-label={t("stb.close")} title={t("stb.close")} style={{ border: "none", background: "none", fontSize: 20, color: T.t4, cursor: "pointer" }}>×</button>
         </div>
         <div style={{ flex: 1, overflow: "auto", padding: 16 }}>
           {err && <div style={{ marginBottom: 10, padding: "8px 12px", borderRadius: 7, background: T.redL, color: T.red, fontSize: 12.5 }}>{err}</div>}
@@ -241,6 +283,15 @@ function BatchModal({ id, onClose }) {
                 return (
                   <div style={{ marginBottom: 12, border: `1px solid ${openN ? T.red : T.b1}`, borderRadius: 8, overflow: "hidden" }}>
                     <div style={{ padding: "8px 10px", background: openN ? T.redL : T.surfaceB, fontSize: 12, fontWeight: 700, color: openN ? T.red : T.t1 }}>
+                      {openN > 1 && (() => {
+                        const all = sk.filter((x) => !x.followup).every((x) => skSel[x.idx]);
+                        return (
+                          <button type="button" onClick={() => setSkSel(all ? {} : Object.fromEntries(sk.filter((x) => !x.followup).map((x) => [x.idx, true])))}
+                            style={{ float: "right", fontSize: 11.5, fontWeight: 700, padding: "2px 9px", borderRadius: 6, cursor: "pointer", fontFamily: "inherit", border: `1px solid ${T.red}`, background: T.surface, color: T.red }}>
+                            {all ? t("stb.skip_none_btn") : t("stb.skip_all_btn")}
+                          </button>
+                        );
+                      })()}
                       {t("stb.skip_title", { n: sk.length, o: openN })}
                       <div style={{ fontSize: 11.5, fontWeight: 400, color: T.t2, marginTop: 2 }}>{t("stb.skip_help")}</div>
                     </div>
@@ -264,7 +315,7 @@ function BatchModal({ id, onClose }) {
                     })}
                     {openN > 0 && (
                       <div style={{ padding: "9px 10px", borderTop: `1px solid ${T.b1}`, background: T.surfaceB, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                        <input value={skNote} onChange={(ev) => setSkNote(ev.target.value)} maxLength={500} placeholder={t("stb.skip_note_ph")}
+                        <input value={skNote} onChange={(ev) => setSkNote(ev.target.value)} maxLength={500} placeholder={t("stb.skip_note_ph")} aria-label={t("stb.skip_note_ph")}
                           style={{ flex: "1 1 240px", fontSize: 12.5, padding: "6px 10px", borderRadius: 6, border: `1.5px solid ${skNote.trim().length >= 3 ? T.grnM : T.ambM}`, fontFamily: "inherit" }} />
                         <button disabled={busy} onClick={() => skipDo("ack")} style={btn(T.slt, false)}>{t("stb.skip_ack")}</button>
                         <button disabled={busy} onClick={() => skipDo("resend")} style={btn(T.blu, true)}>{t("stb.skip_resend")}</button>

@@ -15151,6 +15151,11 @@ const dict = {
   "stmt.proj_yours": "your choice",
   "stmt.proj_why_tip": "Filled automatically — change it if wrong",
   "stmt.pv_project": "Project-wise",
+  "stmt.close_confirm": "Close the statement? The work on this screen will be lost.",
+  "stmt.pv_keys": "Keyboard: Ctrl+Enter = send for approval · Esc = back",
+  "stb.close": "Close (Esc)",
+  "stb.skip_all_btn": "Select all",
+  "stb.skip_none_btn": "Clear selection",
 };
 
 export default dict;

@@ -15153,6 +15153,11 @@ const dict = {
   "stmt.proj_yours": "aapne chuna",
   "stmt.proj_why_tip": "Apne aap bhara — galat ho to badlo",
   "stmt.pv_project": "Project-wise",
+  "stmt.close_confirm": "Statement band karein? Is screen ka kaam chala jaayega.",
+  "stmt.pv_keys": "Keyboard: Ctrl+Enter = approval ke liye bhejo · Esc = wapas",
+  "stb.close": "Band karo (Esc)",
+  "stb.skip_all_btn": "Sab chuno",
+  "stb.skip_none_btn": "Chunav hatao",
 };
 
 export default dict;
