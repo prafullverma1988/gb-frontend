@@ -451,7 +451,10 @@ export default function WeighbridgePanel({ dest, onChanged }) {
 
   const tripHead = (w) => {
     const [c, bg, k] = STATUS[w.status] || STATUS.InTransit;
-    const flags = (Array.isArray(w.flags) ? w.flags : []).map(flagText).filter(Boolean);
+    // "Pichhli gadi khuli" ka jawab mil gaya (24 Oct 2026, server f.answered) — laal nahi, grey ✓.
+    const flags = (Array.isArray(w.flags) ? w.flags : [])
+      .map((f) => (f && f.answered ? { ok: true, s: t("weigh.flag_answered", { grn: f.answered.grn || "—" }) } : { ok: false, s: flagText(f) }))
+      .filter((x) => x.s);
     return (
       <>
         <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
@@ -477,7 +480,9 @@ export default function WeighbridgePanel({ dest, onChanged }) {
         </div>
         {flags.length > 0 && (
           <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 4 }}>
-            {flags.map((f, i) => <span key={i} style={{ fontSize: 9.5, fontWeight: 700, color: T.red, background: T.redL, border: "1px solid " + T.redM, padding: "1px 7px", borderRadius: 8 }}>⚠ {f}</span>)}
+            {flags.map((f, i) => f.ok
+              ? <span key={i} style={{ fontSize: 9.5, fontWeight: 700, color: T.t3, background: T.bg, border: "1px solid " + T.b1, padding: "1px 7px", borderRadius: 8 }}>{f.s}</span>
+              : <span key={i} style={{ fontSize: 9.5, fontWeight: 700, color: T.red, background: T.redL, border: "1px solid " + T.redM, padding: "1px 7px", borderRadius: 8 }}>⚠ {f.s}</span>)}
           </div>
         )}
       </>

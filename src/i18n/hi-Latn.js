@@ -13192,6 +13192,7 @@ const dict = {
   "weigh.finding_truck":                                      "Gadi dhoondh rahe hain…",
   "weigh.flag_dup_rec_slip":                                  "Rec slip {no} pehle {grn} par aa chuki",
   "weigh.flag_open_trip":                                     "Yahi {what} pehle se khula hai — pichhli gadi site par utri kya?",
+  "weigh.flag_answered":                                      "✓ Jawab mila — pichhli gadi site par utri ({grn})",
   "weigh.flag_plate_mismatch":                                "Gadi ki plate ({plate}) slip ke number ({vehicle}) se alag",
   "weigh.flag_stale_tare":                                    "Khali wazan {h} ghante purana",
   "weigh.flag_stored_tare":                                   "Kaante ne stored tare lagaya — slip par khali {slip} kg, hamara {ours} kg; bill hamare wazan par",

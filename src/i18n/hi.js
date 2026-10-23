@@ -13189,6 +13189,7 @@ const dict = {
   "weigh.finding_truck":                                      "गाड़ी ढूँढ रहे हैं…",
   "weigh.flag_dup_rec_slip":                                  "Rec slip {no} पहले {grn} पर आ चुकी",
   "weigh.flag_open_trip":                                     "यही {what} पहले से खुला है — पिछली गाड़ी साइट पर उतरी क्या?",
+  "weigh.flag_answered":                                      "✓ जवाब मिला — पिछली गाड़ी साइट पर उतरी ({grn})",
   "weigh.flag_plate_mismatch":                                "गाड़ी की प्लेट ({plate}) स्लिप के नंबर ({vehicle}) से अलग",
   "weigh.flag_stale_tare":                                    "खाली वज़न {h} घंटे पुराना",
   "weigh.flag_stored_tare":                                   "कांटे ने stored tare लगाया — स्लिप पर खाली {slip} kg, हमारा {ours} kg; बिल हमारे वज़न पर",

@@ -13190,6 +13190,7 @@ const dict = {
   "weigh.finding_truck":                                      "Finding the truck…",
   "weigh.flag_dup_rec_slip":                                  "Rec slip {no} already used on {grn}",
   "weigh.flag_open_trip":                                     "This {what} is already open — did the earlier truck get unloaded?",
+  "weigh.flag_answered":                                      "✓ Answered — the earlier truck unloaded at site ({grn})",
   "weigh.flag_plate_mismatch":                                "Vehicle plate ({plate}) differs from the slip's number ({vehicle})",
   "weigh.flag_stale_tare":                                    "Empty weight {h} h old",
   "weigh.flag_stored_tare":                                   "Weighbridge used a stored tare — slip says {slip} kg empty, ours {ours} kg; billing uses our weight",
