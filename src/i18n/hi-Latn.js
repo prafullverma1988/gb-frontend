@@ -4872,7 +4872,7 @@ const dict = {
   "machinery.ye_fuel_module_ka_hi_data":                       "Ye Fuel module ka hi data hai, is machine par filter kar ke. Entry wahin se hoti hai — do jagah entry se calculation kabhi match nahi hoti.",
   "machinery.ye_key_kabhi_wapas_screen_par":                   "Ye key kabhi wapas screen par nahi dikhegi — sirf last 4 characters.",
   "machinery.ye_kiraye_ki_machine_hai_hum":                    "Ye rent ki machine hai — hum vendor ke documents sirf",
-  "machinery.ye_machine_ka_apna_record_hai":                   "Ye machine ka apna record hai (laga hai ya nahi, device/IMEI). Vendor ka API ab{v} **account level** par judta hai — Machinery ke **GPS tab** se; wahi se unit is machine se jodi jaati hai aur data apne aap aata hai.",
+  "machinery.ye_machine_ka_apna_record_hai":                   "Ye machine ka apna record hai (laga hai ya nahi, device/IMEI). Vendor ka API ab{v} **account level** par judta hai — Machinery ke **Live Tracking** tab se; wahi se unit is machine se jodi jaati hai aur data apne aap aata hai.",
   "machinery.zaroori_hai_usi_par_reminder_chalta":             "important hai — usi par reminder chalta hai.",
 
   // ── map_draw ──────────────────────────────────────────────
@@ -14564,7 +14564,7 @@ const dict = {
   "settings.tg_tab_desc":                                      "GPS / fuel-sensor vendor ke account, token aur sync log",
   "settings.tg_title":                                         "GPS / Telematics",
   "settings.tg_desc":                                          "Company ke GPS / fuel-sensor vendor account — ek se zyada bhi",
-  "settings.tg_note":                                          "Dashboard Machinery → GPS me hai. Yahan: vendor ka setup, token, vendor kya deta hai, aur har sync ka log. Token band (encrypted) rehta hai — screen par sirf aakhri 4 akshar.",
+  "settings.tg_note":                                          "Dashboard Machinery → Live Tracking me hai. Yahan: vendor ka setup, token, vendor kya deta hai, aur har sync ka log. Token band (encrypted) rehta hai — screen par sirf aakhri 4 akshar.",
   "settings.tg_naya":                                          "+ Naya account",
   "settings.tg_naya_title":                                    "Naya GPS account",
   "settings.tg_edit":                                          "GPS account badlo",
@@ -15158,6 +15158,7 @@ const dict = {
   "stb.close": "Band karo (Esc)",
   "stb.skip_all_btn": "Sab chuno",
   "stb.skip_none_btn": "Chunav hatao",
+  "machinery.tab_live":                                        "Live Tracking",
 };
 
 export default dict;

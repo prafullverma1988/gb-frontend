@@ -4870,7 +4870,7 @@ const dict = {
   "machinery.ye_fuel_module_ka_hi_data":                       "This is data from the Fuel module, filtered for this machine. Entries are made there — calculations never match if entered in two places.",
   "machinery.ye_key_kabhi_wapas_screen_par":                   "This key will never be displayed on screen again — only the last 4 characters.",
   "machinery.ye_kiraye_ki_machine_hai_hum":                    "This is a rented machine — we only have vendor documents",
-  "machinery.ye_machine_ka_apna_record_hai":                   "This is the machine's own record (whether installed, device/IMEI). The vendor's API now connects at the **account level** {v}— from the **GPS tab** of Machinery; from there, the unit is linked to this machine and data syncs automatically.",
+  "machinery.ye_machine_ka_apna_record_hai":                   "This is the machine's own record (whether installed, device/IMEI). The vendor's API now connects at the **account level** {v}— from the **Live Tracking** tab of Machinery; from there, the unit is linked to this machine and data syncs automatically.",
   "machinery.zaroori_hai_usi_par_reminder_chalta":             "is important — reminders run on it.",
 
   // ── map_draw ──────────────────────────────────────────────
@@ -14562,7 +14562,7 @@ const dict = {
   "settings.tg_tab_desc":                                      "GPS / fuel-sensor vendor accounts, token and sync log",
   "settings.tg_title":                                         "GPS / Telematics",
   "settings.tg_desc":                                          "Your company's GPS / fuel-sensor vendor accounts — more than one is fine",
-  "settings.tg_note":                                          "The dashboard is in Machinery → GPS. Here: vendor setup, token, what the vendor provides, and every sync's log. The token is stored locked (encrypted) — only its last 4 characters are ever shown.",
+  "settings.tg_note":                                          "The dashboard is in Machinery → Live Tracking. Here: vendor setup, token, what the vendor provides, and every sync's log. The token is stored locked (encrypted) — only its last 4 characters are ever shown.",
   "settings.tg_naya":                                          "+ New account",
   "settings.tg_naya_title":                                    "New GPS account",
   "settings.tg_edit":                                          "Edit GPS account",
@@ -15156,6 +15156,7 @@ const dict = {
   "stb.close": "Close (Esc)",
   "stb.skip_all_btn": "Select all",
   "stb.skip_none_btn": "Clear selection",
+  "machinery.tab_live":                                        "Live Tracking",
 };
 
 export default dict;

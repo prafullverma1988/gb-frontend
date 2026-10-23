@@ -1713,8 +1713,9 @@ function MachineDetail({ id, onBack, onChanged, onEdit, onRemoved, canRemove, pa
     { id: "oil", l: t("machinery.oil_tab") + ((oil && (oil.summary || []).some((x) => x.warning)) ? " ⚠" : "") },
     // GPS tab sirf judi hui machine par — bina jod ke dikha kar "khaali
     // khaana jo kabhi nahi bharega" nahi dena (wahi niyam jo rented ke
-    // service tab par laga hai). Jodna Machinery ke GPS tab se hota hai.
-    ...(gps && gps.linked ? [{ id: "gps", l: "GPS" }] : []),
+    // service tab par laga hai). Jodna Machinery ke Live Tracking tab se hota hai.
+    // Naam "GPS" se "Live Tracking" (23 Oct 2026, Prafull — phone jaisa).
+    ...(gps && gps.linked ? [{ id: "gps", l: t("machinery.tab_live") }] : []),
   ];
 
   // Owned se rented par jaate waqt purana tab gayab ho sakta hai — tab khaali
@@ -8261,7 +8262,8 @@ function MachineryModule() {
     { id: "due", l: t("machinery.reminders"), I: IcBell, badge: active.length || null },
     // Badge = kitni vendor units abhi kisi machine se judi nahi — wahi is
     // tab ka asli kaam hai. Account hi na ho to badge ka koi matlab nahi.
-    { id: "gps", l: "GPS", I: IcSignal, badge: (tele && tele.account && tele.pending.length) || null },
+    // Naam "GPS" se "Live Tracking" (23 Oct 2026, Prafull — phone jaisa); id wahi.
+    { id: "gps", l: t("machinery.tab_live"), I: IcSignal, badge: (tele && tele.account && tele.pending.length) || null },
     { id: "insights", l: t("machinery.insights"), I: IcSpark },
     { id: "reports", l: t("common.reports"), I: IcChart },
     // Company ki machine wali setting (site rate, Start/Stop) — Settings ka Edit
