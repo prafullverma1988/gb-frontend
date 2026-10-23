@@ -541,6 +541,73 @@ function Modal({ open, onClose, title, desc, width = 560, children }) {
 // ─── OFFICE & WAREHOUSE LOCATIONS (company-level geofences) ──────────
 // Each row is a company geofence (project_id NULL) with kind office/warehouse.
 // Mobile punch-in geofence check honors these alongside project sites.
+// ── Store ↔ Site (24 Oct 2026, Prafull: "store wahi feasible hai jo site ke paas ho") ──
+// Har store kin site ko maal deta hai. MR me "Kahan se aaye → Store" par sirf
+// isi site se jude store dikhte hain (utils/mrDest.js). PUT /warehouse/warehouses/:id/projects.
+function StoreSitesLine({ wh, projects, linked, onSaved }) {
+  const [open, setOpen] = useState(false);
+  const [sel, setSel] = useState([]);
+  const [q, setQ] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const names = (linked || []).map(id => (projects.find(p => String(p.id) === String(id)) || {}).name).filter(Boolean);
+  const start = () => { setSel((linked || []).map(String)); setQ(""); setErr(""); setOpen(true); };
+  const ql = q.trim().toLowerCase();
+  const list = projects.filter(p => !ql || String(p.name || "").toLowerCase().includes(ql));
+  const save = async () => {
+    setBusy(true); setErr("");
+    const r = await api.put("/warehouse/warehouses/" + wh.id + "/projects", { project_ids: sel.map(Number) }).catch(() => ({ success: false }));
+    setBusy(false);
+    if (!r || r.success === false) { setErr((r && r.message) || t("settings.wh_sites_fail")); return; }
+    setOpen(false); onSaved && onSaved();
+  };
+  return (
+    <div style={{ marginTop: 3 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", fontSize: 11.5, color: names.length ? T.textMid : T.textLight }}>
+        <span>{names.length ? t("settings.wh_sites_list", { list: names.join(", ") }) : t("settings.wh_sites_none")}</span>
+        {!open && (
+          <button type="button" onClick={start}
+            style={{ padding: "2px 9px", borderRadius: 6, background: "white", color: T.blue, border: `1px solid ${T.blue}55`, fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
+            {t("settings.wh_sites_edit")}
+          </button>
+        )}
+      </div>
+      {open && (
+        <div style={{ marginTop: 6, padding: "10px 12px", border: `1px solid ${T.border}`, borderRadius: 8, background: T.bg }}>
+          <div style={{ fontSize: 11.5, color: T.textMid, marginBottom: 6, lineHeight: 1.45 }}>{t("settings.wh_sites_help")}</div>
+          {projects.length > 8 && (
+            <input value={q} onChange={e => setQ(e.target.value)} placeholder={t("settings.wh_sites_search")} aria-label={t("settings.wh_sites_search")}
+              style={{ width: "100%", padding: "7px 10px", borderRadius: 7, border: `1.5px solid ${T.border}`, fontSize: 12.5, marginBottom: 6, boxSizing: "border-box", fontFamily: "inherit" }}/>
+          )}
+          <div style={{ maxHeight: 220, overflowY: "auto", display: "flex", flexDirection: "column", gap: 2 }}>
+            {list.map(p => {
+              const on = sel.includes(String(p.id));
+              return (
+                <label key={p.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 4px", fontSize: 12.5, color: T.text, cursor: "pointer" }}>
+                  <input type="checkbox" checked={on} onChange={() => setSel(x => on ? x.filter(i => i !== String(p.id)) : [...x, String(p.id)])} style={{ accentColor: T.blue }}/>
+                  {p.name}
+                </label>
+              );
+            })}
+            {list.length === 0 && <div style={{ fontSize: 12, color: T.textLight, padding: 6 }}>{t("settings.wh_sites_no_project")}</div>}
+          </div>
+          {err && <div style={{ fontSize: 11.5, color: T.red, marginTop: 6 }}>{err}</div>}
+          <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+            <button type="button" onClick={save} disabled={busy}
+              style={{ padding: "6px 14px", borderRadius: 7, background: T.blue, color: "white", border: "none", fontSize: 12, fontWeight: 700, cursor: busy ? "wait" : "pointer", fontFamily: "inherit" }}>
+              {busy ? t("common.saving") : t("settings.wh_sites_save", { n: sel.length })}
+            </button>
+            <button type="button" onClick={() => setOpen(false)}
+              style={{ padding: "6px 12px", borderRadius: 7, background: "white", color: T.textMid, border: `1px solid ${T.border}`, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
+              {t("common.cancel")}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function LocationsSettings() {
   const KINDS = [
     { v: "office",    label: "🏢 Office",    c: T.blue },
@@ -555,6 +622,9 @@ function LocationsSettings() {
   // Location list sach me aayi ya nahi — na aayi ho to har store "bina
   // location" na dikhe (neeche orphanWhs).
   const [geoLoaded, setGeoLoaded] = useState(false);
+  // Store ↔ Site (24 Oct 2026) — { warehouse_id: [project_id] } + projects ki list.
+  const [siteLinks, setSiteLinks] = useState({});
+  const [projList, setProjList] = useState([]);
   // Warehouse ka stock-side jodidar (wh_warehouses) — yahin se uska
   // incharge tay hota hai. Geofence attendance ke liye hai, incharge
   // stock ke liye; add dono ka ek hi jagah se hota hai.
@@ -578,7 +648,10 @@ function LocationsSettings() {
     api.get("/warehouse/warehouses?scope=all").then(r => { if (r.success) setWhs(r.data || []); }).catch(()=>{});
     api.get("/projects/team-members").then(r => { if (r.success) setStaff(r.data || []); }).catch(()=>{});
     api.get("/library/cities").then(r => { if (r && r.success) setCities((r.data || []).filter(c => Number(c.is_active) !== 0)); }).catch(()=>{});
+    api.get("/warehouse/store-projects").then(r => { if (r && r.success) setSiteLinks(r.data || {}); }).catch(()=>{});
+    api.get("/projects").then(r => { if (r && r.success) setProjList((r.data || []).map(p => ({ id: p.id, name: p.name }))); }).catch(()=>{});
   };
+  const reloadLinks = () => api.get("/warehouse/store-projects").then(r => { if (r && r.success) setSiteLinks(r.data || {}); }).catch(()=>{});
   useEffect(load, []);
 
   // Geofence row ka warehouse jodidar (backend boot par khud jod deta hai).
@@ -736,6 +809,7 @@ function LocationsSettings() {
                     : (rowsFor(w) > 0 ? t("settings.wh_has_work", { n: rowsFor(w) }) : t("settings.wh_empty"))}
                   {w.incharge_name ? " · 👤 " + w.incharge_name : ""}
                 </div>
+                <StoreSitesLine wh={w} projects={projList} linked={siteLinks[w.id] || []} onSaved={reloadLinks}/>
               </div>
               <button onClick={()=>editWh(w)} style={{ padding:"5px 11px", borderRadius:6, background:T.blueSoft, color:T.blue, border:`1px solid ${T.blue}33`, fontSize:11, fontWeight:700, cursor:"pointer" }}>{t("settings.wh_add_location")}</button>
               <button onClick={()=>closeWh(w)} title={t("settings.wh_close")} style={{ padding:"5px 9px", borderRadius:6, background:T.redSoft, color:T.red, border:`1px solid ${T.red}33`, fontSize:11, fontWeight:700, cursor:"pointer" }}>✕</button>
@@ -754,6 +828,9 @@ function LocationsSettings() {
                     <div style={{ fontSize:10.5, marginTop:2, color: whFor(g)?.incharge_name ? T.textMid : T.amber, fontWeight:600 }}>
                       👤 {whFor(g)?.incharge_name || "Incharge nahi laga — Edit karke lagao"}
                     </div>
+                  )}
+                  {g.kind === "warehouse" && whFor(g) && Number(whFor(g).is_active) !== 0 && (
+                    <StoreSitesLine wh={whFor(g)} projects={projList} linked={siteLinks[whFor(g).id] || []} onSaved={reloadLinks}/>
                   )}
                 </div>
                 <button onClick={()=>edit(g)} style={{ padding:"5px 11px", borderRadius:6, background:T.blueSoft, color:T.blue, border:`1px solid ${T.blue}33`, fontSize:11, fontWeight:700, cursor:"pointer" }}>Edit</button>
@@ -4262,6 +4339,52 @@ function UIPreferences() {
 // ═══════════════════════════════════════════════════════════════════════
 // WAREHOUSE SETTINGS — procurement mode, GRN photo policy, MR flow
 // ═══════════════════════════════════════════════════════════════════════
+// ── MR banane wala Store / Procurement chun sake (24 Oct 2026, Prafull) ──
+// company_prefs.mr_dest_choice (default band). Chalu ho to MR form me "Kahan se
+// aaye" (Apne aap / Store / Procurement); Store me sirf site se jude store.
+function MrDestChoiceCard({ onGoto }) {
+  const [val, setVal] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+  useEffect(() => {
+    api.get("/settings/prefs").then(r => {
+      const row = r?.success && Array.isArray(r.data) ? r.data.find(p => p.key === "mr_dest_choice") : null;
+      setVal(row ? row.value : "off");
+    }).catch(() => setVal("off"));
+  }, []);
+  const pick = async (v) => {
+    if (v === val || busy) return;
+    setBusy(true); setMsg("");
+    const r = await api.put("/settings/prefs", { mr_dest_choice: v }).catch(() => ({ success: false }));
+    setBusy(false);
+    if (r && r.success !== false) { setVal(v); setMsg(t("mrd.set_saved")); setTimeout(() => setMsg(""), 2000); }
+    else setMsg((r && r.message) || t("mrd.set_fail"));
+  };
+  return (
+    <SectionCard title={t("mrd.set_title")} desc={t("mrd.set_desc")}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10, paddingTop: 4 }}>
+        {[{ v: "off", label: t("mrd.set_off"), sub: t("mrd.set_off_sub") }, { v: "on", label: t("mrd.set_on"), sub: t("mrd.set_on_sub") }].map(opt => (
+          <label key={opt.v} style={{ display: "flex", gap: 10, padding: "12px 14px", borderRadius: 9, border: `1.5px solid ${val===opt.v ? "#2563EB" : "#E5E7EB"}`, background: val===opt.v ? "#EFF6FF" : "white", cursor: "pointer", alignItems: "flex-start" }}>
+            <input type="radio" checked={val===opt.v} disabled={val === null || busy} onChange={() => pick(opt.v)} style={{ marginTop: 3, accentColor: "#2563EB" }}/>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: val===opt.v ? "#1D4ED8" : "#111827" }}>{opt.label}</div>
+              <div style={{ fontSize: 11.5, color: "#6B7280", marginTop: 3, lineHeight: 1.5 }}>{opt.sub}</div>
+            </div>
+          </label>
+        ))}
+      </div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap", marginTop: 12, padding: "9px 12px", background: "#F8FAFC", border: "1px solid #E2E8F0", borderRadius: 7 }}>
+        <span style={{ fontSize: 11.5, color: "#374151", lineHeight: 1.5 }}>{t("mrd.set_link_note")}</span>
+        <button type="button" onClick={() => onGoto && onGoto("locations")}
+          style={{ padding: "6px 12px", borderRadius: 7, background: T.blueSoft, color: T.blue, border: `1px solid ${T.blue}33`, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" }}>
+          {t("mrd.set_link_open")}
+        </button>
+      </div>
+      {msg && <div style={{ fontSize: 12, color: T.textMid, marginTop: 8 }}>{msg}</div>}
+    </SectionCard>
+  );
+}
+
 function WarehouseSettings({ onGoto }) {
   const [whProcMode, setWhProcMode] = useState("direct"); // direct | via_procurement
   const [mrFlow, setMrFlow] = useState("procurement_driven"); // procurement_driven | warehouse_driven
@@ -4370,6 +4493,8 @@ function WarehouseSettings({ onGoto }) {
           <b>⚠ Note:</b> Mode flip karne par <b>in-flight MRs apne original mode me hi complete</b> honge (har MR pe creation-time mode snapshot hota hai). Naye MRs current mode follow karenge. Drastic break-changes nahi honge.
         </div>
       </SectionCard>
+
+      <MrDestChoiceCard onGoto={onGoto}/>
 
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap", padding: "12px 16px", borderRadius: T.radius, border: `1px solid ${T.border}`, background: T.card, marginBottom: 20 }}>
         <div style={{ fontSize: 12.5, color: T.textMid, lineHeight: 1.5 }}>{t("weigh.settings_moved")}</div>

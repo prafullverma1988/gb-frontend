@@ -59,7 +59,94 @@ function toMrCard(m) {
     date: m.created_at ? new Date(m.created_at).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}) : "—",
     vendor: m.linked_vendor || null,
     amt: parseFloat(m.approx_amount) || 0,
+    // MR wale ka "Kahan se aaye" (24 Oct 2026)
+    dest: m.fulfill_via === "store"
+      ? (m.fulfill_warehouse_name ? t("mrd.dest_store", { name: m.fulfill_warehouse_name }) : t("mrd.dest_store_any"))
+      : m.fulfill_via === "procurement" ? t("mrd.dest_proc") : "",
   };
+}
+
+// ── MR "Kahan se aaye" — Apne aap / Store / Procurement (24 Oct 2026, Prafull) ──
+// Company pref mr_dest_choice (Settings → Store Settings) chalu ho tabhi. Store me
+// sirf is site se jude store (Settings → Office & Store), har me material ka stock.
+// Server bhi wahi jaanch karta hai (utils/mrDest.js) — yahan sirf dikhana / pehle rok.
+function useMrDest(projectId, material) {
+  const [on, setOn] = useState(false);
+  const [stores, setStores] = useState([]);
+  const [loading, setLoading] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    api.get("/settings/prefs").then(r => {
+      const row = r?.success && Array.isArray(r.data) ? r.data.find(p => p.key === "mr_dest_choice") : null;
+      if (alive) setOn(!!row && row.value === "on");
+    }).catch(() => {});
+    return () => { alive = false; };
+  }, []);
+  useEffect(() => {
+    if (!on || !projectId) { setStores([]); return undefined; }
+    let alive = true;
+    setLoading(true);
+    const h = setTimeout(() => {
+      api.get("/warehouse/project-stores?project_id=" + encodeURIComponent(projectId) + (material ? "&material=" + encodeURIComponent(material) : ""))
+        .then(r => { if (alive) { setStores(r?.success && Array.isArray(r.data) ? r.data : []); setLoading(false); } })
+        .catch(() => { if (alive) { setStores([]); setLoading(false); } });
+    }, 250);
+    return () => { alive = false; clearTimeout(h); };
+  }, [on, projectId, material]);
+  return { on, stores, loading };
+}
+
+function MrDestField({ value, onChange, stores, loading }) {
+  const v = value || { via: "", warehouseId: null };
+  const noStore = !loading && !stores.length;
+  useEffect(() => {
+    if (v.via === "store" && stores.length === 1 && Number(v.warehouseId) !== Number(stores[0].id)) onChange({ via: "store", warehouseId: Number(stores[0].id) });
+    if (v.via === "store" && noStore) onChange({ via: "", warehouseId: null });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stores, loading]);
+  const opts = [
+    { id: "", label: t("mrd.auto"), hint: t("mrd.auto_hint") },
+    { id: "store", label: t("mrd.store"), hint: t("mrd.store_hint"), off: noStore },
+    { id: "procurement", label: t("mrd.proc"), hint: t("mrd.proc_hint") },
+  ];
+  const cur = opts.find(o => o.id === (v.via || "")) || opts[0];
+  const fmt = (n) => { const x = Number(n) || 0; return Number.isInteger(x) ? String(x) : x.toFixed(2).replace(/.?0+$/, ""); };
+  return (
+    <div>
+      <label style={{fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".5px",display:"block",marginBottom:5}}>{t("mrd.title")}</label>
+      <div role="group" aria-label={t("mrd.title")} style={{display:"inline-flex",gap:3,background:T.bg||"#F1F5F9",borderRadius:8,padding:3}}>
+        {opts.map(o => {
+          const on = (v.via || "") === o.id;
+          return (
+            <button key={o.id || "auto"} type="button" disabled={o.off} aria-pressed={on}
+              onClick={() => onChange({ via: o.id, warehouseId: o.id === "store" ? (v.warehouseId || (stores.length === 1 ? Number(stores[0].id) : null)) : null })}
+              style={{padding:"6px 14px",borderRadius:6,border:"none",cursor:o.off?"not-allowed":"pointer",fontFamily:"inherit",fontSize:12.5,
+                fontWeight:on?700:500,background:on?T.surface:"transparent",boxShadow:on?"0 1px 2px rgba(15,23,42,.12)":"none",color:o.off?T.t4:on?T.t1:T.t3}}>
+              {o.label}
+            </button>
+          );
+        })}
+      </div>
+      <div style={{fontSize:11.5,color:T.t3,marginTop:5}}>{cur.hint}</div>
+      {noStore && <div style={{fontSize:11.5,color:"#B45309",marginTop:3}}>{t("mrd.no_store")}</div>}
+      {v.via === "store" && stores.length > 1 && (
+        <div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:7}}>
+          {stores.map(st => {
+            const on = Number(v.warehouseId) === Number(st.id);
+            return (
+              <button key={st.id} type="button" aria-pressed={on} onClick={() => onChange({ via: "store", warehouseId: Number(st.id) })}
+                style={{padding:"6px 12px",borderRadius:7,border:`1.5px solid ${on?T.blu:T.b1}`,background:on?`${T.blu}12`:T.surface,color:T.t1,fontSize:12.5,fontWeight:on?700:500,cursor:"pointer",fontFamily:"inherit"}}>
+                {st.name}{st.qty != null && <span style={{marginLeft:6,fontSize:11.5,fontWeight:700,color:Number(st.qty)>0?"#15803D":"#B45309"}}>{Number(st.qty)>0 ? t("mrd.stock_n",{ qty: fmt(st.qty), unit: st.unit || "" }) : t("mrd.stock_none")}</span>}
+              </button>
+            );
+          })}
+        </div>
+      )}
+      {v.via === "store" && stores.length === 1 && (
+        <div style={{fontSize:12,color:T.t2,marginTop:6}}>{t("mrd.store_one", { name: stores[0].name })}{stores[0].qty != null ? " · " + (Number(stores[0].qty)>0 ? t("mrd.stock_n",{ qty: fmt(stores[0].qty), unit: stores[0].unit || "" }) : t("mrd.stock_none")) : ""}</div>
+      )}
+    </div>
+  );
 }
 
 function TabMaterial({ project }) {
@@ -116,6 +203,9 @@ function TabMaterial({ project }) {
     items: [{ item_name:"", quantity:"", unit:"Bags", approx_amount:"" }],
     required_date:"", notes:"", photos: [],
   });
+  // Kahan se aaye (24 Oct 2026) — poore MR form ka ek chunav; ek hi material ho to stock bhi.
+  const [mrDest, setMrDest] = useState({ via: "", warehouseId: null });
+  const destInfo = useMrDest(projectId, (form.items || []).length === 1 ? String(form.items[0].item_name || "").trim() : "");
   // Duplicate-MR pipeline check — when user picks a material, query if the
   // same item is already in-flight for THIS project (Pending / Approved /
   // Ordered / Partial). Warning UI sits under the row; submit requires an
@@ -530,6 +620,10 @@ function TabMaterial({ project }) {
       alert(t("material.at_least_one_material_with_quantity"));
       return;
     }
+    if (destInfo.on && mrDest.via === "store") {
+      if (!destInfo.stores.length) { alert(t("mrd.no_store")); return; }
+      if (destInfo.stores.length > 1 && !mrDest.warehouseId) { alert(t("mrd.pick_store")); return; }
+    }
     // Pipeline-duplicate force confirm — if any picked material is
     // already in-flight for this project, list them and require an
     // explicit Continue. Cancel = abort.
@@ -557,6 +651,7 @@ function TabMaterial({ project }) {
           approx_amount: it.approx_amount ? parseFloat(it.approx_amount) : null,
           notes: form.notes || null,
           photo_urls: form.photos && form.photos.length ? form.photos : null,
+          ...(destInfo.on && mrDest.via ? { fulfill_via: mrDest.via, fulfill_warehouse_id: mrDest.via === "store" ? (mrDest.warehouseId || null) : null } : {}),
         });
         if (res?.success) {
           api.post("/approvals/submit", {
@@ -583,6 +678,7 @@ function TabMaterial({ project }) {
           items: [{ item_name:"", quantity:"", unit:"Bags", approx_amount:"" }],
           required_date:"", notes:"", photos: [],
         });
+        setMrDest({ via: "", warehouseId: null });
         setShowModal(false);
         // One refresh after the whole batch — pre-warm the badge once.
         apiCache.refreshApprovals();
@@ -804,6 +900,9 @@ function TabMaterial({ project }) {
                     style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",resize:"none",minHeight:38}}/>
                 </div>
               </div>
+
+              {/* Kahan se aaye — Store / Procurement (company setting chalu ho tabhi) */}
+              {destInfo.on && <MrDestField value={mrDest} onChange={setMrDest} stores={destInfo.stores} loading={destInfo.loading}/>}
 
               {/* Photos */}
               <div>
@@ -1289,6 +1388,7 @@ function TabMaterial({ project }) {
                       {m.challan&&<span style={{fontSize:9,color:T.t4}}>{t("material.ch_challan", { challan: m.challan })}</span>}
                     </div>
                     <div style={{fontSize:11,color:T.t4}}>{m.date} · {m.by}</div>
+                    {m.dest && <div style={{fontSize:11.5,color:T.t3,marginTop:2}}>{m.dest}</div>}
                   </div>
                   <div style={{padding:"7px 12px",borderTop:"1px solid "+T.b1,background:T.surfaceB,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                     <span style={{fontSize:11,color:T.t4}}>{t("material.by_m", { m: (m.by||"—").split(" ")[0] })}</span>
