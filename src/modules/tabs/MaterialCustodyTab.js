@@ -200,7 +200,10 @@ function UsedRow({ u, canFlag, onChanged }) {
   );
 }
 
-function CustodyDrawer({ issueId, onClose, onChanged }) {
+// v2 (24 Oct 2026, Prafull): "Mil gaya" = site par receive. Button Material tab
+// ka Record GRN (Ordered → "Issues from Store" card) kholta hai — wahi photo /
+// rec slip ke saath receive; receive hote hi zimmedari Chalu.
+function CustodyDrawer({ issueId, onClose, onChanged, onReceive }) {
   const [d, setD] = useState(null);
   const [err, setErr] = useState("");
   const [msg, setMsg] = useState("");
@@ -238,7 +241,9 @@ function CustodyDrawer({ issueId, onClose, onChanged }) {
           {d.can_accept && (
             <div style={{ padding: 10, background: T.ambL, border: `1px solid ${T.ambM}`, borderRadius: 8, marginBottom: 10, display: "flex", alignItems: "center", gap: 10 }}>
               <span style={{ fontSize: 12, color: T.t2, flex: 1 }}>{t("custody.accept_hint")}</span>
-              <button style={btn(T.grn, true)} onClick={() => post(`/material-custody/issue/${d.id}/accept`)}>{t("custody.btn_accept")}</button>
+              {onReceive
+                ? <button style={btn(T.grn, true)} onClick={() => { onClose(); onReceive(d); }}>{t("custody.btn_receive")}</button>
+                : <button style={btn(T.grn, true)} onClick={() => post(`/material-custody/issue/${d.id}/accept`)}>{t("custody.btn_accept")}</button>}
             </div>
           )}
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
@@ -315,7 +320,7 @@ function CustodyDrawer({ issueId, onClose, onChanged }) {
   );
 }
 
-export default function MaterialCustodyTab({ projectId }) {
+export default function MaterialCustodyTab({ projectId, onReceive }) {
   const [rows, setRows] = useState(null);
   const [all, setAll] = useState(false);
   const [open, setOpen] = useState(null);
@@ -358,15 +363,16 @@ export default function MaterialCustodyTab({ projectId }) {
           })}</tbody>
         </table>
       )}
-      {open && <CustodyDrawer issueId={open} onClose={() => setOpen(null)} onChanged={load} />}
+      {open && <CustodyDrawer issueId={open} onClose={() => setOpen(null)} onChanged={load} onReceive={onReceive} />}
     </div>
   );
 }
 
 // Used entry ke form ka picker (TabTasks used-log, Material → mark used):
-// is site + material ki khuli zimmedari lines; pehli apne aap chuni (default),
-// "Zimmedari se nahi" = link nahi. Koi line nahi to kuch nahi dikhta (server
-// tab bhi apne aap jod deta hai agar line mile). value: line id | null | undefined.
+// is site + material ki khuli zimmedari lines. v2 (24 Oct 2026, Prafull):
+// default "Apne aap" (undefined) — server pehle site ka AAM stock, phir
+// zimmedari (subcon wali kabhi apne aap nahi). Line chuno to wahi; "Zimmedari
+// se nahi" (null) = link nahi. Koi line nahi to picker nahi dikhta.
 export function CustodyLinePick({ projectId, material, value, onChange }) {
   const [lines, setLines] = useState([]);
   useEffect(() => {
@@ -378,7 +384,7 @@ export function CustodyLinePick({ projectId, material, value, onChange }) {
         if (!live) return;
         const ls = (r && r.success && r.data) || [];
         setLines(ls);
-        onChange(ls.length ? ls[0].id : undefined);
+        onChange(undefined);
       }).catch(() => { if (live) setLines([]); });
     return () => { live = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -387,8 +393,10 @@ export function CustodyLinePick({ projectId, material, value, onChange }) {
   return (
     <div style={{ marginTop: 6 }}>
       <label style={{ fontSize: 9, fontWeight: 700, color: T.t3, textTransform: "uppercase", display: "block", marginBottom: 3 }}>{t("custody.pick_label")}</label>
-      <select value={value == null ? "" : String(value)} onChange={(e) => onChange(e.target.value ? Number(e.target.value) : null)}
+      <select value={value === undefined ? "auto" : value === null ? "" : String(value)}
+        onChange={(e) => onChange(e.target.value === "auto" ? undefined : e.target.value ? Number(e.target.value) : null)}
         style={{ ...inp, width: "100%" }}>
+        <option value="auto">{t("custody.pick_auto")}</option>
         {lines.map((l) => (
           <option key={l.id} value={String(l.id)}>
             {t("custody.pick_opt", { no: l.issue_no, who: l.custodian_name + (l.party_name ? " · " + l.party_name : ""), n: n3(l.khula), unit: l.unit || "" })}

@@ -18,6 +18,7 @@ import { WarehouseGintiTab, DisposalModal, DisposalsPanel } from "./WarehouseGin
 import { ConversionTab } from "./WarehouseConversion";
 import { can, canAny, canEntry } from "../utils/perms";
 import { UnitPickOrLock, StockConvLine, cardUnitOptions, useUnitCards, stockQtyOf, factorOf, needsFactor, UnitViewChip } from "../components/UnitConv";
+import SiteStockLine, { useSiteStock, siteStockKey } from "../components/SiteStockLine";
 
 // ── ICONS ──────────────────────────────────────────────────────────────
 const Ic=({d,size=18,color="currentColor",sw=1.8,fill="none"})=>(
@@ -814,6 +815,8 @@ function NewIssueModal({stock,projects,users,onClose,onSaved,prefill,fromMR}){
     :[{material_id:null,name:"",unit:"Nos",qty:"",rate:"",selected_batches:null,_rateDirty:false}];
   const [items,setItems]=useState(initial);
   const ucards=useUnitCards(items.map(it=>it.name));   // unit card (19 Oct 2026)
+  // D5 (24 Oct 2026): jis site ko de rahe ho, wahan isi material ka abhi ka stock.
+  const siteStock=useSiteStock(f.project_id, items.map(it=>it.name));
   const [saving,setSaving]=useState(false);
   const chPol=useChallanPol();
   const [chPhotos,setChPhotos]=useState([]);
@@ -1074,6 +1077,7 @@ function NewIssueModal({stock,projects,users,onClose,onSaved,prefill,fromMR}){
             mode="transfer"
             canRemove={!fromMR && items.length>1}
             lockMaterial={!!fromMR}/>
+          {f.project_id&&row.name&&<SiteStockLine info={siteStock.get(siteStockKey(row.name))} unit={row.unit} style={{paddingLeft:4}}/>}
           {row.name && (
             <div style={{display:"flex",alignItems:"center",gap:8,marginTop:-2,marginBottom:preview?2:6,paddingLeft:"calc(40% + 60px + 1fr + 6px)",fontSize:10.5,flexWrap:"wrap"}}>
               <button onClick={()=>openBatchPicker(i)}
@@ -1920,6 +1924,7 @@ function AddStockModal({material,onClose,onSaved}){
 // ── QUICK ISSUE MODAL (single material from stock) ────────────────
 function QuickIssueModal({material,projects,onClose,onSaved}){
   const [f,setF]=useState({project_id:null,issued_to:"",qty:"",remarks:""});
+  const siteStock=useSiteStock(f.project_id, [material?.name]);   // D5 (24 Oct 2026)
   const [saving,setSaving]=useState(false);
   const chPol=useChallanPol();
   const [chPhotos,setChPhotos]=useState([]);
@@ -1965,6 +1970,7 @@ function QuickIssueModal({material,projects,onClose,onSaved}){
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:11,marginBottom:11}}>
         <Field label={t("common.project")}>
           <SearchSelect compact value={f.project_id} options={projects} onChange={v=>setF(p=>({...p,project_id:v}))} placeholder={t("warehouse.select_project")}/>
+          {f.project_id&&material?.name&&<SiteStockLine info={siteStock.get(siteStockKey(material.name))} unit={material.unit} style={{marginTop:4}}/>}
         </Field>
         <Field label={t("warehouse.issued_to")}>
           <Input value={f.issued_to} maxLength={100} onChange={e=>setF(p=>({...p,issued_to:e.target.value}))} placeholder={t("warehouse.issued_to_ph")}/>

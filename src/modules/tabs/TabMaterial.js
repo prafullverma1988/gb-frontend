@@ -1779,7 +1779,7 @@ function TabMaterial({ project }) {
 
       {/* TAB 5: MATERIAL ZIMMEDARI — store issue kiske zimme, kitna baaki (14 Oct 2026) */}
       {activeTab==="custody"&&(
-        <MaterialCustodyTab projectId={projectId}/>
+        <MaterialCustodyTab projectId={projectId} onReceive={()=>{ setGrnTab("ordered"); setShowGRN(true); }}/>
       )}
 
       {/* ── MATERIAL LEDGER DRAWER (material click → GRN/Used/MR tabs) ── */}
