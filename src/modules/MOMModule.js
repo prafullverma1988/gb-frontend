@@ -801,6 +801,11 @@ function MMItem({it,meta,onPatch,inputStyle,allMode,projects}){
   );
 }
 
+// Awaaz → text aur AI extraction me der lagti hai (lambi all-projects meeting
+// ~1 minute). Aam 15 s ka timeout beech me hi "Request timed out" de deta tha
+// (24 Oct, Greenbox Bhilai) — phone app jaisa 3 minute.
+const MEETING_AI_TIMEOUT_MS = 180000;
+
 function MeetingModeModal({projectId=null,projectName="",onClose,onComplete}){
   const [step,setStep]=useState("capture");           // capture | review | done
   const [mode,setMode]=useState(projectId?"single":"all"); // default All at company level; Single inside a project
@@ -866,7 +871,7 @@ function MeetingModeModal({projectId=null,projectName="",onClose,onComplete}){
     setTranscribing(true);
     try{
       const b64=await blobToB64(blob);
-      const r=await api.post("/meetings/transcribe",{audio_base64:b64,mime_type:blob.type});
+      const r=await api.post("/meetings/transcribe",{audio_base64:b64,mime_type:blob.type},{timeoutMs:MEETING_AI_TIMEOUT_MS});
       setTranscribing(false);
       if(!r||!r.success){ setErr(r?.message||"Transcription fail hua."); return; }
       setTranscript(p=>(p&&p.trim()?p.trim()+" ":"")+(r.transcript||""));
@@ -879,7 +884,7 @@ function MeetingModeModal({projectId=null,projectName="",onClose,onComplete}){
     if(mode==="single"&&!proj){ setErr(t("mom.single_project_mode_me_pehle_project")); return; }
     if(!transcript.trim()){ setErr(t("mom.pehle_record_karein_ya_transcript_daalein")); return; }
     setErr(""); setExtracting(true);
-    const r=await api.post("/meetings/extract",{transcript:transcript.trim(),mode,project_id:proj||undefined,project_name:projName(proj)||undefined,title:title.trim()||undefined,audio_url:audioUrl||undefined});
+    const r=await api.post("/meetings/extract",{transcript:transcript.trim(),mode,project_id:proj||undefined,project_name:projName(proj)||undefined,title:title.trim()||undefined,audio_url:audioUrl||undefined},{timeoutMs:MEETING_AI_TIMEOUT_MS});
     setExtracting(false);
     if(!r||!r.success){ setErr(r?.message||"AI extraction fail hua."); return; }
     setMeeting(r.data);
