@@ -16,7 +16,7 @@ import { isoDate, todayISO } from "../../utils/today";
 import { cld } from "../../utils/cloudinary";
 import { GrnPhotoTiles } from "../../components/grn/GrnPhotoBox";
 import { can, canAny, canEntry, currentUser, can as canPerm, canEntry as canPermEntry } from "../../utils/perms";
-import { CustodyLinePick } from "./MaterialCustodyTab";
+import { CustodyLinePick, askCustodyApproval } from "./MaterialCustodyTab";
 
 // Tasks ka CSV/Excel import — common sudhaar screen (components/ImportFileModal),
 // jaanch server par (POST /tasks/import/rows). Column NAAM se pehchane jaate hain,
@@ -4515,7 +4515,12 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile,canDele
                   setUsedLog(p=>[res.data,...p]);
                   setUsedLogForm({material_name:"",used_qty:"",unit:"Nos",remark:"",used_date:todayISO()});
                   setMatTab("none");
-                } else alert(res.message||"Failed");
+                } else {
+                  // Hissa B: kisi aur task ki zimmedari — manzoori maango.
+                  const asked=await askCustodyApproval(res,{task_id:task.id,qty:uf.used_qty,unit:uu,...(sf?{stock_factor:sf}:{}),remark:uf.remark,used_date:uf.used_date,via:"task"});
+                  if(!asked) alert(res.message||"Failed");
+                  else if(asked.asked){ alert(asked.message); if(asked.ok){ setUsedLogForm({material_name:"",used_qty:"",unit:"Nos",remark:"",used_date:todayISO()}); setMatTab("none"); } }
+                }
                 setUsedLogSaving(false);
               }} style={{width:"100%",padding:"12px",borderRadius:8,background:usedLogSaving?"#94A3B8":"#16A34A",color:"white",fontSize:13,fontWeight:700,border:"none",cursor:"pointer"}}>
                 {usedLogSaving?t("common.saving"):t("tasks.log_usage")}

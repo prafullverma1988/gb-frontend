@@ -110,10 +110,15 @@ function UsedForm({ line, projectId, onDone, onCancel }) {
   const over = Number(qty) > Number(line.khula) + 0.0005;
   const save = async () => {
     setSaving(true); setErr("");
-    const r = await api.post(`/tasks/${taskId}/used-log`, { material_name: line.material_name, used_qty: Number(qty), unit: line.unit,
-      remark: note, project_id: projectId, custody_line_id: line.id, photo_urls: photos }).catch((e) => ({ message: e.message }));
+    const body = { material_name: line.material_name, used_qty: Number(qty), unit: line.unit,
+      remark: note, project_id: projectId, custody_line_id: line.id, photo_urls: photos };
+    const r = await api.post(`/tasks/${taskId}/used-log`, body).catch((e) => ({ message: e.message }));
+    if (r && r.success) { setSaving(false); onDone(t("custody.used_saved")); return; }
+    // Hissa B: line kisi aur task ki — manzoori maango (zimmedar / Admin).
+    const asked = await askCustodyApproval(r, { task_id: Number(taskId), qty: Number(qty), unit: line.unit, remark: note, photo_urls: photos, via: "task" });
     setSaving(false);
-    if (r && r.success) onDone(t("custody.used_saved")); else setErr((r && r.message) || t("custody.save_fail"));
+    if (asked && asked.asked) { if (asked.ok) onDone(asked.message); else setErr(asked.message); return; }
+    if (!asked) setErr((r && r.message) || t("custody.save_fail"));
   };
   const ok = taskId && Number(qty) > 0 && !over && !busy;
   return (
@@ -236,6 +241,7 @@ function CustodyDrawer({ issueId, onClose, onChanged, onReceive }) {
           <div style={{ fontSize: 12, color: T.t2, marginBottom: 10, lineHeight: 1.6 }}>
             {t("custody.zimmedar")}: <b>{d.custodian_name}</b>{d.party_name ? " · " + d.party_name : ""} ·{" "}
             {t("custody.since_days", { n: d.days })} · {d.warehouse_name || ""}
+            {d.task_name && <> · <b>{t("custody.use_task", { task: d.task_name })}</b></>}
             {d.custody_accepted_at && <> · {t("custody.accepted_on", { date: String(d.custody_accepted_at).slice(0, 10) })}</>}
           </div>
           {d.can_accept && (
@@ -310,6 +316,31 @@ function CustodyDrawer({ issueId, onClose, onChanged, onReceive }) {
             })}
           </>)}
 
+          {(d.use_requests || []).length > 0 && (<>
+            <div style={{ fontSize: 11, fontWeight: 700, color: T.t3, textTransform: "uppercase", margin: "16px 0 6px" }}>{t("custody.use_title")}</div>
+            {d.use_requests.map((u) => (
+              <div key={u.id} style={{ padding: "7px 0", borderTop: `1px solid ${T.b1}`, fontSize: 12 }}>
+                <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                  <b>{u.material_name} {n3(u.qty)} {u.unit}</b>
+                  <span>{u.task_name ? t("custody.use_task", { task: u.task_name }) : t("custody.use_notask")}</span>
+                  <span style={{ color: T.t4 }}>{u.by_name}{u.remark ? " · " + u.remark : ""}</span>
+                  {(u.photos || []).map((p, i) => <a key={i} href={p} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: T.blu }}>📷{i + 1}</a>)}
+                  <span style={{ marginLeft: "auto", fontWeight: 700, color: u.status === "pending" ? T.amb : u.status === "approved" ? T.grn : T.red }}>{t("custody.use_st_" + u.status)}</span>
+                </div>
+                {u.decide_note && <div style={{ color: T.t4, fontSize: 11 }}>{u.decided_by_name}: {u.decide_note}</div>}
+                {u.status === "pending" && d.can_decide_use && (
+                  <div style={{ display: "flex", gap: 6, marginTop: 5 }}>
+                    <button style={btn(T.grn, true)} onClick={() => post(`/material-custody/use-requests/${u.id}/approve`)}>{t("custody.btn_use_yes")}</button>
+                    {rejectId === "u" + u.id ? (<>
+                      <input value={rejectNote} onChange={(e) => setRejectNote(e.target.value)} placeholder={t("custody.reject_ph")} style={{ ...inp, flex: 1 }} />
+                      <button style={btn(T.red, true)} disabled={!rejectNote.trim()} onClick={() => post(`/material-custody/use-requests/${u.id}/reject`, { note: rejectNote })}>{t("custody.btn_use_no")}</button>
+                    </>) : <button style={btn(T.red)} onClick={() => setRejectId("u" + u.id)}>{t("custody.btn_use_no")}</button>}
+                  </div>
+                )}
+              </div>
+            ))}
+          </>)}
+
           <div style={{ fontSize: 11, fontWeight: 700, color: T.t3, textTransform: "uppercase", margin: "16px 0 4px" }}>{t("custody.used_title")}</div>
           <div style={{ fontSize: 11, color: T.t4, marginBottom: 4 }}>{t("custody.used_hint")}</div>
           {d.used.length === 0 && <div style={{ fontSize: 12, color: T.t4 }}>{t("custody.used_empty")}</div>}
@@ -366,6 +397,24 @@ export default function MaterialCustodyTab({ projectId, onReceive }) {
       {open && <CustodyDrawer issueId={open} onClose={() => setOpen(null)} onChanged={load} onReceive={onReceive} />}
     </div>
   );
+}
+
+// ── Doosre task ki manzoori (Hissa B, 24 Oct 2026, Prafull D3) ─────────
+// Used entry par server 409 CUSTODY_TASK_APPROVAL (khud chuni line kisi aur task
+// ki) / CUSTODY_RESERVED (apne aap wala kram rakhi zimmedari tak pahuncha) de
+// to: sandesh + "Manzoori maangein?" → haan par wahi entry manzoori ke liye.
+// Lautata null (ye 409 nahi — caller apna error dikhaye), { asked:false }
+// (mana kiya) ya { asked:true, ok, message }.
+export async function askCustodyApproval(res, payload) {
+  if (!res || !["CUSTODY_TASK_APPROVAL", "CUSTODY_RESERVED"].includes(res.code)) return null;
+  const line = res.data && (res.data.lines || [])[0];
+  if (!line) return null;
+  if (!window.confirm((res.message || "") + "\n\n" + t("custody.ask_approval_q", { who: line.zimmedar || "" }))) return { asked: false };
+  const r = await api.post("/material-custody/use-requests", {
+    ...payload, line_id: line.line_id, need_qty: res.data.need_qty,
+    pick_line: res.code === "CUSTODY_TASK_APPROVAL" ? 1 : 0,
+  }).catch((e) => ({ message: e.message }));
+  return { asked: true, ok: !!(r && r.success), message: (r && r.message) || t("custody.save_fail") };
 }
 
 // Used entry ke form ka picker (TabTasks used-log, Material → mark used):

@@ -7,7 +7,7 @@ import LibrarySelect from "../../components/LibrarySelect";
 import MaterialFlowDrawer from "../../components/MaterialFlowDrawer";
 import MRDetailDrawer from "../../components/MRDetailDrawer";
 import MaterialTransferTab from "../../components/MaterialTransferTab";
-import MaterialCustodyTab, { CustodyLinePick } from "./MaterialCustodyTab";
+import MaterialCustodyTab, { CustodyLinePick, askCustodyApproval } from "./MaterialCustodyTab";
 import MaterialLedgerDrawer from "../../components/MaterialLedgerDrawer";
 import GrnReceive from "../../components/grn/GrnReceive";
 import WeighbridgePanel from "../../components/grn/WeighbridgePanel";
@@ -1595,7 +1595,11 @@ function TabMaterial({ project }) {
                                     setLedgerMarkUsedFor(null);
                                     const rr=await api.get("/tasks/project/"+projectId+"/material-ledger");
                                     if(rr.success) setLedger(rr.data||[]);
-                                  } else alert(res.message||"Failed");
+                                  } else {
+                                    const asked=await askCustodyApproval(res,{task_id:null,qty:parseFloat(uForm.qty),unit:uu,...(sf?{stock_factor:sf}:{}),remark:uForm.remark||null,used_date:uForm.used_date,via:"mark_used"});
+                                    if(!asked) alert(res.message||"Failed");
+                                    else if(asked.asked){ alert(asked.message); if(asked.ok) setLedgerMarkUsedFor(null); }
+                                  }
                                 }catch(e){alert(e.message);}
                                 setInvUsedSaving(null);
                               }} disabled={invUsedSaving===mat.material_name}
@@ -1843,6 +1847,11 @@ function TabMaterial({ project }) {
                                 remark:uForm.remark||null,
                                 used_date:uForm.used_date,
                               });
+                              if(!res.success){
+                                // Hissa B: rakhi zimmedari tak pahuncha — manzoori maango.
+                                const asked=await askCustodyApproval(res,{task_id:null,qty:parseFloat(uForm.qty),unit:uu,...(sf?{stock_factor:sf}:{}),remark:uForm.remark||null,used_date:uForm.used_date,via:"mark_used"});
+                                if(asked){ if(asked.asked){ alert(asked.message); if(asked.ok) setInvExpandedMat(null); } setInvUsedSaving(null); return; }
+                              }
                               if(res.success){
                                 setInvExpandedMat(null);
                                 // Reload inventory

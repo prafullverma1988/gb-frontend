@@ -23,6 +23,7 @@ import { canEntry, currentUser } from "../utils/perms";
 import { loadLibUnits, unitOptions, sameStockUnit, kgPerUnit } from "./grn/weigh";
 import PickSelect from "./PickSelect";
 import { UsedUnitRow, stockQtyOf, factorOf } from "./UnitConv";
+import { askCustodyApproval } from "../modules/tabs/MaterialCustodyTab";
 
 const T = {
   surface: "#FFFFFF", surfaceB: "#F8F9FB",
@@ -169,7 +170,14 @@ export default function MaterialLedgerDrawer({ material, projectId, onClose, onC
         used_qty: q, unit: uu, ...(sf ? { stock_factor: sf } : {}),
         remark: uForm.remark || null, used_date: uForm.used_date,
       });
-      if (res?.success === false) { setErr(res.message || "Failed"); setSaving(false); return; }
+      if (res?.success === false) {
+        // Hissa B: rakhi zimmedari tak pahuncha — manzoori maango.
+        const asked = await askCustodyApproval(res, { task_id: null, qty: q, unit: uu, ...(sf ? { stock_factor: sf } : {}),
+          remark: uForm.remark || null, used_date: uForm.used_date, via: "mark_used" });
+        if (asked && asked.asked) { if (asked.ok) { setMarkUsed(false); window.alert(asked.message); } else setErr(asked.message); }
+        else if (!asked) setErr(res.message || "Failed");
+        setSaving(false); return;
+      }
       setMarkUsed(false);
       onChanged && onChanged();
       onClose && onClose();

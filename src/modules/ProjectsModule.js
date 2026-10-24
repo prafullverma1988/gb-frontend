@@ -2400,7 +2400,8 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
   // NOTE: purchase_order is NOT here — POs live in the Materials drawer (PO tab),
   // not the Pending Approvals (Finance) tab. Keeping it out prevents the same
   // PO being shown/counted in both drawers.
-  const financeItems  = data.centralized.filter(i=>["ra_bill","wo_amendment","ce_amendment","auto_invoice","labour_rate","salary_edit","attendance_review"].includes(i._source)&&inScope(i));
+  // custody_use (24 Oct 2026): Material Zimmedari — doosre task me lagane ki manzoori (zimmedar / Admin).
+  const financeItems  = data.centralized.filter(i=>["ra_bill","wo_amendment","ce_amendment","auto_invoice","labour_rate","salary_edit","attendance_review","custody_use"].includes(i._source)&&inScope(i));
   const paymentItems  = [
     ...data.centralized.filter(i=>i._source==="payment_request"&&inScope(i)),
     ...data.finance.filter(pf=>!data.centralized.some(c=>c._source_id===pf.id&&c._source==="payment_request")),
@@ -2590,6 +2591,11 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
           if(rejectNote!==null) window.alert(t("projects.rejection_reason_required"));
           return;
         }
+      } else if(src==="custody_use"&&isRej){
+        // Material Zimmedari manzoori — Nahi par wajah zaroori (server bhi maangta hai).
+        rejectNote=await window.promptAsync({ message: t("custody.use_reject_prompt"), multiline: true, cancelLabel: t("common.cancel") });
+        if(rejectNote==null) return;
+        if(!String(rejectNote).trim()){ window.alert(t("custody.use_reject_need")); return; }
       } else if(src==="auto_invoice"&&isRej){
         // Draft invoice hatana = delete — server wajah maangta hai (5 Oct 2026,
         // utils/deleteSnapshot needReason; kam se kam 3 akshar). Wahi prompt jo TabEstimate me hai.
@@ -2637,6 +2643,8 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
           res=await api.patch("/approvals/labour-rate/"+item._source_id+"/action",{action:isRej?"reject":"approve"});
         } else if(src==="salary_edit"){
           res=await api.patch("/payroll/salary-edit-requests/"+item._source_id,{status:isRej?"rejected":"approved"});
+        } else if(src==="custody_use"){
+          res=await api.post("/material-custody/use-requests/"+item._source_id+"/"+(isRej?"reject":"approve"),isRej?{note:String(rejectNote).trim()}:{});
         } else if(src==="attendance_review"){
           // Out-of-fence punch — approve keeps the session/Present; reject undoes it
           res=await api.patch("/attendance-sessions/sessions/"+item._source_id+"/review",{action:isRej?"reject":"approve"});

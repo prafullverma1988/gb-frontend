@@ -799,7 +799,14 @@ function ChallanPhotoField({pol,photos,setPhotos}){
 //   Issued To = person (preserved)
 // Source debit immediate, dest pending until site Receive (creates GRN at project)
 function NewIssueModal({stock,projects,users,onClose,onSaved,prefill,fromMR}){
-  const [f,setF]=useState({date:today(),project_id:prefill?.project_id||null,issued_to:"",remarks:prefill?.remarks||"",custodian_user_id:null,custody_party_id:null});
+  const [f,setF]=useState({date:today(),project_id:prefill?.project_id||null,issued_to:"",remarks:prefill?.remarks||"",custodian_user_id:null,custody_party_id:null,task_id:null});
+  // Hissa B (24 Oct 2026): "Kis task ke liye" (marzi) — chune project ke task.
+  const [ptasks,setPtasks]=useState([]);
+  useEffect(()=>{
+    if(fromMR||!f.project_id){ setPtasks([]); return; }
+    api.get("/tasks?project_id="+f.project_id).then(r=>setPtasks(r.success?(r.data||[]).map(x=>({id:x.id,name:x.name||x.title||("#"+x.id)})):[])).catch(()=>setPtasks([]));
+    setF(p=>(p.task_id?{...p,task_id:null}:p));
+  },[f.project_id,fromMR]);
   // Material Zimmedari (14 Oct 2026) — zimmedar (login user) + subcontractor;
   // subcontractor chuna to zimmedar zaroori (backend bhi rokta hai).
   const [subcons,setSubcons]=useState([]);
@@ -1056,6 +1063,12 @@ function NewIssueModal({stock,projects,users,onClose,onSaved,prefill,fromMR}){
           <div style={{gridColumn:"1 / -1",fontSize:11,color:zimMissing?T.red:T.t4,fontWeight:zimMissing?700:500,marginTop:-4}}>
             {zimMissing?t("custody.zimmedar_required"):t("custody.zimmedar_hint")}
           </div>
+          {f.project_id&&ptasks.length>0&&(
+            <Field label={t("custody.task_label")} style={{gridColumn:"1 / -1"}}>
+              <SearchSelect compact value={f.task_id} options={ptasks} onChange={v=>upd("task_id",v)} placeholder={t("custody.task_ph")}/>
+              <div style={{fontSize:11,color:T.t4,marginTop:3}}>{t("custody.task_hint")}</div>
+            </Field>
+          )}
         </div>
       )}
       {toName&&(
