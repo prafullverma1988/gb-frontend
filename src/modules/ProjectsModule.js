@@ -3088,12 +3088,15 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
                {t("projects.loading_items")}
               </div>
             ):raDetail?(<>
-              {/* 4 KPI tiles */}
-              <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:5,marginBottom:8}}>
+              {/* KPI tiles — Material katauti ho to 5wa khaana (Phase B, 26 Oct 2026; Net = Gross − SD − TDS − Material) */}
+              <div style={{display:"grid",gridTemplateColumns:"repeat("+(Math.abs(Number(raDetail.bill.material_amt)||0)>0.005?5:4)+",1fr)",gap:5,marginBottom:8}}>
                 {[
                   {l:t("common.gross"),v:raDetail.bill.gross_amount,c:T.t1},
                   {l:t("common.retention_2"),v:raDetail.bill.retention_amt,c:T.amb},
                   {l:"TDS",v:raDetail.bill.tds_amt,c:T.red},
+                  ...(Math.abs(Number(raDetail.bill.material_amt)||0)>0.005?[Number(raDetail.bill.material_amt)<0
+                    ?{l:t("subcon.mat_tile_credit"),v:-Number(raDetail.bill.material_amt),c:T.grn}
+                    :{l:t("subcon.mat_tile"),v:raDetail.bill.material_amt,c:T.amb}]:[]),
                   {l:t("common.net"),v:raDetail.bill.net_payable,c:T.grn},
                 ].map(s=>(
                   <div key={s.l} style={{textAlign:"center",background:T.surfaceB,borderRadius:5,padding:"5px 4px"}}>

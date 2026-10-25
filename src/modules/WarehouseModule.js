@@ -801,7 +801,7 @@ function ChallanPhotoField({pol,photos,setPhotos}){
 function NewIssueModal({stock,projects,users,onClose,onSaved,prefill,fromMR}){
   // 26 Oct 2026 (Prafull): "Site ka zimmedar" ZAROORI (MR se issue me bhi); "Le gaya (driver)"
   // = issued_to naam + driver_phone, optional — server driver_name / driver_phone me rakhta hai.
-  const [f,setF]=useState({date:today(),project_id:prefill?.project_id||null,issued_to:"",driver_phone:"",remarks:prefill?.remarks||"",custodian_user_id:null,custody_party_id:null,task_id:null});
+  const [f,setF]=useState({date:today(),project_id:prefill?.project_id||null,issued_to:"",driver_phone:"",remarks:prefill?.remarks||"",custodian_user_id:null,custody_party_id:null,task_id:null,wo_id:null});
   // Hissa B (24 Oct 2026): "Kis task ke liye" (marzi) — chune project ke task.
   const [ptasks,setPtasks]=useState([]);
   useEffect(()=>{
@@ -817,6 +817,19 @@ function NewIssueModal({stock,projects,users,onClose,onSaved,prefill,fromMR}){
   },[fromMR]);
   const zimMissing=!f.custodian_user_id;
   const subconNoZim=!!f.custody_party_id&&!f.custodian_user_id;
+  // Phase B (26 Oct 2026): subcon ko diya issue kis Work Order ka — us site par ek hi
+  // chalu WO to apne aap, zyada ho to chunna zaroori (RA bill me material katauti isi se).
+  const [subWos,setSubWos]=useState([]);
+  useEffect(()=>{
+    if(fromMR||!f.project_id||!f.custody_party_id){ setSubWos([]); setF(p=>(p.wo_id?{...p,wo_id:null}:p)); return; }
+    api.get("/warehouse/subcon-wos?project_id="+f.project_id+"&party_id="+f.custody_party_id).then(r=>{
+      const l=r.success?(r.data||[]):[];
+      setSubWos(l);
+      setF(p=>({...p,wo_id:l.length===1?l[0].id:(l.some(w=>w.id===p.wo_id)?p.wo_id:null)}));
+    }).catch(()=>setSubWos([]));
+  },[f.project_id,f.custody_party_id,fromMR]);
+  const woLabel=(w)=>(w.description||t("warehouse.iswo_wo"))+" (#"+w.id+")"+(w.material_mode==="deduct"?" · "+t("warehouse.iswo_deduct"):"");
+  const woMissing=subWos.length>1&&!f.wo_id;
   const initial=()=> (prefill?.items&&prefill.items.length>0)
     ?prefill.items.map(it=>{
       const m=stock.find(s=>s.name?.toLowerCase()===String(it.material_name||it.name||"").toLowerCase());
@@ -974,7 +987,7 @@ function NewIssueModal({stock,projects,users,onClose,onSaved,prefill,fromMR}){
     const m=stock.find(s=>s.id===it.material_id);
     return m&&wantByMat[it.material_id]>Number(m.qty);
   });
-  const valid=!stockErr&&f.project_id&&!zimMissing&&items.some(it=>it.material_id&&Number(it.qty)>0);
+  const valid=!stockErr&&f.project_id&&!zimMissing&&!woMissing&&items.some(it=>it.material_id&&Number(it.qty)>0);
   const total=items.reduce((s,it)=>s+(Number(it.qty)||0)*(Number(it.rate)||0),0);
   const toName=projects.find(p=>p.id===f.project_id)?.name;
 
@@ -984,6 +997,7 @@ function NewIssueModal({stock,projects,users,onClose,onSaved,prefill,fromMR}){
     const um=!fromMR&&unitMissingIn(items,ucards);
     if(um){ alert(t("unitcard.need_number",{unit:um.unit})); return; }
     if(!f.custodian_user_id){ alert(t("warehouse.isz_err")); return; }
+    if(woMissing){ alert(t("warehouse.iswo_err")); return; }
     const drvPh=String(f.driver_phone||"").replace(/[^\d+]/g,"");
     if(drvPh&&!f.issued_to.trim()){ alert(t("warehouse.drv_err_name")); return; }
     setSaving(true);
@@ -1073,6 +1087,17 @@ function NewIssueModal({stock,projects,users,onClose,onSaved,prefill,fromMR}){
           <div style={{gridColumn:"1 / -1",fontSize:11,color:subconNoZim?T.red:T.t4,fontWeight:subconNoZim?700:500,marginTop:-4}}>
             {subconNoZim?t("custody.zimmedar_required"):t("warehouse.isz_hint")}
           </div>
+          {!fromMR&&subWos.length>1&&(
+            <Field label={t("warehouse.iswo_title")+" *"} style={{gridColumn:"1 / -1"}}>
+              <SearchSelect compact value={f.wo_id} options={subWos.map(w=>({id:w.id,name:woLabel(w)}))} onChange={v=>upd("wo_id",v)} placeholder={t("warehouse.iswo_ph")}/>
+              <div style={{fontSize:11,color:woMissing?T.red:T.t4,marginTop:3,fontWeight:woMissing?700:500}}>{t("warehouse.iswo_hint_many")}</div>
+            </Field>
+          )}
+          {!fromMR&&subWos.length===1&&(
+            <div style={{gridColumn:"1 / -1",fontSize:11.5,color:T.t2,padding:"6px 10px",borderRadius:6,background:T.surfaceB,border:`1px solid ${T.b1}`}}>
+              {t("warehouse.iswo_auto",{wo:woLabel(subWos[0])})}
+            </div>
+          )}
           {!fromMR&&f.project_id&&ptasks.length>0&&(
             <Field label={t("custody.task_label")} style={{gridColumn:"1 / -1"}}>
               <SearchSelect compact value={f.task_id} options={ptasks} onChange={v=>upd("task_id",v)} placeholder={t("custody.task_ph")}/>
@@ -2933,6 +2958,7 @@ function IssueTab({issues,projects,onNew,onSelect}){
                 <div style={{minWidth:0}}>
                   <div style={{fontSize:11.5,fontWeight:iss.zimmedar?600:400,color:iss.zimmedar?T.t1:T.t4,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{iss.zimmedar||"—"}</div>
                   {iss.zimParty&&<div title={iss.zimParty} style={{fontSize:10,color:T.t4,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{iss.zimParty}</div>}
+                  {iss.woLabel&&<div title={iss.woLabel} style={{fontSize:10,color:T.blu,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{iss.woLabel}</div>}
                 </div>
                 <span style={{fontSize:12,fontWeight:700,color:status==="Cancelled"?T.t4:T.amb,textAlign:"right",paddingRight:10,textDecoration:status==="Cancelled"?"line-through":"none"}}>₹{fmt(iss.total)}</span>
                 <span style={{fontSize:11.5,color:T.t3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{iss.by}</span>
@@ -4201,7 +4227,7 @@ function WarehouseModule({deepLink,onDeepLinkDone}={}){
       if(sRes.success) setStock((sRes.data||[]).map(m=>({...m,value:m.stock_value!=null?Number(m.stock_value)||0:(Number(m.qty)||0)*(Number(m.rate)||0),qty:Number(m.qty)||0,min_qty:Number(m.min_qty)||0,max_qty:Number(m.max_qty)||0,rate:Number(m.rate)||0,minQty:Number(m.min_qty)||0,maxQty:Number(m.max_qty)||0,qty_damaged:Number(m.qty_damaged)||0,qty_scrap:Number(m.qty_scrap)||0,qty_repair:Number(m.qty_repair)||0})));
       // Hatayi gayi GRN (12 Oct 2026, khaate se "GRN hatao") — status "Cancelled" dikhe.
       if(gRes.success) setGrns((gRes.data||[]).map(g=>({...g,status:g.cancelled_at?"Cancelled":g.status,id:g.grn_no||`GRN-${g.id}`,dbId:g.id,date:fmtDate(g.date),poNo:g.po_no||"—",vendor:g.vendor||"—",by:g.received_by_name||"—",total:Number(g.total)||0,items:(g.items||[]).map(it=>({...it,name:it.material_name||it.name||"—",matId:it.material_id,ordQty:Number(it.ordered_qty)||0,recQty:Number(it.received_qty)||0,rate:Number(it.rate)||0,amount:Number(it.amount)||0,unit:it.unit||""}))})));
-      if(iRes.success) setIssues((iRes.data||[]).map(i=>({...i,id:i.issue_no||`ISS-${i.id}`,dbId:i.id,date:fmtDate(i.date),project:i.project_name||"—",issuedTo:i.issued_to_name||"—",by:i.issued_by_name||"—",zimmedar:i.custodian_name||"",zimParty:i.custody_party_name||"",zimId:i.custodian_user_id||null,total:Number(i.total)||0,remarks:i.remarks||"",status:i.status||"Pending",items:(i.items||[]).map(it=>({...it,name:it.material_name||it.name||"—",matId:it.material_id,qty:Number(it.qty)||0,rate:Number(it.rate)||0,unit:it.unit||""}))})));
+      if(iRes.success) setIssues((iRes.data||[]).map(i=>({...i,id:i.issue_no||`ISS-${i.id}`,dbId:i.id,date:fmtDate(i.date),project:i.project_name||"—",issuedTo:i.issued_to_name||"—",by:i.issued_by_name||"—",zimmedar:i.custodian_name||"",zimParty:i.custody_party_name||"",woLabel:i.wo_label||"",zimId:i.custodian_user_id||null,total:Number(i.total)||0,remarks:i.remarks||"",status:i.status||"Pending",items:(i.items||[]).map(it=>({...it,name:it.material_name||it.name||"—",matId:it.material_id,qty:Number(it.qty)||0,rate:Number(it.rate)||0,unit:it.unit||""}))})));
       if(mRes.success) setMrs((mRes.data||[]).map(m=>({...m,project:m.project_name||(m.project_id?"—":(m.warehouse_name?`${m.warehouse_name} ${t("warehouse.internal_request")}`:"Store (internal)")),requestedBy:m.requested_by_name||"—",id:m.mr_no||`MR-${m.id}`,dbId:m.id,date:fmtDate(m.date),items:m.items||[]})));
       if(tRes.success) setTransfers((tRes.data||[]).map(t=>({...t,from:t.from_warehouse_name||t.from_project_name||t.from_location||"—",to:t.to_warehouse_name||t.to_project_name||t.to_location||"—",by:t.transferred_by_name||"—",id:t.transfer_no||`TRF-${t.id}`,dbId:t.id,date:fmtDate(t.date),items:t.items||[],total_value:Number(t.total_value)||0})));
       if(pRes.success) setProjects((pRes.data||[]).map(p=>({id:p.id,name:p.name})));

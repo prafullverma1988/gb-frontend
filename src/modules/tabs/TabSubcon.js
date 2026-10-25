@@ -38,10 +38,13 @@ function TabSubcon({ projectId, project }) {
   const [editBill, setEditBill] = useState(null);
   const [editBillSaving, setEditBillSaving] = useState(false);
   const [billItems, setBillItems] = useState({});
+  const [billMat, setBillMat] = useState({});   // bill id → material katauti lines (Phase B)
+  const [editMat, setEditMat] = useState({ body:null, amount:0, invalid:false });
   const [billForm, setBillForm] = useState({ bill_date: localYMD(), remark:"", items:[] });
   const [showManualRaBill, setShowManualRaBill] = useState(false);
   const [manualBillForm, setManualBillForm] = useState({ bill_date: localYMD(), remark:"", items:[{description:"",qty:"",rate:""}] });
   const [manualBillSaving, setManualBillSaving] = useState(false);
+  const [manualMat, setManualMat] = useState({ body:null, amount:0, invalid:false });   // Phase B
 
   // ── Milestone billing (Phase 1 backend already shipped; this is the UI side) ──
   // Subcon WOs default to billing_method='manual'. Switch via the chip in the WO
@@ -279,8 +282,8 @@ function TabSubcon({ projectId, project }) {
     let res;
     // ── Split logic — mirrors Estimate exactly ──────────────────────────
     if (payload._isSplit) {
-      const { normalItems, overItems, over_bill_mode, over_bill_reason, bill_date, remark } = payload;
-      const base = { bill_date, remark };
+      const { normalItems, overItems, over_bill_mode, over_bill_reason, bill_date, remark, material } = payload;
+      const base = { bill_date, remark, ...(material || {}) };
 
       // CASE A: nothing
       if (!normalItems.length && !overItems.length) {
@@ -338,6 +341,7 @@ function TabSubcon({ projectId, project }) {
       it.description.trim() && parseFloat(it.qty) > 0 && parseFloat(it.rate) >= 0
     );
     if (!validItems.length) return alert(t("subcon.add_at_least_one_item_with"));
+    if (manualMat.invalid) return alert(t("subcon.mat_reason_needed"));
     setManualBillSaving(true);
     const res = await api.post("/subcon/ra-bills", {
       wo_id: selWo.id,
@@ -349,6 +353,7 @@ function TabSubcon({ projectId, project }) {
         qty:  parseFloat(it.qty),
         rate: parseFloat(it.rate),
       })),
+      ...(manualMat.body || {}),
     }).catch(() => ({ success:false }));
     setManualBillSaving(false);
     if (res.success) {
@@ -577,6 +582,8 @@ function TabSubcon({ projectId, project }) {
                   <div style={{fontSize:11,fontWeight:700,color:T.t2}}>{t("subcon.retention_retention_pct_tds_tds_pct", { retention_pct: selWo.retention_pct, tds_pct: selWo.tds_pct })}</div>
                   <span style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:4,background:T.grnL,color:T.grn}}>{t("subcon.total_fmtc", { fmtC: fmtC(selWo.total_value) })}</span>
                 </div>
+                {/* Material kiska + Diya / Kat chuka / Baaki katna (Phase B) */}
+                <WoMaterialCard key={selWo.id+":"+bills.length} wo={selWo} canEdit={sEdit} fmtC={fmtC} onModeChanged={reloadWo}/>
                 {/* WO items table - load from API */}
                 <WoItemsTable woId={selWo.id} fmtC={fmtC}/>
               </div>
@@ -893,14 +900,19 @@ function TabSubcon({ projectId, project }) {
                          {t("subcon.auto_generated_from_task_progress_review")}
                         </div>
                       )}
-                      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:8}}>
-                        {[{l:t("common.gross"),v:fmtC(b.gross_amount),c:T.t1},{l:t("common.retention_2"),v:fmtC(b.retention_amt),c:T.amb},{l:"TDS",v:fmtC(b.tds_amt),c:T.red},{l:t("subcon.net_payable"),v:fmtC(b.net_payable),c:T.grn}].map(s=>(
+                      <div style={{display:"grid",gridTemplateColumns:"repeat("+(hasMat(b.material_amt)?5:4)+",1fr)",gap:8,marginBottom:8}}>
+                        {[{l:t("common.gross"),v:fmtC(b.gross_amount),c:T.t1},{l:t("common.retention_2"),v:fmtC(b.retention_amt),c:T.amb},{l:"TDS",v:fmtC(b.tds_amt),c:T.red},...(hasMat(b.material_amt)?[matTile(b.material_amt,fmtC)]:[]),{l:t("subcon.net_payable"),v:fmtC(b.net_payable),c:T.grn}].map(s=>(
                           <div key={s.l} style={{textAlign:"center",background:T.surfaceB,borderRadius:6,padding:"6px 8px"}}>
                             <div style={{fontSize:9,color:T.t4,textTransform:"uppercase"}}>{s.l}</div>
                             <div style={{fontSize:13,fontWeight:800,color:s.c}}>{s.v}</div>
                           </div>
                         ))}
                       </div>
+                      {b.material_note && (
+                        <div style={{marginBottom:8,padding:"5px 10px",borderRadius:6,background:"#FFFBEB",border:"1px solid #FCD34D",fontSize:11,color:"#92400E"}}>
+                          {t("subcon.mat_note_line",{note:b.material_note})}
+                        </div>
+                      )}
                       {/* Payment state — read off the Finance ledger. Payment is
                           made in Finance → Party Payment, never from here. */}
                       {(b.status==="Approved"||b.status==="Paid") && !b.ledger_missing && (
@@ -975,7 +987,7 @@ function TabSubcon({ projectId, project }) {
                           setExpandedBill(b.id);
                           if(!billItems[b.id]){
                             const r = await api.get("/subcon/ra-bills/"+b.id);
-                            if(r.success) setBillItems(p=>({...p,[b.id]:r.data.items||[]}));
+                            if(r.success){ setBillItems(p=>({...p,[b.id]:r.data.items||[]})); setBillMat(p=>({...p,[b.id]:r.data.material_lines||[]})); }
                           }
                         }}
                         style={{background:"none",border:"none",color:T.blu,fontSize:11,fontWeight:600,cursor:"pointer",padding:0,display:"flex",alignItems:"center",gap:4}}
@@ -1013,11 +1025,12 @@ function TabSubcon({ projectId, project }) {
                       {/* Body */}
                       <div style={{flex:1,overflowY:"auto",padding:14}}>
                         {/* KPI tiles */}
-                        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:14}}>
+                        <div style={{display:"grid",gridTemplateColumns:"repeat("+(hasMat(b.material_amt)?5:4)+",1fr)",gap:8,marginBottom:14}}>
                           {[
                             {l:t("common.gross"),       v:fmtC(b.gross_amount),  c:T.t1},
                             {l:t("common.retention_2"),   v:fmtC(b.retention_amt), c:T.amb},
                             {l:"TDS",         v:fmtC(b.tds_amt),       c:T.red},
+                            ...(hasMat(b.material_amt)?[matTile(b.material_amt,fmtC)]:[]),
                             {l:t("subcon.net_payable"), v:fmtC(b.net_payable),   c:T.grn},
                           ].map(s=>(
                             <div key={s.l} style={{textAlign:"center",background:T.surface,border:`1px solid ${T.b1}`,borderRadius:8,padding:"10px 8px"}}>
@@ -1077,6 +1090,7 @@ function TabSubcon({ projectId, project }) {
                             </div>
                           )}
                         </div>
+                        {(billMat[b.id]||[]).length>0 && <BillMatLines lines={billMat[b.id]} note={b.material_note} fmtC={fmtC}/>}
                         {b.remark && (
                           <div style={{marginTop:14,padding:"10px 12px",background:T.bluL,border:`1px solid ${T.bluM}`,borderRadius:7,fontSize:12,color:T.t2}}>
                             <div style={{fontSize:9.5,fontWeight:700,color:T.blu,textTransform:"uppercase",letterSpacing:"0.4px",marginBottom:3}}>{t("common.remarks")}</div>
@@ -1585,6 +1599,21 @@ function TabSubcon({ projectId, project }) {
               )}
             </div>
 
+            {/* Material katauti (Phase B) — Gross − SD − TDS − Material = Net */}
+            {(() => {
+              const g  = Math.round(manualBillForm.items.reduce((s,it)=>s+(parseFloat(it.qty)||0)*(parseFloat(it.rate)||0),0)*100)/100;
+              const ra = Math.round(g*(parseFloat(selWo?.retention_pct)||0))/100;
+              const ta = Math.round(g*(parseFloat(selWo?.tds_pct)||0))/100;
+              return (
+                <div style={{marginBottom:14}}>
+                  <MaterialKatauti wo={selWo} room={g-ra-ta} fmtC={fmtC} inpStyle={inpStyle} onChange={setManualMat}/>
+                  {g>0 && <div style={{marginTop:8,fontSize:11.5,color:T.t2,textAlign:"right"}}>
+                    {t("subcon.mat_net_line",{gross:fmtC(g),sd:fmtC(ra),tds:fmtC(ta),mat:fmtC(manualMat.amount),net:fmtC(Math.round((g-ra-ta-manualMat.amount)*100)/100)})}
+                  </div>}
+                </div>
+              );
+            })()}
+
             {/* Footer buttons */}
             <div style={{display:"flex",justifyContent:"flex-end",gap:10}}>
               <button onClick={()=>setShowManualRaBill(false)}
@@ -1625,6 +1654,10 @@ function TabSubcon({ projectId, project }) {
 
         const editItems = (editBill.items || []).filter(it => it.is_active !== 0);
         const showItems = editItems.length > 0;
+        // Material katauti (Phase B) — Net = Gross − SD − TDS − Material. Over-bill ka jod bill katauti nahi leta.
+        const matOk = !editBill.linked_bill_id;
+        const editRoom = (parseFloat(editBill.gross_amount)||0) - (parseFloat(editBill.retention_amt)||0) - (parseFloat(editBill.tds_amt)||0);
+        const netShown = Math.round((editRoom - (matOk ? (editMat.amount||0) : 0)) * 100) / 100;
 
         return (
           <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center"}}>
@@ -1722,7 +1755,7 @@ function TabSubcon({ projectId, project }) {
                 </div>
                 <div>
                   <label style={lblStyle}>{t("subcon.net_payable_auto")}</label>
-                  <input type="number" value={editBill.net_payable ?? 0} disabled
+                  <input type="number" value={netShown} disabled
                     style={{...inpStyle,background:T.surfaceB,color:T.t3,fontWeight:700}}/>
                 </div>
                 <div>
@@ -1753,6 +1786,10 @@ function TabSubcon({ projectId, project }) {
                 </div>
               </div>
 
+              {matOk && <div style={{marginBottom:12}}>
+                <MaterialKatauti wo={selWo} billId={editBill.id} initial={editBill} room={editRoom} fmtC={fmtC} inpStyle={inpStyle} onChange={setEditMat}/>
+              </div>}
+
               {/* Remark */}
               <div style={{marginBottom:14}}>
                 <label style={lblStyle}>{t("subcon.remark_notes")}</label>
@@ -1761,12 +1798,13 @@ function TabSubcon({ projectId, project }) {
               </div>
 
               {/* Summary bar */}
-              <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:14,padding:"10px",background:T.surfaceB,borderRadius:7,border:"1px solid "+T.b1}}>
+              <div style={{display:"grid",gridTemplateColumns:"repeat("+(matOk&&hasMat(editMat.amount)?5:4)+",1fr)",gap:8,marginBottom:14,padding:"10px",background:T.surfaceB,borderRadius:7,border:"1px solid "+T.b1}}>
                 {[
                   {l:t("common.gross"),  v:fmtC(editBill.gross_amount||0),    c:T.t1},
                   {l:t("subcon.ret"),   v:fmtC(editBill.retention_amt||0),   c:T.amb},
                   {l:"TDS",    v:fmtC(editBill.tds_amt||0),         c:T.red},
-                  {l:t("subcon.net_pay"),v:fmtC(editBill.net_payable||0),     c:T.grn},
+                  ...(matOk&&hasMat(editMat.amount)?[matTile(editMat.amount,fmtC)]:[]),
+                  {l:t("subcon.net_pay"),v:fmtC(netShown),     c:T.grn},
                 ].map(s=>(
                   <div key={s.l} style={{textAlign:"center"}}>
                     <div style={{fontSize:9,color:T.t4,textTransform:"uppercase",fontWeight:700}}>{s.l}</div>
@@ -1781,6 +1819,7 @@ function TabSubcon({ projectId, project }) {
                  {t("common.cancel")}
                 </button>
                 <button onClick={async()=>{
+                    if (matOk && editMat.invalid) { alert(t("subcon.mat_reason_needed")); return; }
                     setEditBillSaving(true);
                     try {
                       // Money (gross / SD / TDS / net) and status are derived on the
@@ -1790,6 +1829,7 @@ function TabSubcon({ projectId, project }) {
                         retention_pct:  parseFloat(editBill.retention_pct) || 0,
                         tds_pct:        parseFloat(editBill.tds_pct)       || 0,
                         remark:         editBill.remark,
+                        ...(matOk ? (editMat.body || {}) : {}),
                       };
                       // Send edited items only if quantities were changed
                       const editedItems = editItems.filter(it => it._editCum !== undefined);
@@ -2155,6 +2195,7 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
     subcon_name:"", subcon_category:"Civil",
     description:"", retention_pct:5, tds_pct:2,
     start_date:"", end_date:"",
+    material_mode:"company",   // Phase B — Material kiska?
     sections:[ blankSection() ],
   });
   const [libItems, setLibItems] = useState([]);
@@ -2253,6 +2294,7 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
       tds_pct:         form.tds_pct === "" ? undefined : parseFloat(form.tds_pct),
       start_date:      form.start_date||null,
       end_date:        form.end_date||null,
+      material_mode:   form.material_mode === "deduct" ? "deduct" : "company",
       sections: finalSections.map(s=>({
         title: s.title,
         items: s.items
@@ -2399,6 +2441,9 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
                           <input type="date" value={form.start_date||""} onChange={e=>setForm(p=>({...p,start_date:e.target.value}))} style={inpC}/></div>
                         <div><label style={lblC}>{t("common.end_date")}</label>
                           <input type="date" value={form.end_date||""} onChange={e=>setForm(p=>({...p,end_date:e.target.value}))} style={inpC}/></div>
+                      </div>
+                      <div style={{marginBottom:9}}>
+                        <WoMaterialMode value={form.material_mode} onChange={v=>setForm(p=>({...p,material_mode:v}))}/>
                       </div>
                       {/* Row 3: Attachment + Category */}
                       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
@@ -3299,6 +3344,11 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
             </div>
           </div>
           }
+          {woType!=="package" && (
+            <div style={{marginBottom:14}}>
+              <WoMaterialMode value={form.material_mode} onChange={v=>setForm(p=>({...p,material_mode:v}))}/>
+            </div>
+          )}
 
           {/* Sections & Grand Total — manual / item-wise mode only */}
           {woType!=="package" && (<>
@@ -4084,6 +4134,7 @@ function NewRaBillModal({ wo, milestones, fmtC, inpStyle, lblStyle, saving, onCl
   const [overBillMode,  setOverBillMode]  = useState(false);
   const [overBillReason,setOverBillReason]= useState("");
   const [pickedItems,   setPickedItems]   = useState({}); // {[ms_id or item_id]: {checked, cumulative_qty}}
+  const [mat,           setMat]           = useState({ body:null, amount:0, invalid:false });   // Phase B
 
   // ── Data state ─────────────────────────────────────────────────────────
   const [billingLedger, setBillingLedger] = useState(null);
@@ -4146,10 +4197,13 @@ function NewRaBillModal({ wo, milestones, fmtC, inpStyle, lblStyle, saving, onCl
   const grossR  = Math.round(gross * 100) / 100;
   const retAmt  = Math.round(grossR * retPct) / 100;
   const tdsAmt  = Math.round(grossR * tdsPct) / 100;
-  const netPay  = Math.round((grossR - retAmt - tdsAmt) * 100) / 100;
+  // Material katauti (Phase B) — SD / TDS Gross par; Net = Gross − SD − TDS − Material.
+  const netPay  = Math.round((grossR - retAmt - tdsAmt - (mat.amount || 0)) * 100) / 100;
+  const matBody = mat.body || {};
 
   // ── Submit ────────────────────────────────────────────────────────────
   const handleSubmit = () => {
+    if (mat.invalid) { alert(t("subcon.mat_reason_needed")); return; }
     if (overBillMode && !overBillReason.trim()) {
       alert(t("subcon.over_billing_mode_is_on_please"));
       return;
@@ -4179,7 +4233,7 @@ function NewRaBillModal({ wo, milestones, fmtC, inpStyle, lblStyle, saving, onCl
         rate: parseFloat(it.rate),
       }));
       // Earlier this always sent over_bill_mode 0 — the toggle on screen did nothing.
-      onSave({ bill_date: billDate, remark, items,
+      onSave({ bill_date: billDate, remark, items, ...matBody,
                over_bill_mode: overBillMode ? 1 : 0, over_bill_reason: overBillMode ? overBillReason.trim() : "" });
       return;
     }
@@ -4188,7 +4242,7 @@ function NewRaBillModal({ wo, milestones, fmtC, inpStyle, lblStyle, saving, onCl
       for (const s of (billingLedger?.stages || [])) {
         if (pickedItems[s.milestone_id]?.checked) items.push({ milestone_id: s.milestone_id });
       }
-      onSave({ bill_date: billDate, remark, items, over_bill_mode: 0, over_bill_reason: "" });
+      onSave({ bill_date: billDate, remark, items, ...matBody, over_bill_mode: 0, over_bill_reason: "" });
       return;
     }
 
@@ -4223,6 +4277,7 @@ function NewRaBillModal({ wo, milestones, fmtC, inpStyle, lblStyle, saving, onCl
       normalItems, overItems,
       over_bill_mode: overBillMode ? 1 : 0,
       over_bill_reason: overBillReason.trim(),
+      material: matBody,
       _isSplit: true,
     });
   };
@@ -4556,15 +4611,19 @@ function NewRaBillModal({ wo, milestones, fmtC, inpStyle, lblStyle, saving, onCl
             })}
           </>)}
 
+          {/* ── Material katauti (Phase B) ── */}
+          <MaterialKatauti wo={wo} room={grossR - retAmt - tdsAmt} fmtC={fmtC} inpStyle={inpS} onChange={setMat}/>
+
           {/* ── Bill Summary ── */}
           {grossR > 0 && (
             <div style={{marginTop:14,background:"#0F172A",borderRadius:8,padding:14,flexShrink:0}}>
               <div style={{fontSize:11,fontWeight:700,color:"rgba(255,255,255,0.5)",textTransform:"uppercase",marginBottom:10}}>{t("subcon.bill_summary")}</div>
-              <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
+              <div style={{display:"grid",gridTemplateColumns:"repeat("+(hasMat(mat.amount)?5:4)+",1fr)",gap:10}}>
                 {[
                   {l:t("subcon.gross_amount"),              v:fmtC(grossR), c:"#E2E8F0"},
                   {l:t("subcon.retention_retpct", { retPct }),    v:fmtC(retAmt), c:"#FCD34D"},
                   {l:t("subcon.tds_tdspct", { tdsPct }),          v:fmtC(tdsAmt), c:"#F87171"},
+                  ...(hasMat(mat.amount)?[{...matTile(mat.amount,fmtC), c: mat.amount<0?"#4ADE80":"#FDBA74"}]:[]),
                   {l:t("subcon.net_payable"),               v:fmtC(netPay), c:"#4ADE80"},
                 ].map(s=>(
                   <div key={s.l} style={{textAlign:"center",background:"rgba(255,255,255,0.05)",borderRadius:6,padding:"8px"}}>
@@ -4734,6 +4793,269 @@ function PaymentsTab({ woId, fmtC, summary, inpStyle, lblStyle, onChanged }) {
           </div>
         ))}
       </>)}
+    </div>
+  );
+}
+
+
+// ════════════════════════════════════════════════════════════════
+// MATERIAL KATAUTI (Phase B, 26 Oct 2026) — subcon ko diya material, RA bill se minus.
+// Isi file ke (module apne me poora). Asli hisaab server karta hai
+// (utils/subconMaterial.js); yahan dikhana + user ka chunav.
+//   'deduct'  (Bill se katega) — poora baaki bhara aata hai; kam karo to wajah;
+//             minus = katauti ke baad wapas aaya material (credit).
+//   'company' (Company ka material) — approve hui Kami / Kharab sirf FLAG; tick
+//             karo to katega, warna chhod do.
+// ════════════════════════════════════════════════════════════════
+const MAT_AMB = { bg:"#FFFBEB", bd:"#FCD34D", tx:"#92400E" };
+const r2m = (n) => Math.round((Number(n) || 0) * 100) / 100;
+const hasMat = (amt) => Math.abs(Number(amt) || 0) > 0.005;
+const matTile = (amt, fmtC) => {
+  const a = Number(amt) || 0;
+  return a < 0 ? { l: t("subcon.mat_tile_credit"), v: fmtC(-a), c: T.grn } : { l: t("subcon.mat_tile"), v: fmtC(a), c: "#B45309" };
+};
+
+// WO form — "Material kiska?"
+function WoMaterialMode({ value, onChange }) {
+  const cur = value === "deduct" ? "deduct" : "company";
+  const opts = [
+    { id: "company", l: t("subcon.mat_mode_company"), h: t("subcon.mat_mode_company_hint") },
+    { id: "deduct",  l: t("subcon.mat_mode_deduct"),  h: t("subcon.mat_mode_deduct_hint") },
+  ];
+  return (
+    <div>
+      <div style={{fontSize:9.5,fontWeight:700,color:"#6B7280",textTransform:"uppercase",letterSpacing:".4px",marginBottom:4}}>{t("subcon.mat_kiska")}</div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+        {opts.map(o => (
+          <button key={o.id} type="button" onClick={() => onChange(o.id)}
+            style={{textAlign:"left",padding:"8px 10px",borderRadius:7,cursor:"pointer",fontFamily:"inherit",
+              border:"1.5px solid "+(cur===o.id?T.blu:T.b1),background:cur===o.id?T.bluL:T.surface}}>
+            <div style={{fontSize:12,fontWeight:700,color:cur===o.id?T.blu:T.t1}}>{cur===o.id?"● ":"○ "}{o.l}</div>
+            <div style={{fontSize:10.5,color:T.t3,marginTop:2,lineHeight:1.4}}>{o.h}</div>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Issue-wise lines (WO card + bill form)
+function MatLinesTable({ lines, mode, fmtC }) {
+  const cols = "1fr 1.6fr 58px 58px 58px 70px 90px";
+  const head = [t("subcon.mat_col_issue"), t("subcon.mat_col_material"), t("subcon.mat_col_aaya"), t("subcon.mat_col_wapas"),
+    t("subcon.mat_col_kami"), t("subcon.mat_col_rate"), mode === "deduct" ? t("subcon.mat_col_baaki") : t("subcon.mat_col_kami_amt")];
+  return (
+    <div style={{marginTop:8,border:"1px solid "+T.b1,borderRadius:6,overflow:"hidden",background:T.surface}}>
+      <div style={{display:"grid",gridTemplateColumns:cols,gap:6,padding:"5px 8px",background:T.surfaceB}}>
+        {head.map((h,i) => <span key={i} style={{fontSize:9,fontWeight:700,color:T.t4,textTransform:"uppercase",textAlign:i>=2?"right":"left"}}>{h}</span>)}
+      </div>
+      {lines.map(l => {
+        const v = mode === "deduct" ? Number(l.pending) || 0 : Number(l.kami_pending) || 0;
+        return (
+          <div key={l.line_id} style={{display:"grid",gridTemplateColumns:cols,gap:6,padding:"6px 8px",borderTop:"1px solid "+T.b1,fontSize:11,alignItems:"center"}}>
+            <span style={{color:T.t2,fontWeight:600}}>{l.issue_no || ("#"+l.issue_id)}</span>
+            <span title={l.material} style={{color:T.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{l.material} <span style={{color:T.t4}}>{l.unit}</span></span>
+            <span style={{textAlign:"right"}}>{l.aaya}</span>
+            <span style={{textAlign:"right",color:l.wapas>0?T.t1:T.t4}}>{l.wapas>0?l.wapas:"—"}</span>
+            <span style={{textAlign:"right",color:l.kami>0?"#B45309":T.t4}}>{l.kami>0?l.kami:"—"}</span>
+            <span style={{textAlign:"right",color:T.t3}}>₹{Number(l.rate||0).toLocaleString("en-IN")}</span>
+            <span style={{textAlign:"right",fontWeight:700,color:v<0?T.grn:v>0?T.t1:T.t4}}>{hasMat(v)?(v<0?"+ "+fmtC(-v):fmtC(v)):"—"}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// WO tab — Material kiska (badlo) + Diya / Kat chuka / Baaki katna
+function WoMaterialCard({ wo, canEdit, fmtC, onModeChanged }) {
+  const [d, setD] = useState(null);
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const load = () => api.get("/subcon/work-orders/"+wo.id+"/material").then(r => { if (r?.success) setD(r.data); }).catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { load(); }, [wo.id]);
+  if (!d || d.ready === false) return null;
+  const mode = d.mode;
+  const change = async (m) => {
+    if (m === mode || busy || !canEdit) return;
+    if (!await window.confirmAsync(t("subcon.mat_change_confirm"))) return;
+    setBusy(true);
+    const r = await api.put("/subcon/work-orders/"+wo.id+"/material-mode", { material_mode: m }).catch(e => ({ success:false, message:e?.message }));
+    setBusy(false);
+    if (!r?.success) { alert(r?.message || t("subcon.action_failed")); return; }
+    await load();
+    if (onModeChanged) onModeChanged(m);
+  };
+  const tiles = mode === "deduct"
+    ? [{ l:t("subcon.mat_diya"), v:fmtC(d.diya_value), c:T.t1 },
+       { l:t("subcon.mat_kat_chuka"), v:fmtC(d.deducted_total), c:"#B45309" },
+       { l:d.pending_total < 0 ? t("subcon.mat_tile_credit") : t("subcon.mat_baaki_katna"), v:fmtC(Math.abs(d.pending_total)), c:d.pending_total < 0 ? T.grn : T.red }]
+    : [{ l:t("subcon.mat_diya"), v:fmtC(d.diya_value), c:T.t1 },
+       { l:t("subcon.mat_kami_baaki"), v:fmtC(d.kami_total), c:d.kami_total > 0 ? "#B45309" : T.t3 },
+       { l:t("subcon.mat_kat_chuka"), v:fmtC(d.deducted_total), c:T.t2 }];
+  return (
+    <div style={{border:"1px solid "+T.b1,borderRadius:8,padding:"10px 12px",marginBottom:12,background:T.surface}}>
+      <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",marginBottom:8}}>
+        <span style={{fontSize:11,fontWeight:700,color:T.t2,textTransform:"uppercase",letterSpacing:".4px",marginRight:4}}>{t("subcon.mat_kiska")}</span>
+        {["company","deduct"].map(m => (
+          <button key={m} type="button" disabled={busy || (!canEdit && m !== mode)} onClick={() => change(m)}
+            style={{padding:"3px 10px",borderRadius:14,fontSize:11,fontWeight:700,fontFamily:"inherit",cursor:canEdit&&m!==mode?"pointer":"default",
+              border:"1.5px solid "+(m===mode?T.blu:T.b1),background:m===mode?T.bluL:T.surface,color:m===mode?T.blu:T.t3}}>
+            {m === "deduct" ? t("subcon.mat_mode_deduct") : t("subcon.mat_mode_company")}
+          </button>
+        ))}
+      </div>
+      {d.lines.length === 0
+        ? <div style={{fontSize:11,color:T.t4}}>{t("subcon.mat_no_issue")}</div>
+        : (<>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8}}>
+            {tiles.map(s => (
+              <div key={s.l} style={{textAlign:"center",background:T.surfaceB,borderRadius:6,padding:"6px 8px"}}>
+                <div style={{fontSize:9,color:T.t4,textTransform:"uppercase"}}>{s.l}</div>
+                <div style={{fontSize:13,fontWeight:800,color:s.c}}>{s.v}</div>
+              </div>
+            ))}
+          </div>
+          <button type="button" onClick={() => setOpen(o => !o)}
+            style={{marginTop:6,background:"none",border:"none",color:T.blu,fontSize:11,fontWeight:600,cursor:"pointer",padding:0}}>
+            {open ? "▾" : "▸"} {t("subcon.mat_lines_show", { n: d.lines.length })}
+          </button>
+          {open && <MatLinesTable lines={d.lines} mode={mode} fmtC={fmtC}/>}
+        </>)}
+    </div>
+  );
+}
+
+// RA bill form (naya / free-form / edit) — katauti tay karna.
+//   room = is bill ka (Gross − SD − TDS); usse zyada nahi katta.
+//   billId = edit (us bill ki apni katauti chhod kar baaki); initial = bill row.
+//   onChange({ body, amount, invalid }) — body server ko (null = mat chhedo),
+//   amount = Net ke liye, invalid = kam kaata par wajah nahi.
+function MaterialKatauti({ wo, billId, initial, room, fmtC, inpStyle, onChange }) {
+  const [d, setD] = useState(null);
+  const [amt, setAmt] = useState("");
+  const [reason, setReason] = useState("");
+  const [picked, setPicked] = useState({});
+  const [dirty, setDirty] = useState(!billId);
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (!wo?.id) return undefined;
+    let off = false;
+    api.get("/subcon/work-orders/"+wo.id+"/material"+(billId ? "?bill_id="+billId : "")).then(r => {
+      if (off || !r?.success) return;
+      const x = r.data;
+      setD(x);
+      if (billId) {
+        setAmt(String(r2m(initial?.material_amt)));
+        setReason(initial?.material_note || "");
+        const pk = {};
+        for (const l of (x.bill_lines || [])) if (l.kind === "kami") pk[l.issue_item_id] = true;
+        setPicked(pk);
+      } else setAmt(String(r2m(x.pending_total)));
+    }).catch(() => {});
+    return () => { off = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wo?.id, billId]);
+  const ready = !!d && d.ready !== false;
+  const mode = ready ? d.mode : "company";
+  const kami = ready ? (d.kami_lines || []) : [];
+  const roomN = Math.max(0, r2m(room));
+  let max = 0, credit = 0, want = 0;
+  if (ready && mode === "deduct") {
+    max = r2m(d.pending_total); credit = r2m(d.credit_total);
+    want = Math.max(credit, Math.min(max, amt === "" ? 0 : r2m(amt)));
+    if (want < 0 && credit === 0) want = 0;
+  } else if (ready) {
+    want = r2m(kami.filter(l => picked[l.line_id]).reduce((s, l) => s + l.kami_pending, 0));
+    max = r2m(kami.reduce((s, l) => s + l.kami_pending, 0));
+  }
+  const eff = ready ? r2m(Math.min(want, roomN)) : (billId ? r2m(initial?.material_amt) : 0);
+  const full = r2m(Math.min(max, roomN));
+  const needReason = ready && mode === "deduct" && eff + 0.005 < full;
+  const invalid = needReason && reason.trim().length < 3;
+  const body = !ready || !dirty ? null
+    : mode === "deduct" ? { material_amt: eff, material_reason: needReason ? reason.trim() : "" }
+    : { material_kami_lines: Object.keys(picked).filter(k => picked[k]).map(Number) };
+  const sig = JSON.stringify([eff, invalid, body]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { if (onChange) onChange({ body, amount: eff, invalid }); }, [sig]);
+  if (!ready) return null;
+  // Company ka material + koi Kami / Kharab nahi → kuch nahi dikhana.
+  if (mode === "company" && !kami.length) return null;
+  const box = { marginTop:12, border:"1.5px solid "+MAT_AMB.bd, background:MAT_AMB.bg, borderRadius:8, padding:"10px 12px" };
+  if (mode === "company") {
+    return (
+      <div style={box}>
+        <div style={{fontSize:11.5,fontWeight:800,color:MAT_AMB.tx}}>⚠ {t("subcon.mat_kami_flag_title")}</div>
+        <div style={{fontSize:10.5,color:MAT_AMB.tx,marginTop:2}}>{t("subcon.mat_kami_flag_hint")}</div>
+        {kami.map(l => (
+          <label key={l.line_id} style={{display:"flex",alignItems:"center",gap:8,marginTop:6,fontSize:11.5,cursor:"pointer",color:T.t1}}>
+            <input type="checkbox" checked={!!picked[l.line_id]} onChange={e => { const v = e.target.checked; setPicked(p => ({ ...p, [l.line_id]: v })); setDirty(true); }}/>
+            <span style={{fontWeight:700}}>{l.issue_no || ("#"+l.issue_id)}</span>
+            <span>{l.material} · {t("subcon.mat_kami_qty", { qty: l.kami, unit: l.unit })} × ₹{Number(l.rate||0).toLocaleString("en-IN")}</span>
+            <span style={{marginLeft:"auto",fontWeight:700}}>{fmtC(l.kami_pending)}</span>
+          </label>
+        ))}
+        {eff > 0 && (
+          <div style={{marginTop:6,fontSize:11.5,fontWeight:700,color:"#B45309",textAlign:"right"}}>
+            {t("subcon.mat_is_bill")}: − {fmtC(eff)}{want > roomN + 0.005 ? " · " + t("subcon.mat_room", { amt: fmtC(roomN) }) : ""}
+          </div>
+        )}
+      </div>
+    );
+  }
+  return (
+    <div style={box}>
+      <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+        <span style={{fontSize:11.5,fontWeight:800,color:MAT_AMB.tx,textTransform:"uppercase",letterSpacing:".4px"}}>{t("subcon.mat_title")}</span>
+        <span style={{fontSize:10,fontWeight:700,padding:"1px 8px",borderRadius:10,background:"white",border:"1px solid "+MAT_AMB.bd,color:MAT_AMB.tx}}>{t("subcon.mat_mode_deduct")}</span>
+        <span style={{marginLeft:"auto",fontSize:11.5,fontWeight:700,color:MAT_AMB.tx}}>
+          {max < 0 ? t("subcon.mat_credit_baaki", { amt: fmtC(-max) }) : t("subcon.mat_baaki", { amt: fmtC(max) })}
+        </span>
+      </div>
+      {d.lines.length === 0 ? (
+        <div style={{fontSize:11,color:T.t3,marginTop:6}}>{t("subcon.mat_none")}</div>
+      ) : (<>
+        <div style={{display:"flex",alignItems:"center",gap:8,marginTop:8,flexWrap:"wrap"}}>
+          <span style={{fontSize:11,fontWeight:700,color:T.t2}}>{t("subcon.mat_is_bill")}</span>
+          <input type="number" value={amt} onChange={e => { setAmt(e.target.value); setDirty(true); }}
+            style={{...inpStyle,width:140,textAlign:"right",fontWeight:700}}/>
+          <span style={{fontSize:13,fontWeight:800,color:eff<0?T.grn:"#B45309"}}>{eff < 0 ? "+ " + fmtC(-eff) : "− " + fmtC(eff)}</span>
+          {max > roomN + 0.005 && <span style={{fontSize:10.5,color:T.t3}}>{t("subcon.mat_room", { amt: fmtC(roomN) })}</span>}
+        </div>
+        {credit < -0.005 && <div style={{fontSize:11,color:T.grn,marginTop:6}}>{t("subcon.mat_credit", { amt: fmtC(-credit) })}</div>}
+        {needReason && (
+          <input value={reason} onChange={e => { setReason(e.target.value); setDirty(true); }} placeholder={t("subcon.mat_reason_ph")}
+            style={{...inpStyle,marginTop:8,borderColor:invalid?T.red:T.b1}}/>
+        )}
+        {max > eff + 0.005 && <div style={{fontSize:10.5,color:T.t3,marginTop:4}}>{t("subcon.mat_carry", { amt: fmtC(r2m(max - eff)) })}</div>}
+        <button type="button" onClick={() => setOpen(o => !o)}
+          style={{marginTop:6,background:"none",border:"none",color:T.blu,fontSize:11,fontWeight:600,cursor:"pointer",padding:0}}>
+          {open ? "▾" : "▸"} {t("subcon.mat_lines_show", { n: d.lines.length })}
+        </button>
+        {open && <MatLinesTable lines={d.lines} mode="deduct" fmtC={fmtC}/>}
+      </>)}
+    </div>
+  );
+}
+
+// Bill drawer — is bill me kis issue se kitna kata
+function BillMatLines({ lines, note, fmtC }) {
+  const cols = "1fr 1.6fr 70px 70px 90px";
+  return (
+    <div style={{marginTop:14,background:T.surface,border:"1px solid "+MAT_AMB.bd,borderRadius:8,overflow:"hidden"}}>
+      <div style={{padding:"7px 10px",background:MAT_AMB.bg,fontSize:11,fontWeight:800,color:MAT_AMB.tx,textTransform:"uppercase",letterSpacing:".4px"}}>{t("subcon.mat_bill_lines")}</div>
+      {lines.map(l => (
+        <div key={l.id} style={{display:"grid",gridTemplateColumns:cols,gap:6,padding:"7px 10px",borderTop:"1px solid "+T.b1,fontSize:11,alignItems:"center"}}>
+          <span style={{fontWeight:600,color:T.t2}}>{l.issue_no || ("#"+l.issue_id)}</span>
+          <span style={{color:T.t1}}>{l.material_name}{l.kind === "kami" ? " · " + t("subcon.mat_kind_kami") : ""}</span>
+          <span style={{textAlign:"right"}}>{Math.abs(l.qty)} {l.unit || ""}</span>
+          <span style={{textAlign:"right",color:T.t3}}>₹{Number(l.rate||0).toLocaleString("en-IN")}</span>
+          <span style={{textAlign:"right",fontWeight:700,color:l.amount<0?T.grn:"#B45309"}}>{l.amount < 0 ? "+ " + fmtC(-l.amount) : "− " + fmtC(l.amount)}</span>
+        </div>
+      ))}
+      {note && <div style={{padding:"6px 10px",borderTop:"1px solid "+T.b1,fontSize:11,color:MAT_AMB.tx}}>{t("subcon.mat_note_line", { note })}</div>}
     </div>
   );
 }
