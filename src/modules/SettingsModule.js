@@ -1131,6 +1131,9 @@ function MobileLayoutTab({ roleName, dbRole, perms, isAdmin, isViewer, coModules
   // save hote hi v: 2) ya purana (sirf tile). Neeche har hisaab `rule2` leta hai;
   // na diya to yahi (9 Oct 2026, fix).
   const newRule = !saved || Number(saved.v) >= MLAY_V;
+  // Sanchalan Sahayak (25 Oct 2026): role ke liye band? Admin ke liye kabhi
+  // nahi — server bhi Admin role par `sahayak: false` gira deta hai.
+  const sahayakOff = !isAdmin && draft.sahayak === false;
   // Admin ne chhupaya (AE): patti / Home ke hisse More ke chhupaye se, project
   // ki patti Hub ke chhupaye se. hide_as = More ka id jab Home ka alag ho.
   // Purane matlab me patti / Home par kuch nahi chhupta.
@@ -1163,6 +1166,8 @@ function MobileLayoutTab({ roleName, dbRole, perms, isAdmin, isViewer, coModules
   const tileState = (surface, item, rule2 = newRule) => {
     const why = blockReason(item);
     if (why) return { show: false, locked: true, why };
+    // Sahayak upar ke box se band ho to tile ka tick bematlab — band hi dikhao.
+    if (item.id === "sahayak" && sahayakOff) return { show: false, locked: true, why: t("settings.mlay_sahayak_tile_off") };
     const ov = mlayOverflow(item);
     const placedIn = ov.find(k => (draft[k] || []).includes(item.id) && navIds(k, rule2).has(item.id));
     const autoIn = ov.find(k => navIds(k, rule2).has(item.id));
@@ -1360,6 +1365,24 @@ function MobileLayoutTab({ roleName, dbRole, perms, isAdmin, isViewer, coModules
         {renderNav("project_nav", t("settings.mlay_phome"), t("settings.mlay_hub"))}
         <div style={{ fontSize: 12, color: T.textMid, margin: "14px 0 6px" }}>{t("settings.mlay_hub_tiles")}</div>
         {renderTiles("hub")}
+      </div>
+
+      <div style={box}>
+        <div style={head}>{t("settings.mlay_sahayak_title")}</div>
+        <label style={{ display: "flex", alignItems: "flex-start", gap: 8, fontSize: 12.5, color: isAdmin ? T.textLight : T.text, cursor: isAdmin ? "not-allowed" : "pointer" }}>
+          <input type="checkbox" checked={!sahayakOff} disabled={isAdmin} style={{ marginTop: 2 }}
+            onChange={e => setDraft(d => {
+              const next = { ...d };
+              if (e.target.checked) delete next.sahayak; else next.sahayak = false;
+              return next;
+            })} />
+          <span>
+            {t("settings.mlay_sahayak_on")}
+            <span style={{ display: "block", fontSize: 11.5, color: T.textLight, marginTop: 2 }}>
+              {isAdmin ? t("settings.mlay_sahayak_admin") : t("settings.mlay_sahayak_hint")}
+            </span>
+          </span>
+        </label>
       </div>
 
       <div style={box}>

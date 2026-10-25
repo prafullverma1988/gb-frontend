@@ -290,6 +290,10 @@ function navAllowed(id,user,enabledModules){
   // meant a module switched OFF in SaaS Admin still showed (and opened) for
   // every admin of that tenant.
   if(enabledModules && enabledModules[id]===false) return false;
+  // Sanchalan Sahayak role-wise band (25 Oct 2026) — Settings → Roles & Access
+  // → Mobile. Server admin ke liye hamesha true bhejta hai; band role ki chat
+  // server bhi rokta hai (support-bot 403).
+  if(id==="sahayak" && user?.sahayak_enabled===false) return false;
   // Admins see every module the company DOES have.
   if(["admin","super_admin"].includes(user?.role)) return true;
   // Role-based permission check from DB (Settings → Roles & Access)
@@ -2122,13 +2126,16 @@ function App(){
         // or the SaaS panel) otherwise left the old name in the sidebar for the
         // whole session, since companies are cached at login too.
         const companyNameChanged = res.company_name && res.company_name !== user?.company_name;
-        if(res.success && (roleChanged || projectsChanged || permsChanged || nameChanged || companyNameChanged)){
+        // Sahayak chalu/band (Roles & Access → Mobile) — admin ne badla to bina re-login.
+        const sahayakChanged = typeof res.sahayak_enabled === "boolean" && res.sahayak_enabled !== (user?.sahayak_enabled !== false);
+        if(res.success && (roleChanged || projectsChanged || permsChanged || nameChanged || companyNameChanged || sahayakChanged)){
           const updated={...user,
             ...(roleChanged ? { role: liveRole } : {}),
             ...(projectsChanged ? { projects: liveProjects } : {}),
             ...(permsChanged ? { module_permissions: res.module_permissions } : {}),
             ...(nameChanged ? { name: res.name, phone: res.phone, designation: res.designation } : {}),
             ...(companyNameChanged ? { company_name: res.company_name } : {}),
+            ...(sahayakChanged ? { sahayak_enabled: res.sahayak_enabled } : {}),
           };
           setUser(updated);
           try{ localStorage.setItem("gb_user", JSON.stringify(updated)); }catch(_){}
@@ -2385,7 +2392,7 @@ function App(){
           sidebar. Remembers which screen the user came from so the bot can read
           a half-finished question in that module's context. Hidden while
           already inside Sahayak. */}
-      {nav!=="sahayak"&&(
+      {nav!=="sahayak"&&user?.sahayak_enabled!==false&&(
         <SahayakFab onOpen={()=>{setSahayakFrom(nav);setNav("sahayak");}}
           title={t("app.sahayak_ai_kuch_bhi_poochein")}
           colour={T.blu} badge={T.amb} surface={T.surface}
