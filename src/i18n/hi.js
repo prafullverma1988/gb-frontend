@@ -12573,6 +12573,7 @@ const dict = {
   "warehouse.ch_2026":                                         "CH-2026-...",
   "warehouse.challan_no_required":                             "चालान नंबर चाहिए",
   "warehouse.challan_photo":                                   "साइन वाले चालान की फोटो",
+  "warehouse.issue_send_material": "भेजा गया मटेरियल — फ़ोटो",
   "warehouse.challan_photo_hint":                              "लेने वाले का साइन किया हुआ चालान",
   "warehouse.challan_photo_required":                          "कंपनी सेटिंग: साइन वाले चालान की फोटो लगाना ज़रूरी है।",
   "warehouse.challan_photo_uploading":                         "चालान की फोटो अभी अपलोड हो रही है — पूरी होने दो, फिर Save करो।",

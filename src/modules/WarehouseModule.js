@@ -3108,6 +3108,7 @@ function IssueDetailDrawer({issue,onClose,canCancel,canReceive,onDeleted,onRecei
               <div style={{padding:"9px 11px",background:T.surfaceB,borderRadius:7,border:`1px solid ${T.b1}`}}>
                 <div style={{fontSize:9,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>{t("warehouse.issued_to")}</div>
                 <div style={{fontSize:12,fontWeight:600,color:T.t1}}>{detail?.issuedTo||"—"}</div>
+                {detail?.issued_to_phone&&<div style={{fontSize:11,color:T.t2,marginTop:1}}>{detail.issued_to_phone}</div>}
                 <div style={{fontSize:9.5,color:T.t4,marginTop:1}}>by {detail?.by||"—"}</div>
               </div>
               <div style={{padding:"9px 11px",background:T.surfaceB,borderRadius:7,border:`1px solid ${T.b1}`}}>
@@ -3237,6 +3238,19 @@ function IssueDetailDrawer({issue,onClose,canCancel,canReceive,onDeleted,onRecei
               <div style={{padding:"9px 12px",background:T.surfaceB,border:`1px solid ${T.b1}`,borderRadius:7,marginBottom:8}}>
                 <div style={{fontSize:9.5,color:T.t4,marginBottom:2,fontWeight:700,textTransform:"uppercase",letterSpacing:".4px"}}>{t("common.remarks")}</div>
                 <div style={{fontSize:12,color:T.t2,fontStyle:"italic"}}>"{detail.remarks}"</div>
+              </div>
+            )}
+            {/* Bhejte waqt material ki photo (25 Oct 2026, phone se) */}
+            {Array.isArray(detail?.send_photo_urls)&&detail.send_photo_urls.length>0&&(
+              <div style={{padding:"9px 12px",background:T.surfaceB,border:`1px solid ${T.b1}`,borderRadius:7,marginBottom:8}}>
+                <div style={{fontSize:9.5,color:T.t4,marginBottom:6,fontWeight:700,textTransform:"uppercase",letterSpacing:".4px"}}>{t("warehouse.issue_send_material")}</div>
+                <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                  {detail.send_photo_urls.map((u,i)=>(
+                    <a key={i} href={cld(u, "full")} target="_blank" rel="noopener noreferrer">
+                      <img src={cld(u,"thumb")} alt="" style={{width:64,height:64,objectFit:"cover",borderRadius:6,border:`1px solid ${T.b1}`,display:"block"}}/>
+                    </a>
+                  ))}
+                </div>
               </div>
             )}
             {Array.isArray(detail?.challan_photos)&&detail.challan_photos.length>0&&(

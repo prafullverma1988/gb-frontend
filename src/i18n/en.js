@@ -12574,6 +12574,7 @@ const dict = {
   "warehouse.ch_2026":                                         "CH-2026-...",
   "warehouse.challan_no_required":                             "Challan No. required",
   "warehouse.challan_photo":                                   "Signed challan photo",
+  "warehouse.issue_send_material": "Material sent — photo",
   "warehouse.challan_photo_hint":                              "Challan signed by the receiver",
   "warehouse.challan_photo_required":                          "Company setting: a photo of the signed challan is required.",
   "warehouse.challan_photo_uploading":                         "The challan photo is still uploading — let it finish, then save.",
