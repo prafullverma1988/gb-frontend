@@ -2556,8 +2556,11 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
                 <div>
                   {lbl("Project"+lockTag(projectLocked))}
                   {projectLocked
-                    ? <div style={{height:32,padding:"0 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,background:T.surfaceB,fontSize:12.5,color:T.t2,display:"flex",alignItems:"center",gap:6}}><LockIc/>{project||"—"}</div>
-                    : <SearchSelect options={PROJECTS_LIST} value={project} onChange={setProject} placeholder={t("common.select_project")}/>}
+                    ? <div style={{height:32,padding:"0 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,background:T.surfaceB,fontSize:12.5,color:T.t2,display:"flex",alignItems:"center",gap:6}}><LockIc/>{project||t("finance.company_office")}</div>
+                    // Company ka apna maal (office / store / sab site ke liye) — 25 Oct 2026.
+                    // Khaali project = company level; tab neeche City poochhta hai.
+                    : <SearchSelect options={["Company / Office", ...PROJECTS_LIST]} value={project || "Company / Office"}
+                        onChange={(v)=>setProject(v==="Company / Office"?"":v)} placeholder={t("common.select_project")}/>}
                 </div>
                 <div>
                   {lbl(`Payment Due Date — ${partyCreditDays}d credit`)}
