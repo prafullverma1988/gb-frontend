@@ -34,6 +34,7 @@ const IcTruck = (p) => <Ic {...p} d="M1 3h15v13H1zM16 8h4l3 3v5h-7V8zM5.5 19a2 2
 const IcChart = (p) => <Ic {...p} d="M9 17v-2m3 2v-4m3 4v-6M5 21h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v14a2 2 0 002 2z" />;
 const IcAdd   = (p) => <Ic {...p} d="M12 5v14M5 12h14" />;
 const IcX     = (p) => <Ic {...p} d="M18 6L6 18M6 6l12 12" />;
+const IcSearch = (p) => <Ic {...p} d="M21 21l-4.35-4.35M17 11A6 6 0 115 11a6 6 0 0112 0z" />;
 const IcAlert = (p) => <Ic {...p} d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4M12 17h.01" />;
 const IcRuler = (p) => <Ic {...p} d="M2 12h20M6 9v6M10 9v6M14 9v6M18 9v6" />;
 const IcTrash = (p) => <Ic {...p} d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />;
@@ -3858,10 +3859,13 @@ function FuelModule() {
       {/* Search — tabs ke upar, taaki tab badalne par bhi wahi shabd lagta rahe */}
       <div style={{ margin: "0 18px 8px", flexShrink: 0, display: "flex", alignItems: "center", gap: 10 }}>
         <div style={{ position: "relative", flex: 1, maxWidth: 460 }}>
+          <span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", pointerEvents: "none", display: "flex" }}>
+            <IcSearch size={13} color={qq ? T.ind : T.t4} />
+          </span>
           <input value={q} onChange={(e) => setQ(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Escape") setQ(""); }}
             placeholder={t("fuel.search_ph")}
-            style={{ width: "100%", padding: "9px 30px 9px 12px", borderRadius: 8, fontSize: 12.5, fontFamily: "inherit",
+            style={{ width: "100%", padding: "9px 30px 9px 30px", borderRadius: 8, fontSize: 12.5, fontFamily: "inherit",
               border: `1px solid ${qq ? T.ind : T.b1}`, background: T.surface, color: T.t1, outline: "none", boxSizing: "border-box" }} />
           {qq && (
             <button type="button" onClick={() => setQ("")} title={t("common.clear")}
