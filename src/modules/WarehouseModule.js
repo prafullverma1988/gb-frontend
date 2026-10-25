@@ -799,7 +799,9 @@ function ChallanPhotoField({pol,photos,setPhotos}){
 //   Issued To = person (preserved)
 // Source debit immediate, dest pending until site Receive (creates GRN at project)
 function NewIssueModal({stock,projects,users,onClose,onSaved,prefill,fromMR}){
-  const [f,setF]=useState({date:today(),project_id:prefill?.project_id||null,issued_to:"",remarks:prefill?.remarks||"",custodian_user_id:null,custody_party_id:null,task_id:null});
+  // 26 Oct 2026 (Prafull): "Site ka zimmedar" ZAROORI (MR se issue me bhi); "Le gaya (driver)"
+  // = issued_to naam + driver_phone, optional — server driver_name / driver_phone me rakhta hai.
+  const [f,setF]=useState({date:today(),project_id:prefill?.project_id||null,issued_to:"",driver_phone:"",remarks:prefill?.remarks||"",custodian_user_id:null,custody_party_id:null,task_id:null});
   // Hissa B (24 Oct 2026): "Kis task ke liye" (marzi) — chune project ke task.
   const [ptasks,setPtasks]=useState([]);
   useEffect(()=>{
@@ -813,7 +815,8 @@ function NewIssueModal({stock,projects,users,onClose,onSaved,prefill,fromMR}){
   useEffect(()=>{ if(fromMR) return;
     api.get("/finance/parties?type=subcontractor").then(r=>{ if(r.success) setSubcons((r.data||[]).map(p=>({id:p.id,name:p.name}))); }).catch(()=>{});
   },[fromMR]);
-  const zimMissing=!!f.custody_party_id&&!f.custodian_user_id;
+  const zimMissing=!f.custodian_user_id;
+  const subconNoZim=!!f.custody_party_id&&!f.custodian_user_id;
   const initial=()=> (prefill?.items&&prefill.items.length>0)
     ?prefill.items.map(it=>{
       const m=stock.find(s=>s.name?.toLowerCase()===String(it.material_name||it.name||"").toLowerCase());
@@ -980,6 +983,9 @@ function NewIssueModal({stock,projects,users,onClose,onSaved,prefill,fromMR}){
     if(chPol.mode==="required"&&chPhotos.length===0){ alert(t("warehouse.challan_photo_required")); return; }
     const um=!fromMR&&unitMissingIn(items,ucards);
     if(um){ alert(t("unitcard.need_number",{unit:um.unit})); return; }
+    if(!f.custodian_user_id){ alert(t("warehouse.isz_err")); return; }
+    const drvPh=String(f.driver_phone||"").replace(/[^\d+]/g,"");
+    if(drvPh&&!f.issued_to.trim()){ alert(t("warehouse.drv_err_name")); return; }
     setSaving(true);
     try{
       const cleanItems=items.filter(it=>it.material_id&&Number(it.qty)>0).map(it=>({
@@ -993,7 +999,7 @@ function NewIssueModal({stock,projects,users,onClose,onSaved,prefill,fromMR}){
         selected_batches:Array.isArray(it.selected_batches)&&it.selected_batches.length>0?it.selected_batches:undefined,
       }));
       const url=fromMR?`/warehouse/mr/${fromMR}/issue`:"/warehouse/issues";
-      const res=await api.post(url,{...f,items:cleanItems,photo_urls:chPhotos.length?chPhotos:null,...(fromMR?{}:{unit_card:true})});
+      const res=await api.post(url,{...f,driver_name:f.issued_to.trim()||null,driver_phone:drvPh||null,items:cleanItems,photo_urls:chPhotos.length?chPhotos:null,...(fromMR?{}:{unit_card:true})});
       if(res.success){onSaved&&onSaved(res.data);onClose();}
       else alert(res.message||"Issue failed");
     }catch(e){alert(e.message);}
@@ -1045,32 +1051,35 @@ function NewIssueModal({stock,projects,users,onClose,onSaved,prefill,fromMR}){
 
       <div style={{display:"grid",gridTemplateColumns:"140px 1fr 1fr",gap:11,marginBottom:13}}>
         <Field label={t("common.date")}><Input type="date" value={f.date} onChange={e=>upd("date",e.target.value)}/></Field>
-        <Field label={t("warehouse.issued_to")}>
-          <Input value={f.issued_to} maxLength={100} onChange={e=>upd("issued_to",e.target.value)} placeholder={t("warehouse.issued_to_ph")}/>
+        <Field label={t("warehouse.drv_title")}>
+          <div style={{display:"flex",gap:6}}>
+            <div style={{flex:1.4,minWidth:0}}><Input value={f.issued_to} maxLength={100} onChange={e=>upd("issued_to",e.target.value)} placeholder={t("warehouse.drv_name_ph")}/></div>
+            <div style={{flex:1,minWidth:0}}><Input type="tel" value={f.driver_phone} onChange={e=>upd("driver_phone",e.target.value)} placeholder={t("warehouse.drv_phone_ph")}/></div>
+          </div>
         </Field>
         <Field label={t("common.remarks")}>
           <Input value={f.remarks} onChange={e=>upd("remarks",e.target.value)} placeholder={t("warehouse.e_g_gf_slab_casting")}/>
         </Field>
       </div>
-      {!fromMR&&(
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:11,marginBottom:13}}>
-          <Field label={t("custody.zimmedar")}>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:11,marginBottom:13}}>
+          <Field label={t("warehouse.isz_title")+" *"}>
             <SearchSelect compact value={f.custodian_user_id} options={users} onChange={v=>upd("custodian_user_id",v)} placeholder={t("custody.zimmedar_ph")}/>
           </Field>
+          {!fromMR&&(
           <Field label={t("custody.subcon_optional")}>
             <SearchSelect compact value={f.custody_party_id} options={subcons} onChange={v=>upd("custody_party_id",v)} placeholder={t("custody.subcon_ph")}/>
           </Field>
-          <div style={{gridColumn:"1 / -1",fontSize:11,color:zimMissing?T.red:T.t4,fontWeight:zimMissing?700:500,marginTop:-4}}>
-            {zimMissing?t("custody.zimmedar_required"):t("custody.zimmedar_hint")}
+          )}
+          <div style={{gridColumn:"1 / -1",fontSize:11,color:subconNoZim?T.red:T.t4,fontWeight:subconNoZim?700:500,marginTop:-4}}>
+            {subconNoZim?t("custody.zimmedar_required"):t("warehouse.isz_hint")}
           </div>
-          {f.project_id&&ptasks.length>0&&(
+          {!fromMR&&f.project_id&&ptasks.length>0&&(
             <Field label={t("custody.task_label")} style={{gridColumn:"1 / -1"}}>
               <SearchSelect compact value={f.task_id} options={ptasks} onChange={v=>upd("task_id",v)} placeholder={t("custody.task_ph")}/>
               <div style={{fontSize:11,color:T.t4,marginTop:3}}>{t("custody.task_hint")}</div>
             </Field>
           )}
-        </div>
-      )}
+      </div>
       {toName&&(
         <div style={{padding:"7px 11px",borderRadius:6,background:T.bluL,border:`1px solid ${T.bluM}`,fontSize:11.5,color:T.blu,marginBottom:13,lineHeight:1.5}}>
          {t("warehouse.warehouse_stock_turant_minus_hoga")} <b>{toName}</b> {t("warehouse.me_material_physically_pohonchne_par_site")}
@@ -1935,8 +1944,10 @@ function AddStockModal({material,onClose,onSaved}){
 }
 
 // ── QUICK ISSUE MODAL (single material from stock) ────────────────
-function QuickIssueModal({material,projects,onClose,onSaved}){
-  const [f,setF]=useState({project_id:null,issued_to:"",qty:"",remarks:""});
+function QuickIssueModal({material,projects,users=[],onClose,onSaved}){
+  // 26 Oct 2026: site par diya to "Site ka zimmedar" zaroori; "Le gaya (driver)" optional.
+  const [f,setF]=useState({project_id:null,issued_to:"",driver_phone:"",custodian_user_id:null,qty:"",remarks:""});
+  const needZim=!!f.project_id&&!f.custodian_user_id;
   const siteStock=useSiteStock(f.project_id, [material?.name]);   // D5 (24 Oct 2026)
   const [saving,setSaving]=useState(false);
   const chPol=useChallanPol();
@@ -1945,6 +1956,9 @@ function QuickIssueModal({material,projects,onClose,onSaved}){
   const overStock=Number(f.qty)>max;
   const submit=async()=>{
     if(!f.qty||Number(f.qty)<=0||overStock) return;
+    if(needZim){ alert(t("warehouse.isz_err")); return; }
+    const drvPh=String(f.driver_phone||"").replace(/[^\d+]/g,"");
+    if(drvPh&&!f.issued_to.trim()){ alert(t("warehouse.drv_err_name")); return; }
     if(challanUploading()){ alert(t("warehouse.challan_photo_uploading")); return; }
     if(chPol.mode==="required"&&chPhotos.length===0){ alert(t("warehouse.challan_photo_required")); return; }
     setSaving(true);
@@ -1953,6 +1967,8 @@ function QuickIssueModal({material,projects,onClose,onSaved}){
         date:today(),
         project_id:f.project_id||null,
         issued_to:f.issued_to.trim()||null,
+        driver_name:f.issued_to.trim()||null, driver_phone:drvPh||null,
+        custodian_user_id:f.custodian_user_id||null,
         items:[{material_id:material.id,qty:Number(f.qty),rate:material.rate}],
         remarks:f.remarks||null,
         photo_urls:chPhotos.length?chPhotos:null,
@@ -1967,7 +1983,7 @@ function QuickIssueModal({material,projects,onClose,onSaved}){
       onClose={onClose} width={500}
       footer={<>
         <GhostBtn onClick={onClose}>{t("common.cancel")}</GhostBtn>
-        <Btn onClick={submit} disabled={!f.qty||overStock||saving} c={T.amb} icon={IcOut}>{saving?t("warehouse.issuing"):t("warehouse.confirm_issue")}</Btn>
+        <Btn onClick={submit} disabled={!f.qty||overStock||saving||needZim} c={T.amb} icon={IcOut}>{saving?t("warehouse.issuing"):t("warehouse.confirm_issue")}</Btn>
       </>}>
       <div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 13px",background:T.surfaceB,borderRadius:8,border:`1px solid ${T.b1}`,marginBottom:14}}>
         <span style={{fontSize:22}}>{getCategoryEmoji(material?.category)}</span>
@@ -1985,10 +2001,16 @@ function QuickIssueModal({material,projects,onClose,onSaved}){
           <SearchSelect compact value={f.project_id} options={projects} onChange={v=>setF(p=>({...p,project_id:v}))} placeholder={t("warehouse.select_project")}/>
           {f.project_id&&material?.name&&<SiteStockLine info={siteStock.get(siteStockKey(material.name))} unit={material.unit} style={{marginTop:4}}/>}
         </Field>
-        <Field label={t("warehouse.issued_to")}>
-          <Input value={f.issued_to} maxLength={100} onChange={e=>setF(p=>({...p,issued_to:e.target.value}))} placeholder={t("warehouse.issued_to_ph")}/>
+        <Field label={t("warehouse.isz_title")+(f.project_id?" *":"")}>
+          <SearchSelect compact value={f.custodian_user_id} options={users} onChange={v=>setF(p=>({...p,custodian_user_id:v}))} placeholder={t("custody.zimmedar_ph")}/>
         </Field>
       </div>
+      <Field label={t("warehouse.drv_title")} style={{marginBottom:11}}>
+        <div style={{display:"flex",gap:6}}>
+          <div style={{flex:1.4,minWidth:0}}><Input value={f.issued_to} maxLength={100} onChange={e=>setF(p=>({...p,issued_to:e.target.value}))} placeholder={t("warehouse.drv_name_ph")}/></div>
+          <div style={{flex:1,minWidth:0}}><Input type="tel" value={f.driver_phone} onChange={e=>setF(p=>({...p,driver_phone:e.target.value}))} placeholder={t("warehouse.drv_phone_ph")}/></div>
+        </div>
+      </Field>
       <Field label={`Quantity (${material?.unit}) *`} style={{marginBottom:11}}>
         <Input type="number" value={f.qty} onChange={e=>setF(p=>({...p,qty:e.target.value}))} placeholder={`Max ${max}`} max={max}
           accent={overStock?T.red:T.amb}
@@ -3109,6 +3131,8 @@ function IssueDetailDrawer({issue,onClose,canCancel,canReceive,onDeleted,onRecei
                 <div style={{fontSize:9,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>{t("warehouse.issued_to")}</div>
                 <div style={{fontSize:12,fontWeight:600,color:T.t1}}>{detail?.issuedTo||"—"}</div>
                 {detail?.issued_to_phone&&<div style={{fontSize:11,color:T.t2,marginTop:1}}>{detail.issued_to_phone}</div>}
+                {detail?.driver_name&&detail.driver_name!==detail.issuedTo&&<div style={{fontSize:11,color:T.t2,marginTop:1}}>{t("warehouse.drv_short")}: {detail.driver_name}{detail.driver_phone?" · "+detail.driver_phone:""}</div>}
+                {detail?.driver_phone&&detail.driver_name===detail.issuedTo&&<div style={{fontSize:11,color:T.t2,marginTop:1}}>{detail.driver_phone}</div>}
                 <div style={{fontSize:9.5,color:T.t4,marginTop:1}}>by {detail?.by||"—"}</div>
               </div>
               <div style={{padding:"9px 11px",background:T.surfaceB,borderRadius:7,border:`1px solid ${T.b1}`}}>
@@ -3831,6 +3855,15 @@ export function TransferDetailDrawer({transfer,onClose,canDelete,canReceive,onDe
                 <span style={{fontSize:12,fontWeight:600,color:T.t1}}>{detail.custodian_name}{detail.custodian_phone?" · "+detail.custodian_phone:""}</span>
               </div>
             )}
+            {detail?.driver_name&&(
+              <div style={{display:"flex",alignItems:"baseline",gap:8,padding:"9px 11px",background:T.surfaceB,borderRadius:7,border:`1px solid ${T.b1}`,marginTop:-4,marginBottom:14}}>
+                <span style={{fontSize:9,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px"}}>{t("warehouse.drv_short")}</span>
+                <span style={{fontSize:12,fontWeight:600,color:T.t1}}>{detail.driver_name}{detail.driver_phone?" · "+detail.driver_phone:""}</span>
+              </div>
+            )}
+            {detail?.status==="Cancelled"&&detail?.cancel_reason&&(
+              <div style={{padding:"9px 11px",background:T.redL,borderRadius:7,border:`1px solid ${T.red}33`,fontSize:12,color:T.red,marginTop:-4,marginBottom:14}}>{t("warehouse.tr_cancel_was",{reason:detail.cancel_reason})}</div>
+            )}
 
             {/* Items table */}
             <div style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".4px",marginBottom:7,display:"flex",justifyContent:"space-between"}}>
@@ -4454,7 +4487,7 @@ function WarehouseModule({deepLink,onDeepLinkDone}={}){
         <AddStockModal material={addStockTarget} onClose={()=>setAddStockTarget(null)} onSaved={()=>loadAll()}/>
       )}
       {issueTarget&&(
-        <QuickIssueModal material={issueTarget} projects={projects}
+        <QuickIssueModal material={issueTarget} projects={projects} users={users}
           onClose={()=>setIssueTarget(null)} onSaved={()=>loadAll()}/>
       )}
       {grnNewOpen&&(
