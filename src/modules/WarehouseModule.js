@@ -3774,6 +3774,14 @@ export function TransferDetailDrawer({transfer,onClose,canDelete,canReceive,onDe
               </div>
             </div>
 
+            {/* Custodian — maal le ja raha (25 Oct 2026, mobile se) */}
+            {detail?.custodian_name&&(
+              <div style={{display:"flex",alignItems:"baseline",gap:8,padding:"9px 11px",background:T.surfaceB,borderRadius:7,border:`1px solid ${T.b1}`,marginTop:-4,marginBottom:14}}>
+                <span style={{fontSize:9,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px"}}>{t("warehouse.tr_custodian")}</span>
+                <span style={{fontSize:12,fontWeight:600,color:T.t1}}>{detail.custodian_name}{detail.custodian_phone?" · "+detail.custodian_phone:""}</span>
+              </div>
+            )}
+
             {/* Items table */}
             <div style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".4px",marginBottom:7,display:"flex",justifyContent:"space-between"}}>
               <span>{t("warehouse.items_items", { items: items.length })}</span>
@@ -3803,12 +3811,34 @@ export function TransferDetailDrawer({transfer,onClose,canDelete,canReceive,onDe
               })}
             </div>
 
+            {/* Bhejte waqt ki photo — slip / challan + material (25 Oct 2026, mobile se) */}
+            {((detail?.send_slip_urls||[]).length>0||(detail?.send_photo_urls||[]).length>0)&&(
+              <div style={{marginBottom:14}}>
+                <div style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".4px",marginBottom:7}}>{t("warehouse.tr_send_photos")}</div>
+                {[
+                  {title:t("warehouse.tr_send_slip"),urls:detail.send_slip_urls||[]},
+                  {title:t("grn_ph.material"),urls:detail.send_photo_urls||[]},
+                ].filter(g=>g.urls.length>0).map((g,gi)=>(
+                  <div key={gi} style={{padding:"8px 11px",background:T.surfaceB,borderRadius:7,border:`1px solid ${T.b1}`,marginBottom:6}}>
+                    <div style={{fontSize:11.5,fontWeight:700,color:T.t1}}>{g.title}</div>
+                    <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:6}}>
+                      {g.urls.map((u,i)=>(
+                        <a key={i} href={cld(u, "full")} target="_blank" rel="noopener noreferrer">
+                          <img src={cld(u,"thumb")} alt="" style={{width:56,height:56,objectFit:"cover",borderRadius:6,border:`1px solid ${T.b1}`,display:"block"}}/>
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
             {/* Receive ki photo — store me receive par GRN nahi banti, isliye transfer par hi (13 Oct 2026) */}
             {(detail?.rec_slip_url||detail?.rec_slip_no||(detail?.site_photo_urls||[]).length>0)&&(
               <div style={{marginBottom:14}}>
                 <div style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".4px",marginBottom:7}}>{t("warehouse.transfer_rec_photos")}</div>
                 {[
-                  {title:t("grn_ph.rec_slip")+(detail.rec_slip_no?" · "+t("grn_ph.rec_slip_no")+" "+detail.rec_slip_no:""),urls:detail.rec_slip_url?[detail.rec_slip_url]:[],show:!!(detail.rec_slip_url||detail.rec_slip_no)},
+                  {title:t("grn_ph.rec_slip")+(detail.rec_slip_no?" · "+t("grn_ph.rec_slip_no")+" "+detail.rec_slip_no:""),urls:(detail.rec_slip_urls||[]).length?detail.rec_slip_urls:detail.rec_slip_url?[detail.rec_slip_url]:[],show:!!(detail.rec_slip_url||detail.rec_slip_no)},
                   {title:t("grn_ph.material"),urls:detail.site_photo_urls||[],show:(detail.site_photo_urls||[]).length>0},
                 ].filter(g=>g.show).map((g,gi)=>(
                   <div key={gi} style={{padding:"8px 11px",background:T.surfaceB,borderRadius:7,border:`1px solid ${T.b1}`,marginBottom:6}}>
