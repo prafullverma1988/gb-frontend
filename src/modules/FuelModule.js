@@ -80,6 +80,8 @@ const fmtDT = (d) => {
   return dt.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "2-digit" }) + " " +
          dt.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
 };
+// Doori aadmi ki bhasha me — 800 m tak metre, uske baad km.
+const fmtDist = (m) => (m == null ? "" : Number(m) < 800 ? Math.round(Number(m)) + " m" : (Number(m) / 1000).toFixed(1) + " km");
 // Server samay UTC me deta hai (9 Oct 2026 se fuel / sensor bhi) — dikhao
 // phone/browser ki apni ghadi me. Kachcha string kaatne se UTC dikhta tha.
 const localYmd = (v) => { const d = new Date(v); return v && !isNaN(d) ? d.toLocaleDateString("en-CA") : String(v || "").slice(0, 10); };
@@ -473,6 +475,44 @@ function FuelEntryDrawer({ entry, onClose, onChanged }) {
                 <KV k={t("fuel.kis_kaam_ke_liye")} v={d.purpose} />
                 <KV k={t("fuel.d_sector")} v={d.sector} />
               </Sec>
+
+              {/* Jagah — photo ke saath uthi GPS. Entry alag se location
+                  nahi maangti; photo khinchte waqt wo apne aap jud jaati
+                  hai, aur verify karne wale ke liye yahi sabse kaam ki
+                  line hai. Na mile (geo band / GPS nahi) to khaana hi nahi. */}
+              {d.location && (() => {
+                const L = d.location, S = L.site;
+                const inside = S && S.inside;
+                const name = (inside && (S.label || S.project_name)) || L.short_place || L.place
+                  || (S && (S.label || S.project_name)) || null;
+                return (
+                  <Sec title={t("fuel.d_jagah")}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: T.t1 }}>📍 {name || t("fuel.d_jagah_naam_nahi")}</div>
+                    {S && !inside && (S.label || S.project_name) && (
+                      <div style={{ fontSize: 11.5, color: T.t3, marginTop: 2 }}>
+                        {t("fuel.d_jagah_se_door", { name: S.label || S.project_name, d: fmtDist(S.distance_m) })}
+                      </div>
+                    )}
+                    {inside && S.project_name && S.label !== S.project_name && (
+                      <div style={{ fontSize: 11.5, color: T.t3, marginTop: 2 }}>{S.project_name}</div>
+                    )}
+                    {L.place && L.place !== name && (
+                      <div style={{ fontSize: 11, color: T.t4, marginTop: 3, lineHeight: 1.45 }}>{L.place}</div>
+                    )}
+                    <div style={{ display: "flex", gap: 12, alignItems: "center", marginTop: 7, flexWrap: "wrap" }}>
+                      <span style={{ fontSize: 11.5, color: T.t3, fontFamily: "monospace" }}>
+                        {Number(L.lat).toFixed(5)}, {Number(L.lng).toFixed(5)}
+                      </span>
+                      <a href={`https://www.google.com/maps/search/?api=1&query=${L.lat},${L.lng}`}
+                        target="_blank" rel="noreferrer"
+                        style={{ fontSize: 11.5, fontWeight: 700, color: T.ind, textDecoration: "none" }}>
+                        {t("fuel.d_naksha_me_kholo")}
+                      </a>
+                    </div>
+                    <div style={{ fontSize: 10.5, color: T.t4, marginTop: 5 }}>{t("fuel.d_jagah_photo_se")}</div>
+                  </Sec>
+                );
+              })()}
 
               <Sec title={t("fuel.d_paisa")}>
                 {d.kind === "purchase" && (
@@ -1164,6 +1204,33 @@ function OverviewTab({ stores, purchases, issues, byEquipment, normMissing, onRe
   );
 }
 
+// ══════════════════════════════════════════════════════════════════
+// UNIVERSAL SEARCH — ek patti, sab tab
+// ------------------------------------------------------------------
+// Fuel ke kisi bhi tab me search tha hi nahi (Prafull, 26 Oct 2026):
+// 346 entry me se ek machine ki entry dhoondhne ka matlab aankh se
+// scroll karna tha. Ab patti tabs ke UPAR hai, isliye wahi likha hua
+// shabd har tab par lagta hai — tab badalne par mitta nahi, aur har tab
+// apne match ki ginti dikhata hai, to pata chal jaata hai ki cheez
+// kahan padi hai.
+//
+// Chhanni client par hai kyunki entry/barrel/vendor ka poora data pehle
+// se screen par aa chuka hota hai — server par jaane se jawab dheema hi
+// hoga, tez nahi.
+const sq = (v) => String(v == null ? "" : v).toLowerCase();
+const hayOf = (...parts) => parts.map(sq).filter(Boolean).join(" ");
+// Entry ka haystack: wahi cheezein jo aadmi yaad rakh kar dhoondhta hai —
+// machine/drum/pump ka naam, number, project, slip, kaam, aur ankde.
+const entryHay = (r) => hayOf(r.vendor_party_name, r.vendor_name, r.store_name, r.equipment_name,
+  r.equipment_code, r.equipment_text, r.project_name, r.subcon_name, r.slip_no, r.purpose, r.sector,
+  r.note, r.entered_by_name, r.issued_by_name, r.litres, r.rate, r.rate_used, r.amount,
+  fmtDT(r.filled_at || r.issued_at || r.at));
+const storeHay = (x) => hayOf(x.name, x.project_name, x.location, x.label);
+const vendorHay = (x) => hayOf(x.vendor_name, x.name, x.party_name);
+const equipHay = (x) => hayOf(x.equipment_name, x.name, x.code, x.equipment_code, x.project_name, x.ownership);
+const projHay = (x) => hayOf(x.project_name, x.name, x.kind);
+const keep = (q, hay) => !q || hay.includes(q);
+
 function RefuelingTab({ purchases, issues, onRefuel }) {
   const openEntry = useOpenEntry();
   const [kind, setKind] = useState("all");
@@ -1788,7 +1855,7 @@ function BarrelTab({ stores, projects, onReload, onOpenLedger, onRefuel, dipPend
 // lagta hai, wahi jo apni machine par lagta hai. Pump se seedha dete waqt
 // parchi ka rate chahiye, kyunki wahi bill vendor ko dena hai.
 // ══════════════════════════════════════════════════════════════════
-function SubconTab({ subcons, stores, vendors, projects, from, to, onRange, onReload }) {
+function SubconTab({ subcons, stores, vendors, projects, from, to, onRange, onReload, q = "" }) {
   const openEntry = useOpenEntry();
   const [rows, setRows] = useState(null);
   const [summary, setSummary] = useState([]);
@@ -1913,6 +1980,7 @@ function SubconTab({ subcons, stores, vendors, projects, from, to, onRange, onRe
       <Panel title={t("fuel.kab_kya_diya")}>
         {rows === null && <Empty>{t("common.loading")}</Empty>}
         {rows && rows.length === 0 && <Empty>{t("fuel.abhi_kisi_subcon_ko_diesel_nahi")}</Empty>}
+        {rows && rows.length > 0 && !rows.some((r) => keep(q, entryHay(r))) && <Empty>{t("fuel.search_kuch_nahi")}</Empty>}
         {rows && rows.length > 0 && (
           <>
             <Row head cols="110px 1.3fr 1.1fr 1.2fr 80px 80px 100px 120px 70px">
@@ -1920,7 +1988,7 @@ function SubconTab({ subcons, stores, vendors, projects, from, to, onRange, onRe
               <span>{t("fuel.machine_kaam")}</span><span>{t("fuel.litres")}</span><span>{t("common.rate")}</span>
               <span>{t("fuel.value")}</span><span>{t("fuel.katauti")}</span><span />
             </Row>
-            {rows.map((r) => {
+            {rows.filter((r) => keep(q, entryHay(r))).map((r) => {
               const adj = Number(r.adjusted || 0);
               const amt = Number(r.amount || 0);
               const pill = !r.recovery_txn_id
@@ -2089,7 +2157,7 @@ function SubconTab({ subcons, stores, vendors, projects, from, to, onRange, onRe
 // Cash wali entries alag patti me hain. Unka paisa nikal chuka hai,
 // isliye unka bill nahi banta — unhe sirf "post" kiya jaata hai, aur tab
 // wo kharche me utarti hain (wallet se di gayi ho to us aadmi ke wallet se).
-function UnbilledTab({ onReload }) {
+function UnbilledTab({ onReload, q = "" }) {
   const openEntry = useOpenEntry();
   const [data, setData] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -2180,7 +2248,13 @@ function UnbilledTab({ onReload }) {
         </span>
       </div>
 
-      {data.groups.map((g) => {
+      {/* Dhoondhte waqt: vendor ka naam mile to poora group, warna sirf
+          wahi entry jo mili — aur jiska kuch na mile wo vendor hi nahi dikhta. */}
+      {data.groups.map((g0) => {
+        const gHit = keep(q, hayOf(g0.vendor_name));
+        const ents = gHit ? g0.entries : g0.entries.filter((e) => keep(q, entryHay(e)));
+        if (!ents.length) return null;
+        const g = ents === g0.entries ? g0 : { ...g0, entries: ents };
         const credit = g.entries.filter((e) => (e.payment_mode || "credit") === "credit");
         const cash = g.entries.filter((e) => e.payment_mode === "cash");
         const isOpen = open[g.vendor_party_id] !== false;
@@ -3632,6 +3706,8 @@ function FuelModule() {
 
   const [refuelOpen, setRefuelOpen] = useState(false);
   const [ledgerStore, setLedgerStore] = useState(null);
+  // Upar ki search patti — sab tab par lagti hai (dekho: UNIVERSAL SEARCH).
+  const [q, setQ] = useState("");
 
   // Default window: this month to date — the span a site actually reconciles.
   const monthStart = new Date(); monthStart.setDate(1);
@@ -3689,6 +3765,16 @@ function FuelModule() {
 
   const reloadAll = useCallback(async () => { await loadCore(); await loadReports(); }, [loadCore, loadReports]);
 
+  // Jo data is module ke paas hai wo yahin chhanta hai; Subcon/Unbilled
+  // apna data khud laate hain, isliye unhe sirf shabd bheja jaata hai.
+  const qq = q.trim().toLowerCase();
+  const fPurchases = useMemo(() => (qq ? purchases.filter((r) => keep(qq, entryHay(r))) : purchases), [purchases, qq]);
+  const fIssues = useMemo(() => (qq ? issues.filter((r) => keep(qq, entryHay(r))) : issues), [issues, qq]);
+  const fStores = useMemo(() => (qq ? stores.filter((r) => keep(qq, storeHay(r))) : stores), [stores, qq]);
+  const fVendor = useMemo(() => (qq ? byVendor.filter((r) => keep(qq, vendorHay(r))) : byVendor), [byVendor, qq]);
+  const fEquip = useMemo(() => (qq ? byEquipment.filter((r) => keep(qq, equipHay(r))) : byEquipment), [byEquipment, qq]);
+  const fProject = useMemo(() => (qq ? byProject.filter((r) => keep(qq, projHay(r))) : byProject), [byProject, qq]);
+
   // Machines whose diesel is our cost but which carry no consumption norm.
   // Derived from the master, so it counts machines that have no fuel entries
   // yet — the report's own norm_missing only sees machines already in it.
@@ -3716,24 +3802,30 @@ function FuelModule() {
   // link server khaali bhejta hai). Unbilled wahi jiska paisa kahin nahi laga.
   const unbilledN = purchases.filter((p) => !p.billed_at && !p.settlement_id && !p.transaction_id).length;
 
+  // Dhoondhte waqt har tab ka badge = us tab me kitne mile. Jin tab ka
+  // data wahin andar aata hai (Subcon/Unbilled) unki ginti yahan nahi ban
+  // sakti — wahan badge waisa hi rehta hai jaisa tha.
   const TABS = [
     { id: "overview",  l: t("common.overview"),      I: IcGauge },
-    { id: "refueling", l: t("fuel.refueling"),     I: IcDrop, badge: purchases.length + issues.length || null },
+    { id: "refueling", l: t("fuel.refueling"),     I: IcDrop,
+      badge: (qq ? fPurchases.length + fIssues.length : purchases.length + issues.length) || null,
+      bc: qq ? T.ind : undefined },
     // Do alag ginti: kam stock wale drum (amber) aur faisla baaki dipstick
     // requests (indigo) — admin ki ghanti isi tab ki taraf laati hai.
-    { id: "barrel",    l: t("fuel.barrel_stock_2"),  I: IcDrum, badge: stores.filter((s) => s.below_reorder).length || null, bc: T.amb,
-      badge2: dipPending.length || null, bc2: T.ind },
+    { id: "barrel",    l: t("fuel.barrel_stock_2"),  I: IcDrum,
+      badge: (qq ? fStores.length : stores.filter((s) => s.below_reorder).length) || null, bc: qq ? T.ind : T.amb,
+      badge2: qq ? null : (dipPending.length || null), bc2: T.ind },
     // Unbilled vendor ledger ke theek pehle — kaam ka kram wahi hai:
     // pehle bill banao, tabhi ledger me kuch aata hai.
     // Subcon ko diya diesel barrel ke theek baad — wo wahin se nikalta hai,
     // aur uska paisa vendor ke bill se nahi, subcon ke khaate se aata hai.
     { id: "subcon",    l: t("fuel.subcon_ko_diesel"), I: IcTruck },
     { id: "unbilled",  l: t("fuel.unbilled"),        I: IcFile, badge: unbilledN || null, bc: T.amb },
-    { id: "vendor",    l: t("fuel.vendor_ledger_2"), I: IcTruck },
+    { id: "vendor",    l: t("fuel.vendor_ledger_2"), I: IcTruck, badge: qq ? (fVendor.length || null) : null, bc: T.ind },
     // No badge: a count here would have to be invented until the sensor
     // checks (E3) actually run.
     { id: "cc",        l: t("fuel.cross_check"),   I: IcRuler },
-    { id: "reports",   l: t("common.reports"),       I: IcChart },
+    { id: "reports",   l: t("common.reports"),       I: IcChart, badge: qq ? (fEquip.length || null) : null, bc: T.ind },
   ];
 
   const TILES = [
@@ -3763,6 +3855,27 @@ function FuelModule() {
         </div>
       </div>
 
+      {/* Search — tabs ke upar, taaki tab badalne par bhi wahi shabd lagta rahe */}
+      <div style={{ margin: "0 18px 8px", flexShrink: 0, display: "flex", alignItems: "center", gap: 10 }}>
+        <div style={{ position: "relative", flex: 1, maxWidth: 460 }}>
+          <input value={q} onChange={(e) => setQ(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Escape") setQ(""); }}
+            placeholder={t("fuel.search_ph")}
+            style={{ width: "100%", padding: "9px 30px 9px 12px", borderRadius: 8, fontSize: 12.5, fontFamily: "inherit",
+              border: `1px solid ${qq ? T.ind : T.b1}`, background: T.surface, color: T.t1, outline: "none", boxSizing: "border-box" }} />
+          {qq && (
+            <button type="button" onClick={() => setQ("")} title={t("common.clear")}
+              style={{ position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)", border: "none",
+                background: "none", color: T.t3, cursor: "pointer", fontSize: 14, lineHeight: 1, padding: 4 }}>✕</button>
+          )}
+        </div>
+        {qq && (
+          <span style={{ fontSize: 11.5, color: T.t3 }}>
+            {t("fuel.search_mile", { n: fPurchases.length + fIssues.length + fStores.length + fVendor.length })}
+          </span>
+        )}
+      </div>
+
       <div style={{ margin: "0 18px", flexShrink: 0 }}>
         <div style={{ background: T.sb, borderRadius: 10, padding: "0 10px", display: "flex", alignItems: "center", gap: 4, boxShadow: "0 2px 10px rgba(0,0,0,0.2)" }}>
           {TABS.map((t) => (
@@ -3778,34 +3891,34 @@ function FuelModule() {
 
       <div style={{ flex: 1, overflowY: "auto", padding: "12px 18px 16px" }}>
         {tab === "overview" && (
-          <OverviewTab stores={stores} purchases={purchases} issues={issues}
-            byEquipment={byEquipment} normMissing={normMissing}
+          <OverviewTab stores={fStores} purchases={fPurchases} issues={fIssues}
+            byEquipment={fEquip} normMissing={normMissing}
             onRefuel={() => setRefuelOpen(true)} />
         )}
         {tab === "refueling" && (
-          <RefuelingTab purchases={purchases} issues={issues}
+          <RefuelingTab purchases={fPurchases} issues={fIssues}
             onRefuel={() => setRefuelOpen(true)} />
         )}
         {tab === "barrel" && (
-          <BarrelTab stores={stores} projects={projects} onReload={reloadAll} dipPending={dipPending}
+          <BarrelTab stores={fStores} projects={projects} onReload={reloadAll} dipPending={dipPending}
             onOpenLedger={setLedgerStore} onRefuel={() => setRefuelOpen(true)} />
         )}
         {tab === "subcon" && (
-          <SubconTab subcons={subcons} stores={stores} vendors={vendors} projects={projects}
+          <SubconTab subcons={subcons} stores={stores} vendors={vendors} projects={projects} q={qq}
             from={from} to={to} onRange={(f2, t2) => { setFrom(f2); setTo(t2); }} onReload={reloadAll} />
         )}
         {tab === "unbilled" && (
-          <UnbilledTab onReload={reloadAll} />
+          <UnbilledTab onReload={reloadAll} q={qq} />
         )}
         {tab === "vendor" && (
-          <VendorTab vendorRows={byVendor} from={from} to={to}
+          <VendorTab vendorRows={fVendor} from={from} to={to}
             onRange={(f, t2) => { setFrom(f); setTo(t2); }} />
         )}
         {tab === "cc" && (
-          <CrossCheckTab stores={stores} byEquipment={byEquipment} purchases={purchases} issues={issues} sensor={sensor} onReload={loadCore} />
+          <CrossCheckTab stores={fStores} byEquipment={fEquip} purchases={fPurchases} issues={fIssues} sensor={sensor} onReload={loadCore} />
         )}
         {tab === "reports" && (
-          <ReportsTab byEquipment={byEquipment} byProject={byProject} from={from} to={to}
+          <ReportsTab byEquipment={fEquip} byProject={fProject} from={from} to={to}
             onRange={(f, t2) => { setFrom(f); setTo(t2); }}
             projects={projects} equipment={equipment} vendors={vendors} stores={stores} />
         )}
