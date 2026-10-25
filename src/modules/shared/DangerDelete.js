@@ -56,9 +56,18 @@ export default function DangerDelete({ kind, id, name, onArchived, onDeleted }) 
   const [delGroups, setDelGroups] = useState([]);
   const [openG, setOpenG] = useState("");
   const [ackRecent, setAckRecent] = useState(false);
+  // Raste me khadi gadi (25 Oct 2026, Prafull — 5551 haadsa): project hatne / archive
+  // hone par trip kahin nahi dikhti aur gadi atak jaati thi. Ab pehle faisla —
+  // "cancel" (radd) ya "complete" (Manual close jaisa, review me). archTrips =
+  // archive par server ne list lautayi (409 open_trips).
+  const [tripAct, setTripAct] = useState("cancel");
+  const [archTrips, setArchTrips] = useState(null);
 
-  useEffect(() => { setStep("idle"); setPrev(null); setPw(""); setTyped(""); setForce(false); setErr(""); setDone(null); setDelGroups([]); setOpenG(""); setAckRecent(false); }, [kind, id]);
+  useEffect(() => { setStep("idle"); setPrev(null); setPw(""); setTyped(""); setForce(false); setErr(""); setDone(null); setDelGroups([]); setOpenG(""); setAckRecent(false); setTripAct("cancel"); setArchTrips(null); }, [kind, id]);
   const groups = prev?.groups || null;
+  const openTrips = prev?.open_trips || [];
+  // Trip project ke saath rakhi ja rahi hain (Machinery "Rakho" ya band)? "Hatao" me wo mit jaati hain.
+  const tripsKept = !!groups && groups.some((g) => g.key === "machinery" && (g.locked || !delGroups.includes("machinery")));
   const recentOthers = prev?.recent?.others || 0;
   const keepsSome = !!groups && groups.some((g) => g.locked || !delGroups.includes(g.key));
   // Sach me kitni rows mitengi — apni + jo linked group Hatao chune (band wale nahi)
@@ -67,8 +76,11 @@ export default function DangerDelete({ kind, id, name, onArchived, onDeleted }) 
 
   const archive = async () => {
     setBusy("archive"); setErr("");
-    const r = await api.patch(`/danger/${kind}/${id}/archive`, { archived: true }).catch((e) => ({ success: false, message: e?.message }));
+    const r = await api.patch(`/danger/${kind}/${id}/archive`,
+      { archived: true, ...(archTrips ? { open_trips_action: tripAct } : {}) }).catch((e) => ({ success: false, message: e?.message }));
     setBusy("");
+    // Raste me gadi — list dikhao, faisla ke baad dobara "Archive karo".
+    if (r?.code === "open_trips") { setArchTrips(r.open_trips || []); return; }
     if (!r?.success) return setErr(r?.message || "Archive nahi hua");
     window.toast?.success?.(r.message);
     onArchived && onArchived();
@@ -88,7 +100,8 @@ export default function DangerDelete({ kind, id, name, onArchived, onDeleted }) 
       { password: pw, confirm_name: typed,
         // Paise wala group khud "Hatao" chuna = wahi "phir bhi hatao" wali haan
         force: force || delGroups.includes("money"),
-        delete_groups: delGroups, ack_recent: ackRecent }, { timeoutMs: 180000 })
+        delete_groups: delGroups, ack_recent: ackRecent,
+        ...(openTrips.length && tripsKept ? { open_trips_action: tripAct } : {}) }, { timeoutMs: 180000 })
       .catch((e) => ({ success: false, message: e?.message }));
     setBusy("");
     if (!r?.success) {
@@ -135,6 +148,7 @@ export default function DangerDelete({ kind, id, name, onArchived, onDeleted }) 
       {step === "idle" && (<>
         <div style={{ fontSize: 13, fontWeight: 600, color: T.t1, marginBottom: 4 }}>{t("danger_delete.archive_karo")}</div>
         <div style={{ fontSize: 12, color: T.t3, lineHeight: 1.55, marginBottom: 10 }}><Rich k="danger_delete.label_list_se_hat_jayega_par" params={{ label, t: t("danger_delete.data_poora_bacha_rahega"), label2: label.toLowerCase() }} /></div>
+        {archTrips && <OpenTripsBox trips={archTrips} act={tripAct} setAct={setTripAct} />}
         <button onClick={archive} disabled={!!busy}
           style={{ padding: "7px 16px", borderRadius: 7, background: T.surface, border: `1.5px solid ${T.b2}`,
             color: T.t2, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
@@ -171,6 +185,10 @@ export default function DangerDelete({ kind, id, name, onArchived, onDeleted }) 
             </div>
           </div>
         )}
+
+        {openTrips.length > 0 && (tripsKept
+          ? <OpenTripsBox trips={openTrips} act={tripAct} setAct={setTripAct} />
+          : <div style={{ fontSize: 12, color: T.t3, marginBottom: 11 }}>{t("danger_delete.ot_gone", { n: openTrips.length })}</div>)}
 
         {!groups && prev.money?.length > 0 && (
           <div style={{ background: "#FEF3C7", border: "1px solid #FDE68A", borderRadius: 7, padding: "9px 12px", fontSize: 12, color: "#92400E", marginBottom: 11, lineHeight: 1.55 }}>
@@ -259,6 +277,31 @@ export default function DangerDelete({ kind, id, name, onArchived, onDeleted }) 
           </button>
         </div>
       </>)}
+    </div>
+  );
+}
+
+// ── Raste me khadi gadi — delete / archive se pehle faisla (25 Oct 2026) ──
+const fmtAt = (d) => { if (!d) return "—"; const x = new Date(d); return isNaN(x) ? String(d) : x.toLocaleString("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit", hour12: true }); };
+function OpenTripsBox({ trips, act, setAct }) {
+  const opt = (v, title, sub) => (
+    <label key={v} style={{ display: "flex", gap: 8, alignItems: "flex-start", padding: "7px 9px", borderRadius: 6, cursor: "pointer",
+      background: act === v ? "white" : "transparent", border: `1px solid ${act === v ? "#F59E0B" : "transparent"}` }}>
+      <input type="radio" name="dd_open_trips" checked={act === v} onChange={() => setAct(v)} style={{ marginTop: 2 }} />
+      <span><b style={{ color: T.t1 }}>{title}</b><span style={{ display: "block", fontSize: 11, color: T.t3, marginTop: 1 }}>{sub}</span></span>
+    </label>
+  );
+  return (
+    <div style={{ background: "#FEF3C7", border: "1px solid #FDE68A", borderRadius: 7, padding: "10px 12px", marginBottom: 11, fontSize: 12, color: "#92400E", lineHeight: 1.5 }}>
+      <div style={{ fontWeight: 700, marginBottom: 3 }}>{t("danger_delete.ot_title", { n: trips.length })}</div>
+      <div style={{ marginBottom: 6 }}>{t("danger_delete.ot_hint")}</div>
+      {trips.map((x) => (
+        <div key={x.id} style={{ fontSize: 11.5, color: T.t2 }}>• {t("danger_delete.ot_row", { truck: x.truck || "—", route: x.route_name || "—", at: fmtAt(x.load_at), no: x.trip_no })}</div>
+      ))}
+      <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 8 }}>
+        {opt("cancel", t("danger_delete.ot_cancel"), t("danger_delete.ot_cancel_sub"))}
+        {opt("complete", t("danger_delete.ot_complete"), t("danger_delete.ot_complete_sub"))}
+      </div>
     </div>
   );
 }

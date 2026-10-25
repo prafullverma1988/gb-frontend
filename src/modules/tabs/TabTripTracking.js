@@ -679,6 +679,8 @@ function RoutesTab({ projectId }) {
                   {Array.isArray(r.route_geometry) && <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: T.grn }}>{t("trip_tracking.naksha_tag")}</span>}
                 </div>
                 {r.default_task_name && <div style={{ fontSize: 10.5, color: T.t4 }}>{r.default_task_name}</div>}
+                {/* Route kisne banaya (25 Oct 2026, Prafull) */}
+                {r.created_by_name && <div style={{ fontSize: 10.5, color: T.t4 }}>{t("trip_tracking.route_by", { name: r.created_by_name })}</div>}
                 {/* Route par ab rate nahi (4 Oct 2026) — paisa gaadi ke rate card se.
                     Purana rate sirf bina card wali Per trip gaadi par lagta hai. */}
                 {r.rate_per_trip != null && <div style={{ fontSize: 10.5, color: T.t4 }}>{t("trip_tracking.purana_rate_route", { rate: rs(r.rate_per_trip) })}</div>}
