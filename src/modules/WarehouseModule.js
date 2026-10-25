@@ -2896,6 +2896,8 @@ function IssueTab({issues,projects,onNew,onSelect}){
                   {iss.remarks&&<div title={iss.remarks} style={{fontSize:10,color:T.t4,fontStyle:"italic",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{t("material.issue_note",{note:iss.remarks})}</div>}
                   {/* Cancel ki wajah (11 Oct 2026, AA) */}
                   {status==="Cancelled"&&<div title={iss.cancel_reason||""} style={{fontSize:10,color:T.red,fontWeight:600,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{t("warehouse.issue_cancelled_line",{reason:iss.cancel_reason||"—",name:iss.cancelled_by_name||"—",date:fmtDate(iss.cancelled_at)})}</div>}
+                  {/* Cancel ki request baaki (25 Oct 2026) */}
+                  {status!=="Cancelled"&&iss.cancel_req_by&&<div title={iss.cancel_req_reason||""} style={{fontSize:10,color:T.amb,fontWeight:700,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{t("warehouse.issue_cancel_req_line",{name:iss.cancel_req_by_name||"—"})}</div>}
                 </div>
                 <div style={{minWidth:0}} title={its.map(issueLineOf).join("\n")}>
                   {its.length===0?<span style={{fontSize:11.5,color:T.t4}}>—</span>:its.slice(0,3).map((it,k)=>(
@@ -2937,11 +2939,14 @@ function IssueDetailDrawer({issue,onClose,canCancel,canReceive,onDeleted,onRecei
   const [detail,setDetail]=useState(issue);
   const [loading,setLoading]=useState(true);
   const [deleting,setDeleting]=useState(false);
-  // Delete → Cancel (11 Oct 2026, AA): wajah + Admin password, issue mitta nahi.
+  // Delete → Cancel (11 Oct 2026, AA), issue mitta nahi. 25 Oct 2026 se password
+  // nahi: Store Approve tick / store incharge seedha (cancel_mode 'direct'), baaki
+  // Store entry wale request bhejte hain ('request') — server batata hai.
   const [cancelOpen,setCancelOpen]=useState(false);
   const [cancelReason,setCancelReason]=useState("");
-  const [cancelPw,setCancelPw]=useState("");
   const [cancelErr,setCancelErr]=useState("");
+  const [reqBusy,setReqBusy]=useState(false);
+  const [reload,setReload]=useState(0);
   const [receiveOpen,setReceiveOpen]=useState(false);
   const [receiveItems,setReceiveItems]=useState([]);
   const [receiving,setReceiving]=useState(false);
@@ -2960,19 +2965,34 @@ function IssueDetailDrawer({issue,onClose,canCancel,canReceive,onDeleted,onRecei
       }
       setLoading(false);
     }).catch(()=>setLoading(false));
-  },[issue?.dbId]);
+  },[issue?.dbId,reload]);
 
-  // Cancel — server (DELETE /warehouse/issues/:id) stock wapas karta hai aur
-  // issue ko status Cancelled + wajah ke saath rakhta hai. Site par receive ho
-  // chuka ho to server mana karta hai (Return from Project ka raasta batata hai).
+  // Cancel — server (POST /warehouse/issues/:id/cancel) seedha-wale ke liye stock
+  // wapas karta hai aur issue Cancelled + wajah; baaki ke liye request (202).
+  // Site par receive ho chuka / Zimmedari me Lag gaya ho to server mana karta hai.
+  const cMode=detail?.cancel_mode!==undefined?detail.cancel_mode:(canCancel?"direct":null);
+  const reqPending=!!detail?.cancel_req_by&&detail?.status!=="Cancelled";
   const handleCancel=async()=>{
     if(cancelReason.trim().length<3){ setCancelErr(t("warehouse.delete_reason_short")); return; }
-    if(!cancelPw){ setCancelErr(t("warehouse.ledger_row_need_pw")); return; }
     setDeleting(true); setCancelErr("");
-    const r=await api.del(`/warehouse/issues/${detail.dbId}`,{reason:cancelReason.trim(),password:cancelPw}).catch(()=>({success:false}));
+    const r=await api.post(`/warehouse/issues/${detail.dbId}/cancel`,{reason:cancelReason.trim()}).catch(()=>({success:false}));
     setDeleting(false);
-    if(r.success){ setCancelPw(""); if(r.message) alert(r.message); onDeleted&&onDeleted(); onClose(); }
-    else setCancelErr(r.message||t("warehouse.issue_cancel_fail"));
+    if(!r.success){ setCancelErr(r.message||t("warehouse.issue_cancel_fail")); return; }
+    if(r.message) alert(r.message);
+    onDeleted&&onDeleted();
+    if(r.data&&r.data.requested){ setCancelOpen(false); setCancelReason(""); setReload(x=>x+1); }
+    else onClose();
+  };
+  const decideCancel=async(ok)=>{
+    let why=null;
+    if(!ok){ why=await askDeleteReason(); if(why==null) return; }
+    setReqBusy(true); setCancelErr("");
+    const r=await api.post(`/warehouse/issues/${detail.dbId}/cancel-request/${ok?"approve":"reject"}`,ok?{}:{reason:why}).catch(()=>({success:false}));
+    setReqBusy(false);
+    if(!r.success){ setCancelErr(r.message||t("warehouse.issue_cancel_fail")); return; }
+    if(r.message) alert(r.message);
+    onDeleted&&onDeleted();
+    if(ok) onClose(); else setReload(x=>x+1);
   };
 
   const handleReceive=async()=>{
@@ -3177,21 +3197,37 @@ function IssueDetailDrawer({issue,onClose,canCancel,canReceive,onDeleted,onRecei
               </div>
             )}
 
+            {/* Cancel ki request baaki — seedha-wale (Approve tick / incharge) yahin faisla (25 Oct 2026) */}
+            {reqPending&&(
+              <div style={{padding:"12px 14px",background:T.ambL,border:`1.5px solid ${T.amb}55`,borderRadius:9,marginBottom:14}}>
+                <div style={{fontSize:12.5,fontWeight:700,color:T.amb}}>{t("warehouse.issue_cancel_req_box",{name:detail.cancel_req_by_name||"—",date:fmtDate(detail.cancel_req_at)})}</div>
+                <div style={{fontSize:12,color:T.t2,marginTop:4}}>{t("warehouse.issue_cancel_req_why",{reason:detail.cancel_req_reason||"—"})}</div>
+                {cMode==="direct"?(
+                  <div style={{display:"flex",gap:8,marginTop:10,justifyContent:"flex-end"}}>
+                    <GhostBtn onClick={()=>decideCancel(false)} disabled={reqBusy}>{t("warehouse.issue_cancel_req_reject")}</GhostBtn>
+                    <Btn onClick={()=>decideCancel(true)} disabled={reqBusy} c={T.red} icon={IcTrash} size="sm">
+                      {reqBusy?t("warehouse.issue_cancelling"):t("warehouse.issue_cancel_req_approve")}
+                    </Btn>
+                  </div>
+                ):(
+                  <div style={{fontSize:11,color:T.t3,marginTop:6}}>{t("warehouse.issue_cancel_req_wait")}</div>
+                )}
+                {cancelErr&&!cancelOpen&&<div style={{fontSize:11.5,color:T.red,fontWeight:600,marginTop:7}}>{cancelErr}</div>}
+              </div>
+            )}
+
             {cancelOpen&&(isPending||isConsumed)&&(
               <div style={{padding:"12px 14px",background:T.redL,border:`1.5px solid ${T.red}44`,borderRadius:9,marginBottom:14}}>
-                <div style={{fontSize:12.5,fontWeight:700,color:T.red}}>{t("warehouse.issue_cancel_title",{no:detail?.id})}</div>
-                <div style={{fontSize:11,color:T.t3,margin:"3px 0 9px"}}>{t("warehouse.issue_cancel_hint")}</div>
+                <div style={{fontSize:12.5,fontWeight:700,color:T.red}}>{t(cMode==="request"?"warehouse.issue_cancel_req_title":"warehouse.issue_cancel_title",{no:detail?.id})}</div>
+                <div style={{fontSize:11,color:T.t3,margin:"3px 0 9px"}}>{t(cMode==="request"?"warehouse.issue_cancel_req_hint":"warehouse.issue_cancel_hint")}</div>
                 <div style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>{t("warehouse.issue_cancel_reason")}</div>
                 <textarea rows={2} value={cancelReason} onChange={e=>setCancelReason(e.target.value)} placeholder={t("warehouse.issue_cancel_reason_ph")}
                   style={{width:"100%",boxSizing:"border-box",padding:"7px 9px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:12,outline:"none",fontFamily:"inherit",resize:"vertical",marginBottom:8}}/>
-                <div style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>{t("warehouse.ledger_row_pw")}</div>
-                <input type="password" autoComplete="new-password" value={cancelPw} onChange={e=>setCancelPw(e.target.value)}
-                  style={{width:"100%",boxSizing:"border-box",height:32,padding:"0 9px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:12,outline:"none",fontFamily:"inherit"}}/>
                 {cancelErr&&<div style={{fontSize:11.5,color:T.red,fontWeight:600,marginTop:7}}>{cancelErr}</div>}
                 <div style={{display:"flex",gap:8,marginTop:10,justifyContent:"flex-end"}}>
-                  <GhostBtn onClick={()=>{setCancelOpen(false);setCancelErr("");setCancelPw("");}}>{t("common.close")}</GhostBtn>
+                  <GhostBtn onClick={()=>{setCancelOpen(false);setCancelErr("");}}>{t("common.close")}</GhostBtn>
                   <Btn onClick={handleCancel} disabled={deleting} c={T.red} icon={IcTrash} size="sm">
-                    {deleting?t("warehouse.issue_cancelling"):t("warehouse.issue_cancel_confirm_btn")}
+                    {deleting?t("warehouse.issue_cancelling"):t(cMode==="request"?"warehouse.issue_cancel_req_send":"warehouse.issue_cancel_confirm_btn")}
                   </Btn>
                 </div>
               </div>
@@ -3226,9 +3262,9 @@ function IssueDetailDrawer({issue,onClose,canCancel,canReceive,onDeleted,onRecei
               <Btn onClick={()=>setReceiveOpen(true)} c={T.grn} icon={IcIn} size="sm">{t("warehouse.receive_at_project", { project: detail.project })}</Btn>
             )}
             {/* Cancel sirf site par receive se pehle (Pending) — uske baad Return from Project */}
-            {canCancel&&(isPending||isConsumed)&&!cancelOpen&&(
+            {cMode&&(isPending||isConsumed)&&!cancelOpen&&!reqPending&&(
               <Btn onClick={()=>{setCancelOpen(true);setCancelErr("");}} c={T.red} icon={IcTrash} size="sm">
-                {t("warehouse.issue_cancel_btn")}
+                {t(cMode==="request"?"warehouse.issue_cancel_req_btn":"warehouse.issue_cancel_btn")}
               </Btn>
             )}
           </div>
