@@ -3445,6 +3445,7 @@ function CrossCheckTab({ stores, byEquipment, purchases, issues, sensor, onReloa
   const fillIssues = fills.filter((f) => f.status !== "ok");
   const noSensor = sensorOn ? sensor.entries_without_sensor || [] : [];
   const drops = sensorOn ? (sensor.drops || []).filter((d) => d.review_status !== "ok") : [];
+  const untrusted = sensorOn ? sensor.untrusted_machines || [] : [];
 
   const review = async (id) => {
     const r = await api.post(`/telematics/events/${id}/review`, { status: "ok" });
@@ -3468,6 +3469,12 @@ function CrossCheckTab({ stores, byEquipment, purchases, issues, sensor, onReloa
         <CheckRow name="Raat ka fuel drop" live={sensorOn}
           note={sensorOn ? "Sensor ke drop events neeche" : "Sensor ke bina pata nahi chalta"} />
       </Panel>
+
+      {untrusted.length > 0 && (
+        <div style={{ padding: "9px 14px", background: T.ambL, border: `1px solid ${T.amb}`, borderRadius: 8, fontSize: 12, color: T.amb, lineHeight: 1.55 }}>
+          ⚠ {t("fuel.sensor_jaanch_me_bahar", { names: untrusted.join(", ") })}
+        </div>
+      )}
 
       {sensorOn && (
         <Panel title={`Sensor fill vs entry — pichhle 30 din (${fills.length} fill, ${fillIssues.length} me dikkat)`}>

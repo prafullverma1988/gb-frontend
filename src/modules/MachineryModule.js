@@ -6292,6 +6292,7 @@ function TeleFleetDash({ fleet, ms, rg, onOpen, onAction, goTab }) {
                 {!m.linked && <span style={{ fontSize: 10, color: T.amb, fontWeight: 700 }}> {t("machinery.judi_nahi")}</span>}
                 {m.p.suspect_days > 0 && <span title={t("machinery.tel_engine_shak_hint")} style={{ fontSize: 10, color: T.amb, fontWeight: 700 }}> {t("machinery.tel_engine_shak")}</span>}
                 {m.link_warn && <span title={teleWarnText(m.link_warn)} style={{ fontSize: 10, color: T.red, fontWeight: 700 }}> {t("machinery.tel_jod_shak")}</span>}
+                {m.fuel_untrusted && <span title={t("machinery.tel_sensor_jaanch_hint")} style={{ fontSize: 10, color: T.amb, fontWeight: 700 }}> {t("machinery.tel_sensor_jaanch")}</span>}
                 {m.p.flags_new > 0 && <span title={t("machinery.tf_tile")} style={{ fontSize: 10, color: T.red, fontWeight: 700 }}> ⚑ {m.p.flags_new}</span>}
                 <div style={{ ...teleEll, fontSize: 10.5, color: T.t4 }}>
                   {[m.group_label, m.city_name, m.site && m.site.label, !m.has_fls ? t("machinery.tp_fls_nahi") : null].filter(Boolean).join(" · ")}
@@ -7040,6 +7041,9 @@ function TeleFuelRegister({ rg, ms, onOpen, onAction }) {
               <span style={{ fontSize: 11, color: T.t3 }}>{fmtDT(r.event_time)}</span>
               <span style={{ minWidth: 0 }}>
                 <span onClick={() => onOpen(r.unit_ref)} style={{ fontSize: 12, fontWeight: 600, color: T.ind, cursor: "pointer" }}>{nameOf(r)}</span>
+                {byUnit.get(r.unit_ref) && byUnit.get(r.unit_ref).fuel_untrusted && (
+                  <div title={t("machinery.tel_sensor_jaanch_hint")} style={{ fontSize: 10, color: T.amb, fontWeight: 700 }}>⚠ {t("machinery.tel_sensor_jaanch")}</div>
+                )}
               </span>
               <span><Pill label={fill ? "F" : "D"} c={fill ? T.grn : T.red} bg={fill ? T.grnL : T.redL} /></span>
               <span style={{ ...teleMono, color: fill ? T.grn : T.red, fontWeight: 700 }}>{fill ? "+" : "−"}{fmtN(l1(r.litres))}</span>
@@ -7323,7 +7327,8 @@ function TeleUnitPanel({ unitId, onClose }) {
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", fontSize: 11.5, color: T.t2 }}>
             {!u.linked && <Pill label={t("machinery.judi_nahi")} c={T.amb} bg={T.ambL} />}
             {!u.has_fls && <Pill label={t("machinery.tp_fls_nahi")} c={T.slt} bg={T.sltL} />}
-            {u.tank && <Pill label={t("machinery.tel_tank_line", { l: Math.round(u.tank.est_l) })} c={T.blu} bg={T.bluL} />}
+            {u.fuel_untrusted && <span title={t("machinery.tel_sensor_jaanch_hint")}><Pill label={"⚠ " + t("machinery.tel_sensor_jaanch")} c={T.amb} bg={T.ambL} /></span>}
+            {u.tank &&<Pill label={t("machinery.tel_tank_line", { l: Math.round(u.tank.est_l) })} c={T.blu} bg={T.bluL} />}
             {data.lph != null && (
               <Pill label={t("machinery.tp_u_lph", { n: data.days, x: fmtN(data.lph) }) + (data.norm_lph != null ? " · " + t("machinery.tp_u_norm", { x: fmtN(data.norm_lph) }) : "")}
                 c={over ? T.red : T.ind} bg={over ? T.redL : T.indL} />
@@ -7529,6 +7534,21 @@ function TelematicsTab({ data, onReload, onNewMachine }) {
     await act(u, "unlink");
   };
 
+  // "Sensor par bharosa nahi" — us unit ke fill/drop Cross-check, diesel flag aur Tank ~ se bahar
+  const fuelTrust = async (u) => {
+    const on = !u.fuel_untrusted;
+    let note = null;
+    if (on) {
+      note = window.prompt(t("machinery.tel_untrust_q", { name: u.machine_name || u.unit_name }), t("machinery.tel_untrust_note_def"));
+      if (note == null) return;
+    } else if (!window.confirm(t("machinery.tel_trust_q", { name: u.machine_name || u.unit_name }))) return;
+    setBusyId(u.id);
+    const r = await api.post(`/telematics/units/${u.id}/fuel-trust`, { untrusted: on, note });
+    setBusyId(null);
+    if (!r || r.success === false) { window.alert(r?.message || "Nahi hua"); return; }
+    reloadAll();
+  };
+
   const healthDot = (h) => (
     <span style={{ width: 8, height: 8, borderRadius: 4, display: "inline-block", flexShrink: 0, background: h === "green" ? T.grn : h === "amber" ? T.amb : T.red }} />
   );
@@ -7680,6 +7700,11 @@ function TelematicsTab({ data, onReload, onNewMachine }) {
                 <span style={{ fontSize: 12.5, fontWeight: 600, color: T.t1 }}>{u.machine_name}
                   {u.machine_reg ? <span style={{ fontWeight: 400, color: T.t4, fontSize: 10.5 }}> · {u.machine_reg}</span> : null}
                   {u.link_warn && <div style={{ fontSize: 10.5, color: T.red, fontWeight: 600 }}>⚠ {teleWarnText(u.link_warn)}</div>}
+                  {!!Number(u.fuel_untrusted) && (
+                    <div style={{ fontSize: 10.5, color: T.amb, fontWeight: 600 }} title={t("machinery.tel_sensor_jaanch_hint")}>
+                      ⚠ {t("machinery.tel_sensor_jaanch")}{u.fuel_untrusted_note ? " — " + u.fuel_untrusted_note : ""}
+                    </div>
+                  )}
                 </span>
                 <span style={{ fontSize: 11.5, color: u.health === "red" ? T.red : T.t3 }}>
                   {u.last_data_at ? fmtD(u.last_data_at) : t("fuel.kabhi_nahi")}
@@ -7688,6 +7713,11 @@ function TelematicsTab({ data, onReload, onNewMachine }) {
                 <span style={{ textAlign: "right", display: "flex", gap: 6, justifyContent: "flex-end", flexWrap: "wrap" }}>
                   {canMach("create") && u.renamed_to && u.renamed_to.link_status !== "linked" && (!u.link_warn || u.link_warn.code !== "machine_removed") && (
                     <Btn size="sm" onClick={() => moveLink(u)} disabled={busyId === u.id}>{t("machinery.tel_move_link")}</Btn>
+                  )}
+                  {canMach("create") && !!u.has_fls && (
+                    <Btn size="sm" ghost onClick={() => fuelTrust({ ...u, fuel_untrusted: !!Number(u.fuel_untrusted) })} disabled={busyId === u.id}>
+                      {Number(u.fuel_untrusted) ? t("machinery.tel_trust_btn") : t("machinery.tel_untrust_btn")}
+                    </Btn>
                   )}
                   {canMach("create") && <Btn size="sm" ghost onClick={() => unlink(u)} disabled={busyId === u.id}>{t("machinery.kholo")}</Btn>}
                 </span>
