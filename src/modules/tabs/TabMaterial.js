@@ -19,6 +19,7 @@ import { cld } from "../../utils/cloudinary";
 import { can, canAny, canEntry } from "../../utils/perms";
 import { isoDate, todayISO } from "../../utils/today";
 import { UsedUnitRow, stockQtyOf, factorOf, UnitViewChip } from "../../components/UnitConv";
+import { receiveWithSiteUnit } from "../../utils/siteUnitAsk";
 
 // Dual-unit billing toggle ab components/grn/DualUnitToggle.js me hai —
 // site aur godown dono ke GRN me wahi switch chalta hai.
@@ -576,7 +577,8 @@ function TabMaterial({ project }) {
         id: it.id,
         received_qty: Number(issueReceiveQty[`${iss.id}_${it.id}`] ?? issueLeftQty(it)) || 0,
       }));
-      const res = await api.post(`/warehouse/issues/${iss.id}/receive`, { items, ...(ph ? ph.body() : {}) });
+      // Site ki unit alag (store Kg, site Bundle) → site wale se ginti poochh kar dobara (utils/siteUnitAsk).
+      const res = await receiveWithSiteUnit((extra) => api.post(`/warehouse/issues/${iss.id}/receive`, { items, ...(ph ? ph.body() : {}), ...extra }));
       if (res.success) {
         inboundDone(ph, res);
         setIssueReceiveDone(p => [...p, iss.id]);

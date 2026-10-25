@@ -19,6 +19,7 @@ import { ConversionTab } from "./WarehouseConversion";
 import { can, canAny, canEntry } from "../utils/perms";
 import { UnitPickOrLock, StockConvLine, cardUnitOptions, useUnitCards, stockQtyOf, factorOf, needsFactor, UnitViewChip } from "../components/UnitConv";
 import SiteStockLine, { useSiteStock, siteStockKey } from "../components/SiteStockLine";
+import { receiveWithSiteUnit } from "../utils/siteUnitAsk";
 
 // ── ICONS ──────────────────────────────────────────────────────────────
 const Ic=({d,size=18,color="currentColor",sw=1.8,fill="none"})=>(
@@ -3049,7 +3050,8 @@ function IssueDetailDrawer({issue,onClose,canCancel,canReceive,onDeleted,onRecei
     const ph=phRef.current;
     if(ph&&!(await ph.ready())){ setReceiving(false); return; }
     const items=receiveItems.map(it=>({id:it.id,received_qty:Number(it.received_qty||0)}));
-    const r=await api.post(`/warehouse/issues/${detail.dbId}/receive`,{items,...(ph?ph.body():{})});
+    // Site ki unit alag (store Kg, site Bundle) → site wale se ginti poochh kar dobara (utils/siteUnitAsk).
+    const r=await receiveWithSiteUnit((extra)=>api.post(`/warehouse/issues/${detail.dbId}/receive`,{items,...(ph?ph.body():{}),...extra}));
     setReceiving(false);
     if(r.success){
       // Peeche chadhti photo site ki GRN (data.grn_id) par; dohra rec slip ho to bata do.
