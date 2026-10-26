@@ -15328,6 +15328,9 @@ const dict = {
   "stb.skip_all_btn": "Select all",
   "stb.skip_none_btn": "Clear selection",
   "machinery.tab_live":                                        "Live Tracking",
+  "darj.tag": "recorded",
+  "darj.detail": "Recorded: {when}",
+  "darj.detail_by": "Recorded: {when} — {name}",
 };
 
 export default dict;

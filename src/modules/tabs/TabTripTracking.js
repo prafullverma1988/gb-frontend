@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
 import PickSelect from "../../components/PickSelect";
 import api from "../../config/api";
 import { T, fmtN, localYMD } from "../shared/tokens";
+import { darjRowSuffix, darjDetailLine } from "../../utils/darjTime";
 import { Pill, Stat, Panel, THead, AddBtn, FilterTabs } from "../shared/ui";
 import { currentUser, canAny, canEntry } from "../../utils/perms";
 import { t, Rich } from "../../i18n";
@@ -478,7 +479,7 @@ function MonitorTab({ projectId, onChange }) {
                       padding: "10px 15px", alignItems: "center", gap: 6, cursor: "pointer", background: open ? T.surfaceB : "transparent" }}>
                     <div>
                       <div style={{ fontSize: 12.5, fontWeight: 700, color: T.t1 }}>{item4.registration_no || item4.truck_name || t("trip_tracking.truck")}</div>
-                      <div style={{ fontSize: 10.5, color: T.t4 }}>#{item4.trip_no} · {fmtD(item4.trip_date)}</div>
+                      <div style={{ fontSize: 10.5, color: T.t4 }}>#{item4.trip_no} · {fmtD(item4.trip_date)}<DarjTag at={item4.created_at} biz={item4.trip_date} /></div>
                     </div>
                     <div style={{ minWidth: 0 }}>
                       <div style={{ fontSize: 12, color: T.t2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item4.route_name || "—"}</div>
@@ -1548,6 +1549,8 @@ const tbParse = (raw) => {
   const d = new Date(/^\d{4}-\d{2}-\d{2}$/.test(s) ? s + "T00:00:00" : s.replace(" ", "T"));
   return isNaN(d.getTime()) ? null : d;
 };
+// Darj time (26 Oct 2026) — trip kab save hui (created_at, IST). Is file ka apna chhota helper.
+const DarjTag = ({ at, biz }) => { const s = darjRowSuffix(at, biz); return s ? <span style={{ color: T.t4, fontWeight: 400 }}>{s}</span> : null; };
 const tbDate = (raw) => {
   const d = tbParse(raw);
   return d ? d.getDate() + " " + TB_MON[d.getMonth()] + " " + String(d.getFullYear()).slice(2) : (raw ? String(raw).slice(0, 10) : "—");
@@ -1754,6 +1757,7 @@ function TbTripDetail({ id, onClose, onOverride, onBill }) {
             {reviewLine && (
               <div style={{ border: `1px solid ${d.verify_status === "approved" ? T.b1 : T.red + "33"}`, background: d.verify_status === "approved" ? T.surfaceB : T.redL, color: T.t1, borderRadius: 8, padding: "8px 11px", marginBottom: 12, fontSize: 12, lineHeight: 1.55 }}>{reviewLine}</div>
             )}
+            {darjDetailLine(d.created_at, d.created_by_name) && <div style={{ fontSize: 11, color: T.t4, marginBottom: 10 }}>{darjDetailLine(d.created_at, d.created_by_name)}</div>}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(190px,1fr))", gap: "12px 16px", marginBottom: 14 }}>
               {fld(t("common.vendor"), d.vendor_name)}
               {fld(t("tripbill.td_vehicle"), [d.registration_no, d.vehicle_name && d.vehicle_name !== d.registration_no ? d.vehicle_name : ""].filter(Boolean).join(" · "))}
@@ -1910,7 +1914,7 @@ function TbBillDetail({ id, onClose, onTrip, footerExtra }) {
                 {trips.map((tr) => (
                   <div key={tr.id} onClick={onTrip ? () => onTrip(tr.id) : undefined}
                     style={{ display: "grid", gridTemplateColumns: TCOLS, gap: 8, padding: "8px 12px", borderTop: `1px solid ${T.b1}`, alignItems: "center", fontSize: 12, color: T.t2, cursor: onTrip ? "pointer" : "default" }}>
-                    <span style={{ whiteSpace: "nowrap" }}>{tbDate(tr.trip_date)}<span style={{ display: "block", fontSize: 10, color: T.t4 }}>#{tr.trip_no}</span></span>
+                    <span style={{ whiteSpace: "nowrap" }}>{tbDate(tr.trip_date)}<DarjTag at={tr.created_at} biz={tr.trip_date} /><span style={{ display: "block", fontSize: 10, color: T.t4 }}>#{tr.trip_no}</span></span>
                     <span style={{ fontWeight: 700, color: T.t1 }}>{tr.registration_no || "—"}</span>
                     <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tr.project_name || "—"}</span>
                     <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tr.route_name || "—"}</span>
@@ -2052,7 +2056,7 @@ function TbVehiclePage({ vehicle, projectId, from: f0, to: t0, showBills, onClos
                     {trips.map((tr) => (
                       <div key={tr.id} onClick={() => setDetail(tr.id)}
                         style={{ display: "grid", gridTemplateColumns: TB_TCOLS, gap: 8, padding: "9px 14px", borderBottom: `1px solid ${T.b1}`, alignItems: "center", fontSize: 12, color: T.t2, cursor: "pointer" }}>
-                        <span style={{ whiteSpace: "nowrap" }}>{tbDate(tr.trip_date)}<span style={{ display: "block", fontSize: 10, color: T.t4 }}>#{tr.trip_no}</span></span>
+                        <span style={{ whiteSpace: "nowrap" }}>{tbDate(tr.trip_date)}<DarjTag at={tr.created_at} biz={tr.trip_date} /><span style={{ display: "block", fontSize: 10, color: T.t4 }}>#{tr.trip_no}</span></span>
                         <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={tr.project_name || ""}>{tr.project_name || "—"}</span>
                         <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={tr.route_name || ""}>{tr.route_name || "—"}</span>
                         <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{[tr.material_name, tr.qty != null ? tbNum(tr.qty) + (tr.qty_unit ? " " + tr.qty_unit : "") : ""].filter(Boolean).join(" · ") || "—"}</span>

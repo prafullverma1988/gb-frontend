@@ -18,6 +18,7 @@ import api from "../config/api";
 import LibrarySelect from "./LibrarySelect";
 import ActivityLog from "./ActivityLog";
 import { t } from "../i18n";
+import { darjWhen } from "../utils/darjTime";
 import { BackClose } from "../utils/backNav";
 import { cld } from "../utils/cloudinary";
 import { companyName } from "../utils/companyName";
@@ -228,6 +229,8 @@ export default function MRDetailDrawer({ mr, onClose, onChanged, isAdmin: allowE
                     c={mr.priority === "urgent" ? T.red : mr.priority === "high" ? T.amb : undefined}/>
                 )}
                 <Tile label={t("mrdetail.requested_by")} value={mr.requested_by || "—"}/>
+                {/* Darj time (26 Oct 2026) — MR kab save hui, IST me */}
+                {darjWhen(mr.created_at) && <Tile label={t("darj.tag").charAt(0).toUpperCase() + t("darj.tag").slice(1)} value={darjWhen(mr.created_at) + (mr.requested_by ? " — " + mr.requested_by : "")}/>}
                 {mr.required_date && <Tile label={t("common.required_by")} value={fmtDate(mr.required_date)}/>}
                 {mr.approx_amount > 0 && <Tile label={t("mrdetail.approx_amount")} value={`₹${Number(mr.approx_amount).toLocaleString("en-IN")}`}/>}
                 {mr.linked_vendor && <Tile label={t("common.vendor")} value={mr.linked_vendor} c={T.blu}/>}

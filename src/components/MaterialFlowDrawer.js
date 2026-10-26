@@ -32,6 +32,7 @@ import { t } from "../i18n";
 import { BackClose } from "../utils/backNav";
 import { cld } from "../utils/cloudinary";
 import { can, canAny, canEntry } from "../utils/perms";
+import { darjWhen } from "../utils/darjTime";
 
 const T = {
   surface: "#FFFFFF", surfaceB: "#F8F9FB",
@@ -487,6 +488,8 @@ export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin 
                       ...(grn.vehicle_no ? [["⚖️ " + t("weigh.vehicle_no"), grn.vehicle_no]] : []),
                       ["Received On",    fmtDate(grn.received_date)],
                       ["Received By",    receivedByName],
+                      // Darj time (26 Oct 2026) — entry kab save hui, IST me; created_at na ho to row nahi
+                      ...(darjWhen(grn.created_at) ? [[t("darj.tag").charAt(0).toUpperCase() + t("darj.tag").slice(1), darjWhen(grn.created_at)]] : []),
                       ["Type",           grn.grn_type || "Full"],
                       // Task ke andar se hua GRN — kis task ke liye material aaya
                       ...(grn.task_name ? [[t("material.flow_task"), grn.task_name]] : []),

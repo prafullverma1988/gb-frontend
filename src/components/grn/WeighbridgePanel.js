@@ -34,6 +34,7 @@ import { t } from "../../i18n";
 import { challanUnits, destParam, fmtKg, kgIn, kgPerUnit, loadWeighments, loadLibUnits, unitOptions, unitKey, WEIGH_UNITS } from "./weigh";
 import { loadOrderedLines, loadPoLines } from "./grnData";
 import { cld } from "../../utils/cloudinary";
+import { darjRowSuffix } from "../../utils/darjTime";
 
 const inp = { width: "100%", padding: "7px 9px", borderRadius: 6, border: "1.5px solid " + T.b1, fontSize: 12.5, outline: "none", boxSizing: "border-box", fontFamily: "inherit" };
 const lbl = { fontSize: 9.5, fontWeight: 700, color: T.t3, textTransform: "uppercase", display: "block", marginBottom: 3 };
@@ -67,6 +68,8 @@ const challanUnitList = (recv) => {
 const blankNew = { ...blankPick, vendor: "", challan: "", vehicle: "", bridge: "", slipNo: "", kg: "", slipUrl: "", vehUrl: "", read: null, readMsg: "" };
 const blankSecond = { ...blankPick, kg: "", slipNo: "", slipUrl: "", vehUrl: "", vendor: "", challan: "", read: null, readMsg: "" };
 
+// Darj time (26 Oct 2026) — entry kab save hui (created_at, IST). Is file ka apna chhota helper.
+const DarjTag = ({ at, biz }) => { const s = darjRowSuffix(at, biz); return s ? <span style={{ color: T.t4, fontWeight: 400 }}>{s}</span> : null; };
 const fmtWhen = (iso) => {
   if (!iso) return "—";
   const d = new Date(iso);
@@ -477,6 +480,7 @@ export default function WeighbridgePanel({ dest, onChanged }) {
           {w.challan_no && <> · {t("weigh.challan_no")} {w.challan_no}</>}
           {w.driver_name && <> · {t("weigh.driver")}: {w.driver_name}</>}
           {w.pending_unload && w.open_hours > 0 && <> · <span style={{ color: T.amb, fontWeight: 600 }}>{t("weigh.open_since", { h: w.open_hours })}</span></>}
+          <DarjTag at={w.created_at} biz={w.gross_at || w.tare_at} />
         </div>
         {flags.length > 0 && (
           <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 4 }}>

@@ -15330,6 +15330,9 @@ const dict = {
   "stb.skip_all_btn": "Sab chuno",
   "stb.skip_none_btn": "Chunav hatao",
   "machinery.tab_live":                                        "Live Tracking",
+  "darj.tag": "darj",
+  "darj.detail": "Darj: {when}",
+  "darj.detail_by": "Darj: {when} — {name}",
 };
 
 export default dict;

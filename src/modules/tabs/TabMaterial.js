@@ -18,6 +18,7 @@ import { t } from "../../i18n";
 import { cld } from "../../utils/cloudinary";
 import { can, canAny, canEntry } from "../../utils/perms";
 import { isoDate, todayISO } from "../../utils/today";
+import { darjRowSuffix } from "../../utils/darjTime";
 import { UsedUnitRow, stockQtyOf, factorOf, UnitViewChip } from "../../components/UnitConv";
 import { receiveWithSiteUnit } from "../../utils/siteUnitAsk";
 
@@ -46,6 +47,9 @@ function mrPendingQty(m) {
   return Math.round((Number.isFinite(n) ? n : 0) * 1000) / 1000;
 }
 
+// Darj time (26 Oct 2026) — entry kab save hui (created_at, IST). Is file ka apna chhota helper.
+const DarjTag=({at,biz})=>{const s=darjRowSuffix(at,biz);return s?<span style={{color:T.t4,fontWeight:400}}>{s}</span>:null;};
+
 function toMrCard(m) {
   const ordered   = parseFloat(m.quantity) || 0;
   const received  = parseFloat(m.received_qty) || 0;
@@ -58,6 +62,7 @@ function toMrCard(m) {
     stage: m.stage || "Requested",
     by: m.requested_by || "Site Team",
     date: m.created_at ? new Date(m.created_at).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}) : "—",
+    createdAt: m.created_at || null, biz: m.created_at || null,
     vendor: m.linked_vendor || null,
     amt: parseFloat(m.approx_amount) || 0,
     // MR wale ka "Kahan se aaye" (24 Oct 2026)
@@ -417,6 +422,7 @@ function TabMaterial({ project }) {
                 stage: "Received",
                 by: g.received_by || (isAutoBill ? "Finance" : "Site"),
                 date: g.received_date ? new Date(g.received_date).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}) : "—",
+                createdAt: g.created_at || null, biz: g.received_date || null,
                 vendor: g.vendor_name || null,
                 // Value of what was received. GRN lines carry rate/amount for
                 // priced receipts (site-expense purchase, direct warehouse receipt);
@@ -1062,7 +1068,7 @@ function TabMaterial({ project }) {
                       const showDel = u.id && u.task_id && canDeleteUsed(u.created_by_id ?? u.created_by, u.created_at);
                       return (
                       <div key={u.id||i} style={{display:"grid",gridTemplateColumns:"85px 1fr 75px 90px 1fr 32px",padding:"9px 16px",gap:8,borderBottom:"1px solid "+T.b1,alignItems:"center",background:i%2===0?T.surface:"white"}}>
-                        <div style={{fontSize:11.5,color:T.t3}}>{u.used_date?new Date(u.used_date).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}):"—"}</div>
+                        <div style={{fontSize:11.5,color:T.t3}}>{u.used_date?new Date(u.used_date).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}):"—"}<DarjTag at={u.created_at} biz={u.used_date}/></div>
                         <div>
                           <div style={{fontSize:12.5,fontWeight:600,color:T.t1}}>{u.material_name}</div>
                           <div style={{fontSize:10,color:T.t4}}>{u.unit}</div>
@@ -1389,7 +1395,7 @@ function TabMaterial({ project }) {
                       {m.isViaBill&&<span style={{fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:3,background:"#FEF3C7",color:"#92400E",border:"1px solid #FDE68A"}}>{t("material.via_bill")}</span>}
                       {m.challan&&<span style={{fontSize:9,color:T.t4}}>{t("material.ch_challan", { challan: m.challan })}</span>}
                     </div>
-                    <div style={{fontSize:11,color:T.t4}}>{m.date} · {m.by}</div>
+                    <div style={{fontSize:11,color:T.t4}}>{m.date}<DarjTag at={m.createdAt} biz={m.biz}/> · {m.by}</div>
                     {m.dest && <div style={{fontSize:11.5,color:T.t3,marginTop:2}}>{m.dest}</div>}
                   </div>
                   <div style={{padding:"7px 12px",borderTop:"1px solid "+T.b1,background:T.surfaceB,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
@@ -1644,7 +1650,7 @@ function TabMaterial({ project }) {
                               onMouseEnter={e=>{ if(isGRN && row.grn_id) e.currentTarget.style.background=T.bluL+"66"; }}
                               onMouseLeave={e=>{ e.currentTarget.style.background=ri%2===0?T.surface:"#F8FAFC"; }}>
                               {/* Date */}
-                              <div style={{fontSize:11.5,color:T.t3,fontWeight:500}}>{dateStr}</div>
+                              <div style={{fontSize:11.5,color:T.t3,fontWeight:500}}>{dateStr}<DarjTag at={row.created_at} biz={row.received_date||row.used_date}/></div>
                               {/* Vendor */}
                               <div style={{fontSize:12,color:T.t2,fontWeight:isGRN?500:400}}>{isGRN?(row.vendor_name||"—"):"—"}</div>
                               {/* Challan */}

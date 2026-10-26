@@ -36,6 +36,7 @@ import { BackClose } from "../utils/backNav";
 import { loadPhotoPolicy, policyFor, fileInputProps } from "../utils/photoPolicy";
 import { cld } from "../utils/cloudinary";
 import { can, canAny, canEntry } from "../utils/perms";
+import { darjRowSuffix, darjWhen } from "../utils/darjTime";
 
 // ── ICONS ─────────────────────────────────────────────────────────
 const Ic = ({ d, size = 18, color = "currentColor", sw = 1.8, fill = "none" }) => (
@@ -87,6 +88,8 @@ const fmtN = (n) => (n == null || n === "" ? "—" : Number(n).toLocaleString("e
 // Poora ankda (₹1,23,456) — store/accounts isi se milate hain, gol kiya hua kaam nahi aata.
 const rupee = (n) => "₹" + Math.round(Number(n) || 0).toLocaleString("en-IN");
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+// Darj time (26 Oct 2026) — entry kab save hui (created_at, IST). Is module ka apna chhota helper.
+const DarjTag = ({ at, biz }) => { const s = darjRowSuffix(at, biz); return s ? <span style={{ color: T.t4, fontWeight: 400 }}>{s}</span> : null; };
 const fmtD = (raw) => {
   if (!raw) return "—";
   const d = new Date(raw);
@@ -765,7 +768,7 @@ function DashboardTab({ dash: companyDash, warehouses, onOpenVoucher, onGo }) {
                     dikhna chahiye (Prafull, 29 Sep 2026). */}
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontSize: 12.5, fontWeight: 600, color: T.t1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.item_names || v.voucher_no}</div>
-                  <div style={{ fontSize: 10.5, color: T.t4 }}>{v.voucher_no} · {typeLabel(v.type)} · {fmtD(v.date)}</div>
+                  <div style={{ fontSize: 10.5, color: T.t4 }}>{v.voucher_no} · {typeLabel(v.type)} · {fmtD(v.date)}<DarjTag at={v.created_at} biz={v.date} /></div>
                 </div>
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontSize: 12, color: T.t2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.main} → <b>{to.main}</b></div>
@@ -785,7 +788,7 @@ function DashboardTab({ dash: companyDash, warehouses, onOpenVoucher, onGo }) {
               <Row key={v.id} cols="1.1fr 1.4fr 80px 80px" onClick={() => onOpenVoucher(v.id)}>
                 <div>
                   <div style={{ fontSize: 12.5, fontWeight: 600, color: T.t1 }}>{v.voucher_no}</div>
-                  <div style={{ fontSize: 10.5, color: T.t4 }}>{typeLabel(v.type)} · {fmtD(v.date)}</div>
+                  <div style={{ fontSize: 10.5, color: T.t4 }}>{typeLabel(v.type)} · {fmtD(v.date)}<DarjTag at={v.created_at} biz={v.date} /></div>
                 </div>
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontSize: 12, color: T.t2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{to.main}</div>
@@ -915,7 +918,7 @@ function DashboardTab({ dash: companyDash, warehouses, onOpenVoucher, onGo }) {
               return (
                 <Row key={v.id} cols="120px 80px 90px 1.4fr 1.4fr 60px 90px" onClick={() => onOpenVoucher(v.id)}>
                   <span style={{ fontWeight: 600, color: T.t1 }}>{v.voucher_no}</span>
-                  <span style={{ fontSize: 11.5, color: T.t3 }}>{fmtD(v.date)}</span>
+                  <span style={{ fontSize: 11.5, color: T.t3 }}>{fmtD(v.date)}<DarjTag at={v.created_at} biz={v.date} /></span>
                   <span><TypePill ty={v.type} /></span>
                   <div style={{ minWidth: 0 }}><div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.main}</div><div style={{ fontSize: 10.5, color: T.t4 }}>{f.sub}</div></div>
                   <div style={{ minWidth: 0 }}><div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{to.main}</div><div style={{ fontSize: 10.5, color: T.t4 }}>{to.sub}</div></div>
@@ -1158,7 +1161,7 @@ function LogEvent({ e, unit, onOpenVoucher }) {
   const row = { display: "flex", gap: 12, padding: "10px 14px", borderBottom: `1px solid ${T.b1}` };
   const line = { fontSize: 12, color: T.t2, marginTop: 4, wordBreak: "break-word" };
   const muted = { fontSize: 11, color: T.t4, marginTop: 3 };
-  const date = <div style={{ width: 70, flexShrink: 0, fontSize: 11.5, color: T.t3, paddingTop: 2 }}>{fmtD(e.date)}</div>;
+  const date = <div style={{ width: 70, flexShrink: 0, fontSize: 11.5, color: T.t3, paddingTop: 2 }}>{fmtD(e.date)}<DarjTag at={e.created_ts} biz={e.date} /></div>;
   if (e.kind === "count") {
     const gap = N(e.counted) - N(e.system);
     return (
@@ -2488,7 +2491,7 @@ function GrnTab({ refreshKey, canCreate, canEntry: canGrn, onNew, onNewBuy, onRe
           {rows.map((v) => (
             <Row key={v.id} cols={cols} onClick={() => onOpenVoucher(v.id)}>
               <span style={{ fontWeight: 600, color: T.t1 }}>{v.voucher_no}</span>
-              <span style={{ fontSize: 11.5, color: T.t3 }}>{fmtD(v.date)}</span>
+              <span style={{ fontSize: 11.5, color: T.t3 }}>{fmtD(v.date)}<DarjTag at={v.created_at} biz={v.date} /></span>
               <span>{v.vendor_name || "—"}</span>
               <span style={{ fontSize: 11.5, color: T.t3 }}>{v.invoice_no || "—"}{v.invoice_date ? ` · ${fmtD(v.invoice_date)}` : ""}</span>
               <span>{v.to_warehouse_name || "—"}</span>
@@ -2630,6 +2633,7 @@ function VoucherDrawer({ id, me, onClose, onChanged }) {
           </div>
 
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, marginBottom: 14 }}>
+            {darjWhen(v.created_at) && <KV k={t("darj.tag").charAt(0).toUpperCase() + t("darj.tag").slice(1)} v={darjWhen(v.created_at) + (v.created_by_name ? " — " + v.created_by_name : "")} />}
             {v.type === "grn" && <KV k={t("assets.vendor")} v={v.vendor_name} />}
             {v.type === "grn" && <KV k={t("assets.invoice")} v={[v.invoice_no, v.invoice_date ? fmtD(v.invoice_date) : null].filter(Boolean).join(" · ")} />}
             {isRepairType(v.type) && <KV k={t("assets.repair_cost")} v={v.repair_cost == null ? null : rupee(v.repair_cost)} />}
@@ -3592,7 +3596,7 @@ function MovementsTab({ refreshKey, meta, pickers, canCreate, onIssue, onTransfe
             return (
               <Row key={v.id} cols={cols} onClick={() => onOpenVoucher(v.id)}>
                 <span style={{ fontWeight: 600, color: T.t1 }}>{v.voucher_no}</span>
-                <span style={{ fontSize: 11.5, color: T.t3 }}>{fmtD(v.date)}</span>
+                <span style={{ fontSize: 11.5, color: T.t3 }}>{fmtD(v.date)}<DarjTag at={v.created_at} biz={v.date} /></span>
                 <span><TypePill ty={v.type} /></span>
                 <div style={{ minWidth: 0 }}><div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.main}</div><div style={{ fontSize: 10.5, color: T.t4 }}>{f.sub}</div></div>
                 <div style={{ minWidth: 0 }}><div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{to.main}</div><div style={{ fontSize: 10.5, color: T.t4 }}>{to.sub}</div></div>

@@ -21,6 +21,7 @@ import { BackClose } from "../utils/backNav";
 import { can, canAny, canEntry } from "../utils/perms";
 import { cld } from "../utils/cloudinary";
 import { loadPhotoPolicy, policyFor, fileInputProps } from "../utils/photoPolicy";
+import { darjRowSuffix, darjWhen } from "../utils/darjTime";
 
 // ── ICONS ─────────────────────────────────────────────────────────
 const Ic = ({ d, size = 18, color = "currentColor", sw = 1.8, fill = "none" }) => (
@@ -74,6 +75,8 @@ const nowLocal = () => {
 };
 // <input type="datetime-local"> gives "YYYY-MM-DDTHH:mm"; MySQL wants a space.
 const toSqlDateTime = (v) => (v ? String(v).replace("T", " ") + ":00" : null);
+// Darj time (26 Oct 2026) — entry kab save hui (created_at, IST). Is file ka apna chhota helper.
+const DarjTag = ({ at, biz }) => { const s = darjRowSuffix(at, biz); return s ? <span style={{ color: T.t4, fontWeight: 400 }}>{s}</span> : null; };
 const fmtDT = (d) => {
   if (!d) return "—";
   const dt = new Date(d);
@@ -578,7 +581,7 @@ function FuelEntryDrawer({ entry, onClose, onChanged }) {
 
               <Sec title={t("fuel.kisne_darj_ki")}>
                 <KV k={t("fuel.d_naam")} v={d.entered_by_name || "—"} strong />
-                <KV k={t("fuel.d_darj_hui")} v={fmtDT(d.created_at)} />
+                <KV k={t("fuel.d_darj_hui")} v={darjWhen(d.created_at) || fmtDT(d.created_at)} />
                 <KV k={t("common.note")} v={d.note} />
               </Sec>
 
@@ -1262,7 +1265,7 @@ function RefuelingTab({ purchases, issues, onRefuel }) {
           </Row>
           {rows.map((r) => (
             <Row key={r._k + r.id} cols="105px 80px 1.3fr 1.2fr 80px 80px 95px 90px" onClick={() => openEntry({ kind: r._k, id: r.id })}>
-              <span style={{ fontSize: 11, color: T.t3 }}>{fmtDT(r._at)}</span>
+              <span style={{ fontSize: 11, color: T.t3 }}>{fmtDT(r._at)}<DarjTag at={r.created_at} biz={r._at} /></span>
               <span>{r._k === "purchase"
                 ? <Pill label={r.destination === "store" ? t("fuel.barrel") : t("fuel.machine_2")} c={T.blu} bg={T.bluL} />
                 : <Pill label={t("fuel.barrel_se")} c={T.slt} bg={T.sltL} />}</span>

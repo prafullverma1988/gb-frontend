@@ -15,6 +15,7 @@ import { can, canAny, canEntry } from "../utils/perms";
 import { t, Rich } from "../i18n";
 import { companyName } from "../utils/companyName";
 import { todayISO } from "../utils/today";
+import { darjTime, darjRowSuffix, darjDetailLine } from "../utils/darjTime";
 import { BackClose } from "../utils/backNav";
 import { itemName, vendorLines, photoList, waUrl, vendorPhone } from "../utils/vendorShare";
 
@@ -200,8 +201,11 @@ const MrPrio=({p})=>{
   return <span style={{fontSize:9.5,fontWeight:700,color:x[0],background:x[1],padding:"1px 7px",borderRadius:9,whiteSpace:"nowrap"}}>{t("assets.prio_"+p)}</span>;
 };
 
-// Vertical date rail — "16 Apr" stacked, used in MR cards
-const DateRail=({date})=>{
+// Darj time (26 Oct 2026) — entry kab save hui (created_at, IST). Is module ka apna chhota helper.
+const DarjTag=({at,biz})=>{const s=darjRowSuffix(at,biz);return s?<span style={{color:T.t4,fontWeight:400}}>{s}</span>:null;};
+
+// Vertical date rail — "16 Apr" stacked, used in MR cards (at = created_at → neeche save time)
+const DateRail=({date,at})=>{
   // date may be "16 Apr 2026" / "16/04/2026" / ISO; extract day + month
   let day="", mon="";
   if(date){
@@ -220,6 +224,7 @@ const DateRail=({date})=>{
     <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",lineHeight:1.1}}>
       <span style={{fontSize:14,fontWeight:800,color:T.t1,letterSpacing:"-.3px"}}>{day||"--"}</span>
       <span style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".5px",marginTop:1}}>{mon||""}</span>
+      {darjTime(at)&&<span style={{fontSize:9,fontWeight:400,color:T.t4,marginTop:2,whiteSpace:"nowrap"}}>{darjTime(at)}</span>}
     </div>
   );
 };
@@ -878,6 +883,7 @@ function PODetailDrawer({po,onClose,onApprove,onShare,onGRN,onEdit,onCancel,onSe
           <div>
             <div style={{fontSize:16,fontWeight:700,color:"white",letterSpacing:"-.3px"}}>{d.poNum||("PO-"+d.id)}</div>
             <div style={{fontSize:11,color:"rgba(255,255,255,0.45)",marginTop:3}}>{d.date}</div>
+            {darjDetailLine(d.createdAt,d.createdBy)&&<div style={{fontSize:10.5,color:"rgba(255,255,255,0.45)",marginTop:2}}>{darjDetailLine(d.createdAt,d.createdBy)}</div>}
           </div>
           <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)",display:"flex",padding:4}}><IcX size={15}/></button>
         </div>
@@ -2262,6 +2268,7 @@ function ProcurementModule(){
   const mapPO=p=>({
     id:p.id, poNum:p.po_number,
     date:fmtDate(p.created_at),
+    createdAt:p.created_at||null, createdBy:p.created_by_name||null,
     vendor:p.vendor_name||"—", project:p.project_name||"—",
     project_id:p.project_id||null,
     warehouse_id:p.warehouse_id||null,
@@ -2994,7 +3001,7 @@ function ProcurementModule(){
                       onClick={e=>{if(e.target.closest("button,input"))return;setSelMR(m);}}
                       onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB} onMouseLeave={e=>e.currentTarget.style.background="none"}>
                       {/* Left date rail */}
-                      <DateRail date={m.date}/>
+                      <DateRail date={m.date} at={m.created_at}/>
                       {/* Material + MR# + project */}
                       <div style={{minWidth:0}}>
                         <div style={{fontSize:13,fontWeight:600,color:T.t1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{m.item}</div>
@@ -3069,7 +3076,7 @@ function ProcurementModule(){
                             <input type="checkbox" checked={!!selected[m.id]} onChange={()=>toggleSelect(m.id)}
                               style={{width:15,height:15,cursor:"pointer",accentColor:T.blu}}/>
                           </div>
-                          <DateRail date={m.date}/>
+                          <DateRail date={m.date} at={m.created_at}/>
                           <div style={{minWidth:0}}>
                             <div style={{fontSize:13,fontWeight:600,color:T.t1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{m.item}</div>
                             <div style={{fontSize:10.5,color:T.t4,marginTop:2,display:"flex",gap:8,flexWrap:"wrap"}}>
@@ -3110,7 +3117,7 @@ function ProcurementModule(){
                       onClick={e=>{if(e.target.closest("button,input"))return;setSelMR(m);}}
                       onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB} onMouseLeave={e=>e.currentTarget.style.background="none"}>
                       <div>
-                        <div style={{fontSize:10,color:T.t4}}>{m.date}</div>
+                        <div style={{fontSize:10,color:T.t4}}>{m.date}<DarjTag at={m.created_at} biz={m.created_at}/></div>
                         <div style={{fontSize:10.5,fontWeight:700,color:T.blu,fontFamily:"monospace"}}>{m.id}</div>
                       </div>
                       <div>
@@ -3189,7 +3196,7 @@ function ProcurementModule(){
                         onClick={e=>{if(e.target.closest("button,input"))return;setSelMR(m);}}
                         onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB} onMouseLeave={e=>e.currentTarget.style.background="none"}>
                         <div>
-                          <div style={{fontSize:10,color:T.t4}}>{m.date}</div>
+                          <div style={{fontSize:10,color:T.t4}}>{m.date}<DarjTag at={m.created_at} biz={m.created_at}/></div>
                           <div style={{fontSize:10.5,fontWeight:700,color:T.blu,fontFamily:"monospace"}}>{m.id}</div>
                         </div>
                         <div>
@@ -3238,7 +3245,7 @@ function ProcurementModule(){
                       onClick={e=>{if(e.target.closest("button,input"))return;setSelMR(m);}}
                       onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB} onMouseLeave={e=>e.currentTarget.style.background="none"}>
                       <div>
-                        <div style={{fontSize:10,color:T.t4}}>{m.date}</div>
+                        <div style={{fontSize:10,color:T.t4}}>{m.date}<DarjTag at={m.created_at} biz={m.created_at}/></div>
                         <div style={{fontSize:10.5,fontWeight:700,color:T.red,fontFamily:"monospace"}}>{m.id}</div>
                       </div>
                       <div>
@@ -3264,7 +3271,7 @@ function ProcurementModule(){
                       onClick={e=>{if(e.target.closest("button,input"))return;setSelMR(m);}}
                       onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB} onMouseLeave={e=>e.currentTarget.style.background="none"}>
                       <div>
-                        <div style={{fontSize:10,color:T.t4}}>{m.date}</div>
+                        <div style={{fontSize:10,color:T.t4}}>{m.date}<DarjTag at={m.created_at} biz={m.created_at}/></div>
                         <div style={{fontSize:10.5,fontWeight:700,color:T.t3,fontFamily:"monospace"}}>{m.id}</div>
                       </div>
                       <div>
@@ -3324,7 +3331,10 @@ function ProcurementModule(){
                 return(<div key={po.id}>
                   <div onClick={()=>setSelPO(po)} style={{display:"grid",gridTemplateColumns:"90px 160px 1fr 130px 90px 100px 110px 106px",padding:"10px 14px",borderBottom:po.reviewNote?"none":`1px solid ${T.b1}`,alignItems:"center",cursor:"pointer",borderLeft:`3px solid ${borderC}`,transition:"background 0.1s"}}
                     onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB} onMouseLeave={e=>e.currentTarget.style.background="none"}>
-                    <span style={{fontSize:12,fontWeight:700,color:T.blu,fontFamily:"monospace"}}>{po.poNum||("PO-"+po.id)}</span>
+                    <div style={{minWidth:0}}>
+                      <div style={{fontSize:12,fontWeight:700,color:T.blu,fontFamily:"monospace"}}>{po.poNum||("PO-"+po.id)}</div>
+                      <div style={{fontSize:10,color:T.t4}}>{po.date}<DarjTag at={po.createdAt} biz={po.createdAt}/></div>
+                    </div>
                     <span style={{fontSize:12,color:T.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{po.vendor}</span>
                     <span style={{fontSize:11.5,color:T.t3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{po.project}</span>
                     <span style={{fontSize:11.5,color:T.t3}}>{po.deliverySite}</span>

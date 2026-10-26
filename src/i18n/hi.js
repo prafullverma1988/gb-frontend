@@ -15327,6 +15327,9 @@ const dict = {
   "stb.skip_all_btn": "सब चुनें",
   "stb.skip_none_btn": "चुनाव हटाएँ",
   "machinery.tab_live":                                        "लाइव ट्रैकिंग",
+  "darj.tag": "दर्ज",
+  "darj.detail": "दर्ज: {when}",
+  "darj.detail_by": "दर्ज: {when} — {name}",
 };
 
 export default dict;

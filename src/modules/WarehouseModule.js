@@ -20,6 +20,7 @@ import { can, canAny, canEntry } from "../utils/perms";
 import { UnitPickOrLock, StockConvLine, cardUnitOptions, useUnitCards, stockQtyOf, factorOf, needsFactor, UnitViewChip } from "../components/UnitConv";
 import SiteStockLine, { useSiteStock, siteStockKey } from "../components/SiteStockLine";
 import { receiveWithSiteUnit } from "../utils/siteUnitAsk";
+import { darjRowSuffix, darjDetailLine } from "../utils/darjTime";
 
 // ── ICONS ──────────────────────────────────────────────────────────────
 const Ic=({d,size=18,color="currentColor",sw=1.8,fill="none"})=>(
@@ -57,6 +58,9 @@ const fmtN=(n)=>n==null?"-":Number(n).toLocaleString("en-IN",{maximumFractionDig
 const fmt=(n)=>n>=10000000?`${(n/10000000).toFixed(1)}Cr`:n>=100000?`${(n/100000).toFixed(1)}L`:n>=1000?`${(n/1000).toFixed(0)}K`:String(n||0);
 const today=()=>new Date().toLocaleDateString('en-CA');
 const fmtDate=(d)=>{if(!d)return"—";const dt=new Date(d);return isNaN(dt)?"—":dt.toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"});};
+// Darj time (26 Oct 2026) — entry kab save hui (created_at, IST). Is module ka apna chhota helper.
+const DarjTag=({at,biz})=>{const s=darjRowSuffix(at,biz);return s?<span style={{color:T.t4,fontWeight:400}}>{s}</span>:null;};
+const DarjLine=({at,by,style})=>{const s=darjDetailLine(at,by);return s?<div style={{fontSize:11,color:T.t4,...style}}>{s}</div>:null;};
 
 // ── CATALOG ───────────────────────────────────────────────────────
 const CATEGORIES=["Cement & Concrete","Steel & Iron","Bricks & Blocks","Sand & Aggregate","Tiles & Flooring","Electrical","Plumbing","Paint & Finishing","Wood & Carpentry","Safety & Tools","Other"];
@@ -2683,7 +2687,7 @@ function GrnTab({grns,onNew,onVerify}){
                 onMouseEnter={e=>e.currentTarget.style.background=T.bluL+"77"}
                 onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
                 <span style={{fontSize:11.5,fontWeight:700,color:isReturn?T.cyn:T.blu,fontFamily:"monospace"}}>{g.id}</span>
-                <span style={{fontSize:11.5,color:T.t3}}>{g.date}</span>
+                <span style={{fontSize:11.5,color:T.t3}}>{g.date}<DarjTag at={g.created_at} biz={g._biz}/></span>
                 <div style={{minWidth:0,display:"flex",alignItems:"center",gap:6}}>
                   {isReturn&&<span style={{fontSize:10,padding:"1px 7px",borderRadius:10,background:T.cynL,color:T.cyn,fontWeight:600,border:`1px solid ${T.cynM}`,whiteSpace:"nowrap"}}>{t("warehouse.return")}</span>}
                   <span style={{fontSize:12,color:T.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{g.vendor}</span>
@@ -2741,6 +2745,7 @@ function GRNDetailDrawer({grn,onClose,onVerify}){
             </div>
           </div>
 
+          <DarjLine at={grn.created_at} by={grn.created_by_name} style={{marginBottom:10}}/>
           {/* Meta grid */}
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
             <div style={{padding:"9px 11px",background:T.surfaceB,borderRadius:7,border:`1px solid ${T.b1}`}}>
@@ -2937,7 +2942,7 @@ function IssueTab({issues,projects,onNew,onSelect}){
                 onMouseEnter={e=>e.currentTarget.style.background=T.bluL+"77"}
                 onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
                 <span style={{fontSize:11.5,fontWeight:700,color:T.amb,fontFamily:"monospace"}}>{iss.id}</span>
-                <span style={{fontSize:11.5,color:T.t3}}>{iss.date}</span>
+                <span style={{fontSize:11.5,color:T.t3}}>{iss.date}<DarjTag at={iss.created_at} biz={iss._biz}/></span>
                 <div style={{minWidth:0}}>
                   <div style={{fontSize:12,fontWeight:600,color:T.t1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{iss.project}</div>
                   {/* Issue ka note list me bhi (11 Oct 2026, O) */}
@@ -3008,7 +3013,7 @@ function IssueDetailDrawer({issue,onClose,canCancel,canReceive,onDeleted,onRecei
     setLoading(true);
     api.get(`/warehouse/issues/${issue.dbId}`).then(r=>{
       if(r.success){
-        const d={...r.data,id:r.data.issue_no,dbId:r.data.id,date:fmtDate(r.data.date),project:r.data.project_name,issuedTo:r.data.issued_to_name,by:r.data.issued_by_name};
+        const d={...r.data,id:r.data.issue_no,dbId:r.data.id,_biz:r.data.date,date:fmtDate(r.data.date),project:r.data.project_name,issuedTo:r.data.issued_to_name,by:r.data.issued_by_name};
         setDetail(d);
         setReceiveItems((r.data.items||[]).map(it=>({id:it.id,name:it.name||it.material_name,unit:it.unit,qty:Number(it.qty),received_qty:Number(it.qty)})));
       }
@@ -3060,7 +3065,7 @@ function IssueDetailDrawer({issue,onClose,canCancel,canReceive,onDeleted,onRecei
       onReceived&&onReceived();
       api.get(`/warehouse/issues/${detail.dbId}`).then(rr=>{
         if(rr.success){
-          const d={...rr.data,id:rr.data.issue_no,dbId:rr.data.id,date:fmtDate(rr.data.date),project:rr.data.project_name,issuedTo:rr.data.issued_to_name,by:rr.data.issued_by_name};
+          const d={...rr.data,id:rr.data.issue_no,dbId:rr.data.id,_biz:rr.data.date,date:fmtDate(rr.data.date),project:rr.data.project_name,issuedTo:rr.data.issued_to_name,by:rr.data.issued_by_name};
           setDetail(d);
           setReceiveOpen(false);
         }
@@ -3129,6 +3134,7 @@ function IssueDetailDrawer({issue,onClose,canCancel,canReceive,onDeleted,onRecei
                 <div style={{fontSize:11,color:T.blu,marginTop:2}}>{t("warehouse.issue_machine_hint")}</div>
               </div>
             )}
+            <DarjLine at={detail?.created_at} by={detail?.created_by_name} style={{marginBottom:10}}/>
 
             <div style={{padding:"14px 16px",background:`linear-gradient(135deg, ${T.ambL} 0%, ${T.bluL} 100%)`,borderRadius:10,border:`1px solid ${T.ambM}`,marginBottom:14}}>
               <div style={{display:"grid",gridTemplateColumns:"1fr auto 1fr",gap:14,alignItems:"center"}}>
@@ -3414,7 +3420,7 @@ function MRTab({mrs,onNew,onIssue,onApprove,onReject,onClose,onOrder,onGrn,onSen
                 <span style={{display:"inline-block",marginTop:3,fontSize:8.5,fontWeight:700,color:ps.c,background:ps.bg,padding:"1px 6px",borderRadius:5}}>{mr.priority}</span>
               </div>
               {/* Date */}
-              <span style={{fontSize:11,color:T.t3,whiteSpace:"nowrap"}}>{mr.date}</span>
+              <span style={{fontSize:11,color:T.t3,whiteSpace:"nowrap"}}>{mr.date}<DarjTag at={mr.created_at} biz={mr.created_at}/></span>
               {/* Project / Source + by */}
               <div style={{minWidth:0}}>
                 <div style={{fontSize:12,fontWeight:600,color:T.t1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{mr.project}</div>
@@ -3710,7 +3716,7 @@ export function TransfersTab({transfers,onNew,onSelect}){
               onMouseEnter={e=>e.currentTarget.style.background=T.bluL+"77"}
               onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
               <span style={{fontSize:11.5,fontWeight:700,color:T.cyn,fontFamily:"monospace"}}>{t.id}</span>
-              <span style={{fontSize:11.5,color:T.t3}}>{t.date}</span>
+              <span style={{fontSize:11.5,color:T.t3}}>{t.date}<DarjTag at={t.created_at} biz={t._biz}/></span>
               <div style={{minWidth:0}}>
                 <div style={{fontSize:12,fontWeight:600,color:T.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.from}</div>
                 <div style={{fontSize:10,color:T.t4,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{(t.items||[]).map(i=>`${i.material_name||i.name} ×${fmtN(i.qty)} ${i.unit||""}`).join(", ")}</div>
@@ -3746,7 +3752,7 @@ export function TransferDetailDrawer({transfer,onClose,canDelete,canReceive,onDe
     setLoading(true);
     api.get(`/warehouse/transfers/${transfer.dbId}`).then(r=>{
       if(r.success){
-        const d={...r.data,id:r.data.transfer_no,dbId:r.data.id,date:fmtDate(r.data.date),from:r.data.from_warehouse_name||r.data.from_project_name||r.data.from_location,to:r.data.to_warehouse_name||r.data.to_project_name||r.data.to_location,by:r.data.transferred_by_name};
+        const d={...r.data,id:r.data.transfer_no,dbId:r.data.id,_biz:r.data.date,date:fmtDate(r.data.date),from:r.data.from_warehouse_name||r.data.from_project_name||r.data.from_location,to:r.data.to_warehouse_name||r.data.to_project_name||r.data.to_location,by:r.data.transferred_by_name};
         setDetail(d);
         setReceiveItems((r.data.items||[]).map(it=>({id:it.id,material_name:it.material_name,unit:it.unit,qty:Number(it.qty),received_qty:Number(it.qty)})));
       }
@@ -3782,7 +3788,7 @@ export function TransferDetailDrawer({transfer,onClose,canDelete,canReceive,onDe
       // refresh detail
       api.get(`/warehouse/transfers/${detail.dbId}`).then(rr=>{
         if(rr.success){
-          const d={...rr.data,id:rr.data.transfer_no,dbId:rr.data.id,date:fmtDate(rr.data.date),from:rr.data.from_warehouse_name||rr.data.from_project_name||rr.data.from_location,to:rr.data.to_warehouse_name||rr.data.to_project_name||rr.data.to_location,by:rr.data.transferred_by_name};
+          const d={...rr.data,id:rr.data.transfer_no,dbId:rr.data.id,_biz:rr.data.date,date:fmtDate(rr.data.date),from:rr.data.from_warehouse_name||rr.data.from_project_name||rr.data.from_location,to:rr.data.to_warehouse_name||rr.data.to_project_name||rr.data.to_location,by:rr.data.transferred_by_name};
           setDetail(d);
           setReceiveOpen(false);
         }
@@ -3858,6 +3864,7 @@ export function TransferDetailDrawer({transfer,onClose,canDelete,canReceive,onDe
               </div>
             </div>
 
+            <DarjLine at={detail?.created_at} by={detail?.created_by_name} style={{marginBottom:10}}/>
             {/* Meta grid */}
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:14}}>
               <div style={{padding:"9px 11px",background:T.surfaceB,borderRadius:7,border:`1px solid ${T.b1}`}}>
@@ -4228,10 +4235,10 @@ function WarehouseModule({deepLink,onDeepLinkDone}={}){
       if(settRes.success&&settRes.data) setProcMode(settRes.data.warehouse_procurement_mode||"direct");
       if(sRes.success) setStock((sRes.data||[]).map(m=>({...m,value:m.stock_value!=null?Number(m.stock_value)||0:(Number(m.qty)||0)*(Number(m.rate)||0),qty:Number(m.qty)||0,min_qty:Number(m.min_qty)||0,max_qty:Number(m.max_qty)||0,rate:Number(m.rate)||0,minQty:Number(m.min_qty)||0,maxQty:Number(m.max_qty)||0,qty_damaged:Number(m.qty_damaged)||0,qty_scrap:Number(m.qty_scrap)||0,qty_repair:Number(m.qty_repair)||0})));
       // Hatayi gayi GRN (12 Oct 2026, khaate se "GRN hatao") — status "Cancelled" dikhe.
-      if(gRes.success) setGrns((gRes.data||[]).map(g=>({...g,status:g.cancelled_at?"Cancelled":g.status,id:g.grn_no||`GRN-${g.id}`,dbId:g.id,date:fmtDate(g.date),poNo:g.po_no||"—",vendor:g.vendor||"—",by:g.received_by_name||"—",total:Number(g.total)||0,items:(g.items||[]).map(it=>({...it,name:it.material_name||it.name||"—",matId:it.material_id,ordQty:Number(it.ordered_qty)||0,recQty:Number(it.received_qty)||0,rate:Number(it.rate)||0,amount:Number(it.amount)||0,unit:it.unit||""}))})));
-      if(iRes.success) setIssues((iRes.data||[]).map(i=>({...i,id:i.issue_no||`ISS-${i.id}`,dbId:i.id,date:fmtDate(i.date),project:i.project_name||"—",issuedTo:i.issued_to_name||"—",by:i.issued_by_name||"—",zimmedar:i.custodian_name||"",zimParty:i.custody_party_name||"",woLabel:i.wo_label||"",zimId:i.custodian_user_id||null,total:Number(i.total)||0,remarks:i.remarks||"",status:i.status||"Pending",items:(i.items||[]).map(it=>({...it,name:it.material_name||it.name||"—",matId:it.material_id,qty:Number(it.qty)||0,rate:Number(it.rate)||0,unit:it.unit||""}))})));
-      if(mRes.success) setMrs((mRes.data||[]).map(m=>({...m,project:m.project_name||(m.project_id?"—":(m.warehouse_name?`${m.warehouse_name} ${t("warehouse.internal_request")}`:"Store (internal)")),requestedBy:m.requested_by_name||"—",id:m.mr_no||`MR-${m.id}`,dbId:m.id,date:fmtDate(m.date),items:m.items||[]})));
-      if(tRes.success) setTransfers((tRes.data||[]).map(t=>({...t,from:t.from_warehouse_name||t.from_project_name||t.from_location||"—",to:t.to_warehouse_name||t.to_project_name||t.to_location||"—",by:t.transferred_by_name||"—",id:t.transfer_no||`TRF-${t.id}`,dbId:t.id,date:fmtDate(t.date),items:t.items||[],total_value:Number(t.total_value)||0})));
+      if(gRes.success) setGrns((gRes.data||[]).map(g=>({...g,status:g.cancelled_at?"Cancelled":g.status,id:g.grn_no||`GRN-${g.id}`,dbId:g.id,_biz:g.date,date:fmtDate(g.date),poNo:g.po_no||"—",vendor:g.vendor||"—",by:g.received_by_name||"—",total:Number(g.total)||0,items:(g.items||[]).map(it=>({...it,name:it.material_name||it.name||"—",matId:it.material_id,ordQty:Number(it.ordered_qty)||0,recQty:Number(it.received_qty)||0,rate:Number(it.rate)||0,amount:Number(it.amount)||0,unit:it.unit||""}))})));
+      if(iRes.success) setIssues((iRes.data||[]).map(i=>({...i,id:i.issue_no||`ISS-${i.id}`,dbId:i.id,_biz:i.date,date:fmtDate(i.date),project:i.project_name||"—",issuedTo:i.issued_to_name||"—",by:i.issued_by_name||"—",zimmedar:i.custodian_name||"",zimParty:i.custody_party_name||"",woLabel:i.wo_label||"",zimId:i.custodian_user_id||null,total:Number(i.total)||0,remarks:i.remarks||"",status:i.status||"Pending",items:(i.items||[]).map(it=>({...it,name:it.material_name||it.name||"—",matId:it.material_id,qty:Number(it.qty)||0,rate:Number(it.rate)||0,unit:it.unit||""}))})));
+      if(mRes.success) setMrs((mRes.data||[]).map(m=>({...m,project:m.project_name||(m.project_id?"—":(m.warehouse_name?`${m.warehouse_name} ${t("warehouse.internal_request")}`:"Store (internal)")),requestedBy:m.requested_by_name||"—",id:m.mr_no||`MR-${m.id}`,dbId:m.id,_biz:m.date,date:fmtDate(m.date),items:m.items||[]})));
+      if(tRes.success) setTransfers((tRes.data||[]).map(t=>({...t,from:t.from_warehouse_name||t.from_project_name||t.from_location||"—",to:t.to_warehouse_name||t.to_project_name||t.to_location||"—",by:t.transferred_by_name||"—",id:t.transfer_no||`TRF-${t.id}`,dbId:t.id,_biz:t.date,date:fmtDate(t.date),items:t.items||[],total_value:Number(t.total_value)||0})));
       if(pRes.success) setProjects((pRes.data||[]).map(p=>({id:p.id,name:p.name})));
       if(uRes.success) setUsers((uRes.data||[]).map(u=>({id:u.id,name:u.name})));
       if(libRes.success) setLibrary((libRes.data||[]).map(m=>({id:m.id,name:m.name,unit:m.unit||"Nos",category:m.category_name||"",rate:Number(m.last_rate||m.base_rate||0)})));
