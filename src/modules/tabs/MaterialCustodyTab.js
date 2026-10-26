@@ -242,6 +242,8 @@ function CustodyDrawer({ issueId, onClose, onChanged, onReceive }) {
             {t("custody.zimmedar")}: <b>{d.custodian_name}</b>{d.party_name ? " · " + d.party_name : ""} ·{" "}
             {t("custody.since_days", { n: d.days })} · {d.warehouse_name || ""}
             {d.task_name && <> · <b>{t("custody.use_task", { task: d.task_name })}</b></>}
+            {/* Company setting: zimmedari sirf raaste tak (26 Oct 2026) */}
+            {d.custody_scope === "transit" && <> · <b style={{ color: T.amb }}>{t("custody.scope_transit_note")}</b></>}
             {d.custody_accepted_at && <> · {t("custody.accepted_on", { date: String(d.custody_accepted_at).slice(0, 10) })}</>}
           </div>
           {d.can_accept && (
@@ -271,7 +273,7 @@ function CustodyDrawer({ issueId, onClose, onChanged, onReceive }) {
                       <button style={btn(T.grn)} onClick={() => setForm({ line: l, kind: "used" })}>{t("custody.btn_mark_used")}</button>{" "}
                     </>)}
                     {d.can_act && l.khula > 0 && (<>
-                      <button style={btn(T.blu)} onClick={() => setForm({ line: l, kind: "return" })}>{t("custody.btn_return")}</button>{" "}
+                      {d.custody_scope !== "transit" && <><button style={btn(T.blu)} onClick={() => setForm({ line: l, kind: "return" })}>{t("custody.btn_return")}</button>{" "}</>}
                       <button style={btn(T.red)} onClick={() => setForm({ line: l, kind: "short" })}>{t("custody.btn_short")}</button>
                     </>)}
                   </td>

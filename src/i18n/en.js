@@ -14454,6 +14454,7 @@ const dict = {
   "custody.open_tag": "Open",
   "custody.resolved_tag": "Resolved",
   "custody.pick_label": "From custody (store issue)",
+  "custody.scope_transit_note": "Custody is in-transit only — ends when the site receives it (company setting)",
   "custody.pick_opt": "{no} · {who} · {n} {unit} open",
   "custody.pick_none": "Not from a custody",
   "custody.fin_tab": "Material with subcontractors",

@@ -14456,6 +14456,7 @@ const dict = {
   "custody.open_tag": "Khula",
   "custody.resolved_tag": "Band",
   "custody.pick_label": "Zimmedari se (store issue)",
+  "custody.scope_transit_note": "Zimmedari sirf raaste tak — site par receive hote hi khatam (company setting)",
   "custody.pick_opt": "{no} · {who} · khula {n} {unit}",
   "custody.pick_none": "Zimmedari se nahi",
   "custody.fin_tab": "Subcontractor ke paas material",

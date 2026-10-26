@@ -14453,6 +14453,7 @@ const dict = {
   "custody.open_tag": "खुला",
   "custody.resolved_tag": "बंद",
   "custody.pick_label": "Zimmedari से (store issue)",
+  "custody.scope_transit_note": "ज़िम्मेदारी सिर्फ़ रास्ते तक — साइट पर रिसीव होते ही ख़त्म (कंपनी सेटिंग)",
   "custody.pick_opt": "{no} · {who} · खुला {n} {unit}",
   "custody.pick_none": "Zimmedari से नहीं",
   "custody.fin_tab": "Subcontractor के पास material",

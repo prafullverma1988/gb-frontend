@@ -4408,6 +4408,47 @@ function MrDestChoiceCard({ onGoto }) {
   );
 }
 
+// ── Material Zimmedari kab tak (26 Oct 2026, Prafull) ──
+// company_prefs.custody_scope: "use" (lagne / wapas hone tak, default) ya "transit"
+// (sirf raaste tak — site par receive hote hi band). Naam / samjhaana / option server
+// ke PREFS se (routes/settings.js) — user ki bhasha me. Sirf naye store issue par.
+function CustodyScopeCard() {
+  const [row, setRow] = useState(null);       // null = aa raha hai, false = server par ye setting nahi
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+  useEffect(() => {
+    api.get("/settings/prefs").then(r => {
+      const p = r?.success && Array.isArray(r.data) ? r.data.find(x => x.key === "custody_scope") : null;
+      setRow(p || false);
+    }).catch(() => setRow(false));
+  }, []);
+  if (!row) return null;
+  const pick = async (v) => {
+    if (v === row.value || busy) return;
+    setBusy(true); setMsg("");
+    const r = await api.put("/settings/prefs", { custody_scope: v }).catch(() => ({ success: false }));
+    setBusy(false);
+    if (r && r.success !== false) { setRow(p => ({ ...p, value: v })); setMsg(t("mrd.set_saved")); setTimeout(() => setMsg(""), 2000); }
+    else setMsg((r && r.message) || t("mrd.set_fail"));
+  };
+  return (
+    <SectionCard title={row.label} desc={row.hint}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10, paddingTop: 4 }}>
+        {(row.options || []).map(opt => {
+          const on = row.value === opt.v;
+          return (
+            <label key={opt.v} style={{ display: "flex", gap: 10, padding: "12px 14px", borderRadius: 9, border: `1.5px solid ${on ? "#2563EB" : "#E5E7EB"}`, background: on ? "#EFF6FF" : "white", cursor: "pointer", alignItems: "flex-start" }}>
+              <input type="radio" name="custody_scope" checked={on} disabled={busy} onChange={() => pick(opt.v)} style={{ marginTop: 3, accentColor: "#2563EB" }}/>
+              <div style={{ flex: 1, fontSize: 13, fontWeight: on ? 700 : 500, color: on ? "#1D4ED8" : "#111827", lineHeight: 1.5 }}>{opt.l}</div>
+            </label>
+          );
+        })}
+      </div>
+      {msg && <div style={{ fontSize: 12, color: T.textMid, marginTop: 8 }}>{msg}</div>}
+    </SectionCard>
+  );
+}
+
 function WarehouseSettings({ onGoto }) {
   const [whProcMode, setWhProcMode] = useState("direct"); // direct | via_procurement
   const [mrFlow, setMrFlow] = useState("procurement_driven"); // procurement_driven | warehouse_driven
@@ -4518,6 +4559,8 @@ function WarehouseSettings({ onGoto }) {
       </SectionCard>
 
       <MrDestChoiceCard onGoto={onGoto}/>
+
+      <CustodyScopeCard/>
 
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap", padding: "12px 16px", borderRadius: T.radius, border: `1px solid ${T.border}`, background: T.card, marginBottom: 20 }}>
         <div style={{ fontSize: 12.5, color: T.textMid, lineHeight: 1.5 }}>{t("weigh.settings_moved")}</div>
