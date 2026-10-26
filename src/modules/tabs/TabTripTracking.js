@@ -678,7 +678,10 @@ function RoutesTab({ projectId }) {
                   {r.name}
                   {Array.isArray(r.route_geometry) && <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: T.grn }}>{t("trip_tracking.naksha_tag")}</span>}
                 </div>
-                {r.default_task_name && <div style={{ fontSize: 10.5, color: T.t4 }}>{r.default_task_name}</div>}
+                {r.default_task_name
+                  ? <div style={{ fontSize: 10.5, color: T.t4 }}>{r.default_task_name}</div>
+                  : <div style={{ fontSize: 10.5, color: T.red, fontWeight: 700 }}>⚠ {t("trip_tracking.route_no_task_tag")}</div>}
+                {Number(r.stock_effect) === 0 && <div style={{ fontSize: 10.5, color: T.amb, fontWeight: 700 }}>{t("trip_tracking.stock_no_tag")}</div>}
                 {/* Route kisne banaya (25 Oct 2026, Prafull) */}
                 {r.created_by_name && <div style={{ fontSize: 10.5, color: T.t4 }}>{t("trip_tracking.route_by", { name: r.created_by_name })}</div>}
                 {/* Route par ab rate nahi (4 Oct 2026) — paisa gaadi ke rate card se.
@@ -714,6 +717,8 @@ function RouteForm({ projectId, tasks, route, onCancel, onSaved }) {
     material_use: route?.material_use === "auto" || route?.material_use === "mark" ? route.material_use : "",
     // Loading entry zaroori? (21 Oct 2026) — purana / naya route = zaroori.
     load_required: route && Number(route.load_required) === 0 ? "0" : "1",
+    // Stock par asar? (26 Oct 2026) — naya route khud chune; purana jaisa tha.
+    stock_effect: route ? (Number(route.stock_effect) === 0 ? "0" : "1") : "",
   });
   const [saving, setSaving] = useState(false);
   // Route ka material (5 Oct 2026) — Library se; app ke loading form me pehle se bhara.
@@ -779,6 +784,11 @@ function RouteForm({ projectId, tasks, route, onCancel, onSaved }) {
     if (pts.length === 1) { window.alert(t("trip_tracking.kam_se_kam_2_point")); return; }
     if (geoMode && !startIs) { window.alert(t("trip_tracking.pehle_batao")); return; }
     if (numf(f.lead_km) == null) { window.alert(t("trip_tracking.lead_km_bharein")); return; }
+    // Task + Stock par asar zaroori (26 Oct 2026, Prafull)
+    if (!f.default_task_id) { window.alert(t("trip_tracking.route_task_chuno")); return; }
+    if (f.stock_effect === "") { window.alert(t("trip_tracking.stock_eff_chuno")); return; }
+    const stockOff = route && f.stock_effect === "0" && Number(route.stock_effect) !== 0;
+    if (stockOff && Number(route.stock_trip_n) > 0 && !window.confirm(t("trip_tracking.stock_eff_off_q", { n: route.stock_trip_n }))) return;
     setSaving(true);
     const a = canon ? canon[0] : null, b = canon ? canon[canon.length - 1] : null;
     const body = {
@@ -788,6 +798,7 @@ function RouteForm({ projectId, tasks, route, onCancel, onSaved }) {
       material_name: f.material_name || null,
       material_use: f.material_use || null,
       load_required: f.load_required === "0" ? 0 : 1,
+      stock_effect: f.stock_effect === "0" ? 0 : 1,
       load_lat: a ? a.lat : numf(f.load_lat), load_lng: a ? a.lng : numf(f.load_lng),
       unload_lat: b ? b.lat : numf(f.unload_lat), unload_lng: b ? b.lng : numf(f.unload_lng),
       load_radius: f.load_radius, unload_radius: f.load_radius,
@@ -809,6 +820,9 @@ function RouteForm({ projectId, tasks, route, onCancel, onSaved }) {
     }
     setSaving(false);
     if (!r || r.success === false) { window.alert((r && r.message) || t("trip_tracking.save_fail")); return; }
+    const rs0 = r.data && r.data.restock;
+    if (rs0 && rs0.zeroed) window.alert(t("trip_tracking.stock_eff_done_off", { n: rs0.zeroed }));
+    else if (rs0 && rs0.back) window.alert(t("trip_tracking.stock_eff_done_on", { n: rs0.back }));
     onSaved();
   };
 
@@ -818,6 +832,26 @@ function RouteForm({ projectId, tasks, route, onCancel, onSaved }) {
       <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 10 }}>
         <div><div style={lblS}>{t("trip_tracking.route_name")}</div><input value={f.name} onChange={e => upd("name", e.target.value)} placeholder={t("trip_tracking.quarry_site_a")} style={inp} /></div>
         <div><div style={lblS}>{t("trip_tracking.lead_km")} <span style={{ color: T.t4, fontWeight: 400 }}>{t("trip_tracking.haul_road")}</span></div><input value={f.lead_km} onChange={e => { upd("lead_km", e.target.value.replace(/[^0-9.]/g, "")); setLeadAuto(false); }} placeholder="0" style={inp} /></div>
+      </div>
+      {/* Task + Stock par asar — dono zaroori (26 Oct 2026, Prafull) */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 10 }}>
+        <div>
+          <div style={lblS}>{t("trip_tracking.route_task_label")}</div>
+          <PickSelect value={f.default_task_id || ""} onChange={e => upd("default_task_id", e.target.value ? Number(e.target.value) : "")} style={inp}>
+            <option value="">{t("trip_tracking.route_task_chuno_opt")}</option>
+            {tasks.map(tk => <option key={tk.id} value={tk.id}>{tk.name || tk.title}</option>)}
+          </PickSelect>
+          <div style={{ fontSize: 10.5, color: T.t4, marginTop: 3 }}>{t("trip_tracking.route_task_hint")}</div>
+        </div>
+        <div>
+          <div style={lblS}>{t("trip_tracking.stock_eff_label")}</div>
+          <PickSelect value={f.stock_effect} onChange={e => upd("stock_effect", e.target.value)} style={inp}>
+            <option value="">{t("trip_tracking.stock_eff_pick")}</option>
+            <option value="1">{t("trip_tracking.stock_eff_yes")}</option>
+            <option value="0">{t("trip_tracking.stock_eff_no")}</option>
+          </PickSelect>
+          <div style={{ fontSize: 10.5, color: T.t4, marginTop: 3 }}>{t("trip_tracking.stock_eff_hint")}</div>
+        </div>
       </div>
       {/* Route sirf jagah aur samay hai (4 Oct 2026) — paisa gaadi ke rate card se. */}
       {route && route.rate_per_trip != null && (
@@ -883,7 +917,7 @@ function RouteForm({ projectId, tasks, route, onCancel, onSaved }) {
           placeholder={t("trip_tracking.route_material_ph")} />
         <div style={{ fontSize: 10.5, color: T.t4, marginTop: 3 }}>{t("trip_tracking.route_material_hint")}</div>
       </div>
-      <div style={{ marginTop: 10 }}>
+      {f.stock_effect !== "0" && <div style={{ marginTop: 10 }}>
         <div style={lblS}>{t("trip_stock.route_label")}</div>
         <PickSelect value={f.material_use} onChange={e => upd("material_use", e.target.value)} style={inp}>
           <option value="">{route && route.company_material_use
@@ -893,7 +927,7 @@ function RouteForm({ projectId, tasks, route, onCancel, onSaved }) {
           <option value="mark">{t("trip_stock.mark")}</option>
         </PickSelect>
         <div style={{ fontSize: 10.5, color: T.t4, marginTop: 3 }}>{t("trip_stock.route_hint")}</div>
-      </div>
+      </div>}
       <div style={{ marginTop: 10 }}>
         <div style={lblS}>{t("trip_tracking.load_req_label")}</div>
         <PickSelect value={f.load_required} onChange={e => upd("load_required", e.target.value)} style={inp}>
@@ -901,13 +935,6 @@ function RouteForm({ projectId, tasks, route, onCancel, onSaved }) {
           <option value="0">{t("trip_tracking.load_req_no")}</option>
         </PickSelect>
         <div style={{ fontSize: 10.5, color: T.t4, marginTop: 3 }}>{t("trip_tracking.load_req_hint")}</div>
-      </div>
-      <div style={{ marginTop: 10 }}>
-        <div style={lblS}>{t("trip_tracking.default_task_optional")}</div>
-        <PickSelect value={f.default_task_id || ""} onChange={e => upd("default_task_id", e.target.value ? Number(e.target.value) : "")} style={inp}>
-          <option value="">{t("boq_import_wizard.none")}</option>
-          {tasks.map(t => <option key={t.id} value={t.id}>{t.name || t.title}</option>)}
-        </PickSelect>
       </div>
       <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 12 }}>
         <button onClick={onCancel} type="button" style={{ padding: "8px 14px", borderRadius: 7, border: `1px solid ${T.b1}`, background: T.surface, fontSize: 12, fontWeight: 600, color: T.t3, cursor: "pointer", fontFamily: "inherit" }}>{t("common.cancel")}</button>
