@@ -3612,7 +3612,62 @@ function SubTabBar({tabs,active,onSelect}){
 // Lifecycle view of incoming material:
 //   - Received: confirmed GRNs (history)
 //   - Warehouse MR: requests warehouse raised that will become GRNs
-function MaterialInTab({grns,mrs,projects,users,library,procMode="direct",onNewGRN,onVerifyGRN,onSubMR,onApprove,onReject,onClose}){
+// ── Site se wapsi aa rahi (28 Oct 2026) ──────────────────────────────
+// Prafull: "material ko store me wapas bhejne pe store GRN me show nahi ho raha". Zimmedar ka
+// "Wapas karo → Store" tab tak pending rehta hai jab tak store "Store me mila" na dabaye — tabhi
+// Return GRN banti hai (neeche list me). Pehle ye button sirf project ke Zimmedari tab me tha, store
+// ko raaste wali wapsi dikhti hi nahi thi. Ab GRN list ke upar; khaali ho to kuch nahi dikhta.
+function StoreReturnsPanel({whId,canAct,onDone}){
+  const [rows,setRows]=useState(null);
+  const [busy,setBusy]=useState(0);
+  const load=useCallback(()=>{
+    api.get("/material-custody/store-returns"+(whId?"?warehouse_id="+encodeURIComponent(whId):""))
+      .then(r=>setRows(r&&r.success?(r.data||[]):[])).catch(()=>setRows([]));
+  },[whId]);
+  useEffect(()=>{load();},[load]);
+  if(!rows||!rows.length) return null;
+  const decide=async(m,ok)=>{
+    let body={};
+    if(!ok){
+      const ask=window.promptAsync||((msg)=>Promise.resolve(window.prompt(msg)));
+      const note=String((await ask(t("warehouse.ret_reject_q")))||"").trim();
+      if(!note) return;
+      body={note};
+    }
+    setBusy(m.id);
+    const r=await api.post(`/material-custody/move/${m.id}/${ok?"approve":"reject"}`,body).catch(()=>null);
+    setBusy(0);
+    if(!r||!r.success){ alert((r&&r.message)||t("warehouse.ret_fail")); return; }
+    load(); onDone&&onDone();
+  };
+  return(
+    <div style={{background:T.cynL+"66",border:`1px solid ${T.cynM}`,borderLeft:`3px solid ${T.cyn}`,borderRadius:9,padding:"10px 12px",marginBottom:12}}>
+      <div style={{fontSize:12.5,fontWeight:700,color:T.cyn}}>{t("warehouse.ret_title",{n:rows.length})}</div>
+      <div style={{fontSize:11,color:T.t3,margin:"2px 0 8px"}}>{t("warehouse.ret_hint")}</div>
+      {rows.map(m=>(
+        <div key={m.id} style={{display:"flex",alignItems:"center",gap:10,padding:"7px 0",borderTop:`1px solid ${T.cynM}`}}>
+          {m.photo_urls&&m.photo_urls[0]&&(
+            <a href={m.photo_urls[0]} target="_blank" rel="noreferrer"><img src={cld(m.photo_urls[0],"thumb")} alt="" style={{width:38,height:38,objectFit:"cover",borderRadius:6,display:"block"}}/></a>
+          )}
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontSize:12.5,fontWeight:600,color:T.t1}}>{m.material_name} · {Number(m.qty)} {m.unit}</div>
+            <div style={{fontSize:11,color:T.t3,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+              {t("warehouse.ret_from",{project:m.project_name||"—",by:m.by_name||"—"})} · {m.issue_no} · {fmtDate(m.created_at)}{m.note?" · "+m.note:""}
+            </div>
+          </div>
+          {canAct&&m.can_decide?(
+            <div style={{display:"flex",gap:6,flexShrink:0}}>
+              <Btn onClick={()=>decide(m,false)} c={T.red} size="sm" disabled={busy===m.id}>{t("custody.btn_reject")}</Btn>
+              <Btn onClick={()=>decide(m,true)} c={T.grn} size="sm" disabled={busy===m.id}>{busy===m.id?"…":t("custody.btn_store_received")}</Btn>
+            </div>
+          ):<span style={{fontSize:11,color:T.t4}}>{t("warehouse.ret_waiting")}</span>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function MaterialInTab({grns,mrs,projects,users,library,procMode="direct",onNewGRN,onVerifyGRN,onSubMR,onApprove,onReject,onClose,whId,canReturnAct,onReturnDone}){
   const [sub,setSub]=useState("received");
   const whMrs = mrs.filter(m=>!m.project_id);
   const pendingCount = whMrs.filter(m=>["Pending","Approved","Ordered"].includes(m.status)).length;
@@ -3630,7 +3685,8 @@ function MaterialInTab({grns,mrs,projects,users,library,procMode="direct",onNewG
         </div>
       )}
       {sub==="received"
-        ? <GrnTab grns={grns} onNew={onNewGRN} onVerify={onVerifyGRN}/>
+        ? <><StoreReturnsPanel key={whId||"x"} whId={whId} canAct={canReturnAct} onDone={onReturnDone}/>
+            <GrnTab grns={grns} onNew={onNewGRN} onVerify={onVerifyGRN}/></>
         : <MRTab mrs={whMrs} mode="warehouse" procMode={procMode}
             onNew={onSubMR.openNew?()=>onSubMR.openNew():undefined}
             onOrder={onSubMR.openOrder} onGrn={onSubMR.openGrn}
@@ -4436,7 +4492,7 @@ function WarehouseModule({deepLink,onDeepLinkDone}={}){
         {tab==="ginti"&&<WarehouseGintiTab key={whId} stock={stock} canCreate={canGintiCreate} canApprove={canGintiApprove} onStockChanged={()=>loadAll()}/>}
         {/* key=whId: godown badla to khaata usi godown ka dobara aaye */}
         {tab==="grn"&&<MaterialInTab grns={grns} mrs={mrs} projects={projects} users={users} library={library}
-          procMode={procMode}
+          procMode={procMode} whId={whId} canReturnAct={!!whEntry} onReturnDone={()=>loadAll()}
           onNewGRN={whEntry?()=>setGrnNewOpen(true):undefined} onVerifyGRN={whEdit?handleVerifyGRN:undefined}
           onApprove={canApproveMR?approveMR:undefined} onReject={canApproveMR?rejectMR:undefined} onClose={whEdit?closeMR:undefined}
           onSubMR={{
