@@ -811,7 +811,7 @@ function GRNModal({po,onClose,onSave}){
 const poCanOrder=(p)=>p.approval==="Approved"&&p.poStatus==="Open"&&(p.orderStatus||"NotOrdered")==="NotOrdered";
 const poCanReceive=(p)=>p.approval==="Approved"&&p.poStatus==="Open"&&["Ordered","PartiallyReceived"].includes(p.orderStatus);
 
-function PODetailDrawer({po,onClose,onApprove,onShare,onGRN,onEdit,onCancel,onSendToVendor,onSplit}){
+function PODetailDrawer({po,onClose,onApprove,onShare,onGRN,onEdit,onCancel,onSendToVendor,onSplit,onDivert}){
   const [detail, setDetail] = useState(po);
   const [fetching, setFetching] = useState(true);
   const [cancelling, setCancelling] = useState(false);
@@ -1036,6 +1036,12 @@ function PODetailDrawer({po,onClose,onApprove,onShare,onGRN,onEdit,onCancel,onSe
         {poCanSplit(d)&&onSplit&&(
           <button onClick={()=>onSplit(d)} style={{flex:"1 1 110px",padding:"8px",borderRadius:7,background:T.surfaceB,color:T.t2,border:"1px solid "+T.b1,fontSize:11.5,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:4}}>
             {t("procurement.split_title")}
+          </button>
+        )}
+        {/* Project badlo (divert) — poora PO doosri jagah (28 Oct 2026), Procurement Edit */}
+        {poCanSplit(d)&&onDivert&&(
+          <button onClick={()=>onDivert(d)} style={{flex:"1 1 110px",padding:"8px",borderRadius:7,background:T.surfaceB,color:T.t2,border:"1px solid "+T.b1,fontSize:11.5,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:4}}>
+            <IcTruck size={12} color={T.t2}/> {t("procurement.divert_title")}
           </button>
         )}
         {/* Share — secondary, available anytime for sharing PO copy */}
@@ -2113,6 +2119,119 @@ function SplitPOModal({po,mrs,dbProjects,initLineId,onClose,onDone}){
   );
 }
 
+// "Project badlo (divert)" — poora PO doosre project / store (28 Oct 2026, Prafull: "kai bar
+// order divert karna padta hai — wahi kare jisko Procurement me edit permission hai"). Server
+// har line par wahi split / jagah badlo chalata hai: jo aa chuka / kaante par hai wo purani
+// jagah rehta hai, baaki nayi jagah (line + MR saath). Nayi jagah ka receiving person zaroori
+// (PO wala purani site ka hai). Dobara approval nahi.
+const divertWhy=(l)=>{
+  const p={qty:l.keep,unit:l.unit};
+  return l.why==="received"?t("procurement.divert_why_received",p)
+    :l.why==="truck"?t("procurement.divert_why_truck",p)
+    :l.why==="mr_received"?t("procurement.divert_why_mr",p)
+    :l.why==="same"?t("procurement.divert_why_same")
+    :l.why==="asset_store_only"?t("procurement.divert_why_asset")
+    :null;
+};
+function DivertPOModal({po,dbProjects,onClose,onDone}){
+  const stores=useSplitStores();
+  const curKey=po.warehouse_id?"w:"+po.warehouse_id:(po.project_id?"p:"+po.project_id:"");
+  const [key,setKey]=useState("");
+  const [contacts,setContacts]=useState([]);
+  const [reason,setReason]=useState("");
+  const [pv,setPv]=useState(null);          // GET divert-preview — har line kitna jayega / rahega
+  const [saving,setSaving]=useState(false);
+  const [err,setErr]=useState("");
+  useEffect(()=>{
+    let alive=true;
+    setPv(null); setErr("");
+    if(!key) return undefined;
+    const d=splitDest(key);
+    api.get(`/procurement/pos/${po.id}/divert-preview?${d.project_id?"project_id="+d.project_id:"warehouse_id="+d.warehouse_id}`)
+      .then(r=>{ if(!alive) return; if(r?.success) setPv(r.data); else setErr(r?.message||t("procurement.divert_failed")); })
+      .catch(e=>{ if(alive) setErr(e?.message||t("procurement.divert_failed")); });
+    return ()=>{ alive=false; };
+  },[key,po.id]);
+  const dest=key?splitDest(key):null;
+  const opts=splitOpts(dbProjects,stores,false).map(g=>({...g,items:g.items.filter(o=>o.key!==curKey)}));
+  const moving=pv?pv.moving:0;
+  const canSave=!!key&&!!pv&&!pv.blocked&&moving>0&&hasReceivingContact(contacts)&&!saving;
+  const save=async()=>{
+    if(!canSave) return;
+    setSaving(true); setErr("");
+    try{
+      const res=await api.post(`/procurement/pos/${po.id}/divert`,{...dest,receiving_contacts:contacts,reason:reason.trim()});
+      if(res?.success){ onDone(res); return; }
+      setErr(res?.message||t("procurement.divert_failed"));
+    }catch(e){ setErr(e?.message||t("procurement.divert_failed")); }
+    setSaving(false);
+  };
+  const cols="1fr 96px 96px";
+  return(
+    <Modal onClose={onClose} width={560}>
+      <MHead title={t("procurement.divert_title")} sub={`${po.poNum||"PO-"+po.id} · ${po.vendor||"—"} · ${t("procurement.divert_from",{from:po.project||"—"})}`} onClose={onClose}/>
+      <MBody>
+        <div style={{background:T.bluL,border:`1px solid ${T.bluM}`,borderRadius:7,padding:"9px 12px",marginBottom:12,fontSize:11.5,color:T.blu,lineHeight:1.5}}>
+          {t("procurement.divert_hint")}
+        </div>
+        {!poCanSplit(po)?(
+          <div style={{padding:"18px",textAlign:"center",color:T.t3,fontSize:12.5}}>{t("procurement.divert_po_not_open",{status:displayPOStatus(po)})}</div>
+        ):(<>
+          <Fld label={t("procurement.divert_to")} required>
+            <Sel value={key} onChange={e=>setKey(e.target.value)}>
+              <option value="">{t("procurement.split_pick_dest")}</option>
+              {opts.map(g=>g.items.length>0&&(
+                <optgroup key={g.grp} label={g.grp}>
+                  {g.items.map(o=><option key={o.key} value={o.key}>{o.label}</option>)}
+                </optgroup>
+              ))}
+            </Sel>
+          </Fld>
+          {key&&!pv&&!err&&<div style={{marginTop:10,fontSize:11.5,color:T.t3}}>{t("common.loading")}</div>}
+          {pv&&(
+            <div style={{marginTop:12,border:`1px solid ${T.b1}`,borderRadius:8,overflow:"hidden"}}>
+              <div style={{display:"grid",gridTemplateColumns:cols,gap:6,padding:"6px 10px",background:T.surfaceB}}>
+                {[t("procurement.divert_col_item"),t("procurement.divert_col_go"),t("procurement.divert_col_stay")].map((h,i)=>(
+                  <span key={i} style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".3px",textAlign:i?"right":"left"}}>{h}</span>
+                ))}
+              </div>
+              {pv.lines.map(l=>(
+                <div key={l.line_id} style={{display:"grid",gridTemplateColumns:cols,gap:6,padding:"7px 10px",borderTop:`1px solid ${T.b1}`,alignItems:"center"}}>
+                  <div style={{minWidth:0}}>
+                    <div title={l.item} style={{fontSize:12,color:T.t1,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{l.item}</div>
+                    {divertWhy(l)&&<div style={{fontSize:10.5,color:T.amb,marginTop:1}}>{divertWhy(l)}</div>}
+                  </div>
+                  <span style={{fontSize:12,fontWeight:700,color:l.move>0?T.grn:T.t4,textAlign:"right"}}>{l.move>0?`${l.move} ${l.unit}`:"—"}</span>
+                  <span style={{fontSize:12,color:l.keep>0?T.t2:T.t4,textAlign:"right"}}>{l.keep>0?`${l.keep} ${l.unit}`:"—"}</span>
+                </div>
+              ))}
+              {moving===0&&<div style={{padding:"8px 10px",fontSize:11.5,color:T.red,borderTop:`1px solid ${T.b1}`}}>{t("procurement.divert_nothing_ui")}</div>}
+            </div>
+          )}
+          {pv&&moving>0&&(<>
+            <div style={{marginTop:12}}>
+              <div style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:".4px",marginBottom:4}}>{t("procurement.divert_contacts")}</div>
+              <ReceivingContacts theme={T} compact value={contacts} onChange={setContacts}
+                projectIds={dest&&dest.project_id?[dest.project_id]:[]} warehouseIds={dest&&dest.warehouse_id?[dest.warehouse_id]:[]}/>
+              {!hasReceivingContact(contacts)&&<div style={{fontSize:10.5,color:T.red,marginTop:3}}>{t("procurement.split_need_contact")}</div>}
+            </div>
+            <div style={{marginTop:12}}>
+              <Fld label={t("procurement.divert_reason")}>
+                <Inp value={reason} onChange={e=>setReason(e.target.value)} placeholder={t("procurement.divert_reason_ph")}/>
+              </Fld>
+            </div>
+          </>)}
+          {err&&<div style={{marginTop:10,padding:"8px 11px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,fontSize:11.5,color:T.red}}>{err}</div>}
+        </>)}
+      </MBody>
+      <MFoot>
+        <Btn onClick={onClose} outline color={T.slt} full>{t("common.cancel")}</Btn>
+        <Btn onClick={save} disabled={!canSave} color={T.blu} full>{saving?t("procurement.split_saving"):t("procurement.divert_save")}</Btn>
+      </MFoot>
+    </Modal>
+  );
+}
+
 // Manual order (MR seedha "Ordered", PO nahi) ka split — POST /procurement/mrs/:id/split.
 // Har nayi jagah ka apna receiving person (asli MR ke contacts pehle se bhare).
 // Kitna aa chuka = MR list ka received_qty (+ godown se aane wala hissa).
@@ -2463,6 +2582,7 @@ function ProcurementModule(){
   const [grnTarget,setGrnTarget]=useState(null);
   const [splitTarget,setSplitTarget]=useState(null);   // "Order split karo" ka PO
   const [splitLine,setSplitLine]=useState(null);       // PO split me pehle se chuni line (MR se aaye to)
+  const [divertTarget,setDivertTarget]=useState(null); // "Project badlo (divert)" ka PO (28 Oct 2026)
   const [mrSplitTarget,setMrSplitTarget]=useState(null); // manual order (bina PO) ki MR ka split
   const [poMenu,setPoMenu]=useState(null);             // PO row ka ⋮ menu (PO id)
   const [showCreatePO,setShowCreatePO]=useState(false);
@@ -3359,6 +3479,11 @@ function ProcurementModule(){
                               onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB} onMouseLeave={e=>e.currentTarget.style.background="none"}>
                               <IcFlow size={13} color={T.t2}/> {t("procurement.split_title")}
                             </button>
+                            <button onClick={e=>{e.stopPropagation();setPoMenu(null);setDivertTarget(po);}}
+                              style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"10px 13px",border:"none",borderTop:`1px solid ${T.b1}`,background:"none",color:T.t1,fontSize:12.5,fontWeight:600,cursor:"pointer",textAlign:"left"}}
+                              onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB} onMouseLeave={e=>e.currentTarget.style.background="none"}>
+                              <IcTruck size={13} color={T.t2}/> {t("procurement.divert_title")}
+                            </button>
                           </div>
                         </>)}
                       </div>}
@@ -3419,6 +3544,7 @@ function ProcurementModule(){
       {selPO&&<PODetailDrawer po={selPO} onClose={()=>setSelPO(null)} onApprove={canApprovePO(selPO.id)?(id)=>{approvePO(id);setSelPO(p=>p?{...p,approval:"Approved"}:p);}:null} onShare={(po)=>{setShareTarget(po);setSelPO(null);}} onGRN={pReceive?(po)=>{setGrnTarget(po);setSelPO(null);}:null}
         onSendToVendor={pEdit?(po)=>{setSendToVendorTarget(po);}:null}
         onSplit={pEdit?(d)=>{setSplitTarget(pos.find(x=>String(x.id)===String(d.id))||d);setSelPO(null);}:null}
+        onDivert={pEdit?(d)=>{setDivertTarget(pos.find(x=>String(x.id)===String(d.id))||d);setSelPO(null);}:null}
         onEdit={pEdit?(po)=>{setEditPo(po);setShowCreatePO(true);setSelPO(null);}:null}
         onCancel={!pApprove?null:async(po)=>{
           let res=await api.patch("/procurement/pos/"+po.id+"/cancel",{});
@@ -3448,6 +3574,14 @@ function ProcurementModule(){
         onDone={(res)=>{
           // PO ki lines + nayi MR dono badle — poori list taaza
           setSplitTarget(null); setSplitLine(null);
+          if(res?.data) setPOs(p=>p.map(x=>x.id===res.data.id?mapPO(res.data):x));
+          loadAll();
+          if(res?.message) window.alert(res.message);
+        }}/>}
+      {divertTarget&&<DivertPOModal po={divertTarget} dbProjects={dbProjects} onClose={()=>setDivertTarget(null)}
+        onDone={(res)=>{
+          // Lines + MR + PO ki jagah badli — poori list taaza
+          setDivertTarget(null);
           if(res?.data) setPOs(p=>p.map(x=>x.id===res.data.id?mapPO(res.data):x));
           loadAll();
           if(res?.message) window.alert(res.message);
