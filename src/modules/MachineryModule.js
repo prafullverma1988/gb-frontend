@@ -464,6 +464,8 @@ function MachineForm({ open, onClose, onSaved, machine, parties, seed, cities, s
 
   const owned = String(f.ownership || "").toLowerCase() === "owned";
   const fuelOurs = owned || f.fuel_responsibility === "company";
+  // Kiraya Bill (28 Oct 2026) — ghante / din ke kiraye wali par aane-jaane + din ke kam se kam ghante
+  const hireMode = ["hourly", "daily"].includes(f.measurement_mode || "hourly");
 
   const save = async () => {
     setError("");
@@ -511,6 +513,10 @@ function MachineForm({ open, onClose, onSaved, machine, parties, seed, cities, s
       // wo apne raaste se hoti hai (sirf admin, aur log bhi banta hai) —
       // isliye edit par server city ko chhuta hi nahi.
       ...(editing ? {} : { city_id: f.city_id || null }),
+      ...(!owned && hireMode ? {
+        mobilization_charge: f.mobilization_charge !== "" && f.mobilization_charge != null ? parseFloat(f.mobilization_charge) || null : null,
+        min_hours_day: f.measurement_mode !== "daily" && f.min_hours_day !== "" && f.min_hours_day != null ? parseFloat(f.min_hours_day) || null : null,
+      } : {}),
     };
     if (f.telematics_api_key) body.telematics_api_key = f.telematics_api_key;
     if (!editing) {
@@ -631,6 +637,20 @@ function MachineForm({ open, onClose, onSaved, machine, parties, seed, cities, s
               <PartyPicker value={f.default_vendor_id} onChange={(v) => upd("default_vendor_id", v)}
                 parties={parties} roles={HIRE_VENDOR_ROLES} placeholder={t("machinery.kis_se_kiraye_par_li_hai")} />
             </Field>
+          )}
+          {!owned && hireMode && (
+            <>
+              <Field label={t("machinery.hb_f_mobilization")} hint={t("machinery.hb_f_mobilization_hint")}>
+                <input value={f.mobilization_charge == null ? "" : String(f.mobilization_charge).replace(/\.00$/, "")} inputMode="decimal"
+                  onChange={(e) => upd("mobilization_charge", e.target.value.replace(/[^0-9.]/g, ""))} placeholder="0" style={inp} />
+              </Field>
+              {f.measurement_mode !== "daily" ? (
+                <Field label={t("machinery.hb_f_min_hours")} hint={t("machinery.hb_f_min_hours_hint")}>
+                  <input value={f.min_hours_day == null ? "" : String(f.min_hours_day).replace(/\.00$/, "")} inputMode="decimal"
+                    onChange={(e) => upd("min_hours_day", e.target.value.replace(/[^0-9.]/g, ""))} placeholder="—" style={inp} />
+                </Field>
+              ) : <span />}
+            </>
           )}
           <Field label={t("machinery.diesel_kiska")} span={2}
             hint={t("machinery.rent_me_shaamil_hai_to_hum")}>
@@ -7808,6 +7828,446 @@ const MR_PRIO = [
   { k: "normal", get l() { return t("machinery.mr_p_normal"); }, c: T.t3,  bg: T.sltL, rank: 2 },
 ];
 const mrPrio = (k) => MR_PRIO.find((p) => p.k === k) || MR_PRIO[2];
+
+// ══════════════════════════════════════════════════════════════════
+// MACHINE LOG (28 Oct 2026, Prafull) — phone ke Start / Band ka register.
+// Har run: kahan (project / Company / Office), task, kaun, kab shuru / band,
+// ghante ya km, meter + slip photo, paisa kahan gaya (Kiraya Bill / sirf log).
+// Site wale band karna bhool gaye to office (approver) wajah + samay se band
+// karta hai — log tab hi banta hai.
+// ══════════════════════════════════════════════════════════════════
+const ML_KIND = {
+  hire: { c: T.amb, bg: T.ambL }, own: { c: T.grn, bg: T.grnL }, log: { c: T.slt, bg: T.sltL },
+};
+const mlPhotos = (r) => {
+  const p = (raw, tag) => { try { const a = JSON.parse(raw || "[]"); return Array.isArray(a) ? a.map((u) => ({ u, tag })) : []; } catch (_) { return []; } };
+  return [...p(r.start_photo_urls, t("machinery.ml_ph_start")), ...p(r.stop_photo_urls, t("machinery.ml_ph_stop")), ...p(r.slip_photo_urls, t("machinery.ml_ph_slip"))];
+};
+const istDayStr = (ms) => new Date(ms + 330 * 60000).toISOString().slice(0, 10);
+
+function MachineLogTab({ projects }) {
+  const [from, setFrom] = useState(() => istDayStr(Date.now() - 6 * 86400000));
+  const [to, setTo] = useState(() => istDayStr(Date.now()));
+  const [pf, setPf] = useState("");
+  const [sf, setSf] = useState("");
+  const [q, setQ] = useState("");
+  const [rows, setRows] = useState(null);
+  const [err, setErr] = useState("");
+  const [ph, setPh] = useState(null);
+  const [closeRun, setCloseRun] = useState(null);
+  const [cf, setCf] = useState({ note: "", at: "", meter: "" });
+  const [busy, setBusy] = useState(false);
+  const u = currentUser();
+  const mayClose = ["admin", "super_admin", "project_manager"].includes(u.role) || canAny("Equipment", "approve", { strict: true });
+
+  const load = useCallback(async () => {
+    setRows(null); setErr("");
+    const qs = new URLSearchParams({ from, to, ...(pf ? { project_id: pf } : {}), ...(sf ? { status: sf } : {}) });
+    const r = await api.get("/equipment/runs?" + qs.toString()).catch(() => null);
+    if (!r || r.success === false) { setErr((r && r.message) || t("machinery.ml_load_fail")); setRows([]); return; }
+    setRows(Array.isArray(r.data) ? r.data : []);
+  }, [from, to, pf, sf]);
+  useEffect(() => { load(); }, [load]);
+
+  const shown = useMemo(() => {
+    const s = q.trim().toLowerCase(), sr = normReg(q);
+    return (rows || []).filter((r) => !s || String(r.equipment_name || "").toLowerCase().includes(s) || (sr && normReg(r.registration_no).includes(sr))
+      || String(r.operator_name || "").toLowerCase().includes(s));
+  }, [rows, q]);
+
+  const qtyTxt = (r) => (r.status === "running" ? "—"
+    : r.meter_unit === "km" ? (r.km != null ? fmtN(Number(r.km)) + " km" : "—") : (r.hours != null ? fmtN(Number(r.hours)) + " h" : "—"));
+  const moneyTxt = (r) => {
+    if (r.status === "running") return t("machinery.ml_chal_rahi");
+    if (r.status === "stopped") return t("machinery.ml_log_baaki");
+    if (r.usage_status === "billed") return t("machinery.ml_bill_me", { amt: fmtN(Number(r.usage_amount)) });
+    if (r.usage_status === "bill_pending") return r.usage_amount != null ? t("machinery.ml_bill_baaki", { amt: fmtN(Number(r.usage_amount)) }) : t("machinery.ml_rate_nahi");
+    if (r.kind === "own" && r.usage_amount != null) return t("machinery.ml_andar", { amt: fmtN(Number(r.usage_amount)) });
+    return t("machinery.ml_sirf_log");
+  };
+  const COLS = [
+    { key: "d", label: t("machinery.ml_c_date"), w: 12, excel: (r) => r.start_d },
+    { key: "m", label: t("machinery.ml_c_machine"), w: 26, excel: (r) => r.equipment_name + (r.registration_no ? " · " + r.registration_no : "") },
+    { key: "k", label: t("machinery.ml_c_kism"), w: 10, excel: (r) => t("machinery.ml_kind_" + (r.kind || "log")) },
+    { key: "p", label: t("machinery.ml_c_kahan"), w: 26, excel: (r) => (r.project_name || t("machinery.ml_company")) + (r.task_name ? " · " + r.task_name : "") },
+    { key: "s", label: t("machinery.ml_c_shuru"), w: 16, excel: (r) => (r.start_hm || "") + " · " + (r.started_by_name || "") },
+    { key: "e", label: t("machinery.ml_c_band"), w: 16, excel: (r) => (r.stop_hm || "") + (r.stop_note ? " · " + r.stop_note : "") },
+    { key: "q", label: t("machinery.ml_c_kitna"), w: 10, excel: qtyTxt },
+    { key: "o", label: t("machinery.ml_c_operator"), w: 22, excel: (r) => [r.operator_name, r.purpose].filter(Boolean).join(" · ") },
+    { key: "a", label: t("machinery.ml_c_paisa"), w: 22, excel: moneyTxt },
+  ];
+  const cols = "84px 1.5fr 1.4fr 104px 104px 70px 1.2fr 1.2fr 92px";
+
+  const doClose = async () => {
+    if (cf.note.trim().length < 3) { window.alert(t("machinery.ml_wajah_zaroori")); return; }
+    setBusy(true);
+    const r = await api.post(`/equipment/run/${closeRun.id}/stop`, {
+      office_note: cf.note.trim(), stopped_at: cf.at ? cf.at.replace("T", " ") : null, meter_end: cf.meter || null,
+    }).catch(() => null);
+    setBusy(false);
+    if (!r || r.success === false) { window.alert((r && r.message) || t("machinery.ml_save_fail")); return; }
+    setCloseRun(null); load();
+  };
+
+  return (
+    <div style={{ display: "grid", gap: 12 }}>
+      <Notice>{t("machinery.ml_intro")}</Notice>
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
+        <div><div style={{ fontSize: 11, color: T.t3, marginBottom: 4, fontWeight: 600 }}>{t("machinery.ml_from")}</div>
+          <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} style={{ ...inp, width: 150 }} /></div>
+        <div><div style={{ fontSize: 11, color: T.t3, marginBottom: 4, fontWeight: 600 }}>{t("machinery.ml_to")}</div>
+          <input type="date" value={to} onChange={(e) => setTo(e.target.value)} style={{ ...inp, width: 150 }} /></div>
+        <div style={{ width: 220 }}><div style={{ fontSize: 11, color: T.t3, marginBottom: 4, fontWeight: 600 }}>{t("machinery.ml_c_kahan")}</div>
+          <PickSelect value={pf} onChange={(e) => setPf(e.target.value)} style={inp}>
+            <option value="">{t("machinery.ml_sab")}</option>
+            <option value="company">{t("machinery.ml_company")}</option>
+            {(projects || []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </PickSelect></div>
+        <div style={{ width: 160 }}><div style={{ fontSize: 11, color: T.t3, marginBottom: 4, fontWeight: 600 }}>{t("machinery.ml_haal")}</div>
+          <PickSelect value={sf} onChange={(e) => setSf(e.target.value)} style={inp}>
+            <option value="">{t("machinery.ml_sab")}</option>
+            <option value="running">{t("machinery.ml_chal_rahi")}</option>
+            <option value="stopped">{t("machinery.ml_log_baaki")}</option>
+            <option value="logged">{t("machinery.ml_logged")}</option>
+          </PickSelect></div>
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("machinery.ml_khoj")} style={{ ...inp, width: 220 }} />
+      </div>
+      {err && <ErrBox>{err}</ErrBox>}
+      <Panel title={t("machinery.ml_title", { n: shown.length })}
+        action={canAny("Machinery", "export") ? (
+          <Btn size="sm" ghost icon={IcSheet} disabled={!shown.length}
+            onClick={() => exportExcel(shown, COLS, `machine-log-${from}-to-${to}`, "Machine Log")}>{t("common.excel")}</Btn>
+        ) : null}>
+        {/* Kism machine ke naam ke saath dikhti hai — alag khaana sirf Excel me */}
+        <Row head cols={cols}>{COLS.filter((c) => c.key !== "k").map((c) => <span key={c.key}>{c.label}</span>)}<span /></Row>
+        {rows === null && <Empty>{t("common.loading")}</Empty>}
+        {rows !== null && shown.length === 0 && <Empty>{t("machinery.ml_koi_nahi")}</Empty>}
+        {shown.map((r) => {
+          const k = ML_KIND[r.kind] || ML_KIND.log;
+          const photos = mlPhotos(r);
+          const late = r.status === "running" && Number(r.mins) >= 14 * 60;
+          return (
+            <Row key={r.id} cols={cols}>
+              <span style={{ fontSize: 11.5, color: T.t3 }}>{fmtD(r.start_d)}</span>
+              <span style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 12.5, fontWeight: 600, color: T.t1 }}>{r.equipment_name}</div>
+                <div style={{ fontSize: 10.5, color: T.t4 }}>
+                  <Pill label={t("machinery.ml_kind_" + (r.kind || "log"))} c={k.c} bg={k.bg} />
+                  {r.registration_no ? " " + r.registration_no : ""}
+                  {photos.length > 0 && <span onClick={() => setPh({ r, photos })} style={{ marginLeft: 6, color: T.ind, cursor: "pointer", fontWeight: 600 }}>📷 {photos.length}</span>}
+                </div>
+              </span>
+              <span style={{ fontSize: 12, minWidth: 0 }}>
+                <div style={{ color: r.project_name ? T.t2 : T.t3 }}>{r.project_name || t("machinery.ml_company")}</div>
+                {r.task_name && <div style={{ fontSize: 10.5, color: T.t4 }}>{r.task_name}</div>}
+              </span>
+              <span style={{ fontSize: 11.5 }}>{r.start_hm}<div style={{ fontSize: 10.5, color: T.t4 }}>{r.started_by_name || "—"}</div></span>
+              <span style={{ fontSize: 11.5 }}>
+                {r.status === "running" ? <span style={{ color: late ? T.red : T.grn, fontWeight: 700 }}>{t("machinery.ml_chal_rahi_h", { h: Math.floor((Number(r.mins) || 0) / 60) })}</span> : r.stop_hm}
+                {r.stop_note ? <div style={{ fontSize: 10.5, color: T.amb }} title={r.stop_note}>{t("machinery.ml_office_band")}</div>
+                  : r.stopped_by_name && r.status !== "running" ? <div style={{ fontSize: 10.5, color: T.t4 }}>{r.stopped_by_name}</div> : null}
+              </span>
+              <span style={{ fontSize: 12, fontWeight: 700, color: T.t1 }}>{qtyTxt(r)}</span>
+              <span style={{ fontSize: 11.5, color: T.t3, minWidth: 0 }}>{[r.operator_name, r.purpose].filter(Boolean).join(" · ") || "—"}</span>
+              <span style={{ fontSize: 11, color: r.usage_status === "bill_pending" ? T.amb : T.t3, fontWeight: 600 }}>{moneyTxt(r)}</span>
+              <span>
+                {r.status === "running" && mayClose && (
+                  <Btn size="sm" ghost onClick={() => { setCf({ note: "", at: "", meter: "" }); setCloseRun(r); }}>{t("machinery.ml_band_karo")}</Btn>
+                )}
+              </span>
+            </Row>
+          );
+        })}
+      </Panel>
+
+      <Modal open={!!ph} onClose={() => setPh(null)} width={760} title={ph ? ph.r.equipment_name : ""} sub={ph ? (ph.r.start_d + " · " + (ph.r.project_name || t("machinery.ml_company"))) : ""}>
+        {ph && (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
+            {ph.photos.map((p, i) => (
+              <a key={i} href={p.u} target="_blank" rel="noreferrer" style={{ textDecoration: "none" }}>
+                <img src={cld(p.u, "tile")} alt={p.tag} style={{ width: "100%", height: 170, objectFit: "cover", borderRadius: 8, border: `1px solid ${T.b1}` }} />
+                <div style={{ fontSize: 11, color: T.t3, marginTop: 3, fontWeight: 600 }}>{p.tag}</div>
+              </a>
+            ))}
+          </div>
+        )}
+      </Modal>
+
+      <Modal open={!!closeRun} onClose={() => setCloseRun(null)} width={520} title={t("machinery.ml_office_band_title")}
+        sub={closeRun ? closeRun.equipment_name + " · " + t("machinery.ml_shuru_tha", { at: closeRun.start_d + " " + closeRun.start_hm }) : ""}
+        footer={<><Btn ghost onClick={() => setCloseRun(null)}>{t("common.cancel")}</Btn><Btn c={T.red} onClick={doClose} disabled={busy}>{busy ? t("common.saving") : t("machinery.ml_band_karo")}</Btn></>}>
+        <div style={{ display: "grid", gap: 12 }}>
+          <Field label={t("machinery.ml_wajah")}><input value={cf.note} onChange={(e) => setCf((p) => ({ ...p, note: e.target.value }))} maxLength={200} placeholder={t("machinery.ml_wajah_ph")} style={inp} /></Field>
+          <Field label={t("machinery.ml_band_kab")} hint={t("machinery.ml_band_kab_hint")}>
+            <input type="datetime-local" value={cf.at} onChange={(e) => setCf((p) => ({ ...p, at: e.target.value }))} style={inp} />
+          </Field>
+          <Field label={t("machinery.ml_meter_band")}>
+            <input value={cf.meter} inputMode="decimal" onChange={(e) => setCf((p) => ({ ...p, meter: e.target.value.replace(/[^0-9.]/g, "") }))} placeholder={closeRun && closeRun.meter_start != null ? String(Number(closeRun.meter_start)) : "—"} style={inp} />
+          </Field>
+        </div>
+      </Modal>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════
+// KIRAYA BILL (28 Oct 2026, Prafull) — ghante / din ke kiraye wali machine ka
+// party ke naam ek bill (Trip bill jaisa). Party → uski entry tick → aane-jaane
+// "× kitni baar" → bill no. / tareekh / due → party ke khaate me baaki.
+// Hisaab server ka (/hire-bills/preview) — screen aur bill kabhi alag nahi.
+// ══════════════════════════════════════════════════════════════════
+const addDays = (ymd, n) => new Date(new Date(ymd + "T00:00:00Z").getTime() + n * 86400000).toISOString().slice(0, 10);
+
+function HireBillTab() {
+  const [view, setView] = useState("ready");
+  const [ready, setReady] = useState(null);
+  const [bills, setBills] = useState(null);
+  const [vend, setVend] = useState(null);       // { vendor, entries, mobilization_rate }
+  const [sel, setSel] = useState({});
+  const [mob, setMob] = useState({ n: "0", rate: "" });
+  const [form, setForm] = useState({ bill_no: "", bill_date: istDayStr(Date.now()), due_date: addDays(istDayStr(Date.now()), 15), note: "" });
+  const [pv, setPv] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [openBill, setOpenBill] = useState(null);
+  const mayCreate = canAny("Finance", "create", { strict: true });
+  const mayDelete = canAny("Finance", "delete", { strict: true });
+
+  const loadReady = useCallback(async () => {
+    setReady(null);
+    const r = await api.get("/equipment/hire-bills/ready").catch(() => null);
+    setReady(r && r.success && Array.isArray(r.data) ? r.data : []);
+  }, []);
+  const loadBills = useCallback(async () => {
+    setBills(null);
+    const r = await api.get("/equipment/hire-bills").catch(() => null);
+    setBills(r && r.success && Array.isArray(r.data) ? r.data : []);
+  }, []);
+  useEffect(() => { if (view === "ready") loadReady(); else loadBills(); }, [view, loadReady, loadBills]);
+
+  const openVendor = async (vid) => {
+    const r = await api.get("/equipment/hire-bills/ready/" + vid).catch(() => null);
+    if (!r || r.success === false) { window.alert((r && r.message) || t("machinery.ml_load_fail")); return; }
+    const d = r.data;
+    setVend(d);
+    const s = {};
+    (d.entries || []).forEach((e) => { if (e.ready) s[e.id] = true; });
+    setSel(s);
+    setMob({ n: "0", rate: d.mobilization_rate ? String(d.mobilization_rate) : "" });
+    setForm({ bill_no: "", bill_date: istDayStr(Date.now()), due_date: addDays(istDayStr(Date.now()), 15), note: "" });
+  };
+  const ids = useMemo(() => Object.keys(sel).filter((k) => sel[k]).map(Number), [sel]);
+  // Hisaab server se — tick / aane-jaane badalte hi
+  useEffect(() => {
+    if (!vend) return undefined;
+    let dead = false;
+    const tm = setTimeout(async () => {
+      const r = await api.post("/equipment/hire-bills/preview", { vendor_id: vend.vendor && vend.vendor.id, usage_ids: ids,
+        mobilization_count: Number(mob.n) || 0, mobilization_rate: Number(mob.rate) || 0 }).catch(() => null);
+      if (!dead) setPv(r && r.success ? r.data : null);
+    }, 250);
+    return () => { dead = true; clearTimeout(tm); };
+  }, [vend, ids, mob]);
+
+  const create = async () => {
+    if (!ids.length) { window.alert(t("machinery.hb_tick_karo")); return; }
+    if (!form.due_date) { window.alert(t("machinery.hb_due_daalo")); return; }
+    setBusy(true);
+    const r = await api.post("/equipment/hire-bills", { vendor_id: vend.vendor.id, usage_ids: ids,
+      mobilization_count: Number(mob.n) || 0, mobilization_rate: Number(mob.rate) || 0, ...form }).catch(() => null);
+    setBusy(false);
+    if (!r || r.success === false) { window.alert((r && r.message) || t("machinery.ml_save_fail")); return; }
+    window.alert(t("machinery.hb_ban_gaya", { no: r.data.bill_ref, amt: fmtN(r.data.total) }));
+    setVend(null); setView("bills");
+  };
+  const showBill = async (id) => {
+    const r = await api.get("/equipment/hire-bills/" + id).catch(() => null);
+    if (!r || r.success === false) { window.alert((r && r.message) || t("machinery.ml_load_fail")); return; }
+    setOpenBill(r.data);
+  };
+  const delBill = async (b) => {
+    const reason = window.prompt(t("machinery.hb_hatao_q", { no: b.bill_ref }), "");
+    if (reason == null) return;
+    const r = await api.del("/equipment/hire-bills/" + b.id, { reason }).catch(() => null);
+    if (!r || r.success === false) { window.alert((r && r.message) || t("machinery.ml_save_fail")); return; }
+    window.alert(r.message || t("machinery.hb_hata"));
+    loadBills();
+  };
+  const PAY = { unpaid: { c: T.amb, bg: T.ambL }, partial: { c: T.ind, bg: T.indL }, paid: { c: T.grn, bg: T.grnL } };
+  const ecols = "28px 82px 1.4fr 1.4fr 70px 80px 92px 1fr";
+
+  if (vend) {
+    const entries = vend.entries || [];
+    const allOn = entries.filter((e) => e.ready).every((e) => sel[e.id]);
+    return (
+      <div style={{ display: "grid", gap: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <Btn ghost size="sm" onClick={() => setVend(null)}>← {t("common.back")}</Btn>
+          <span style={{ fontSize: 14, fontWeight: 800, color: T.t1 }}>{t("machinery.hb_party_bill", { name: (vend.vendor && vend.vendor.name) || "—" })}</span>
+        </div>
+        <Panel title={t("machinery.hb_entries", { n: entries.length })}
+          action={<label style={{ fontSize: 11.5, color: T.t2, display: "flex", gap: 6, alignItems: "center", cursor: "pointer" }}>
+            <input type="checkbox" checked={allOn} onChange={(e) => { const s = {}; entries.forEach((x) => { if (x.ready) s[x.id] = e.target.checked; }); setSel(s); }} />
+            {t("machinery.hb_sab")}</label>}>
+          <Row head cols={ecols}><span /><span>{t("machinery.ml_c_date")}</span><span>{t("machinery.ml_c_machine")}</span><span>{t("machinery.ml_c_kahan")}</span>
+            <span>{t("machinery.hb_c_kitna")}</span><span>{t("machinery.hb_c_rate")}</span><span>{t("machinery.hb_c_rakam")}</span><span>{t("machinery.hb_c_haal")}</span></Row>
+          {entries.length === 0 && <Empty>{t("machinery.hb_koi_entry_nahi")}</Empty>}
+          {entries.map((e) => {
+            let photos = [];
+            try { photos = JSON.parse(e.photo_urls || "[]") || []; } catch (_) { photos = []; }
+            return (
+              <Row key={e.id} cols={ecols}>
+                <input type="checkbox" disabled={!e.ready} checked={!!sel[e.id]} onChange={(x) => setSel((p) => ({ ...p, [e.id]: x.target.checked }))} />
+                <span style={{ fontSize: 11.5, color: T.t3 }}>{fmtD(e.usage_date)}</span>
+                <span style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 12.5, fontWeight: 600, color: T.t1 }}>{e.equipment_name}</div>
+                  <div style={{ fontSize: 10.5, color: T.t4 }}>
+                    {[e.start_time && e.end_time ? String(e.start_time).slice(0, 5) + "–" + String(e.end_time).slice(0, 5) : null,
+                      e.meter_start != null && e.meter_end != null ? t("machinery.hb_meter", { a: fmtN(Number(e.meter_start)), b: fmtN(Number(e.meter_end)) }) : null,
+                      e.operator_name].filter(Boolean).join(" · ")}
+                    {photos.length > 0 && <a href={photos[0]} target="_blank" rel="noreferrer" style={{ marginLeft: 6, color: T.ind, fontWeight: 600 }}>📷 {photos.length}</a>}
+                  </div>
+                </span>
+                <span style={{ fontSize: 12 }}>{e.project_name || t("machinery.ml_company")}{e.task_name && <div style={{ fontSize: 10.5, color: T.t4 }}>{e.task_name}</div>}</span>
+                <span style={{ fontSize: 12, fontWeight: 700 }}>{fmtN(Number(e.hours_or_days))} {e.measurement_mode === "daily" ? t("machinery.hb_din") : e.measurement_mode === "km" ? "km" : "h"}</span>
+                <span style={{ fontSize: 12 }}>₹{fmtN(Number(e.rate_used))}</span>
+                <span style={{ fontSize: 12, fontWeight: 700, color: T.t1 }}>{e.total_amount != null ? "₹" + fmtN(Number(e.total_amount)) : "—"}</span>
+                <span style={{ fontSize: 10.5, color: e.ready ? T.t4 : T.red, fontWeight: e.ready ? 400 : 700 }}>
+                  {e.ready ? (Number(e.trip_charge) > 0 ? t("machinery.hb_transport_shamil", { amt: fmtN(Number(e.trip_charge)) }) : "") : e.total_amount == null ? t("machinery.ml_rate_nahi") : t("machinery.hb_rate_approval")}
+                </span>
+              </Row>
+            );
+          })}
+        </Panel>
+
+        <Panel title={t("machinery.hb_hisaab")}>
+          <div style={{ padding: 14, display: "grid", gap: 12 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 12 }}>
+              <Field label={t("machinery.hb_mob_n")} hint={t("machinery.hb_mob_hint")}>
+                <input value={mob.n} inputMode="numeric" onChange={(e) => setMob((p) => ({ ...p, n: e.target.value.replace(/[^0-9]/g, "") }))} style={inp} />
+              </Field>
+              <Field label={t("machinery.hb_mob_rate")}>
+                <input value={mob.rate} inputMode="decimal" onChange={(e) => setMob((p) => ({ ...p, rate: e.target.value.replace(/[^0-9.]/g, "") }))} placeholder="0" style={inp} />
+              </Field>
+              <Field label={t("machinery.hb_party_bill_no")}>
+                <input value={form.bill_no} onChange={(e) => setForm((p) => ({ ...p, bill_no: e.target.value }))} maxLength={60} style={inp} />
+              </Field>
+              <Field label={t("machinery.hb_note")}>
+                <input value={form.note} onChange={(e) => setForm((p) => ({ ...p, note: e.target.value }))} maxLength={300} style={inp} />
+              </Field>
+              <Field label={t("machinery.hb_bill_date")}>
+                <input type="date" value={form.bill_date} onChange={(e) => setForm((p) => ({ ...p, bill_date: e.target.value }))} style={inp} />
+              </Field>
+              <Field label={t("machinery.hb_due_date")}>
+                <input type="date" value={form.due_date} onChange={(e) => setForm((p) => ({ ...p, due_date: e.target.value }))} style={inp} />
+              </Field>
+            </div>
+            {pv && (
+              <div style={{ display: "grid", gap: 4, fontSize: 12.5, color: T.t2, background: T.surfaceB, borderRadius: 8, padding: "10px 12px" }}>
+                <div>{t("machinery.hb_l_entry", { n: ids.length })} <b style={{ float: "right" }}>₹{fmtN(pv.usage_amount)}</b></div>
+                {pv.min_lines.map((m, i) => (
+                  <div key={i} style={{ color: T.amb }}>{t("machinery.hb_l_min", { m: m.equipment_name, d: fmtD(m.date), h: fmtN(m.hours), min: fmtN(m.min), x: fmtN(m.extra), rate: fmtN(m.rate) })}
+                    <b style={{ float: "right" }}>₹{fmtN(m.amount)}</b></div>
+                ))}
+                {pv.mobilization_amount > 0 && <div>{t("machinery.hb_l_mob", { n: pv.mobilization_count, rate: fmtN(pv.mobilization_rate) })} <b style={{ float: "right" }}>₹{fmtN(pv.mobilization_amount)}</b></div>}
+                <div style={{ borderTop: `1px solid ${T.b1}`, paddingTop: 5, fontWeight: 800, color: T.t1 }}>{t("machinery.hb_l_total")} <span style={{ float: "right" }}>₹{fmtN(pv.total)}</span></div>
+                {pv.by_project.length > 1 && <div style={{ fontSize: 11, color: T.t4 }}>{pv.by_project.map((g) => (g.project_name || t("machinery.ml_company")) + " ₹" + fmtN(g.amount)).join(" · ")}</div>}
+              </div>
+            )}
+            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+              {mayCreate ? <Btn onClick={create} disabled={busy || !ids.length}>{busy ? t("common.saving") : t("machinery.hb_banao")}</Btn>
+                : <span style={{ fontSize: 11.5, color: T.t4 }}>{t("machinery.hb_finance_create")}</span>}
+            </div>
+          </div>
+        </Panel>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: "grid", gap: 12 }}>
+      <Notice>{t("machinery.hb_intro")}</Notice>
+      <div style={{ display: "flex", gap: 6 }}>
+        {[["ready", t("machinery.hb_v_ready")], ["bills", t("machinery.hb_v_bills")]].map(([k, l]) => (
+          <button key={k} type="button" onClick={() => setView(k)}
+            style={{ padding: "6px 14px", borderRadius: 8, border: `1.5px solid ${view === k ? T.ind : T.b1}`, background: view === k ? T.indL : T.surface,
+              color: view === k ? T.ind : T.t2, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>{l}</button>
+        ))}
+      </div>
+      {view === "ready" ? (
+        <Panel title={t("machinery.hb_ready_title")}>
+          <Row head cols="1.6fr 90px 120px 1.2fr 130px"><span>{t("machinery.hb_c_party")}</span><span>{t("machinery.hb_c_entry")}</span><span>{t("machinery.hb_c_rakam")}</span><span>{t("machinery.hb_c_kab")}</span><span /></Row>
+          {ready === null && <Empty>{t("common.loading")}</Empty>}
+          {ready !== null && ready.length === 0 && <Empty>{t("machinery.hb_koi_baaki_nahi")}</Empty>}
+          {(ready || []).map((v) => (
+            <Row key={v.vendor_id} cols="1.6fr 90px 120px 1.2fr 130px">
+              <span style={{ fontSize: 12.5, fontWeight: 600, color: T.t1 }}>{v.vendor_name || "—"}</span>
+              <span style={{ fontSize: 12 }}>{v.ready_n}{v.n > v.ready_n ? <span style={{ color: T.red, fontSize: 10.5 }}> · {t("machinery.hb_n_ruki", { n: v.n - v.ready_n })}</span> : null}</span>
+              <span style={{ fontSize: 12.5, fontWeight: 700 }}>₹{fmtN(v.amount)}</span>
+              <span style={{ fontSize: 11.5, color: T.t3 }}>{fmtD(v.from_d)} – {fmtD(v.to_d)}</span>
+              <span style={{ textAlign: "right" }}><Btn size="sm" onClick={() => openVendor(v.vendor_id)}>{t("machinery.hb_bill_banao")}</Btn></span>
+            </Row>
+          ))}
+        </Panel>
+      ) : (
+        <Panel title={t("machinery.hb_bills_title")}>
+          <Row head cols="80px 1.5fr 1fr 90px 90px 70px 110px 90px 130px"><span>{t("machinery.hb_c_no")}</span><span>{t("machinery.hb_c_party")}</span><span>{t("machinery.hb_party_bill_no")}</span>
+            <span>{t("machinery.hb_bill_date")}</span><span>{t("machinery.hb_due_date")}</span><span>{t("machinery.hb_c_entry")}</span><span>{t("machinery.hb_c_rakam")}</span><span>{t("machinery.hb_c_haal")}</span><span /></Row>
+          {bills === null && <Empty>{t("common.loading")}</Empty>}
+          {bills !== null && bills.length === 0 && <Empty>{t("machinery.hb_koi_bill_nahi")}</Empty>}
+          {(bills || []).map((b) => {
+            const st = PAY[b.pay_status] || PAY.unpaid;
+            return (
+              <Row key={b.id} cols="80px 1.5fr 1fr 90px 90px 70px 110px 90px 130px">
+                <span style={{ fontSize: 12, fontWeight: 700, color: T.ind, cursor: "pointer" }} onClick={() => showBill(b.id)}>{b.bill_ref}</span>
+                <span style={{ fontSize: 12.5, color: T.t1 }}>{b.vendor_name || "—"}</span>
+                <span style={{ fontSize: 12 }}>{b.bill_no || "—"}</span>
+                <span style={{ fontSize: 11.5 }}>{fmtD(b.bill_date)}</span>
+                <span style={{ fontSize: 11.5 }}>{fmtD(b.due_date)}</span>
+                <span style={{ fontSize: 12 }}>{b.entry_n}</span>
+                <span style={{ fontSize: 12.5, fontWeight: 700 }}>₹{fmtN(Number(b.total))}</span>
+                <span><Pill label={t("machinery.hb_pay_" + b.pay_status)} c={st.c} bg={st.bg} /></span>
+                <span style={{ textAlign: "right", display: "flex", gap: 6, justifyContent: "flex-end" }}>
+                  <Btn size="sm" ghost onClick={() => showBill(b.id)}>{t("machinery.hb_kholo")}</Btn>
+                  {mayDelete && b.pay_status === "unpaid" && <Btn size="sm" ghost onClick={() => delBill(b)}>{t("machinery.hb_hatao")}</Btn>}
+                </span>
+              </Row>
+            );
+          })}
+        </Panel>
+      )}
+
+      <Modal open={!!openBill} onClose={() => setOpenBill(null)} width={820} title={openBill ? openBill.bill_ref + " · " + (openBill.vendor_name || "") : ""}
+        sub={openBill ? t("machinery.hb_modal_sub", { d: fmtD(openBill.bill_date), due: fmtD(openBill.due_date), no: openBill.bill_no || "—" }) : ""}>
+        {openBill && (
+          <div style={{ display: "grid", gap: 10 }}>
+            <div style={{ display: "grid", gap: 4, fontSize: 12.5, color: T.t2, background: T.surfaceB, borderRadius: 8, padding: "10px 12px" }}>
+              <div>{t("machinery.hb_l_entry", { n: openBill.entries.length })} <b style={{ float: "right" }}>₹{fmtN(Number(openBill.usage_amount))}</b></div>
+              {(openBill.min_lines || []).map((m, i) => (
+                <div key={i} style={{ color: T.amb }}>{t("machinery.hb_l_min", { m: m.equipment_name, d: fmtD(m.date), h: fmtN(m.hours), min: fmtN(m.min), x: fmtN(m.extra), rate: fmtN(m.rate) })}
+                  <b style={{ float: "right" }}>₹{fmtN(m.amount)}</b></div>
+              ))}
+              {Number(openBill.mobilization_amount) > 0 && <div>{t("machinery.hb_l_mob", { n: openBill.mobilization_count, rate: fmtN(Number(openBill.mobilization_rate)) })} <b style={{ float: "right" }}>₹{fmtN(Number(openBill.mobilization_amount))}</b></div>}
+              <div style={{ borderTop: `1px solid ${T.b1}`, paddingTop: 5, fontWeight: 800, color: T.t1 }}>{t("machinery.hb_l_total")} <span style={{ float: "right" }}>₹{fmtN(Number(openBill.total))}</span></div>
+              <div style={{ fontSize: 11, color: T.t4 }}>{t("machinery.hb_paid_line", { amt: fmtN(Number(openBill.paid)), st: t("machinery.hb_pay_" + openBill.pay_status) })}</div>
+            </div>
+            <div style={{ border: `1px solid ${T.b1}`, borderRadius: 8, overflow: "hidden" }}>
+              {openBill.entries.map((e) => (
+                <Row key={e.id} cols="82px 1.5fr 1.3fr 80px 100px">
+                  <span style={{ fontSize: 11.5, color: T.t3 }}>{fmtD(e.usage_date)}</span>
+                  <span style={{ fontSize: 12.5, color: T.t1 }}>{e.equipment_name}</span>
+                  <span style={{ fontSize: 12 }}>{e.project_name || t("machinery.ml_company")}{e.task_name ? " · " + e.task_name : ""}</span>
+                  <span style={{ fontSize: 12 }}>{fmtN(Number(e.hours_or_days))}</span>
+                  <span style={{ fontSize: 12, fontWeight: 700 }}>₹{fmtN(Number(e.total_amount))}</span>
+                </Row>
+              ))}
+            </div>
+          </div>
+        )}
+      </Modal>
+    </div>
+  );
+}
+
 // ══════════════════════════════════════════════════════════════════
 // MACHINERY SETTINGS (7 Oct 2026) — company ki machine wali setting ek jagah.
 // Photo kab zaroori hai wo yahan nahi — Settings → Photo (wahi ek jagah).
@@ -8293,6 +8753,9 @@ function MachineryModule() {
     ...(tv.state === "ok" || tv.state === "error" ? [{ id: "tripv", l: t("machinery.tv_tab"), I: IcRoute }] : []),
     // Site se aayi machine ki maang (mobile + project Equipment tab)
     { id: "requests", l: t("machinery.mr_tab"), I: IcInbox, badge: reqPending || null },
+    // Machine Log (28 Oct 2026) — phone ke Start / Band ka register; Kiraya Bill = ghante / din wali ka party bill
+    { id: "mlog", l: t("machinery.ml_tab"), I: IcClock },
+    ...(canAny("Finance", "view", { strict: true }) ? [{ id: "hirebill", l: t("machinery.hb_tab"), I: IcFile }] : []),
     { id: "due", l: t("machinery.reminders"), I: IcBell, badge: active.length || null },
     // Badge = kitni vendor units abhi kisi machine se judi nahi — wahi is
     // tab ka asli kaam hai. Account hi na ho to badge ka koi matlab nahi.
@@ -8351,6 +8814,8 @@ function MachineryModule() {
               <MachineRequestsTab fleet={fleet} projects={projects} cities={cities} onChanged={loadReqCount} />
             )}
             {curTab === "msettings" && <MachinerySettingsTab />}
+            {curTab === "mlog" && <MachineLogTab projects={projects} />}
+            {curTab === "hirebill" && <HireBillTab />}
 
             {curTab === "reports" && (
               <ReportsTab fleet={fleet} projects={projects} from={repFrom} to={repTo}
