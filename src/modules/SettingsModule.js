@@ -131,10 +131,10 @@ function ToggleRow({ icon, label, desc, value, onChange }) {
 //   • Approve: Approvals drawer bhi ab matrix ka Approve tick maangta hai
 //     (routes/approvals.js), isliye Design ka Approve bhi "server".
 const PERM_LIVE = {
-  view:    { "*": "app", "CRM": "server", "Township CRM": "server", "Tenders": "server", "Team & HR": "server", "Machinery": "server", "Equipment": "server", "Subcon": "server", "Estimate": "server", "Finance": "server", "Fuel": "server", "Procurement": "server", "Warehouse": "server", "Material": "server", "Assets": "server", "Financial Reports": "server", "Users & Roles": "server", "Attendance": "server", "Transaction": "server", "Mapping": "server", "Pulse": "server", "RMC": "server", "Road Levels": "server", "Budget": "server" },
+  view:    { "*": "app", "Flags": "server", "CRM": "server", "Township CRM": "server", "Tenders": "server", "Team & HR": "server", "Machinery": "server", "Equipment": "server", "Subcon": "server", "Estimate": "server", "Finance": "server", "Fuel": "server", "Procurement": "server", "Warehouse": "server", "Material": "server", "Assets": "server", "Financial Reports": "server", "Users & Roles": "server", "Attendance": "server", "Transaction": "server", "Mapping": "server", "Pulse": "server", "RMC": "server", "Road Levels": "server", "Budget": "server" },
   create:  { "Attendance": "server", "CRM": "server", "Design": "server", "Equipment": "server", "Estimate": "server", "Finance": "server", "Fuel": "server", "Library": "server", "MOM": "server", "Machinery": "server", "Procurement": "server", "Projects": "server", "Subcon": "server", "Team & HR": "server", "Tenders": "server", "Township CRM": "server", "Users & Roles": "server", "Warehouse": "server", "Material": "server", "Mapping": "server", "Assets": "server", "Tasks": "server", "To Do": "server", "Budget": "server", "Site / DPR": "server", "RMC": "server", "Road Levels": "server", "Party": "server" },
   entry:   { "Site / DPR": "server", "Tasks": "server", "Material": "server", "Attendance": "server", "Equipment": "server", "Files": "server", "Procurement": "server", "Warehouse": "server", "Fuel": "server", "Machinery": "server", "Assets": "server", "RMC": "server", "Tenders": "server", "Mapping": "server", "Finance": "server", "Design": "server" },
-  edit:    { "Attendance": "server", "CRM": "server", "Design": "server", "Equipment": "server", "Estimate": "server", "Finance": "server", "Fuel": "server", "Library": "server", "MOM": "server", "Machinery": "server", "Procurement": "server", "Projects": "server", "Subcon": "server", "Team & HR": "server", "Tenders": "server", "Township CRM": "server", "Users & Roles": "server", "Warehouse": "server", "Mapping": "server", "Assets": "server", "Tasks": "server", "To Do": "server", "Budget": "server", "RMC": "server", "Road Levels": "server", "Party": "server", "Material": "server", "Site / DPR": "server" },
+  edit:    { "Flags": "server", "Attendance": "server", "CRM": "server", "Design": "server", "Equipment": "server", "Estimate": "server", "Finance": "server", "Fuel": "server", "Library": "server", "MOM": "server", "Machinery": "server", "Procurement": "server", "Projects": "server", "Subcon": "server", "Team & HR": "server", "Tenders": "server", "Township CRM": "server", "Users & Roles": "server", "Warehouse": "server", "Mapping": "server", "Assets": "server", "Tasks": "server", "To Do": "server", "Budget": "server", "RMC": "server", "Road Levels": "server", "Party": "server", "Material": "server", "Site / DPR": "server" },
   delete:  { "Attendance": "server", "CRM": "server", "Design": "server", "Equipment": "server", "Estimate": "server", "Finance": "server", "Fuel": "server", "Library": "server", "MOM": "server", "Machinery": "server", "Projects": "server", "Subcon": "server", "Team & HR": "server", "Tenders": "server", "Township CRM": "server", "Users & Roles": "server", "Warehouse": "server", "Mapping": "server", "Tasks": "server", "To Do": "server", "RMC": "server", "Road Levels": "server", "Party": "server", "Budget": "server", "Files": "server", "Material": "server", "Procurement": "server", "Assets": "server", "Site / DPR": "server" },
   approve: { "Attendance": "server", "Finance": "server", "Procurement": "server", "Team & HR": "server", "Warehouse": "server", "Mapping": "server", "Assets": "server", "Site / DPR": "server", "Equipment": "server", "RMC": "server", "Fuel": "server", "Subcon": "server", "Estimate": "server", "CRM": "server", "Budget": "server", "Design": "server" },
   export:  { "Site / DPR": "server", "Finance": "server", "Financial Reports": "app", "Party": "server", "Fuel": "server", "Machinery": "server", "Road Levels": "server", "Tenders": "server", "Assets": "server", "Team & HR": "server",
@@ -147,6 +147,7 @@ const permLive = (mod, act) => (PERM_LIVE[act] || {})[mod] || (PERM_LIVE[act] ||
 // nahi — default" isi se banta hai, aur hover par chetavni bhi.
 const PERM_STRICT = {
   "Users & Roles": ["view", "create", "edit", "delete"],
+  "Flags": ["view", "edit"],   // Flag Center (28 Oct 2026): row na ho to server band rakhta hai
   "Road Levels": ["create", "edit", "delete"],
   "Site / DPR": ["approve"],
   "Budget": ["approve"],
@@ -190,6 +191,10 @@ const PERM_HELP = {
   },
   "Pulse": {
     view: () => t("settings.perm_pulse_view"), create: NA, entry: NA, edit: NA,
+    delete: NA, approve: NA, export: NA,
+  },
+  "Flags": {
+    view: () => t("settings.perm_flags_view"), create: NA, entry: NA, edit: () => t("settings.perm_flags_edit"),
     delete: NA, approve: NA, export: NA,
   },
   "Mapping": {
@@ -321,6 +326,7 @@ const PERM_ROW_LABEL = {
   "Finance": () => t("settings.perm_row_finance"),
   "Financial Reports": () => t("settings.perm_row_finrep"),
   "Pulse": () => t("settings.perm_row_pulse"),
+  "Flags": () => t("settings.perm_row_flags"),
   "Mapping": () => t("settings.perm_row_mapping"),
   "Procurement": () => t("settings.perm_row_procurement"),
   "Warehouse": () => t("settings.perm_row_warehouse"),
@@ -1713,7 +1719,7 @@ function RolesAccess() {
   // RMC / Road Levels backend ki list (PERM_TOP) me the par yahan nahi — har
   // save par unki row ud jaati aur wo module us role ke liye chupchaap khul
   // jaata; admin unhe kabhi set bhi nahi kar sakta tha. (2026-09-22)
-  const ALL_MODULE_ITEMS = ["Projects","Design","Finance","Financial Reports","Pulse","Mapping","Procurement","Warehouse","Fuel","Machinery","Assets","RMC","Road Levels","Team & HR","CRM","MOM","Township CRM","Tenders","Reports","Library","Settings","Users & Roles"];
+  const ALL_MODULE_ITEMS = ["Projects","Design","Finance","Financial Reports","Pulse","Flags","Mapping","Procurement","Warehouse","Fuel","Machinery","Assets","RMC","Road Levels","Team & HR","CRM","MOM","Township CRM","Tenders","Reports","Library","Settings","Users & Roles"];
   // Project ke ANDAR ke saare tabs. Budget/Party/To Do/Tasks/Files/Site-DPR
   // pehle yahan the hi nahi, isliye unhe kabhi rok hi nahi sakte the — wo har
   // role ko hamesha dikhte the. (Design aur MOM upar "Modules" me hain, isliye

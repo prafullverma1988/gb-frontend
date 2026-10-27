@@ -55,6 +55,7 @@ const WarehouseModule    = lazyWithPreload("warehouse",    () => import("./modul
 const FuelModule         = lazyWithPreload("fuel",         () => import("./modules/FuelModule"));
 const MachineryModule    = lazyWithPreload("machinery",    () => import("./modules/MachineryModule"));
 const AssetsModule       = lazyWithPreload("assets",       () => import("./modules/AssetsModule"));
+const FlagCenterModule   = lazyWithPreload("flags",        () => import("./modules/FlagCenterModule"));
 const RMCModule          = lazyWithPreload("rmc",          () => import("./modules/RMCModule"));
 const MapLibraryModule   = lazyWithPreload("mapping",      () => import("./modules/MapLibraryModule"));
 const TownshipCRMModule  = lazyWithPreload("township",     () => import("./modules/TownshipCRMModule"));
@@ -113,6 +114,7 @@ const PREFETCH_LIST = [
   ["fuel",        FuelModule,        "FuelModule"],
   ["machinery",   MachineryModule,   "MachineryModule"],
   ["assets",      AssetsModule,      "AssetsModule"],
+  ["flags",       FlagCenterModule,  "FlagCenterModule"],
   ["rmc",         RMCModule,         "RMCModule"],
   ["mapping",     MapLibraryModule,  "MapLibraryModule"],
   ["township",    TownshipCRMModule, "TownshipCRMModule"],
@@ -159,6 +161,7 @@ const IcSet   =(p)=><Ic {...p} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.
 const IcWH    =(p)=><Ic {...p} d="M3 21V8l9-5 9 5v13M9 21v-6h6v6"/>;
 const IcFuel  =(p)=><Ic {...p} d="M12 2.7s6 6.3 6 10.3a6 6 0 01-12 0c0-4 6-10.3 6-10.3z"/>;
 const IcMach  =(p)=><Ic {...p} d="M1 3h15v13H1zM16 8h4l3 3v5h-7V8zM5.5 19a2 2 0 100-4 2 2 0 000 4zM18.5 19a2 2 0 100-4 2 2 0 000 4z"/>;
+const IcFlag  =(p)=><Ic {...p} d="M4 22V4M4 4h13l-2 4 2 4H4"/>;
 const IcAsset =(p)=><Ic {...p} d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16zM3.27 6.96L12 12.01l8.73-5.05M12 22.08V12"/>;
 const IcMap   =(p)=><Ic {...p} d="M9 20l-5.4-2.7A1 1 0 013 16.4V5.6a1 1 0 011.4-.9L9 7m0 13l6-3m-6 3V7m6 10l4.6 2.3a1 1 0 001.4-.9V7.6a1 1 0 00-.6-.9L15 4m0 13V4m0 0L9 7"/>;
 const IcTown  =(p)=><Ic {...p} d="M3 21h18M5 21V7l6-4v18M19 21V11l-6-4M9 9v.01M9 13v.01M9 17v.01"/>;
@@ -240,6 +243,7 @@ const NAV_GROUPS=[
     {id:"mom",       label:"MOM",          Icon:IcMOM,  sc:"M"},
     {id:"team",      get label() { return t("app.my_team"); },      Icon:IcTeam, sc:"T"},
     {id:"sahayak",   get label() { return t("app.sahayak_ai"); },   Icon:IcHelp},
+    {id:"flags",     get label() { return t("app.flags"); },        Icon:IcFlag},
   ]},
   {section:"FINANCE & OPS",items:[
     {id:"design",      get label() { return t("common.design"); },      Icon:IcDes,  sc:"D"},
@@ -280,7 +284,8 @@ const MODULE_MAP_NAV={
   // Iske bina machinery kisi bhi non-admin ko dikh hi nahi sakti (isVisible
   // ALWAYS_ON par gir jaata hai) — jabki kaagaz-expiry ki bell accountant ko
   // jaati hai aur uska link /machinery hai. Yahan hone se ye grantable ho jata hai.
-  fuel:"Fuel",machinery:"Machinery",assets:"Assets",mapping:"Mapping",rmc:"RMC"
+  fuel:"Fuel",machinery:"Machinery",assets:"Assets",mapping:"Mapping",rmc:"RMC",
+  flags:"Flags"
 };
 function navAllowed(id,user,enabledModules){
   if(id==="saas"||id==="saas-leads") return user?.role==="super_admin";
@@ -296,6 +301,9 @@ function navAllowed(id,user,enabledModules){
   if(id==="sahayak" && user?.sahayak_enabled===false) return false;
   // Admins see every module the company DOES have.
   if(["admin","super_admin"].includes(user?.role)) return true;
+  // Flags (Flag Center): row hi na ho to BAND — baaki modules ki tarah "row nahi = khula" nahi
+  // (server bhi strict: routes/flags.js). Tick de to hi dikhe.
+  if(id==="flags") return !!(user?.module_permissions?.Flags?.view);
   // Role-based permission check from DB (Settings → Roles & Access)
   const perms = user?.module_permissions;
   const modName = MODULE_MAP_NAV[id];
@@ -875,7 +883,7 @@ function ShortcutCheatsheet({onClose}){
 }
 
 // ── SIDEBAR ───────────────────────────────────────────────────────────
-function Sidebar({active,setActive,collapsed,setCollapsed,user,onLogout,enabledModules,isMobile,companies,onSwitchCompany,ticketCount,sahayakNotifCount=0}){
+function Sidebar({active,setActive,collapsed,setCollapsed,user,onLogout,enabledModules,isMobile,companies,onSwitchCompany,ticketCount,sahayakNotifCount=0,flagCount=0}){
   const [showSwitcher,setShowSwitcher]=useState(false);
   const [showCreateCo,setShowCreateCo]=useState(false);
   const [newCo,setNewCo]=useState({name:"",domain:"surya_ghar",city:""});
@@ -1032,7 +1040,8 @@ function Sidebar({active,setActive,collapsed,setCollapsed,user,onLogout,enabledM
                 // Admin keeps just the open-bug count.
                 const badgeCount = item0.id==="sahayak" ? ticketCount + sahayakNotifCount : ticketCount;
                 const item = (badgeCount>0 && item0.id===badgeTarget)
-                  ? {...item0, badge:badgeCount, bc:"#DC2626"} : item0;
+                  ? {...item0, badge:badgeCount, bc:"#DC2626"}
+                  : (item0.id==="flags" && flagCount>0 ? {...item0, badge:flagCount, bc:"#DC2626"} : item0);
                 const isA=active===item.id;
                 return(
                   <button key={item.id} onClick={()=>handleNav(item.id)} title={item.sc?`${item.label}  (Alt+${item.sc})`:item.label}
@@ -1958,6 +1967,7 @@ function App(){
     });
   },[nav]);
   const [ticketCount,setTicketCount]=useState(0);   // sidebar Sahayak/SaaS badge
+  const [flagCount,setFlagCount]=useState(0);        // sidebar Flags badge (naye laal flag)
   const [sahayakNotifCount,setSahayakNotifCount]=useState(0); // advisory Sahayak-stream unread (separate from main bell)
   const [projDeepLink,setProjDeepLink]=useState(null);        // {projectId,tab} from a notification click
   // Which module the user was on when they tapped the floating Sahayak button.
@@ -2158,6 +2168,17 @@ function App(){
         if(r&&r.success) setTicketCount(Number(r.count)||0);
       }catch(_){}
     };
+    // Flag Center badge (naye laal flag) — sirf jise Flags ka View ho; baaki skip (403 nahi).
+    const refreshFlags=async()=>{
+      // Taaza user localStorage se (refreshPerms wahin likhta hai) — tick baad me mile to bhi badge aaye
+      let u=user; try{ u=JSON.parse(localStorage.getItem("gb_user")||"null")||user; }catch(_){}
+      if(!loggedIn||!navAllowed("flags",u,null)){ setFlagCount(0); return; }
+      try{
+        const r=await api.get("/flags/summary");
+        if(r&&r.success&&r.data) setFlagCount(Number(r.data.new_red)||0);
+      }catch(_){}
+    };
+    window.addEventListener("flags:changed",refreshFlags);
     // Advisory Sahayak-stream count (onboarding nudges + insight digests) — now
     // out of the main bell, surfaced on the Sahayak nav badge instead. All
     // logged-in users (site staff simply get 0).
@@ -2165,7 +2186,7 @@ function App(){
     // /notifications/counts ek call me bell + Sahayak dono deta hai aur
     // "sanchalan:notif-counts" event se yahan pahunchta hai (neeche wala effect).
     if(!loggedIn) setSahayakNotifCount(0);
-    const tick=()=>{ refreshPerms(); refreshTickets(); };
+    const tick=()=>{ refreshPerms(); refreshTickets(); refreshFlags(); };
     tick();
     // Page khulte hi approve-authority bhi taaza kar lo — Settings me
     // Approval Flow ke level badle to button turant sahi ho jaye.
@@ -2176,7 +2197,7 @@ function App(){
     // request), focus/wapas aane par turant, aur 10 min se kuch chhua na ho to
     // 5 min ki cadence — kaam karte user ko wahi 60 s wali taazgi.
     const stopPoll=visiblePoll(tick, 60_000, { idleAfter: 10*60_000, idleMs: 5*60_000 });
-    return()=>{ stopPoll(); };
+    return()=>{ stopPoll(); window.removeEventListener("flags:changed",refreshFlags); };
   },[loggedIn,user?.role]);
 
   // Bell ka /notifications/counts (30 s, sirf jab tab saamne ho) Sahayak badge
@@ -2332,6 +2353,7 @@ function App(){
     fuel:      guard("fuel","Fuel",                <FuelModule/>),
     machinery: guard("machinery","Machinery",      <MachineryModule/>),
     assets:    guard("assets",   "Assets",         <AssetsModule deepLink={assetDeepLink} onDeepLinkDone={clearAssetDeepLink}/>),
+    flags:     <FlagCenterModule onNavigate={handleNotifNav}/>,
     rmc:       guard("rmc",      "Production Plant",      <RMCModule/>),
     mapping:   guard("mapping", "Site Mapping",   <MapLibraryModule/>),
     township:  guard("township", "Township CRM",   <TownshipCRMModule/>),
@@ -2368,7 +2390,7 @@ function App(){
         <div style={{width:32,height:32,border:"3px solid rgba(255,255,255,0.15)",borderTopColor:"#3B82F6",borderRadius:"50%",animation:"spin .7s linear infinite"}}/>
         <div style={{color:"white",fontSize:14,fontWeight:600}}>{t("app.switching_company")}</div>
       </div>}
-      {!hideAppShell && !isMobile && <Sidebar active={nav} setActive={setNav} collapsed={collapsed} setCollapsed={setCollapsed} user={user} onLogout={handleLogout} enabledModules={enabledModules} isMobile={isMobile} companies={companies} onSwitchCompany={handleSwitchCompany} ticketCount={ticketCount} sahayakNotifCount={sahayakNotifCount}/>}
+      {!hideAppShell && !isMobile && <Sidebar active={nav} setActive={setNav} collapsed={collapsed} setCollapsed={setCollapsed} user={user} onLogout={handleLogout} enabledModules={enabledModules} isMobile={isMobile} companies={companies} onSwitchCompany={handleSwitchCompany} ticketCount={ticketCount} sahayakNotifCount={sahayakNotifCount} flagCount={flagCount}/>}
       <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
         {!hideAppShell && <TopBar title={page.title} sub={page.sub} onNav={setNav} onRefresh={()=>setRefreshKey(k=>k+1)} collapsed={collapsed} setCollapsed={setCollapsed} alertCount={0} user={user} onLogout={handleLogout} onSearch={()=>setShowSearch(true)} onCheatsheet={()=>setShowCheatsheet(true)} onNotificationNav={handleNotifNav} isMobile={isMobile}/>}
         <div style={{flex:1,overflowY:"auto",paddingBottom:isMobile&&!hideAppShell?68:0}}>
