@@ -104,7 +104,8 @@ export default function TabProjectFiles({ projectId }) {
 
   // Roles & Access (5 Oct 2026) — server tay karta hai: hub.can_remove = Files →
   // Delete (kisi ki bhi file/photo), item.can_remove = apni aaj ki daali (Files Entry).
-  const canRemove = (item) => !!hub?.can_remove || !!item?.can_remove;
+  // Design ki drawing (source "design", 27 Oct 2026) Design module ki hai — yahan se nahi hatti.
+  const canRemove = (item) => item?.source !== "design" && (!!hub?.can_remove || !!item?.can_remove);
   const canUpload = canEntry("Files");
   // Jagah / tag badalna: Files Edit, ya apni daali file. Task / issue ki photo nahi.
   const me = currentUser();
@@ -429,6 +430,11 @@ function DocList({ items, arch, canRemove, busy, onRemove, onRestore, folderOf, 
                 <div style={{ fontWeight: 600, color: T.t1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {f.title || f.category_label}
                 </div>
+                {f.source === "design" && (
+                  <span style={{ fontSize: 9, fontWeight: 700, color: "#2563EB", background: "#EFF6FF", borderRadius: 10, padding: "0 6px" }}>
+                    {t("project_files.design_se")}{f.design_status ? " · " + f.design_status : ""}
+                  </span>
+                )}
                 <TagLine tags={f.tags} />
               </div>
             </div>

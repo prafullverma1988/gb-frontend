@@ -7566,6 +7566,7 @@ const dict = {
   "project_files.site_photos":                                 "Site photos",
   "project_files.wapas":                                       "Wapas",
   "project_files.yahan_abhi_koi_document_nahi_upar":           "Yahan abhi koi document nahi. Upar ＋ File daalo se upload kar do — mobile se daale hue documents bhi yahin dikhte hain.",
+  "project_files.design_se": "Design se",
   "project_files.sab_photos": "Sab photos",
   "project_files.bina_folder": "Bina folder",
   "project_files.naya_folder": "+ Naya folder",

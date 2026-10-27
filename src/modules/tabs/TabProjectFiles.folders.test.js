@@ -31,6 +31,7 @@ const HUB = {
   ],
   documents: [
     { ref: "f1", id: 1, category: "boq", category_label: "BOQ / Estimate", title: "BOQ rev 2", url: "https://x/a.pdf", folder_id: 11, tags: ["GFC"], created_at: now, uploaded_by: 1 },
+    { ref: "d60", id: "d60", source: "design", category: "design", category_label: "Design Drawings (GFC)", title: "Culvert GAD · v1", url: "https://x/c.pdf", folder_id: 11, tags: [], created_at: now, can_remove: false, design_status: "Approved" },
     { ref: "f2", id: 2, category: "other", category_label: "Other Documents", title: "Naksha", url: "https://x/b.pdf", folder_id: 30, tags: [], created_at: now, uploaded_by: 2 },
   ],
   photos: [
@@ -94,6 +95,13 @@ test("+ Naya folder (photo) → POST", async () => {
   await setVal(document.body.querySelector("input[placeholder='Folder ka naam']"), "Kitchen side");
   await click([...document.body.querySelectorAll("button")].find((b) => b.textContent.trim() === "✓"));
   expect(api.post).toHaveBeenCalledWith("/projects/5/folders", { kind: "photo", name: "Kitchen side" });
+});
+
+test("Design ki drawing: chip, hatao / 📁 nahi", async () => {
+  const row = leaf("Culvert GAD · v1").closest("div[style*='grid-template-columns']");
+  expect(row.textContent).toContain("Design se · Approved");
+  expect(row.textContent).not.toContain("Hatao");
+  expect(row.querySelector("[title='Folder / tag badlo']")).toBeNull();
 });
 
 test("document ka 📁 → doosre folder + tag wahi (PATCH)", async () => {

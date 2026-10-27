@@ -7563,6 +7563,7 @@ const dict = {
   "project_files.site_photos":                                 "साइट फोटोस",
   "project_files.wapas":                                       "वापस",
   "project_files.yahan_abhi_koi_document_nahi_upar":           "यहां अभी कोई डॉक्यूमेंट नहीं। ऊपर ＋ फाइल डालो से अपलोड कर दो — मोबाइल से डाले हुए डॉक्यूमेंट्स भी यहीं दिखते हैं।",
+  "project_files.design_se": "डिज़ाइन से",
   "project_files.sab_photos": "सभी फ़ोटो",
   "project_files.bina_folder": "बिना फ़ोल्डर",
   "project_files.naya_folder": "+ नया फ़ोल्डर",

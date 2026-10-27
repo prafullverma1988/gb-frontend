@@ -7564,6 +7564,7 @@ const dict = {
   "project_files.site_photos":                                 "Site photos",
   "project_files.wapas":                                       "Back",
   "project_files.yahan_abhi_koi_document_nahi_upar":           "No documents here yet. Upload using ＋ Add file above — documents uploaded from mobile also appear here.",
+  "project_files.design_se": "From Design",
   "project_files.sab_photos": "All photos",
   "project_files.bina_folder": "No folder",
   "project_files.naya_folder": "+ New folder",
