@@ -274,7 +274,9 @@ function SitePulseDrawer({onClose,onSelectProject,initial}){
     if(!title){setSheetErr(t("pulse_chat.title_likho"));return;}
     if(!pid){setSheetErr(t("pulse_chat.project_nahi"));return;}
     setSheetBusy(true); setSheetErr("");
-    const desc=t("pulse_chat.pulse_se_desc",{text:f.text,who:f.user_name||"",when:timeAgo(f.activity_date||f.created_at)});
+    // Apna likha Description pehle, neeche khabar ka hawala (27 Oct 2026).
+    const ctx=t("pulse_chat.pulse_se_desc",{text:f.text,who:f.user_name||"",when:timeAgo(f.activity_date||f.created_at)});
+    const desc=[String(sheet.desc||"").trim(),ctx].filter(Boolean).join("\n\n");
     const photos=Array.isArray(f.photos)?f.photos:(f.photo_url?[f.photo_url]:[]);
     const r=sheet.kind==="issue"
       ?await api.post(`/tasks/project/${pid}/issues`,{title,description:desc,priority:"Medium",photo_url:photos[0]||undefined,photo_urls:photos.length?photos:undefined}).catch(()=>null)
@@ -722,9 +724,13 @@ function SitePulseDrawer({onClose,onSelectProject,initial}){
           <div onClick={e=>e.stopPropagation()} style={{width:"100%",background:C.w,borderRadius:"14px 14px 0 16px",padding:"12px 14px 14px",display:"flex",flexDirection:"column",gap:8,boxSizing:"border-box"}}>
             <div style={{fontSize:13.5,fontWeight:800,color:C.t}}>{sheet.kind==="issue"?t("pulse_chat.issue_banao"):t("pulse_chat.todo_banao")}</div>
             <div style={{fontSize:11,color:C.tl,background:C.bg,borderRadius:7,padding:"5px 9px",borderLeft:`3px solid ${C.p}`,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t("pulse_chat.is_khabar_se")}: {sheet.item.text}</div>
-            <label style={{fontSize:10.5,fontWeight:700,color:C.tl}}>{t("pulse_chat.title")}</label>
-            <input value={sheet.title} onChange={e=>setSheet({...sheet,title:e.target.value})} maxLength={200} style={{height:36,borderRadius:8,border:`1.5px solid ${C.b}`,padding:"0 10px",fontSize:12.5,fontFamily:"inherit",color:C.t}}/>
-            <div style={{fontSize:11,color:C.tl}}>{t("pulse_chat.project")}: <strong style={{color:C.t}}>{sheet.item.project_name||"—"}</strong>{(sheet.item.photo_url||(sheet.item.photos||[]).length)?" · "+t("pulse_chat.photo_saath"):""}</div>
+            {/* Title + project khabar se — chhote akshar me (27 Oct 2026); likhne ki jagah Description */}
+            <div style={{fontSize:11,color:C.tl,lineHeight:1.5}}>
+              <div style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t("pulse_chat.title")}: <span style={{color:C.t}}>{sheet.title}</span></div>
+              <div>{t("pulse_chat.project")}: <strong style={{color:C.t}}>{sheet.item.project_name||"—"}</strong>{(sheet.item.photo_url||(sheet.item.photos||[]).length)?" · "+t("pulse_chat.photo_saath"):""}</div>
+            </div>
+            <label style={{fontSize:10.5,fontWeight:700,color:C.tl}}>{t("pulse_chat.desc_label")}</label>
+            <textarea value={sheet.desc||""} onChange={e=>setSheet({...sheet,desc:e.target.value})} maxLength={2000} rows={3} placeholder={t("pulse_chat.desc_ph")} style={{borderRadius:8,border:`1.5px solid ${C.b}`,padding:"8px 10px",fontSize:12.5,fontFamily:"inherit",color:C.t,resize:"vertical",lineHeight:1.45}}/>
             {sheetErr&&<div style={{fontSize:11,color:C.r}}>{sheetErr}</div>}
             <div style={{display:"flex",gap:8}}>
               <button onClick={()=>setSheet(null)} disabled={sheetBusy} style={{flex:1,height:36,borderRadius:8,border:`1px solid ${C.b}`,background:C.w,color:C.t,fontSize:12.5,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>{t("common.cancel")}</button>
