@@ -18,6 +18,7 @@ import api from "../config/api";
 import { t } from "../i18n";
 import { loadLibUnits, unitOptions, sameStockUnit, kgPerUnit } from "../components/grn/weigh";
 import PickSelect from "../components/PickSelect";
+import MaterialFlowDrawer from "../components/MaterialFlowDrawer";
 
 const T = {
   surface: "#FFFFFF", surfaceB: "#F8F9FB",
@@ -254,7 +255,7 @@ export function MaterialLedgerHistory({ material, isAdmin, focusGrnId, onData, o
           </div>
         )}
       </div>
-      {sel && <LedgerRowDrawer e={sel} unit={material.unit} isAdmin={isAdmin} grnCancel={(d && d.grn_cancel) || {}}
+      {sel && <LedgerRowDrawer e={sel} unit={material.unit} material={material.name} isAdmin={isAdmin} grnCancel={(d && d.grn_cancel) || {}}
         onClose={() => { setSelKey(null); setHot(null); }} onSaved={() => { setReload(x => x + 1); onChanged && onChanged(); }}/>}
     </>
   );
@@ -386,8 +387,21 @@ const rowKey = (e) => (e._before ? "before" : e.kind + ":" + (e.row_id ?? e.ref)
 // Qty sirf store me bani "aaya" line (Opening / Stock add / Site se wapas) ki,
 // sirf Admin, company ke delete-password ke saath. Baaki line par wajah.
 // ════════════════════════════════════════════════════════════════
-function LedgerRowDrawer({ e, unit, isAdmin, grnCancel, onClose, onSaved }) {
+// Line se "Material trail" (27 Oct 2026) — GRN / store me bani aaya line
+// (grn_id = wh_grn), issue (doc_id = wh_issues), transfer (doc_id = wh_transfers).
+// Ginti / nikasi / conversion-out / job work-out ka trail nahi.
+const TRAIL_KIND = { grn: "wh_grn", opening: "wh_grn", addstock: "wh_grn", return: "wh_grn", conversion_in: "wh_grn", jobwork_in: "wh_grn",
+  issue: "wh_issue", transfer_in: "transfer", transfer_out: "transfer" };
+export function trailOf(e, material) {
+  const kind = e && !e._before ? TRAIL_KIND[e.kind] : null;
+  const id = kind === "wh_grn" ? e.grn_id : e && e.doc_id;
+  return kind && id ? { kind, id, material } : null;
+}
+
+function LedgerRowDrawer({ e, unit, material, isAdmin, grnCancel, onClose, onSaved }) {
   const km = kindMeta(e.kind);
+  const [trail, setTrail] = useState(null);
+  const trailRef = trailOf(e, material);
   const [qty, setQty] = useState(String(e.qty ?? ""));
   const [note, setNote] = useState("");
   const [pw, setPw] = useState("");
@@ -448,6 +462,12 @@ function LedgerRowDrawer({ e, unit, isAdmin, grnCancel, onClose, onSaved }) {
           <Row l={t("warehouse.ledger_row_party")} v={e._before ? "—" : partyLine(e)}/>
           <Row l={t("warehouse.ledger_row_by")} v={who}/>
           {!e._before && <Row l={t("warehouse.ledger_row_note")} v={e.note}/>}
+          {trailRef && (
+            <button onClick={() => setTrail(trailRef)}
+              style={{ marginTop: 12, width: "100%", padding: "9px 12px", borderRadius: 7, border: `1.5px solid ${T.blu}`, background: T.surface, color: T.blu, fontSize: 12.5, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
+              {t("mtrail.btn")} →
+            </button>
+          )}
 
           {/* Qty badlav ka itihaas — hamesha dikhe */}
           {(e.edits || []).length > 0 && (
@@ -486,6 +506,7 @@ function LedgerRowDrawer({ e, unit, isAdmin, grnCancel, onClose, onSaved }) {
           )}
         </div>
       </div>
+      {trail && <MaterialFlowDrawer trail={trail} onClose={() => setTrail(null)}/>}
     </>
   );
 }

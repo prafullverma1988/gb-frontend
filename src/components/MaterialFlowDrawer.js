@@ -1,21 +1,21 @@
-// ── MATERIAL FLOW TIMELINE DRAWER ─────────────────────────────
-// Click any row in the project Material Ledger and this slide-in
-// drawer opens with the full audit trail of that delivery:
-//   • who requested it, when, qty
-//   • who approved / rejected, when
-//   • who ordered, vendor, expected delivery
-//   • who received, challan, when
-//   • bills raised against this GRN
-//   • usage entries (which task consumed it)
+// ── MATERIAL TRAIL DRAWER ─────────────────────────────────────
+// Project Material Ledger (GRN row) ya Store khaate ki line (In / Out) se
+// khulta hai: us material ka poora raasta, ek khadi timeline me — har step
+// ek chhota card:
+//   MR → Manzoori → Order → Weighbridge → GRN → Store se diya →
+//   Project par aaya → Use · Bill (sirf Finance VIEW ko — server tay karta hai)
+// Har card: step, kab (IST, darj time), kisne, 1–2 line detail, photo (tap =
+// bada). Jis line se khola wo card highlight.
 //
-// Admin can click "Edit MR" to jump into the MRDetailDrawer for
-// the underlying material request (qty / vendor / date / notes /
-// status). Any change there cascades to the GRN + ledger.
+// Server: GET /procurement/material-trail?kind=&id=&material= (27 Oct 2026).
+// kind = grn (site / store ki grn_entries) — tab GRN ke apne kaam bhi:
+// shikayat (issue), sudhaar, hatana, MR sudhaar, Activity log.
 //
 // Props:
-//   grnId       — the grn_entries.id to load (or null = drawer closed)
+//   grnId       — grn_entries.id (project Material tab) — purana tareeka
+//   trail       — { kind, id, material } — kisi bhi shuruaat se (Store khaata)
 //   onClose
-//   onChanged   — called after any edit so parent can reload ledger
+//   onChanged   — GRN sudhaar / hatane ke baad parent ledger dobara laaye
 //   isAdmin     — false = sirf dekhna. Har button par wahi tick bhi lagta hai
 //                 jo server maangta hai (Roles & Access, 5 Oct 2026):
 //                 shikayat = Procurement/Material Entry, band karna = Procurement
@@ -45,32 +45,74 @@ const T = {
   pur: "#7C3AED", purL: "#F5F3FF", purM: "#DDD6FE",
 };
 
-// GRN issue ka type — wire value English hi rehti hai. "Weighbridge" (9 Oct
-// 2026) server khud banata hai: kaante / site ke nishaan (plate nahi dikhi, AI
-// ka padha badla, gadi no. badla …) bill se pehle dikhein — iska naam bhasha me.
-// "Receiving" (10 Oct 2026, E) bhi server ka — bina gadi wali GRN par wahi rec
-// slip pehle kisi aur GRN par aa chuki ho. "+ Issue" ke chips me nahi aata.
-const issueTypeLabel = (ty) => (ty === "Weighbridge" ? t("grn_issue.type_weighbridge") : ty === "Receiving" ? t("grn_issue.type_receiving") : ty);
+// GRN issue ka type — wire value English hi rehti hai, dikhta bhasha me.
+// "Weighbridge" (9 Oct 2026) / "Receiving" (10 Oct 2026, E) server khud banata
+// hai, "+ Issue" ke chips me nahi aate.
+const ISSUE_TYPES = ["Quality", "Short", "Damaged", "WrongItem", "Other"];
+const ITYPE_KEY = { Quality: "material_flow.itype_quality", Short: "material_flow.itype_short", Damaged: "material_flow.itype_damaged",
+  WrongItem: "material_flow.itype_wrong_item", Other: "material_flow.itype_other",
+  Weighbridge: "grn_issue.type_weighbridge", Receiving: "grn_issue.type_receiving" };
+const issueTypeLabel = (ty) => (ITYPE_KEY[ty] ? t(ITYPE_KEY[ty]) : ty);
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+// Business date ("2026-10-15") — din jaisa ka waisa (timezone se khiske nahi).
 const fmtDate = (d) => {
   if (!d) return "—";
-  try { return new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }); } catch { return d; }
+  const m = String(d).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return Number(m[3]) + " " + MONTHS[Number(m[2]) - 1] + " " + m[1];
+  try { return new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric", timeZone: "Asia/Kolkata" }); } catch { return String(d); }
 };
-const fmtDateTime = (d) => {
-  if (!d) return "—";
-  try {
-    return new Date(d).toLocaleString("en-IN", { day: "2-digit", month: "short", year: "2-digit", hour: "2-digit", minute: "2-digit" });
-  } catch { return d; }
-};
-const fmtN = (n) => {
-  const v = Number(n) || 0;
-  if (v >= 10000000) return (v / 10000000).toFixed(2) + "Cr";
-  if (v >= 100000)  return (v / 100000).toFixed(2) + "L";
-  if (v >= 1000)    return (v / 1000).toFixed(1) + "K";
-  return Math.round(v).toLocaleString("en-IN");
-};
+const fmtQ = (n) => (n == null || n === "" ? "" : Number(n).toLocaleString("en-IN", { maximumFractionDigits: 3 }));
+const fmtINR = (n) => "₹" + Number(n || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 });
 
-export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin = true, onEditMR }) {
-  const open = !!grnId;
+// Step ka rang / naam. receive: store me aaya ho (project nahi) to "Store me aaya".
+const STEP = {
+  mr:       { c: T.amb, bg: T.ambL, k: "mtrail.type_mr" },
+  approval: { c: T.blu, bg: T.bluL, k: "mtrail.type_approval" },
+  order:    { c: T.pur, bg: T.purL, k: "mtrail.type_order" },
+  weigh:    { c: T.pur, bg: T.purL, k: "mtrail.type_weigh" },
+  grn:      { c: T.grn, bg: T.grnL, k: "mtrail.type_grn" },
+  issue:    { c: T.amb, bg: T.ambL, k: "mtrail.type_issue" },
+  transfer: { c: T.blu, bg: T.bluL, k: "mtrail.type_transfer" },
+  receive:  { c: T.grn, bg: T.grnL, k: "mtrail.type_receive" },
+  use:      { c: T.t3,  bg: T.surfaceB, k: "mtrail.type_use" },
+  bill:     { c: T.red, bg: T.redL, k: "mtrail.type_bill" },
+};
+const stepLabel = (s) => (s.type === "receive" && s.details?.store && !s.details?.project)
+  ? t("mtrail.type_receive_store") : t((STEP[s.type] || STEP.use).k);
+const STATUS_KEY = { approved: "mtrail.st_approved", rejected: "mtrail.st_rejected", pending: "mtrail.st_pending",
+  cancelled: "mtrail.st_cancelled", received: "mtrail.st_received", completed: "mtrail.st_received", partial: "mtrail.st_partial",
+  pendingapproval: "mtrail.st_pending" };
+const statusText = (v) => (STATUS_KEY[String(v || "").toLowerCase()] ? t(STATUS_KEY[String(v).toLowerCase()]) : String(v || ""));
+
+// Card ki 1–2 line: pehli = material + qty, doosri = baaki jaankari.
+export function trailLines(s) {
+  const d = s.details || {};
+  const items = (d.items || []).map(i => [i.name, i.qty != null ? fmtQ(i.qty) + (i.unit ? " " + i.unit : "") : ""].filter(Boolean).join(" "));
+  const kv = (k, v) => (v == null || v === "" ? null : t(k) + ": " + v);
+  const kg = (v) => fmtQ(v) + " kg";
+  const rest = [
+    d.status ? statusText(d.status) : null,
+    kv("mtrail.d_vendor", d.vendor), kv("mtrail.d_from", d.from), kv("mtrail.d_to", d.to),
+    kv("mtrail.d_store", s.type === "receive" && !d.project ? null : d.store), kv("mtrail.d_project", d.project),
+    kv("mtrail.d_task", d.task), kv("mtrail.d_issued_to", d.issued_to), kv("mtrail.d_custodian", d.custodian),
+    kv("mtrail.d_driver", d.driver), kv("mtrail.d_po", s.type === "order" ? null : d.po_no), kv("mtrail.d_challan", d.challan),
+    kv("mtrail.d_rec_slip", d.rec_slip), kv("mtrail.d_vehicle", d.vehicle_no), kv("mtrail.d_weighbridge", d.weighbridge),
+    d.gross_kg != null ? kv("mtrail.d_gross", kg(d.gross_kg)) : null, d.tare_kg != null ? kv("mtrail.d_tare", kg(d.tare_kg)) : null,
+    d.net_kg != null ? kv("mtrail.d_net", kg(d.net_kg)) : null,
+    d.expected ? kv("mtrail.d_expected", fmtDate(d.expected)) : null,
+    d.amount != null ? kv("mtrail.d_amount", fmtINR(d.amount)) : null,
+  ].filter(Boolean);
+  return { items: items.join(" · "), rest: rest.join(" · "), note: d.note || "" };
+}
+// Kab: darj time (IST) — na ho to business date.
+export const trailWhen = (s) => darjWhen(s.at) || (s.date ? fmtDate(s.date) : "");
+
+export default function MaterialFlowDrawer({ grnId, trail, onClose, onChanged, isAdmin = true, onEditMR }) {
+  const kind = trail?.kind || (grnId ? "grn" : null);
+  const docId = trail?.id || grnId || null;
+  const open = !!(kind && docId);
+  const isGrn = kind === "grn";
   const mayIssue   = canEntry(["Procurement", "Material"]);
   const mayResolve = isAdmin && can("Procurement", "approve");
   const mayEditGrn = isAdmin && canAny(["Procurement", "Material"], "edit");
@@ -79,6 +121,7 @@ export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin 
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
+  const [zoom, setZoom] = useState(null);
   // GRN edit state
   const [grnEditing, setGrnEditing] = useState(false);
   const [grnForm, setGrnForm] = useState({});
@@ -93,32 +136,36 @@ export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin 
   const [issueSaving, setIssueSaving] = useState(false);
 
   const reload = () => {
-    if (!grnId) return;
+    if (!open) return;
     setLoading(true); setErr("");
-    api.get(`/procurement/grns/${grnId}/flow`)
+    const q = "kind=" + encodeURIComponent(kind) + "&id=" + encodeURIComponent(docId)
+      + (trail?.material ? "&material=" + encodeURIComponent(trail.material) : "");
+    api.get("/procurement/material-trail?" + q)
       .then((r) => {
         if (r?.success && r.data) setData(r.data);
-        else setErr(r?.message || "Failed to load flow");
+        else setErr(r?.message || t("mtrail.load_fail"));
       })
-      .catch((e) => setErr(e?.message || "Network error"))
+      .catch((e) => setErr(e?.message || t("mtrail.load_fail")))
       .finally(() => setLoading(false));
   };
 
   useEffect(() => {
-    if (!grnId) { setData(null); setGrnEditing(false); setGrnEditNote(""); return; }
+    if (!open) { setData(null); setGrnEditing(false); setGrnEditNote(""); setZoom(null); return; }
+    setData(null); setZoom(null);
     reload();
-  }, [grnId]);
+  }, [kind, docId, trail?.material]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const doc = data?.doc || null;
   // Reset edit form whenever GRN data loads
   useEffect(() => {
-    if (data?.grn) {
-      const g = data.grn;
+    if (doc?.grn) {
+      const g = doc.grn;
       setGrnForm({
         vendor_name:   g.vendor_name || "",
         challan_no:    g.challan_no || "",
         received_date: g.received_date ? String(g.received_date).slice(0, 10) : "",
         received_by:   g.received_by || "",
-        items: (data.items || []).map(it => ({
+        items: (doc.items || []).map(it => ({
           id: it.id,
           description:  it.description || "",
           received_qty: it.received_qty != null ? String(it.received_qty) : "",
@@ -126,7 +173,7 @@ export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin 
         })),
       });
     }
-  }, [data]);
+  }, [doc]);
 
   const handleGrnSave = async () => {
     if (grnSaving) return;
@@ -147,12 +194,12 @@ export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin 
           unit:         it.unit || null,
         })),
       };
-      const res = await api.put("/procurement/grns/" + grnId, payload);
-      if (res?.success === false) { setErr(res.message || "Save failed"); setGrnSaving(false); return; }
+      const res = await api.put("/procurement/grns/" + docId, payload);
+      if (res?.success === false) { setErr(res.message || t("mtrail.save_fail")); setGrnSaving(false); return; }
       setGrnEditing(false); setGrnEditNote("");
       reload();
       onChanged && onChanged();
-    } catch (e) { setErr(e?.message || "Network error"); }
+    } catch (e) { setErr(e?.message || t("mtrail.save_fail")); }
     setGrnSaving(false);
   };
 
@@ -161,16 +208,16 @@ export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin 
     if (!issueNote.trim()) { setErr(t("material_flow.issue_note_compulsory_hai")); return; }
     setIssueSaving(true); setErr("");
     try {
-      const res = await api.post(`/procurement/grns/${grnId}/issues`, {
+      const res = await api.post(`/procurement/grns/${docId}/issues`, {
         issue_type: issueType,
         note: issueNote.trim(),
         photo_url: issuePhoto || null,
       });
-      if (res?.success === false) { setErr(res.message || "Issue raise failed"); setIssueSaving(false); return; }
+      if (res?.success === false) { setErr(res.message || t("mtrail.save_fail")); setIssueSaving(false); return; }
       setShowIssueForm(false); setIssueNote(""); setIssueType("Quality"); setIssuePhoto("");
       reload();
       onChanged && onChanged();
-    } catch (e) { setErr(e?.message || "Network error"); }
+    } catch (e) { setErr(e?.message || t("mtrail.save_fail")); }
     setIssueSaving(false);
   };
 
@@ -179,178 +226,44 @@ export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin 
     if (note == null) return;
     try {
       const res = await api.patch(`/procurement/grns/issues/${issueId}/resolve`, { resolution_note: note });
-      if (res?.success === false) { setErr(res.message || "Resolve failed"); return; }
+      if (res?.success === false) { setErr(res.message || t("mtrail.save_fail")); return; }
       reload();
-    } catch (e) { setErr(e?.message || "Network error"); }
+    } catch (e) { setErr(e?.message || t("mtrail.save_fail")); }
   };
 
   const handleGrnDelete = async () => {
     if (grnDeleting) return;
-    const reason = await window.promptAsync(t("material_flow.delete_grn_reason_ask", { grn: data?.grn?.grn_number || "" }));
+    const reason = await window.promptAsync(t("material_flow.delete_grn_reason_ask", { grn: doc?.grn?.grn_number || "" }));
     if (reason == null) return;
     if (reason.trim().length < 3) { setErr(t("material_flow.delete_reason_compulsory_hai")); return; }
     setGrnDeleting(true); setErr("");
     try {
-      const res = await api.del("/procurement/grns/" + grnId, { reason: reason.trim() });
-      if (res?.success === false) { setErr(res.message || "Delete failed"); setGrnDeleting(false); return; }
+      const res = await api.del("/procurement/grns/" + docId, { reason: reason.trim() });
+      if (res?.success === false) { setErr(res.message || t("mtrail.save_fail")); setGrnDeleting(false); return; }
       onChanged && onChanged();
       onClose && onClose();
-    } catch (e) { setErr(e?.message || "Network error"); setGrnDeleting(false); }
+    } catch (e) { setErr(e?.message || t("mtrail.save_fail")); setGrnDeleting(false); }
   };
 
   if (!open) return null;
 
-  const grn = data?.grn;
-  const items = data?.items || [];
+  const steps = data?.steps || [];
+  const grn = doc?.grn || null;
   const grnGone = grn?.grn_type === "Cancelled";   // hatayi gayi site GRN — sudhaar / delete nahi
-  const mr = data?.mr;
-  // Purane GRN ke liye server ka andaaza (naam + vendor se) — sirf batane ke
-  // liye; ye MR is GRN se JUDI nahi hai, isliye timeline/Edit MR me nahi (MAT-09).
-  const mrGuess = !mr ? data?.mr_guess : null;
-  const po = data?.po;
-  const audit = data?.audit || [];
-  const bills = data?.bills || [];
-  const usage = data?.usage || [];
-  const issues = data?.issues || [];
+  const mr = doc?.mr || null;
+  const issues = doc?.issues || [];
   const openIssueCount = issues.filter(i => i.status !== "Resolved").length;
-
-  // photo_urls is stored as a JSON array string. Parse defensively.
-  const parsePhotos = (raw) => {
-    if (!raw) return [];
-    if (Array.isArray(raw)) return raw;
-    try { const v = JSON.parse(raw); return Array.isArray(v) ? v : []; } catch { return []; }
-  };
-  const mrPhotos  = parsePhotos(mr?.photo_urls);
-  // GRN ki teen photo alag naam se (10 Oct 2026, E): vendor challan (photo_urls),
-  // rec slip (rec_slip_url + no.), gadi / material (site_photo_urls). Andar ke
-  // material (store issue / transfer) ki purani receipt me photo photo_urls me hi hai.
-  const inboundGrn = grn && (grn.source === "WarehouseIssue" || grn.source === "WarehouseTransfer");
-  const grnPhotoGroups = grn ? [
-    { label: inboundGrn ? t("grn_ph.material") : t("grn_ph.vendor_challan"), photos: parsePhotos(grn.photo_urls) },
-    { label: t("grn_ph.rec_slip"), photos: grn.rec_slip_url ? [grn.rec_slip_url] : [],
-      note: grn.rec_slip_no ? t("grn_ph.rec_slip_no") + " " + grn.rec_slip_no : "" },
-    { label: inboundGrn ? t("grn_ph.material") : t("grn_ph.site"), photos: parsePhotos(grn.site_photo_urls) },
-  ] : [];
-  const grnPending = Number(grn?.photos_pending) || 0;
-
-  // Build chronological events — combines all sources into a single timeline.
-  const events = [];
-  if (mr?.created_at) {
-    events.push({
-      key: `mr-create-${mr.id}`,
-      ts: mr.created_at,
-      icon: "📝",
-      color: T.amb,
-      bg: T.ambL,
-      title: t("material_flow.material_requested"),
-      who: mr.requested_by || "Site Team",
-      lines: [
-        `${mr.item_name} · ${mr.quantity} ${mr.unit}`,
-        mr.required_date ? `Required by ${fmtDate(mr.required_date)}` : null,
-        mr.notes ? `📌 ${mr.notes}` : null,
-      ].filter(Boolean),
-    });
-  }
-  // Approve / reject from audit
-  audit.forEach((a) => {
-    const action = (a.action || "").toUpperCase();
-    if (action === "APPROVE" || action === "APPROVED") {
-      events.push({
-        key: `audit-${a.created_at}-approve`,
-        ts: a.created_at,
-        icon: "✓",
-        color: T.blu,
-        bg: T.bluL,
-        title: t("common.approved"),
-        who: a.user_name || "Admin",
-        lines: [(() => { try { const d = JSON.parse(a.details || "{}"); return d.approved_qty ? `Approved qty: ${d.approved_qty}` : null; } catch { return null; } })()].filter(Boolean),
-      });
-    } else if (action === "REJECT" || action === "REJECTED") {
-      events.push({
-        key: `audit-${a.created_at}-reject`,
-        ts: a.created_at,
-        icon: "✕",
-        color: T.red,
-        bg: T.redL,
-        title: t("common.rejected"),
-        who: a.user_name || "Admin",
-        lines: [],
-      });
-    } else if (action === "MARK-ORDERED" || action === "ORDERED" || action === "ORDER") {
-      events.push({
-        key: `audit-${a.created_at}-order`,
-        ts: a.created_at,
-        icon: "🚚",
-        color: T.pur,
-        bg: T.purL,
-        title: t("common.ordered"),
-        who: a.user_name || "Admin",
-        lines: [],
-      });
-    }
-  });
-  // Fallback: if MR has linked_vendor but no order audit entry, infer from MR fields
-  if (mr?.linked_vendor && !events.some((e) => e.title === "Ordered")) {
-    events.push({
-      key: `mr-order-${mr.id}`,
-      ts: mr.expected_delivery || mr.updated_at || mr.created_at,
-      icon: "🚚",
-      color: T.pur,
-      bg: T.purL,
-      title: t("common.ordered"),
-      who: "Admin",
-      lines: [
-        `Vendor: ${mr.linked_vendor}`,
-        mr.expected_delivery ? `Expected delivery ${fmtDate(mr.expected_delivery)}` : null,
-      ].filter(Boolean),
-    });
-  }
-  // (GRN intentionally NOT pushed here — it has its own dedicated section
-  // card below so we don't show it twice. The timeline still shows it via
-  // the audit_logs CREATE entry if present.)
-  // Bills
-  bills.forEach((b) => {
-    events.push({
-      key: `bill-${b.id}`,
-      ts: b.date,
-      icon: "🧾",
-      color: T.red,
-      bg: T.redL,
-      title: t("material_flow.bill_raised"),
-      who: b.party_name || "Vendor",
-      lines: [
-        `Amount: ₹${fmtN(b.amount)}`,
-        b.due_date ? `Payment due ${fmtDate(b.due_date)}` : null,
-        b.status ? `Status: ${b.status}` : null,
-      ].filter(Boolean),
-    });
-  });
-  // Usage
-  usage.forEach((u) => {
-    events.push({
-      key: `use-${u.created_at}-${u.task_no}`,
-      ts: u.used_date || u.created_at,
-      icon: "🔧",
-      color: T.t3,
-      bg: T.b1,
-      title: t("material_flow.material_used"),
-      who: u.used_by || "Site",
-      lines: [
-        `${u.material_name}: ${u.used_qty} ${u.unit || ""}`,
-        u.task_name ? `Task: ${u.task_name}` : null,
-        u.remark ? `📌 ${u.remark}` : null,
-      ].filter(Boolean),
-    });
-  });
-
-  events.sort((a, b) => new Date(a.ts) - new Date(b.ts));
+  const hot = steps.find(s => s.highlight) || null;
+  const hotItems = hot?.details?.items || [];
+  const headName = data?.material ? (hotItems.find(i => String(i.name || "").trim().toLowerCase() === data.material)?.name || hotItems[0]?.name)
+    : hotItems[0]?.name;
 
   return (
     <>
       <BackClose onClose={onClose}/>
-      <div 
+      <div
         style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.5)", zIndex: 1500, backdropFilter: "blur(2px)" }}/>
-      <div style={{
+      <div data-testid="material-trail" style={{
         position: "fixed", top: 0, right: 0, height: "100vh", width: "min(560px, 100vw)",
         background: T.surface, zIndex: 1501, display: "flex", flexDirection: "column",
         boxShadow: "-12px 0 40px rgba(0,0,0,0.18)", animation: "matFlowSlide .25s ease",
@@ -360,19 +273,23 @@ export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin 
         <div style={{ background: "#0D1B2A", padding: "16px 20px", color: "#fff", flexShrink: 0 }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
             <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 11, color: "rgba(255,255,255,0.55)", marginBottom: 3, fontWeight: 600, letterSpacing: ".4px", textTransform: "uppercase" }}>{t("material_flow.material_flow_grn", { grn: grn?.grn_number ? `· ${grn.grn_number}` : "" })}</div>
+              <div style={{ fontSize: 11, color: "rgba(255,255,255,0.55)", marginBottom: 3, fontWeight: 600, letterSpacing: ".4px", textTransform: "uppercase" }}>
+                {t("mtrail.title")}{hot?.title ? " · " + hot.title : ""}
+              </div>
               <div style={{ fontSize: 17, fontWeight: 700, color: "#fff", letterSpacing: "-.3px",
                 whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                {items[0]?.description || mr?.item_name || t("common.material")}
-                {items.length > 1 && <span style={{ fontSize: 11, color: "rgba(255,255,255,0.55)", marginLeft: 6, fontWeight: 500 }}>+ {items.length - 1} more</span>}
+                {headName || t("common.material")}
+                {hotItems.length > 1 && <span style={{ fontSize: 11, color: "rgba(255,255,255,0.55)", marginLeft: 6, fontWeight: 500 }}>{t("mtrail.more_items", { n: hotItems.length - 1 })}</span>}
               </div>
-              <div style={{ fontSize: 11.5, color: "rgba(255,255,255,0.55)", marginTop: 4 }}>
-                {grn?.project_name || "—"} · {events.length} event{events.length === 1 ? "" : "s"}
-              </div>
+              {data && (
+                <div style={{ fontSize: 11.5, color: "rgba(255,255,255,0.55)", marginTop: 4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  {[hot?.details?.project || hot?.details?.store, t("mtrail.n_steps", { n: steps.length })].filter(Boolean).join(" · ")}
+                </div>
+              )}
             </div>
-            <button onClick={onClose}
+            <button onClick={onClose} aria-label={t("common.close")}
               style={{ width: 30, height: 30, borderRadius: 8, border: "1px solid rgba(255,255,255,0.15)",
-                background: "rgba(255,255,255,0.07)", color: "#fff", fontSize: 16, cursor: "pointer", lineHeight: 1 }}>×</button>
+                background: "rgba(255,255,255,0.07)", color: "#fff", fontSize: 16, cursor: "pointer", lineHeight: 1, flexShrink: 0 }}>×</button>
           </div>
         </div>
 
@@ -382,318 +299,199 @@ export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin 
             <div style={{ padding: "40px 0", textAlign: "center", color: T.t4, fontSize: 13 }}>
               <div style={{ width: 28, height: 28, border: "3px solid #E2E8F0", borderTopColor: T.blu,
                 borderRadius: "50%", animation: "matSpin 0.7s linear infinite", margin: "0 auto 10px" }}/>
-             {t("material_flow.loading_flow")}
+             {t("mtrail.loading")}
             </div>
           )}
           {err && !loading && (
-            <div style={{ padding: "10px 12px", background: T.redL, border: `1px solid ${T.redM}`, borderRadius: 6, color: T.red, fontSize: 12 }}>
+            <div style={{ padding: "10px 12px", background: T.redL, border: `1px solid ${T.redM}`, borderRadius: 6, color: T.red, fontSize: 12, marginBottom: 10 }}>
               {err}
             </div>
           )}
-          {/* Timeline removed — the per-stage section cards below already
-              tell the full chronological story without duplicating the GRN
-              card.  Keeping `events` array for any future use. */}
 
-          {/* Stage summary cards — MR / Approval / Order / GRN */}
-          {!loading && data && (() => {
-            const approvalEntry = audit.find(a => /APPROV/i.test(a.action || ""));
-            const rejectEntry   = audit.find(a => /REJECT/i.test(a.action || ""));
-            const orderEntry    = audit.find(a => /ORDER/i.test(a.action || ""));
-            const receivedEntry = audit.find(a => /RECEIV/i.test(a.action || ""));
-            let approvedQty = null;
-            if (approvalEntry?.details) { try { approvedQty = JSON.parse(approvalEntry.details).approved_qty; } catch {} }
-            // Order type: PO if MR has linked_po_id, else from audit details, else "Manual"
-            let orderType = "Manual";
-            if (mr?.linked_po_id || po) orderType = "PO";
-            else if (orderEntry?.details) {
-              try { orderType = JSON.parse(orderEntry.details).order_type || "Manual"; } catch {}
-            }
-            // Receiver name — prefer audit user, then GRN.received_by
-            const receivedByName = receivedEntry?.user_name || grn?.received_by || "Site";
-            return (
-              <div style={{ marginTop: 18, display: "flex", flexDirection: "column", gap: 10 }}>
-                {/* MR Request Summary */}
-                <Section
-                  color={T.amb} bg={T.ambL} icon="📝" title={t("material_flow.material_request")}
-                  empty={!mr}
-                  emptyText={mrGuess
-                    ? t("material_flow.possible_mr_not_linked", { mr: mrGuess.mr_number || `MR-${mrGuess.id}`, item: mrGuess.item_name, qty: Number(mrGuess.quantity), unit: mrGuess.unit || "", date: fmtDate(mrGuess.created_at) })
-                    : t("material_flow.no_mr_linked_direct_grn_entry")}
-                  rows={mr ? [
-                    ["MR #",       `MR-${mr.id}`],
-                    ["Material",   `${mr.item_name} · ${mr.quantity} ${mr.unit}`],
-                    ["Requested By", mr.requested_by || "—"],
-                    ["Requested On", fmtDateTime(mr.created_at)],
-                    ["Required By", fmtDate(mr.required_date)],
-                    ...(mr.approx_amount > 0 ? [["Approx. Amount", `₹${fmtN(mr.approx_amount)}`]] : []),
-                    ...(mr.notes ? [["Notes", mr.notes]] : []),
-                  ] : []}
-                  photos={mrPhotos}
-                />
-
-                {/* Approval Summary */}
-                <Section
-                  color={rejectEntry ? T.red : T.blu}
-                  bg={rejectEntry ? T.redL : T.bluL}
-                  icon={rejectEntry ? "✕" : "✓"}
-                  title={rejectEntry ? t("material_flow.rejection") : t("common.approval")}
-                  empty={!mr || (mr.mr_status !== "Approved" && mr.mr_status !== "Rejected" && !approvalEntry && !rejectEntry)}
-                  emptyText={mr ? `Currently ${mr.mr_status || "Pending"}` : "—"}
-                  rows={(approvalEntry || rejectEntry) ? [
-                    ["Status",      rejectEntry ? "Rejected" : "Approved"],
-                    ["By",          (rejectEntry || approvalEntry).user_name || "Admin"],
-                    ["On",          fmtDateTime((rejectEntry || approvalEntry).created_at)],
-                    ...(approvedQty != null ? [["Approved Qty", `${approvedQty} ${mr?.unit || ""}`]] : []),
-                    ...(mr?.rejected_reason ? [["Reason", mr.rejected_reason]] : []),
-                  ] : (mr?.mr_status === "Approved" ? [
-                    // Fallback when audit log missing: show MR's current status
-                    ["Status",      "Approved"],
-                    ["Approved Qty", `${mr.quantity} ${mr.unit}`],
-                  ] : [])}
-                />
-
-                {/* Order Summary — shows order type (Manual / PO / RFQ),
-                    vendor, expected delivery, and who/when ordered. For
-                    truly direct GRNs (no MR + no PO + no order audit) we
-                    still surface vendor info from the GRN itself. */}
-                <Section
-                  color={T.pur} bg={T.purL} icon="🚚" title={t("material_flow.order_placed")}
-                  empty={!mr?.linked_vendor && !po && !orderEntry && !grn?.vendor_name}
-                  emptyText={t("material_flow.not_ordered_yet")}
-                  rows={[
-                    ["Type",            (!mr && !po && !orderEntry && grn?.vendor_name) ? "Direct GRN (no MR/PO)" : orderType],
-                    ...(po ? [["PO #", po.po_number]] : []),
-                    ["Vendor",          mr?.linked_vendor || po?.vendor_name || grn?.vendor_name || "—"],
-                    ["Expected Delivery", fmtDate(mr?.expected_delivery || po?.expected_delivery || grn?.received_date)],
-                    ...(orderEntry ? [
-                      ["Ordered By", orderEntry.user_name || "Admin"],
-                      ["Ordered On", fmtDateTime(orderEntry.created_at)],
-                    ] : []),
-                  ].filter(([_, v]) => v && v !== "—" || _ === "Vendor" || _ === "Expected Delivery" || _ === "Type")}
-                />
-
-                {/* GRN / Receipt Summary — read-only OR inline edit form */}
-                {grn && !grnEditing && (
-                  <Section
-                    color={T.grn} bg={T.grnL} icon="📦" title={t("common.grn_received")}
-                    rows={[
-                      ["GRN #",          grn.grn_number],
-                      ["Vendor",         grn.vendor_name],
-                      ["Challan",        grn.challan_no],
-                      // Store se aaya maal: kisko diya + store ka note (11 Oct 2026, O)
-                      ...((grn.issued_to_name || grn.issue_note) ? [[t("material.from_store"),
-                        [grn.issued_to_name ? t("material.issued_to_name", { name: grn.issued_to_name }) : "",
-                         grn.issue_note ? t("material.issue_note", { note: grn.issue_note }) : ""].filter(Boolean).join(" · ")]] : []),
-                      // Dharam kaante ki tolai wali gadi (28 Sep 2026)
-                      ...(grn.vehicle_no ? [["⚖️ " + t("weigh.vehicle_no"), grn.vehicle_no]] : []),
-                      ["Received On",    fmtDate(grn.received_date)],
-                      ["Received By",    receivedByName],
-                      // Darj time (26 Oct 2026) — entry kab save hui, IST me; created_at na ho to row nahi
-                      ...(darjWhen(grn.created_at) ? [[t("darj.tag").charAt(0).toUpperCase() + t("darj.tag").slice(1), darjWhen(grn.created_at)]] : []),
-                      ["Type",           grn.grn_type || "Full"],
-                      // Task ke andar se hua GRN — kis task ke liye material aaya
-                      ...(grn.task_name ? [[t("material.flow_task"), grn.task_name]] : []),
-                      ...items.map(it => {
-                        const q = Number(it.received_qty) || 0, r = Number(it.rate) || 0;
-                        const val = Number(it.amount) || q * r;
-                        // Priced line → show what it cost; qty-only line stays as-is.
-                        return [it.description || "Item",
-                          r > 0 ? `${it.received_qty} ${it.unit} × ₹${r} = ₹${val.toLocaleString("en-IN")}`
-                                : `${it.received_qty} ${it.unit}`];
-                      }),
-                      ...(grn.remark ? [["Note", grn.remark]] : []),
-                    ]}
-                    photoGroups={grnPhotoGroups}
-                    pendingNote={grnPending > 0 ? t("grn_ph.uploading", { n: grnPending }) : ""}
-                  />
-                )}
-                {/* Site GRN hatana (16 Oct 2026) — request + Admin password se approve */}
-                {grn && !grnEditing && <SiteGrnCancelBox grnId={grn.id} grnNo={grn.grn_number} onDone={() => { reload(); onChanged && onChanged(); }}/>}
-                {grn && grnEditing && (
-                  <div style={{ background: T.surface, border: `1px solid ${T.b1}`, borderLeft: `3px solid ${T.grn}`, borderRadius: 8, padding: "12px 14px" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 10 }}>
-                      <span style={{ width: 22, height: 22, borderRadius: "50%", background: T.grnL, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 12 }}>📦</span>
-                      <span style={{ fontSize: 12, fontWeight: 700, color: T.grn }}>{t("material_flow.edit_grn_grn_number", { grn_number: grn.grn_number })}</span>
-                    </div>
-                    <div style={{ padding: "8px 10px", background: "#FFFBEB", border: `1px solid #FDE68A`, borderRadius: 7, marginBottom: 10 }}>
-                      <div style={{ fontSize: 9.5, fontWeight: 700, color: "#92400E", textTransform: "uppercase", letterSpacing: ".4px", marginBottom: 4 }}>
-                       {t("material_flow.edit_reason")} <span style={{ fontWeight: 500, textTransform: "none", letterSpacing: 0 }}>{t("material_flow.compulsory")}</span>
-                      </div>
-                      <textarea value={grnEditNote} onChange={e => setGrnEditNote(e.target.value)} rows={2}
-                        placeholder={t("material_flow.e_g_vendor_naam_galat_tha")}
-                        style={{ width: "100%", padding: "6px 8px", borderRadius: 5, border: `1.5px solid #FDE68A`, fontSize: 12, outline: "none", boxSizing: "border-box", fontFamily: "inherit", resize: "vertical", background: "#fff" }}/>
-                    </div>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
-                      <div>
-                        <div style={{ fontSize: 9, fontWeight: 700, color: T.t4, textTransform: "uppercase", letterSpacing: ".3px", marginBottom: 3 }}>{t("material_flow.material_vendor")}</div>
-                        <LibrarySelect type="supplier" value={grnForm.vendor_name}
-                          onChange={v => setGrnForm(p => ({ ...p, vendor_name: v }))}/>
-                      </div>
-                      <FInput label={t("material_flow.challan_no")} value={grnForm.challan_no} onChange={v => setGrnForm(p => ({ ...p, challan_no: v }))}/>
-                      <FInput label={t("material_flow.received_on")} type="date" value={grnForm.received_date} onChange={v => setGrnForm(p => ({ ...p, received_date: v }))}/>
-                      <FInput label={t("common.received_by")} value={grnForm.received_by} onChange={v => setGrnForm(p => ({ ...p, received_by: v }))}/>
-                    </div>
-                    {(grnForm.items || []).map((it, idx) => (
-                      <div key={it.id || idx} style={{ display: "grid", gridTemplateColumns: "1.6fr 80px 70px", gap: 6, marginBottom: 6 }}>
-                        <div>
-                          {idx === 0 && <div style={{ fontSize: 9, fontWeight: 700, color: T.t4, textTransform: "uppercase", letterSpacing: ".3px", marginBottom: 3 }}>{t("common.material")}</div>}
-                          <LibrarySelect type="material" value={it.description}
-                            onChange={v => setGrnForm(p => ({ ...p, items: p.items.map((x, i) => i === idx ? { ...x, description: v } : x) }))}/>
-                        </div>
-                        <FInput label={idx === 0 ? t("common.qty") : ""} type="number" value={it.received_qty}
-                          onChange={v => setGrnForm(p => ({ ...p, items: p.items.map((x, i) => i === idx ? { ...x, received_qty: v } : x) }))}/>
-                        <FInput label={idx === 0 ? t("common.unit") : ""} value={it.unit}
-                          onChange={v => setGrnForm(p => ({ ...p, items: p.items.map((x, i) => i === idx ? { ...x, unit: v } : x) }))}/>
-                      </div>
-                    ))}
+          {/* GRN sudhaar — timeline ki jagah form */}
+          {grn && grnEditing && (
+            <div style={{ background: T.surface, border: `1px solid ${T.b1}`, borderLeft: `3px solid ${T.grn}`, borderRadius: 8, padding: "12px 14px", marginBottom: 12 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 10 }}>
+                <span style={{ fontSize: 12, fontWeight: 700, color: T.grn }}>{t("material_flow.edit_grn_grn_number", { grn_number: grn.grn_number })}</span>
+              </div>
+              <div style={{ padding: "8px 10px", background: "#FFFBEB", border: `1px solid #FDE68A`, borderRadius: 7, marginBottom: 10 }}>
+                <div style={{ fontSize: 9.5, fontWeight: 700, color: "#92400E", textTransform: "uppercase", letterSpacing: ".4px", marginBottom: 4 }}>
+                 {t("material_flow.edit_reason")} <span style={{ fontWeight: 500, textTransform: "none", letterSpacing: 0 }}>{t("material_flow.compulsory")}</span>
+                </div>
+                <textarea value={grnEditNote} onChange={e => setGrnEditNote(e.target.value)} rows={2}
+                  placeholder={t("material_flow.e_g_vendor_naam_galat_tha")}
+                  style={{ width: "100%", padding: "6px 8px", borderRadius: 5, border: `1.5px solid #FDE68A`, fontSize: 12, outline: "none", boxSizing: "border-box", fontFamily: "inherit", resize: "vertical", background: "#fff" }}/>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 8, marginBottom: 8 }}>
+                <div>
+                  <div style={{ fontSize: 9, fontWeight: 700, color: T.t4, textTransform: "uppercase", letterSpacing: ".3px", marginBottom: 3 }}>{t("material_flow.material_vendor")}</div>
+                  <LibrarySelect type="supplier" value={grnForm.vendor_name}
+                    onChange={v => setGrnForm(p => ({ ...p, vendor_name: v }))}/>
+                </div>
+                <FInput label={t("material_flow.challan_no")} value={grnForm.challan_no} onChange={v => setGrnForm(p => ({ ...p, challan_no: v }))}/>
+                <FInput label={t("material_flow.received_on")} type="date" value={grnForm.received_date} onChange={v => setGrnForm(p => ({ ...p, received_date: v }))}/>
+                <FInput label={t("common.received_by")} value={grnForm.received_by} onChange={v => setGrnForm(p => ({ ...p, received_by: v }))}/>
+              </div>
+              {(grnForm.items || []).map((it, idx) => (
+                <div key={it.id || idx} style={{ display: "grid", gridTemplateColumns: "minmax(0,1.6fr) 80px 70px", gap: 6, marginBottom: 6 }}>
+                  <div style={{ minWidth: 0 }}>
+                    {idx === 0 && <div style={{ fontSize: 9, fontWeight: 700, color: T.t4, textTransform: "uppercase", letterSpacing: ".3px", marginBottom: 3 }}>{t("common.material")}</div>}
+                    <LibrarySelect type="material" value={it.description}
+                      onChange={v => setGrnForm(p => ({ ...p, items: p.items.map((x, i) => i === idx ? { ...x, description: v } : x) }))}/>
                   </div>
-                )}
+                  <FInput label={idx === 0 ? t("common.qty") : ""} type="number" value={it.received_qty}
+                    onChange={v => setGrnForm(p => ({ ...p, items: p.items.map((x, i) => i === idx ? { ...x, received_qty: v } : x) }))}/>
+                  <FInput label={idx === 0 ? t("common.unit") : ""} value={it.unit}
+                    onChange={v => setGrnForm(p => ({ ...p, items: p.items.map((x, i) => i === idx ? { ...x, unit: v } : x) }))}/>
+                </div>
+              ))}
+            </div>
+          )}
 
-                {/* Issues Section — Quality / Short / Damaged / Wrong-Item / Other */}
-                <div style={{ background: T.surface, border: `1px solid ${T.b1}`, borderLeft: `3px solid ${openIssueCount > 0 ? T.red : T.t3}`, borderRadius: 8, padding: "10px 13px" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 8 }}>
-                    <span style={{ width: 22, height: 22, borderRadius: "50%", background: openIssueCount > 0 ? T.redL : T.b1, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 12 }}>⚠️</span>
-                    <span style={{ fontSize: 12, fontWeight: 700, color: openIssueCount > 0 ? T.red : T.t3 }}>{t("material_flow.issues_issues", { issues: issues.length > 0 ? `(${openIssueCount} open / ${issues.length} total)` : "" })}</span>
-                    <div style={{ flex: 1 }}/>
-                    {!showIssueForm && grn && mayIssue && (
-                      <button onClick={() => setShowIssueForm(true)}
-                        style={{ padding: "4px 10px", borderRadius: 5, background: T.redL, border: `1px solid ${T.redM}`, color: T.red, fontSize: 10.5, fontWeight: 700, cursor: "pointer" }}>
-                       {t("material_flow.create_issue")}
-                      </button>
-                    )}
-                  </div>
+          {/* Timeline */}
+          {!loading && data && !grnEditing && (
+            <>
+              {steps.length === 0 && <div style={{ padding: "30px 0", textAlign: "center", color: T.t4, fontSize: 12 }}>{t("mtrail.empty")}</div>}
+              <div style={{ position: "relative" }}>
+                {steps.map((s, i) => <TrailCard key={s.key} s={s} last={i === steps.length - 1} onZoom={setZoom}/>)}
+              </div>
+              {data.approx && <div style={{ fontSize: 11, color: T.t3, background: T.surfaceB, borderRadius: 7, padding: "8px 10px", marginTop: 6 }}>{t("mtrail.approx_note")}</div>}
+              {!data.approx && steps.some(s => s.approx) && <div style={{ fontSize: 11, color: T.t3, background: T.surfaceB, borderRadius: 7, padding: "8px 10px", marginTop: 6 }}>{t("mtrail.approx_use_note")}</div>}
+              {/* Purani GRN (MR se judi nahi) — server ka andaaza, sirf batane ko (MAT-09) */}
+              {doc?.mr_guess && <div style={{ fontSize: 11, color: T.t3, background: T.ambL, borderRadius: 7, padding: "8px 10px", marginTop: 6 }}>
+                {t("material_flow.possible_mr_not_linked", { mr: doc.mr_guess.mr_number || `MR-${doc.mr_guess.id}`, item: doc.mr_guess.item_name, qty: Number(doc.mr_guess.quantity), unit: doc.mr_guess.unit || "", date: fmtDate(String(doc.mr_guess.created_at || "").slice(0, 10)) })}
+              </div>}
+              {data.hidden > 0 && <div style={{ fontSize: 11, color: T.t3, background: T.surfaceB, borderRadius: 7, padding: "8px 10px", marginTop: 6 }}>{t("mtrail.hidden_note", { n: data.hidden })}</div>}
+            </>
+          )}
 
-                  {showIssueForm && (
-                    <div style={{ padding: "10px", background: T.redL, border: `1px solid ${T.redM}`, borderRadius: 7, marginBottom: 8 }}>
-                      <div style={{ display: "flex", gap: 6, marginBottom: 7, flexWrap: "wrap" }}>
-                        {["Quality", "Short", "Damaged", "WrongItem", "Other"].map(t => (
-                          <button key={t} onClick={() => setIssueType(t)}
-                            style={{ padding: "4px 10px", borderRadius: 12, fontSize: 10.5, fontWeight: 700, cursor: "pointer", background: issueType === t ? T.red : "white", color: issueType === t ? "white" : T.red, border: `1px solid ${T.red}` }}>
-                            {t}
-                          </button>
-                        ))}
-                      </div>
-                      <textarea value={issueNote} onChange={e => setIssueNote(e.target.value)} autoFocus rows={2}
-                        placeholder={t("material_flow.issue_describe_karo_kya_problem_hai")}
-                        style={{ width: "100%", padding: "7px 9px", borderRadius: 5, border: `1.5px solid ${T.redM}`, fontSize: 11.5, outline: "none", boxSizing: "border-box", fontFamily: "inherit", resize: "vertical", marginBottom: 7, background: "white" }}/>
-                      {/* Issue photo — proof of damage / quality problem */}
-                      <div style={{ display: "flex", gap: 6, marginBottom: 7, alignItems: "center" }}>
-                        {issuePhoto ? (
-                          <div style={{ position: "relative", width: 50, height: 50, borderRadius: 5, overflow: "hidden", border: `1px solid ${T.redM}` }}>
-                            <img src={cld(issuePhoto, "thumb")} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }}/>
-                            <button onClick={() => setIssuePhoto("")}
-                              style={{ position: "absolute", top: 1, right: 1, width: 16, height: 16, borderRadius: "50%", background: "rgba(0,0,0,0.6)", color: "white", border: "none", fontSize: 9, cursor: "pointer", lineHeight: 1, padding: 0 }}>×</button>
-                          </div>
-                        ) : (
-                          <label style={{ width: 50, height: 50, borderRadius: 5, border: `1.5px dashed ${T.redM}`, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: 9, color: T.red, fontWeight: 700, flexDirection: "column", gap: 1, background: "white" }}>
-                            <span style={{ fontSize: 14 }}>📷</span>
-                            <span>{t("common.add")}</span>
-                            <input type="file" accept="image/*" capture="environment" style={{ display: "none" }}
-                              onChange={e => {
-                                const file = e.target.files?.[0];
-                                if (!file) return;
-                                uploadManager.add({
-                                  file, folder: "gb_buildcon/issues",
-                                  label: "Issue photo: " + file.name,
-                                  onDone: (url) => setIssuePhoto(url),
-                                });
-                                e.target.value = "";
-                              }}/>
-                          </label>
-                        )}
-                        <span style={{ fontSize: 10, color: T.t4, fontStyle: "italic" }}>
-                          {issuePhoto ? t("material_flow.photo_attached_proof_of_issue") : t("material_flow.photo_lagao_optional_quality_damage_proof")}
-                        </span>
-                      </div>
-                      <div style={{ display: "flex", gap: 6 }}>
-                        <button onClick={() => { setShowIssueForm(false); setIssueNote(""); setErr(""); }} disabled={issueSaving}
-                          style={{ flex: 1, padding: "6px", borderRadius: 5, background: "white", border: `1px solid ${T.b1}`, color: T.t3, fontSize: 11, fontWeight: 600, cursor: issueSaving ? "not-allowed" : "pointer" }}>
-                         {t("common.cancel")}
-                        </button>
-                        <button onClick={handleRaiseIssue} disabled={issueSaving || !issueNote.trim()}
-                          style={{ flex: 2, padding: "6px", borderRadius: 5, background: issueSaving || !issueNote.trim() ? "#9CA3AF" : T.red, border: "none", color: "white", fontSize: 11, fontWeight: 700, cursor: issueSaving || !issueNote.trim() ? "not-allowed" : "pointer" }}>
-                          {issueSaving ? t("common.saving") : t("material_flow.raise_issue")}
-                        </button>
-                      </div>
-                    </div>
-                  )}
+          {/* GRN ke apne kaam — sirf grn_entries se khola ho */}
+          {!loading && isGrn && grn && !grnEditing && (
+            <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 10 }}>
+              {/* Site GRN hatana (16 Oct 2026) — request + Admin password se approve */}
+              <SiteGrnCancelBox grnId={grn.id} grnNo={grn.grn_number} onDone={() => { reload(); onChanged && onChanged(); }}/>
 
-                  {issues.length === 0 && !showIssueForm && (
-                    <div style={{ fontSize: 11, color: T.t4, fontStyle: "italic", paddingLeft: 29 }}>{t("material_flow.no_issues_raised_quality_ok")}</div>
-                  )}
-
-                  {issues.length > 0 && (
-                    <div style={{ display: "flex", flexDirection: "column", gap: 6, paddingLeft: 29 }}>
-                      {issues.map(iss => {
-                        const resolved = iss.status === "Resolved";
-                        return (
-                          <div key={iss.id} style={{ padding: "7px 9px", background: resolved ? "#F1F5F9" : "#FEF2F2", borderRadius: 6, border: `1px solid ${resolved ? T.b1 : T.redM}` }}>
-                            <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
-                              <span style={{ fontSize: 9, fontWeight: 700, padding: "1px 6px", borderRadius: 8, background: resolved ? T.t3 : T.red, color: "white" }}>{issueTypeLabel(iss.issue_type)}</span>
-                              <span style={{ fontSize: 10, fontWeight: 700, color: resolved ? T.t3 : T.red, textTransform: "uppercase" }}>{resolved ? t("material_flow.resolved") : t("material_flow.open")}</span>
-                              <div style={{ flex: 1 }}/>
-                              <span style={{ fontSize: 10, color: T.t4 }}>{fmtDateTime(iss.created_at)}</span>
-                            </div>
-                            <div style={{ fontSize: 11.5, color: T.t1, marginBottom: 4 }}>{iss.note}</div>
-                            {iss.photo_url && (
-                              <img src={cld(iss.photo_url, "thumb")} alt="" onClick={() => window.open(iss.photo_url, "_blank")}
-                                onError={e => { e.target.style.display = "none"; }}
-                                style={{ display: "block", width: 80, height: 80, objectFit: "cover", borderRadius: 5, border: `1px solid ${resolved ? T.b1 : T.redM}`, marginBottom: 4, cursor: "zoom-in" }}/>
-                            )}
-                            <div style={{ fontSize: 10.5, color: T.t3 }}>{t("material_flow.raised_by_iss", { iss: iss.raised_by_name || "—" })}</div>
-                            {resolved && (
-                              <div style={{ marginTop: 4, padding: "5px 7px", background: "white", borderRadius: 4, border: `1px solid ${T.b1}` }}>
-                                <div style={{ fontSize: 10, fontWeight: 700, color: T.grn, marginBottom: 2 }}>{t("material_flow.resolved_by_resolved_by_name_fmtdatetime", { resolved_by_name: iss.resolved_by_name, fmtDateTime: fmtDateTime(iss.resolved_at) })}</div>
-                                {iss.resolution_note && <div style={{ fontSize: 11, color: T.t2 }}>{iss.resolution_note}</div>}
-                              </div>
-                            )}
-                            {!resolved && mayResolve && (
-                              <button onClick={() => handleResolveIssue(iss.id)}
-                                style={{ marginTop: 5, padding: "3px 9px", borderRadius: 4, background: T.grn, border: "none", color: "white", fontSize: 10, fontWeight: 700, cursor: "pointer" }}>
-                               {t("material_flow.mark_resolved")}
-                              </button>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
+              {/* Issues Section — Quality / Short / Damaged / Wrong-Item / Other */}
+              <div style={{ background: T.surface, border: `1px solid ${T.b1}`, borderLeft: `3px solid ${openIssueCount > 0 ? T.red : T.t3}`, borderRadius: 8, padding: "10px 13px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 8, flexWrap: "wrap" }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: openIssueCount > 0 ? T.red : T.t3 }}>
+                    {t("material_flow.issues_issues", { issues: issues.length > 0 ? "(" + t("mtrail.issues_count", { open: openIssueCount, total: issues.length }) + ")" : "" })}
+                  </span>
+                  <div style={{ flex: 1 }}/>
+                  {!showIssueForm && mayIssue && (
+                    <button onClick={() => setShowIssueForm(true)}
+                      style={{ padding: "4px 10px", borderRadius: 5, background: T.redL, border: `1px solid ${T.redM}`, color: T.red, fontSize: 10.5, fontWeight: 700, cursor: "pointer" }}>
+                     {t("material_flow.create_issue")}
+                    </button>
                   )}
                 </div>
 
-                {/* Billing Summary */}
-                {bills.length > 0 && (
-                  <Section
-                    color={T.red} bg={T.redL} icon="🧾" title={`Bills (${bills.length})`}
-                    rows={[
-                      ["Total Billed", `₹${fmtN(bills.reduce((s, b) => s + Number(b.amount || 0), 0))}`],
-                      ...bills.flatMap(b => [
-                        [`Bill ${fmtDate(b.date)}`, `₹${fmtN(b.amount)} · ${b.status || "—"}${b.due_date ? ` · due ${fmtDate(b.due_date)}` : ""}`],
-                      ]),
-                    ]}
-                  />
+                {showIssueForm && (
+                  <div style={{ padding: "10px", background: T.redL, border: `1px solid ${T.redM}`, borderRadius: 7, marginBottom: 8 }}>
+                    <div style={{ display: "flex", gap: 6, marginBottom: 7, flexWrap: "wrap" }}>
+                      {ISSUE_TYPES.map(ty => (
+                        <button key={ty} onClick={() => setIssueType(ty)}
+                          style={{ padding: "4px 10px", borderRadius: 12, fontSize: 10.5, fontWeight: 700, cursor: "pointer", background: issueType === ty ? T.red : "white", color: issueType === ty ? "white" : T.red, border: `1px solid ${T.red}` }}>
+                          {issueTypeLabel(ty)}
+                        </button>
+                      ))}
+                    </div>
+                    <textarea value={issueNote} onChange={e => setIssueNote(e.target.value)} autoFocus rows={2}
+                      placeholder={t("material_flow.issue_describe_karo_kya_problem_hai")}
+                      style={{ width: "100%", padding: "7px 9px", borderRadius: 5, border: `1.5px solid ${T.redM}`, fontSize: 11.5, outline: "none", boxSizing: "border-box", fontFamily: "inherit", resize: "vertical", marginBottom: 7, background: "white" }}/>
+                    {/* Issue photo — proof of damage / quality problem */}
+                    <div style={{ display: "flex", gap: 6, marginBottom: 7, alignItems: "center" }}>
+                      {issuePhoto ? (
+                        <div style={{ position: "relative", width: 50, height: 50, borderRadius: 5, overflow: "hidden", border: `1px solid ${T.redM}` }}>
+                          <img src={cld(issuePhoto, "thumb")} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }}/>
+                          <button onClick={() => setIssuePhoto("")}
+                            style={{ position: "absolute", top: 1, right: 1, width: 16, height: 16, borderRadius: "50%", background: "rgba(0,0,0,0.6)", color: "white", border: "none", fontSize: 9, cursor: "pointer", lineHeight: 1, padding: 0 }}>×</button>
+                        </div>
+                      ) : (
+                        <label style={{ width: 50, height: 50, borderRadius: 5, border: `1.5px dashed ${T.redM}`, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: 9, color: T.red, fontWeight: 700, flexDirection: "column", gap: 1, background: "white" }}>
+                          <span style={{ fontSize: 14 }}>📷</span>
+                          <span>{t("common.add")}</span>
+                          <input type="file" accept="image/*" capture="environment" style={{ display: "none" }}
+                            onChange={e => {
+                              const file = e.target.files?.[0];
+                              if (!file) return;
+                              uploadManager.add({
+                                file, folder: "gb_buildcon/issues",
+                                label: "Issue photo: " + file.name,
+                                onDone: (url) => setIssuePhoto(url),
+                              });
+                              e.target.value = "";
+                            }}/>
+                        </label>
+                      )}
+                      <span style={{ fontSize: 10, color: T.t4, fontStyle: "italic" }}>
+                        {issuePhoto ? t("material_flow.photo_attached_proof_of_issue") : t("material_flow.photo_lagao_optional_quality_damage_proof")}
+                      </span>
+                    </div>
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <button onClick={() => { setShowIssueForm(false); setIssueNote(""); setErr(""); }} disabled={issueSaving}
+                        style={{ flex: 1, padding: "6px", borderRadius: 5, background: "white", border: `1px solid ${T.b1}`, color: T.t3, fontSize: 11, fontWeight: 600, cursor: issueSaving ? "not-allowed" : "pointer" }}>
+                       {t("common.cancel")}
+                      </button>
+                      <button onClick={handleRaiseIssue} disabled={issueSaving || !issueNote.trim()}
+                        style={{ flex: 2, padding: "6px", borderRadius: 5, background: issueSaving || !issueNote.trim() ? "#9CA3AF" : T.red, border: "none", color: "white", fontSize: 11, fontWeight: 700, cursor: issueSaving || !issueNote.trim() ? "not-allowed" : "pointer" }}>
+                        {issueSaving ? t("common.saving") : t("material_flow.raise_issue")}
+                      </button>
+                    </div>
+                  </div>
                 )}
 
-                {/* Usage Summary */}
-                {usage.length > 0 && (
-                  <Section
-                    color={T.t3} bg={T.b1} icon="🔧" title={`Material Used (${usage.length})`}
-                    rows={[
-                      ["Total Used", `${usage.reduce((s, u) => s + Number(u.used_qty || 0), 0)} ${usage[0]?.unit || ""}`],
-                      ...usage.slice(0, 5).map(u => [u.task_name || "Task", `${u.used_qty} ${u.unit || ""}${u.used_by ? ` · by ${u.used_by}` : ""}`]),
-                    ]}
-                  />
+                {issues.length === 0 && !showIssueForm && (
+                  <div style={{ fontSize: 11, color: T.t4, fontStyle: "italic" }}>{t("material_flow.no_issues_raised_quality_ok")}</div>
                 )}
 
-                {/* Activity Log — full kisne kya kab kiya trail */}
-                {mr?.id && <ActivityLog entity_type="material_request" entity_id={mr.id} suffix={mr.mr_number || "MR"}/>}
-                {grn?.id && <ActivityLog entity_type="grn" entity_id={grn.id} suffix={grn.grn_number || "GRN"}/>}
+                {issues.length > 0 && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    {issues.map(iss => {
+                      const resolved = iss.status === "Resolved";
+                      return (
+                        <div key={iss.id} style={{ padding: "7px 9px", background: resolved ? "#F1F5F9" : "#FEF2F2", borderRadius: 6, border: `1px solid ${resolved ? T.b1 : T.redM}` }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3, flexWrap: "wrap" }}>
+                            <span style={{ fontSize: 9, fontWeight: 700, padding: "1px 6px", borderRadius: 8, background: resolved ? T.t3 : T.red, color: "white" }}>{issueTypeLabel(iss.issue_type)}</span>
+                            <span style={{ fontSize: 10, fontWeight: 700, color: resolved ? T.t3 : T.red, textTransform: "uppercase" }}>{resolved ? t("material_flow.resolved") : t("material_flow.open")}</span>
+                            <div style={{ flex: 1 }}/>
+                            <span style={{ fontSize: 10, color: T.t4 }}>{darjWhen(iss.created_at)}</span>
+                          </div>
+                          <div style={{ fontSize: 11.5, color: T.t1, marginBottom: 4, wordBreak: "break-word" }}>{iss.note}</div>
+                          {iss.photo_url && (
+                            <img src={cld(iss.photo_url, "thumb")} alt={t("mtrail.photo")} onClick={() => setZoom(iss.photo_url)}
+                              onError={e => { e.target.style.display = "none"; }}
+                              style={{ display: "block", width: 80, height: 80, objectFit: "cover", borderRadius: 5, border: `1px solid ${resolved ? T.b1 : T.redM}`, marginBottom: 4, cursor: "zoom-in" }}/>
+                          )}
+                          <div style={{ fontSize: 10.5, color: T.t3 }}>{t("material_flow.raised_by_iss", { iss: iss.raised_by_name || "—" })}</div>
+                          {resolved && (
+                            <div style={{ marginTop: 4, padding: "5px 7px", background: "white", borderRadius: 4, border: `1px solid ${T.b1}` }}>
+                              <div style={{ fontSize: 10, fontWeight: 700, color: T.grn, marginBottom: 2 }}>{t("material_flow.resolved_by_resolved_by_name_fmtdatetime", { resolved_by_name: iss.resolved_by_name || "—", fmtDateTime: darjWhen(iss.resolved_at) || "—" })}</div>
+                              {iss.resolution_note && <div style={{ fontSize: 11, color: T.t2 }}>{iss.resolution_note}</div>}
+                            </div>
+                          )}
+                          {!resolved && mayResolve && (
+                            <button onClick={() => handleResolveIssue(iss.id)}
+                              style={{ marginTop: 5, padding: "3px 9px", borderRadius: 4, background: T.grn, border: "none", color: "white", fontSize: 10, fontWeight: 700, cursor: "pointer" }}>
+                             {t("material_flow.mark_resolved")}
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
-            );
-          })()}
+
+              {/* Activity Log — full kisne kya kab kiya trail */}
+              {mr?.id && <ActivityLog entity_type="material_request" entity_id={mr.id} suffix={mr.mr_number || "MR"}/>}
+              <ActivityLog entity_type="grn" entity_id={grn.id} suffix={grn.grn_number || "GRN"}/>
+            </div>
+          )}
         </div>
 
-        {/* Footer — admin actions */}
-        {!loading && data && ((!grnGone && (mayEditGrn || mayDelGrn)) || (mr && onEditMR && mayEditMr)) && (
+        {/* Footer — admin actions (sirf site / store ki grn_entries par) */}
+        {!loading && isGrn && grn && ((!grnGone && (mayEditGrn || mayDelGrn)) || (mr && onEditMR && mayEditMr)) && (
           <div style={{ padding: "12px 20px", borderTop: `1px solid ${T.b1}`, background: T.surfaceB, flexShrink: 0, display: "flex", gap: 8, flexWrap: "wrap" }}>
             {grnEditing ? (
               <>
@@ -728,10 +526,66 @@ export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin 
           </div>
         )}
       </div>
+      {/* Photo bada — × ya Back se band (pehle band hi nahi hota tha) */}
+      {zoom && <PhotoZoom url={zoom} onClose={() => setZoom(null)}/>}
       <style>{`
         @keyframes matFlowSlide { from { transform: translateX(100%); } to { transform: translateX(0); } }
         @keyframes matSpin { to { transform: rotate(360deg); } }
       `}</style>
+    </>
+  );
+}
+
+// ── Ek step ka card (timeline par) ─────────────────────────────
+function TrailCard({ s, last, onZoom }) {
+  const m = STEP[s.type] || STEP.use;
+  const L = trailLines(s);
+  const when = trailWhen(s);
+  return (
+    <div data-testid={"trail-step-" + s.type} style={{ display: "flex", gap: 10, position: "relative" }}>
+      {/* rail */}
+      <div style={{ width: 14, flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "center" }}>
+        <span style={{ width: 12, height: 12, borderRadius: "50%", marginTop: 13, background: s.highlight ? m.c : T.surface, border: `2px solid ${m.c}`, flexShrink: 0 }}/>
+        {!last && <span style={{ flex: 1, width: 2, background: T.b1, marginTop: 2 }}/>}
+      </div>
+      <div style={{ flex: 1, minWidth: 0, marginBottom: 10, background: s.highlight ? m.bg : T.surface, border: `1px solid ${s.highlight ? m.c : T.b1}`,
+        borderRadius: 9, padding: "9px 12px", boxShadow: s.highlight ? "0 0 0 2px " + m.bg : "none" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 10.5, fontWeight: 700, padding: "1.5px 7px", borderRadius: 4, background: m.bg, color: m.c, border: `1px solid ${m.c}22` }}>{stepLabel(s)}</span>
+          {s.title && <span style={{ fontSize: 11, fontFamily: "monospace", color: T.t3, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.title}</span>}
+          {s.approx && <span title={t("mtrail.approx_use_note")} style={{ fontSize: 10, color: T.t4, fontWeight: 600 }}>{t("mtrail.approx_tag")}</span>}
+          <span style={{ flex: 1 }}/>
+          {s.highlight && <span style={{ fontSize: 10, fontWeight: 700, color: m.c }}>{t("mtrail.you_opened")}</span>}
+        </div>
+        {(when || s.by_name) && (
+          <div style={{ fontSize: 11, color: T.t3, marginTop: 4 }}>{[when, s.by_name].filter(Boolean).join(" · ")}</div>
+        )}
+        {L.items && <div style={{ fontSize: 12.5, fontWeight: 600, color: T.t1, marginTop: 3, wordBreak: "break-word" }}>{L.items}</div>}
+        {L.rest && <div style={{ fontSize: 11.5, color: T.t2, marginTop: 2, wordBreak: "break-word", lineHeight: 1.45 }}>{L.rest}</div>}
+        {L.note && <div style={{ fontSize: 11, color: T.t3, marginTop: 2, fontStyle: "italic", wordBreak: "break-word" }}>{L.note}</div>}
+        {s.photos?.length > 0 && (
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 7 }}>
+            {s.photos.map((p, i) => (
+              <img key={i} src={cld(p.url, "thumb")} alt={t("mtrail.photo")} onClick={() => onZoom(p.url)}
+                onError={e => { e.target.style.display = "none"; }}
+                style={{ width: 52, height: 52, objectFit: "cover", borderRadius: 6, border: `1px solid ${T.b1}`, cursor: "zoom-in" }}/>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function PhotoZoom({ url, onClose }) {
+  return (
+    <>
+      <BackClose onClose={onClose}/>
+      <div data-testid="trail-zoom" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.88)", zIndex: 2000, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <img src={cld(url, "full")} alt={t("mtrail.photo")} style={{ maxWidth: "92vw", maxHeight: "88vh", borderRadius: 8, boxShadow: "0 20px 60px rgba(0,0,0,0.5)" }}/>
+        <button onClick={onClose} aria-label={t("common.close")}
+          style={{ position: "absolute", top: 16, right: 16, width: 38, height: 38, borderRadius: "50%", border: "none", background: "rgba(255,255,255,.18)", color: "#fff", fontSize: 20, cursor: "pointer", lineHeight: 1 }}>×</button>
+      </div>
     </>
   );
 }
@@ -871,72 +725,6 @@ function FInput({ label, value, onChange, type = "text" }) {
       {label && <div style={{ fontSize: 9, fontWeight: 700, color: T.t4, textTransform: "uppercase", letterSpacing: ".3px", marginBottom: 3 }}>{label}</div>}
       <input type={type} value={value || ""} onChange={e => onChange(e.target.value)}
         style={{ width: "100%", padding: "6px 8px", borderRadius: 5, border: `1.5px solid ${T.b1}`, fontSize: 11.5, color: T.t1, background: T.surface, outline: "none", boxSizing: "border-box", fontFamily: "inherit" }}/>
-    </div>
-  );
-}
-
-function Cell({ label, value, c }) {
-  return (
-    <div>
-      <div style={{ fontSize: 9, fontWeight: 700, color: T.t4, textTransform: "uppercase", letterSpacing: ".3px" }}>{label}</div>
-      <div style={{ fontSize: 11.5, fontWeight: 600, color: c || T.t1, marginTop: 2 }}>{value || "—"}</div>
-    </div>
-  );
-}
-
-function Section({ color, bg, icon, title, rows = [], empty = false, emptyText = "—", photos = [], photoGroups = [], pendingNote = "" }) {
-  const [zoom, setZoom] = useState(null);
-  const groups = photoGroups.filter(g => g.photos.length || g.note);
-  const nPhotos = photos.length + groups.reduce((n, g) => n + g.photos.length, 0);
-  const thumb = (url, i) => (
-    <img key={i} src={cld(url, "thumb")} alt="" onClick={() => setZoom(url)}
-      onError={e => { e.target.style.display = "none"; }}
-      style={{ width: 60, height: 60, objectFit: "cover", borderRadius: 6, border: `1px solid ${T.b1}`, cursor: "zoom-in" }}/>
-  );
-  return (
-    <div style={{ background: T.surface, border: `1px solid ${T.b1}`, borderLeft: `3px solid ${color}`, borderRadius: 8, padding: "10px 13px" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: empty ? 4 : 8 }}>
-        <span style={{ width: 22, height: 22, borderRadius: "50%", background: bg, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 12 }}>{icon}</span>
-        <span style={{ fontSize: 12, fontWeight: 700, color: color }}>{title}</span>
-        {nPhotos > 0 && (
-          <span style={{ marginLeft: 6, fontSize: 9.5, fontWeight: 700, color: color, background: bg, padding: "1px 6px", borderRadius: 8 }}>
-            📷 {nPhotos}
-          </span>
-        )}
-      </div>
-      {empty || rows.length === 0 ? (
-        <div style={{ fontSize: 11, color: T.t4, fontStyle: "italic", paddingLeft: 29 }}>{emptyText}</div>
-      ) : (
-        <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "5px 12px", paddingLeft: 29 }}>
-          {rows.map(([k, v], i) => (
-            <React.Fragment key={i}>
-              <span style={{ fontSize: 10.5, color: T.t4, fontWeight: 500, whiteSpace: "nowrap" }}>{k}</span>
-              <span style={{ fontSize: 11.5, color: T.t1, fontWeight: 600, wordBreak: "break-word" }}>{v || "—"}</span>
-            </React.Fragment>
-          ))}
-        </div>
-      )}
-      {photos.length > 0 && (
-        <div style={{ paddingLeft: 29, marginTop: 8, display: "flex", gap: 6, flexWrap: "wrap" }}>
-          {photos.map(thumb)}
-        </div>
-      )}
-      {groups.map((g, gi) => (
-        <div key={gi} style={{ paddingLeft: 29, marginTop: 8 }}>
-          <div style={{ fontSize: 10, fontWeight: 700, color: T.t3, textTransform: "uppercase", letterSpacing: ".4px", marginBottom: 4 }}>
-            {g.label}
-            {g.note ? <span style={{ textTransform: "none", letterSpacing: 0, fontWeight: 600, color: T.t2 }}> · {g.note}</span> : null}
-          </div>
-          {g.photos.length > 0 && <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>{g.photos.map(thumb)}</div>}
-        </div>
-      ))}
-      {pendingNote && <div style={{ paddingLeft: 29, marginTop: 6, fontSize: 10.5, color: T.amb }}>{pendingNote}</div>}
-      {zoom && (
-        <div 
-          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 2000, display: "flex", alignItems: "center", justifyContent: "center", cursor: "zoom-out" }}>
-          <img src={cld(zoom, "full")} alt="" style={{ maxWidth: "92vw", maxHeight: "92vh", borderRadius: 8, boxShadow: "0 20px 60px rgba(0,0,0,0.5)" }}/>
-        </div>
-      )}
     </div>
   );
 }

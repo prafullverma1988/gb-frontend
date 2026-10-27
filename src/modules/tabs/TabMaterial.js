@@ -371,6 +371,7 @@ function TabMaterial({ project }) {
   const [ledgerSearch, setLedgerSearch] = useState("");
   // Flow drawer state — opens when user clicks a GRN row in Material Ledger
   const [flowGrnId, setFlowGrnId] = useState(null);
+  const [flowTrail, setFlowTrail] = useState(null);   // Use line → Material trail (27 Oct 2026)
   const [flowEditMR, setFlowEditMR] = useState(null);
   const [ledgerVendor, setLedgerVendor] = useState("All");
 
@@ -1656,9 +1657,9 @@ function TabMaterial({ project }) {
                           const showDel = !isGRN && row.used_log_id && row.task_id && canDeleteUsed(row.created_by_id, row.created_at);
                           return(
                             <div key={ri}
-                              onClick={()=>{ if(isGRN && row.grn_id) setFlowGrnId(row.grn_id); }}
-                              style={{display:"grid",gridTemplateColumns:"85px 130px 85px 1fr 85px 85px 85px 85px 90px 36px",padding:"9px 14px",gap:8,borderBottom:"1px solid "+T.b1,alignItems:"center",background:ri%2===0?T.surface:"#F8FAFC",minWidth:936,borderLeft:"3px solid "+(isGRN?T.grn:T.amb),cursor:isGRN&&row.grn_id?"pointer":"default",transition:"background .1s"}}
-                              onMouseEnter={e=>{ if(isGRN && row.grn_id) e.currentTarget.style.background=T.bluL+"66"; }}
+                              onClick={()=>{ if(isGRN && row.grn_id) setFlowGrnId(row.grn_id); else if(!isGRN && row.used_log_id) setFlowTrail({ kind:"used", id:row.used_log_id, material:mat.material_name }); }}
+                              style={{display:"grid",gridTemplateColumns:"85px 130px 85px 1fr 85px 85px 85px 85px 90px 36px",padding:"9px 14px",gap:8,borderBottom:"1px solid "+T.b1,alignItems:"center",background:ri%2===0?T.surface:"#F8FAFC",minWidth:936,borderLeft:"3px solid "+(isGRN?T.grn:T.amb),cursor:(isGRN?row.grn_id:row.used_log_id)?"pointer":"default",transition:"background .1s"}}
+                              onMouseEnter={e=>{ if(isGRN ? row.grn_id : row.used_log_id) e.currentTarget.style.background=T.bluL+"66"; }}
                               onMouseLeave={e=>{ e.currentTarget.style.background=ri%2===0?T.surface:"#F8FAFC"; }}>
                               {/* Date */}
                               <div style={{fontSize:11.5,color:T.t3,fontWeight:500}}>{dateStr}<DarjTag at={row.created_at} biz={row.received_date||row.used_date}/></div>
@@ -1928,7 +1929,8 @@ function TabMaterial({ project }) {
       {/* ── MATERIAL FLOW DRAWER (Material Ledger row click) ── */}
       <MaterialFlowDrawer
         grnId={flowGrnId}
-        onClose={()=>setFlowGrnId(null)}
+        trail={flowTrail}
+        onClose={()=>{ setFlowGrnId(null); setFlowTrail(null); }}
         onChanged={async()=>{
           try {
             const r = await api.get("/tasks/project/"+projectId+"/material-ledger");
