@@ -5299,6 +5299,7 @@ const dict = {
   "map_form.nishaan_sab_par":                                "यह निशान और रंग \"{type}\" की सब मार्किंग पर लगेगा (लाइब्रेरी में सेव)।",
   "pulse_chat.note":                                           "नोट",
   "pulse_chat.material_used_tag":                                  "Material इस्तेमाल",
+  "pulse_chat.trip_tag": "ट्रिप ट्रैकिंग",
   "pulse_chat.aap":                                            "आप",
   "pulse_chat.team":                                           "टीम",
   "pulse_chat.aaj":                                            "आज",

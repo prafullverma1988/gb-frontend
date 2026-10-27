@@ -139,7 +139,8 @@ const UNBILLED_PARTIES=[];
 const PAY_REQS_DATA=[];
 const PEND_PMTS_DATA=[];
 
-const PULSE_ALL_TYPES=["flag","progress","material","material_used","material_request","approval","payment","photo","document","note"];
+// "trip" (27 Oct 2026, Prafull) — har trip, loading se unloading tak (app ke Pulse jaisa).
+const PULSE_ALL_TYPES=["flag","progress","material","material_used","material_request","trip","approval","payment","photo","document","note"];
 
 // Which project tab a pulse activity belongs to, so clicking a feed card lands
 // the user exactly where the activity happened instead of a generic overview.
@@ -191,7 +192,13 @@ function SitePulseDrawer({onClose,onSelectProject,initial}){
   // about and Saves; the choice persists (per-device) and is applied on every
   // future open. Default = all types until the user saves a custom set.
   // 'note' (12 Oct 2026) purani saved list me nahi — jod do, warna Note kabhi na dikhe.
-  const [selTypes,setSelTypes]=useState(()=>{ try{const s=JSON.parse(localStorage.getItem("gb_pulse_types_v2"));if(!Array.isArray(s)||!s.length)return PULSE_ALL_TYPES;let o=s.includes("note")?s:[...s,"note"];if(!o.includes("material_used"))o=[...o,"material_used"];return o;}catch{return PULSE_ALL_TYPES;} });
+  // Naya type ('trip', 27 Oct 2026) saved list me ek hi baar judta hai ("gb_pulse_types_known" me na ho tab) —
+  // baad me khud hataya to dobara nahi.
+  const [selTypes,setSelTypes]=useState(()=>{ try{const s=JSON.parse(localStorage.getItem("gb_pulse_types_v2"));if(!Array.isArray(s)||!s.length)return PULSE_ALL_TYPES;let o=s.includes("note")?s:[...s,"note"];if(!o.includes("material_used"))o=[...o,"material_used"];
+    let known=null;try{known=JSON.parse(localStorage.getItem("gb_pulse_types_known"));}catch{known=null;}
+    if(!o.includes("trip")&&!(Array.isArray(known)&&known.includes("trip")))o=[...o,"trip"];
+    try{localStorage.setItem("gb_pulse_types_known",JSON.stringify(PULSE_ALL_TYPES));}catch{}
+    return o;}catch{return PULSE_ALL_TYPES;} });
   const [showTypeMenu,setShowTypeMenu]=useState(false);
   const [feed,setFeed]=useState([]);
   const [projects,setProjects]=useState([]);
@@ -318,6 +325,8 @@ function SitePulseDrawer({onClose,onSelectProject,initial}){
     "note":{c:"#3730A3",b:"#EEF2FF",icon:"💬",label:t("pulse_chat.note")},
     // Bina task ka material use — filter me "Material" ke saath (alag chip nahi).
     "material_used":{c:C.p,b:C.bl,icon:"📦",label:t("pulse_chat.material_used_tag")},
+    // Har trip (27 Oct 2026) — gaadi no. · Trip n · material qty · route, status "Raste me" / "Poori".
+    "trip":{c:"#9A3412",b:"#FFEDD5",icon:"🚚",label:t("pulse_chat.trip_tag")},
   };
   const avatarColors=["#1565C0","#2E7D32","#6A1B9A","#AD1457","#E65100","#00838F","#4527A0","#C62828"];
   const getAC=(name)=>avatarColors[Math.abs([...name].reduce((a,c)=>a+c.charCodeAt(0),0))%avatarColors.length];
@@ -648,6 +657,12 @@ function SitePulseDrawer({onClose,onSelectProject,initial}){
               {!f.photo_url&&f.feed_type==="material_request"&&(
                 <div style={{margin:"0 12px 6px",background:"#ECFEFF",borderRadius:8,padding:"8px 11px",borderLeft:"3px solid #0891B2",display:"flex",gap:7,alignItems:"center"}}>
                   <span style={{fontSize:16}}>📋</span><span style={{fontSize:11.5,color:"#0891B2",fontWeight:500}}>{f.feed_status}{amt?` — ${amt}`:""}</span>
+                </div>
+              )}
+              {/* Trip (27 Oct 2026) — "Raste me" / "Poori"; photo ho tab bhi */}
+              {f.feed_type==="trip"&&f.feed_status&&(
+                <div style={{margin:"0 12px 6px",background:"#FFEDD5",borderRadius:8,padding:"8px 11px",borderLeft:"3px solid #9A3412",display:"flex",gap:7,alignItems:"center"}}>
+                  <span style={{fontSize:16}}>🚚</span><span style={{fontSize:11.5,color:"#9A3412",fontWeight:500}}>{f.feed_status}</span>
                 </div>
               )}
 

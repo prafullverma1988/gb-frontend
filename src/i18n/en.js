@@ -5300,6 +5300,7 @@ const dict = {
   "map_form.nishaan_sab_par":                                "This mark and colour apply to every \"{type}\" marking (saved in the library).",
   "pulse_chat.note":                                           "Note",
   "pulse_chat.material_used_tag":                                  "Material used",
+  "pulse_chat.trip_tag": "Trip tracking",
   "pulse_chat.aap":                                            "You",
   "pulse_chat.team":                                           "Team",
   "pulse_chat.aaj":                                            "Today",

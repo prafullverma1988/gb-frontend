@@ -5302,6 +5302,7 @@ const dict = {
   "map_form.nishaan_sab_par":                                "Ye nishaan aur rang \"{type}\" ki sab marking par lagega (library me save).",
   "pulse_chat.note":                                           "Note",
   "pulse_chat.material_used_tag":                                  "Material use",
+  "pulse_chat.trip_tag": "Trip tracking",
   "pulse_chat.aap":                                            "Aap",
   "pulse_chat.team":                                           "Team",
   "pulse_chat.aaj":                                            "Aaj",
