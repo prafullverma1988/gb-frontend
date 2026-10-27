@@ -4,6 +4,10 @@
 // Godown: warehouse MR (ek MR me kai item). Receive = /warehouse/mr/:id/grn.
 // Form ko is farq se matlab nahi — use sirf "line" chahiye.
 import api from "../../config/api";
+import { dayOf } from "./grnOrdered";
+
+// day = kab aana tha (expected delivery, "YYYY-MM-DD") aur by = kisne maanga —
+// Ordered ke vendor card / chip ke liye (27 Oct 2026, grnOrdered.js).
 
 const dedupe = (rows) => {
   const seen = new Set();
@@ -46,6 +50,7 @@ export async function loadOrderedLines(dest) {
         ordered: Number(l.ordered_qty) || 0, received: Number(l.received_qty) || 0,
         pending: Math.max(0, Number(l.pending_qty) || 0), vendor: l.vendor_name || "",
         partial: Number(l.received_qty) > 0, rate: Number(l.rate) || 0,
+        day: dayOf(l.expected_delivery), by: "",
       }));
       return [...poLines, ...mrs.flatMap((mr) => (mr.items || []).filter((it) => !it.on_store_po).map((it) => {
         const ordered = Number(it.qty) || 0;
@@ -56,6 +61,7 @@ export async function loadOrderedLines(dest) {
           unit: it.unit || "", ordered, received, pending: Math.max(0, ordered - received),
           vendor: mr.vendor || "", partial: mr.status === "PartialReceived",
           rate: Number(it.rate) || 0,
+          day: dayOf(mr.expected_date) || dayOf(mr.proc_expected_delivery), by: mr.requested_by_name || "",
         };
       }))];
     }
@@ -83,6 +89,7 @@ export async function loadOrderedLines(dest) {
         unit: m.unit || "", ordered, received, pending: pendingOf(m),
         vendor: m.linked_vendor || "", partial: m.mat_status === "PartialReceived",
         approxAmount: Number(m.approx_amount) || 0,
+        day: dayOf(m.expected_delivery) || dayOf(m.po_expected_delivery), by: m.requested_by || "",
       };
     });
   } catch (_) { return []; }

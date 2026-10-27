@@ -33,6 +33,7 @@ import DualUnitToggle from "./DualUnitToggle";
 import { GrnPhotoTiles } from "./GrnPhotoBox";
 import WeighChip from "./WeighChip";
 import { loadOrderedLines } from "./grnData";
+import { istDay, dueOf, shortDay, countChips, defaultChip, groupByVendor, lockedVendor, pickedLines } from "./grnOrdered";
 import { loadWeighments, indexOpenLines, suggestedQty, fmtKg, loadLibUnits, unitOptions, loadStockUnits, stockConv, stockKey, loadUnitCards } from "./weigh";
 import { GrnStockRow, grnStockPayload, grnStockMissing } from "../UnitConv";
 import { T } from "../../modules/shared/tokens";
@@ -74,6 +75,15 @@ const GrnReceive = forwardRef(function GrnReceive({
   const [vendorMeta, setVendorMeta] = useState({});   // { vendor: { challan, date, received_by } }
   const [rowIssues, setRowIssues] = useState({});     // { lineKey: [...] }
   const [done, setDone] = useState([]);                // received line keys (this session)
+  // Ordered ke 3 step (27 Oct 2026, ./grnOrdered.js): tick wali line (ek hi vendor ki —
+  // ek GRN = ek challan), khula vendor card, 'list' (step 1 + 2) ya 'review' (step 3).
+  // Chip / khoj yaad nahi rehte.
+  const [pick, setPick] = useState({});               // { lineKey: true }
+  const [oq, setOq] = useState("");
+  const [chip, setChip] = useState(null);             // null = list aate hi default (Late › Aaj › Sab)
+  const [openV, setOpenV] = useState(null);
+  const [step, setStep] = useState("list");
+  const [info, setInfo] = useState({});               // line ka MR / PO no. + maangne wala (chhupa)
   const [saving, setSaving] = useState(false);
   const blankRow = () => ({ id: Date.now() + Math.random(), item_name: "", qty: "", unit: "Bags", rate: "" });
   const [dGlobal, setDGlobal] = useState({ vendor: "", challan: "", date: today(), received_by: "" });
@@ -128,10 +138,13 @@ const GrnReceive = forwardRef(function GrnReceive({
     const q = {}; const tick = {}; const vendors = new Set();
     for (const x of tr.lines) {
       const l = lines.find(y => (y.kind === "mr" ? x.mr_id === y.mrId : x.wh_mr_item_id === y.whMrItemId));
-      if (l) { vendors.add(l.vendor || t("grn.unassigned")); const v = suggestedQty({ line: x, trip: tr.trip }, l.unit); if (v != null) q[l.key] = { received_qty: String(v) }; }
+      if (l) { vendors.add(l.vendor || ""); const v = suggestedQty({ line: x, trip: tr.trip }, l.unit); if (v != null) q[l.key] = { received_qty: String(v) }; }
       if (x.is_short) tick[x.id] = true;
     }
     setGrnRows(r => { const n = { ...r }; for (const k of Object.keys(q)) n[k] = { ...(n[k] || {}), ...q[k] }; return n; });
+    // Gadi ki line apne aap tick (ek gadi = ek vendor), us vendor ka card khula.
+    setPick(Object.fromEntries(Object.keys(q).map(k => [k, true])));
+    if (vendors.size) setOpenV([...vendors][0]);
     if (tr.trip.challan_no) setVendorMeta(m => { const n = { ...m }; for (const v of vendors) if (!(n[v] && n[v].challan)) n[v] = { ...(n[v] || {}), challan: tr.trip.challan_no }; return n; });
     setShortTick(tick);
   };
@@ -176,25 +189,38 @@ const GrnReceive = forwardRef(function GrnReceive({
   const libFind = (name) => lib.find(m => (m.name || "").trim().toLowerCase() === String(name || "").trim().toLowerCase());
   const afterSave = (info) => { reloadLines(); reloadWeigh(); onReceived && onReceived(info); };
 
-  // ── ORDERED: vendor ke hisaab se ek delivery ─────────────────────
-  const groups = useMemo(() => {
-    const g = {};
-    for (const l of lines) {
-      if (done.includes(l.key)) continue;
-      if (!inTruck(l)) continue;
-      const v = l.vendor || t("grn.unassigned");
-      (g[v] ||= []).push(l);
-    }
-    return g;
+  // ── ORDERED: vendor ke card → tick → ek delivery (ek GRN = ek vendor) ──
+  const visible = useMemo(() => lines.filter(l => !done.includes(l.key) && inTruck(l)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lines, done, truckFor, weigh]);
-  const vendorKeys = Object.keys(groups).sort();
+    [lines, done, truckFor, weigh]);
+  const oToday = istDay();
+  const counts = countChips(visible, oToday, oq);
+  // List aate hi ek baar: Late ho to Late, warna Aaj, warna Sab.
+  useEffect(() => {
+    if (chip === null && visible.length) setChip(defaultChip(countChips(visible, istDay())));
+  }, [chip, visible]);
+  const cards = groupByVendor(visible, { today: oToday, chip: chip || "sab", q: oq });
+  const lockV = lockedVendor(visible, pick);
+  const sel = pickedLines(visible, pick);
+  // Tick = poora pending (gadi ne qty bhari ho to wahi); untick = qty khaali.
+  const togglePick = (l) => {
+    const on = !pick[l.key];
+    setPick(p => { const n = { ...p }; if (on) n[l.key] = true; else delete n[l.key]; return n; });
+    setGrnRows(r => {
+      const cur = (r[l.key] || {}).received_qty;
+      return { ...r, [l.key]: { ...(r[l.key] || {}), received_qty: on ? (Number(cur) > 0 ? cur : String(l.pending)) : "" } };
+    });
+  };
 
-  const receiveVendor = async (vendor) => {
+  const receiveVendor = async () => {
+    const vendor = lockV;
+    if (vendor === null || saving) return;
     const meta = vendorMeta[vendor] || {};
     if (!meta.challan || !meta.challan.trim()) { alert(t("common.challan_number_required")); return; }
-    const target = (groups[vendor] || []).filter(l => Number((grnRows[l.key] || {}).received_qty || 0) > 0);
+    const target = sel;
     if (!target.length) { alert(t("material.kam_se_kam_ek_material_ka")); return; }
+    const noQty = target.find(l => !(Number((grnRows[l.key] || {}).received_qty || 0) > 0));
+    if (noQty) { alert(t("grn_ord.need_qty", { item: noQty.material })); return; }
     // Site: pending se zyada qty sirf "Zyada maal aaya" tick + wajah ke saath —
     // server bhi yahi maangta hai (MAT-08). Godown ka MR baaki se zyada leta hi nahi.
     const overNoReason = !isWh && target.find(l => {
@@ -217,7 +243,7 @@ const GrnReceive = forwardRef(function GrnReceive({
     const ph = phRef.current;
     if (ph && !(await ph.ready({ wait: true }))) { setBusy(false); return; }
     const pb = ph ? ph.body() : {};
-    let ok = 0; const fails = []; let dup = null; let recvIssue = false; let photoMsg = "";
+    let ok = 0; const okKeys = []; const fails = []; let dup = null; let recvIssue = false; let photoMsg = "";
     const noteDup = (w) => { if (w && w.rec_slip_dup && !dup) dup = w.rec_slip_dup; if (w && w.receiving_issue) recvIssue = true; };
     if (!isWh) {
       // Site: har MR ka apna GRN (mark-received) — pehle jaisa hi.
@@ -240,7 +266,7 @@ const GrnReceive = forwardRef(function GrnReceive({
             unit_card: true,
             ...grnStockPayload(stockU[stockKey(l.material)], ucardOf(l.material), l.unit, row.received_qty, row.stockx),
           });
-          if (res.success) { ok++; setDone(p => [...p, l.key]); noteDup(res.weighment); }
+          if (res.success) { ok++; okKeys.push(l.key); setDone(p => [...p, l.key]); noteDup(res.weighment); }
           else {
             fails.push(`${l.material}: ${res.message || "—"}`);
             // Photo ki rok har MR par wahi — aage bhejna bekaar, wahi tile laal.
@@ -272,7 +298,7 @@ const GrnReceive = forwardRef(function GrnReceive({
                 ...grnStockPayload(stockU[stockKey(l.material)], ucardOf(l.material), l.unit, row.received_qty, row.stockx) };
             }),
           });
-          if (res.success) { ok += ls.length; setDone(p => [...p, ...ls.map(l => l.key)]); noteDup(res.weighment); }
+          if (res.success) { ok += ls.length; okKeys.push(...ls.map(l => l.key)); setDone(p => [...p, ...ls.map(l => l.key)]); noteDup(res.weighment); }
           else {
             fails.push(`${ls[0].label}: ${res.message || "—"}`);
             if (ph && ph.fail(res)) { photoMsg = res.message || ""; break; }
@@ -303,7 +329,7 @@ const GrnReceive = forwardRef(function GrnReceive({
               };
             }),
           });
-          if (res.success) { ok += ls.length; setDone(p => [...p, ...ls.map(l => l.key)]); noteDup(res.data && res.data.weighment); }
+          if (res.success) { ok += ls.length; okKeys.push(...ls.map(l => l.key)); setDone(p => [...p, ...ls.map(l => l.key)]); noteDup(res.data && res.data.weighment); }
           else {
             fails.push(`${ls[0].label}: ${res.message || "—"}`);
             if (ph && ph.fail(res)) { photoMsg = res.message || ""; break; }
@@ -312,6 +338,9 @@ const GrnReceive = forwardRef(function GrnReceive({
       }
     }
     setRowIssues(p => { const n = { ...p }; target.forEach(l => { delete n[l.key]; }); return n; });
+    // Jo utar gayi unki tick hati; sab ho gayi to wapas list (vendor ki baaki line pending hi).
+    setPick(p => { const n = { ...p }; okKeys.forEach(k => { delete n[k]; }); return n; });
+    if (okKeys.length === target.length) setStep("list");
     if (ok > 0) await shortIssuesForTruck();
     // Is delivery ki photo ho gayi — agli delivery apni photo legi. Dohra rec
     // slip ho to peela hint tile ke neeche rehta hai.
@@ -421,7 +450,8 @@ const GrnReceive = forwardRef(function GrnReceive({
   const tiles = (
     <GrnPhotoTiles key="grn-ph" ref={phRef}
       dest={isWh ? { warehouseId: dest?.warehouseId } : { projectId: dest?.projectId }}
-      vendor={mode === "direct" ? dGlobal.vendor : ""} challan={mode === "direct" ? dGlobal.challan : ""} />
+      vendor={mode === "direct" ? dGlobal.vendor : (lockV || "")}
+      challan={mode === "direct" ? dGlobal.challan : ((vendorMeta[lockV || ""] || {}).challan || "")} />
   );
 
   // Godown ka rate: pichhli kharid se (pehle bhi Material In me yahi hota tha).
@@ -438,6 +468,65 @@ const GrnReceive = forwardRef(function GrnReceive({
   if (mode === "ordered") {
     const doneLines = lines.filter(l => done.includes(l.key));
     const cols = isWh ? "100px 1fr 80px 100px 50px 90px" : "100px 1fr 90px 110px 70px";
+    // Step 3 tabhi jab kuch tick ho (sab utar gaya to wapas list).
+    const review = step === "review" && sel.length > 0;
+    const meta = vendorMeta[lockV || ""] || {};
+    const setMeta = (p) => setVendorMeta(m => ({ ...m, [lockV || ""]: { ...m[lockV || ""], ...p } }));
+    const ell = { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
+    // Tareekh ka tag — rang sirf yahin.
+    const dueTag = (day, due, late) => {
+      const c = due === "late" ? [T.red, T.redL] : due === "aaj" ? [T.amb, T.ambL] : [T.t3, T.bg];
+      const txt = due === "late" ? t("grn_ord.tag_late", { n: late }) : due === "aaj" ? t("grn_ord.tag_aaj") : due === "aage" ? shortDay(day) : t("grn_ord.no_date");
+      return <span style={{ flexShrink: 0, fontSize: 10.5, fontWeight: 700, color: c[0], background: c[1], padding: "2px 8px", borderRadius: 20, whiteSpace: "nowrap" }}>{txt}</span>;
+    };
+    // Step 2: chhoti row — tick, naam, tareekh (late = laal), pending; naam tap = MR / PO no. + maangne wala.
+    const pickRow = (l) => {
+      const on = !!pick[l.key];
+      const due = dueOf(l.day, oToday);
+      const row = grnRows[l.key] || {};
+      return (
+        <div key={l.key} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderTop: "1px solid " + T.b1 }}>
+          <input type="checkbox" checked={on} onChange={() => togglePick(l)} aria-label={l.material} style={{ width: 16, height: 16, cursor: "pointer", flexShrink: 0 }} />
+          <div onClick={() => setInfo(p => ({ ...p, [l.key]: !p[l.key] }))} style={{ flex: 1, minWidth: 0, cursor: "pointer" }}>
+            <div style={{ fontSize: 12.5, fontWeight: 600, color: T.t1, ...ell }}>{l.material}</div>
+            <div style={{ fontSize: 10.5, color: due === "late" ? T.red : T.t4, marginTop: 1 }}>
+              {due === "none" ? t("grn_ord.no_date") : due === "aaj" ? t("grn_ord.tag_aaj") : shortDay(l.day)} <span style={{ color: T.t4 }}>{info[l.key] ? "▴" : "▾"}</span>
+            </div>
+            {info[l.key] && <div style={{ fontSize: 10.5, color: T.t3, marginTop: 1 }}>{l.label}{l.by ? " · " + t("grn_ord.by", { name: l.by }) : ""}{l.partial ? " · " + t("common.partial") : ""}</div>}
+          </div>
+          <span style={{ fontSize: 12, fontWeight: 700, color: T.t1, whiteSpace: "nowrap" }}>{l.pending} {l.unit}</span>
+          {on && (
+            <input type="number" value={row.received_qty || ""} onChange={e => { const v = e.target.value; setGrnRows(r => ({ ...r, [l.key]: { ...r[l.key], received_qty: v } })); }}
+              placeholder={String(l.pending)} aria-label={t("material.receive_qty")}
+              style={{ width: 90, padding: "6px 8px", borderRadius: 5, border: "1.5px solid " + T.b1, fontSize: 11.5, textAlign: "right", fontFamily: "inherit", outline: "none" }} />
+          )}
+        </div>
+      );
+    };
+    // Step 1: vendor card — naam + tag, neeche material + ginti. Doosre vendor ki tick ho to band.
+    const vendorCard = (c) => {
+      const open = openV === c.vendor;
+      const dim = lockV !== null && lockV !== c.vendor;
+      const k = c.lines.filter(l => pick[l.key]).length;
+      return (
+        <div key={"v:" + c.vendor} style={{ background: T.surface, border: "1px solid " + T.b1, borderRadius: 8, marginBottom: 8, opacity: dim ? 0.45 : 1 }}>
+          <button type="button" disabled={dim} onClick={() => setOpenV(open ? null : c.vendor)}
+            style={{ display: "block", width: "100%", textAlign: "left", background: "none", border: "none", padding: "10px 14px", cursor: dim ? "not-allowed" : "pointer", fontFamily: "inherit" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 700, color: T.t1, ...ell }}>{c.vendor || t("grn_ord.no_vendor")}</span>
+              {dueTag(c.day, c.due, c.late)}
+            </div>
+            <div style={{ display: "flex", gap: 8, marginTop: 3, fontSize: 11.5, color: T.t3 }}>
+              <span style={{ flex: 1, minWidth: 0, ...ell }}>{[...new Set(c.lines.map(l => l.material))].join(", ")}</span>
+              <span style={{ flexShrink: 0, fontWeight: k ? 700 : 500, color: k ? T.blu : T.t3 }}>
+                {k ? t("grn_ord.items_left", { k, n: c.lines.length - k }) : t("grn_ord.items", { n: c.lines.length })} {open ? "▴" : "▾"}
+              </span>
+            </div>
+          </button>
+          {open && !dim && <div style={{ padding: "0 14px 4px" }}>{c.lines.map(pickRow)}</div>}
+        </div>
+      );
+    };
     return (
       <div>
         {lines.length === 0 && !hasOtherPending && (
@@ -467,7 +556,7 @@ const GrnReceive = forwardRef(function GrnReceive({
               <div key={"n" + x.id} style={{ fontSize: 10.5, color: T.amb, marginTop: 5 }}>{t("weigh.truck_no_order_row", { material: x.material_name })}</div>
             ))}
           </div>
-        ) : trucks.length > 0 ? (
+        ) : trucks.length > 0 && !review ? (
           <div style={{ marginBottom: 10 }}>
             <button type="button" onClick={() => setShowTrucks(v => !v)}
               style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1.5px dashed " + T.bluM, background: T.bluL, color: T.blu, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", textAlign: "left", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -476,128 +565,159 @@ const GrnReceive = forwardRef(function GrnReceive({
             {showTrucks && trucks.map(truckCard)}
           </div>
         ) : null}
-        {vendorKeys.map(vendor => {
-          const ls = groups[vendor];
-          const meta = vendorMeta[vendor] || {};
-          const filled = ls.filter(l => Number((grnRows[l.key] || {}).received_qty || 0) > 0).length;
-          const setMeta = (p) => setVendorMeta(m => ({ ...m, [vendor]: { ...m[vendor], ...p } }));
-          return (
-            <div key={vendor} style={{ background: T.surface, border: "1px solid " + T.b1, borderRadius: 8, marginBottom: 10, borderLeft: "3px solid " + T.blu, overflow: "hidden" }}>
-              <div style={{ padding: "10px 14px", background: T.bluL + "66", borderBottom: "1px solid " + T.b1, display: "flex", alignItems: "center", gap: 8 }}>
-                <span style={{ fontSize: 14 }}>🏭</span>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: T.t1 }}>{vendor}</div>
-                  <div style={{ fontSize: 10.5, color: T.t4, marginTop: 1 }}>{t("material.mrs_pending_materialmrs2", { mrs: ls.length, mrs2: ls.length > 1 ? "s" : "" })}</div>
-                </div>
-                {filled > 0 && <span style={{ fontSize: 10.5, fontWeight: 700, color: T.grn, background: T.grnL, border: "1px solid " + T.grnM, padding: "2px 9px", borderRadius: 20 }}>{t("material.filledcount_qty_filled", { filledCount: filled })}</span>}
-              </div>
-              <div style={{ padding: "10px 14px", background: T.surfaceB, borderBottom: "1px solid " + T.b1, display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
-                <div>
-                  <label style={lblS}>{t("material.challan_no")}</label>
-                  <input value={meta.challan || ""} onChange={e => setMeta({ challan: e.target.value })} placeholder={t("material.e_g_ch_445")} style={inpS} />
-                </div>
-                <div>
-                  <label style={lblS}>{t("material.delivery_date")}</label>
-                  <input type="date" value={meta.date || today()} onChange={e => setMeta({ date: e.target.value })} style={inpS} />
-                </div>
-                <div>
-                  <label style={lblS}>{t("common.received_by")}</label>
-                  <input value={meta.received_by !== undefined ? meta.received_by : (meUser?.name || "")}
-                    onChange={e => setMeta({ received_by: e.target.value })}
-                    placeholder={meUser?.name || t("material.site_person")}
-                    title={t("material.default_logged_in_user_override_karne")} style={inpS} />
-                </div>
-              </div>
-              <div style={{ padding: "4px 14px 10px" }}>
-                <div style={{ display: "grid", gridTemplateColumns: cols, gap: 7, padding: "6px 0", fontSize: 9, fontWeight: 700, color: T.t4, textTransform: "uppercase", letterSpacing: ".3px" }}>
-                  <span>{t("material.mr_no")}</span><span>{t("common.material")}</span>
-                  <span style={{ textAlign: "right" }}>{t("common.pending")}</span>
-                  <span style={{ textAlign: "right" }}>{t("material.receive_qty")}</span><span></span>
-                  {isWh && <span style={{ textAlign: "right" }}>{t("common.rate")}</span>}
-                </div>
-                {ls.map(l => {
-                  const row = grnRows[l.key] || {};
-                  const recv = Number(row.received_qty || 0);
-                  const over = recv > l.pending + 0.0005;
-                  const setRow = (p) => setGrnRows(r => ({ ...r, [l.key]: { ...r[l.key], ...p } }));
-                  const hit = hitFor(l);
+
+        {/* ── Step 1 + 2: khoj, chip, vendor ke card ── */}
+        <div style={{ display: review ? "none" : "block" }}>
+          {visible.length > 0 && (
+            <>
+              <input value={oq} onChange={e => setOq(e.target.value)} placeholder={t("grn_ord.search_ph")} aria-label={t("grn_ord.search_ph")}
+                style={{ ...inpS, fontSize: 12.5, padding: "8px 10px", marginBottom: 8 }} />
+              <div style={{ display: "flex", gap: 6, marginBottom: 10, flexWrap: "wrap" }}>
+                {[["late", "grn_ord.chip_late"], ["aaj", "grn_ord.chip_aaj"], ["aage", "grn_ord.chip_aage"], ["sab", "grn_ord.chip_sab"]].map(([k, lk]) => {
+                  const on = (chip || "sab") === k;
                   return (
-                    <div key={l.key} style={{ display: "grid", gridTemplateColumns: cols, gap: 7, padding: "7px 0", borderTop: "1px dashed " + T.b1, alignItems: "center" }}>
-                      <div>
-                        <span style={{ fontSize: 11, color: T.amb, fontWeight: 700, fontFamily: "monospace" }}>{l.label}</span>
-                        {l.partial && <div style={{ fontSize: 9, color: T.amb, fontWeight: 700, background: T.ambL, border: "1px solid " + T.ambM, borderRadius: 4, padding: "1px 5px", marginTop: 2, display: "inline-block" }}>{t("common.partial")}</div>}
-                      </div>
-                      <div style={{ minWidth: 0 }}>
-                        <div style={{ fontSize: 12, fontWeight: 600, color: T.t1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{l.material}</div>
-                        {l.partial
-                          ? <div style={{ fontSize: 10, color: T.amb }}><Rich k="material.ordered_orderedqty_received_alreadyreceived_pending_pendingqty" params={{ orderedQty: l.ordered, alreadyReceived: l.received, pendingQty: l.pending }} /></div>
-                          : !isWh && l.approxAmount > 0 && <div style={{ fontSize: 10, color: T.t4 }}>@ ₹{Math.round(l.approxAmount / (l.ordered || 1)).toLocaleString("en-IN")}/{l.unit}</div>}
-                      </div>
-                      <span style={{ fontSize: 11.5, color: l.partial ? T.amb : T.t2, fontWeight: 700, textAlign: "right" }}>{l.pending} {l.unit}</span>
-                      <input type="number" value={row.received_qty || ""} onChange={e => setRow({ received_qty: e.target.value })}
-                        placeholder={String(l.pending)}
-                        style={{ padding: "6px 8px", borderRadius: 5, border: "1.5px solid " + (over ? T.red : T.b1), fontSize: 11.5, textAlign: "right", fontFamily: "inherit", outline: "none", background: over ? T.redL : T.surface, color: over ? T.red : T.t1 }} />
-                      <span title={t("unit.order_unit")} style={{ fontSize: 10.5, color: T.t4 }}>{l.unit}</span>
-                      {isWh && l.kind === "po" && (
-                        <span title={t("grn.rate_from_po")} style={{ fontSize: 11.5, textAlign: "right", color: T.t2, padding: "6px 8px" }}>₹{l.rate}</span>
-                      )}
-                      {isWh && l.kind !== "po" && (
-                        <input type="number" value={row.rate !== undefined ? row.rate : (l.rate || "")} onChange={e => setRow({ rate: e.target.value })}
-                          placeholder={t("common.rate")} title={t("grn.rate_fifo_hint")}
-                          style={{ padding: "6px 8px", borderRadius: 5, border: "1px solid " + T.b1, fontSize: 11.5, textAlign: "right", fontFamily: "inherit", outline: "none" }} />
-                      )}
-                      {hit && <WeighChip hit={hit} unit={l.unit} more={truck ? 0 : moreFor(l)} onMore={() => setShowTrucks(true)} onUseNet={(q) => setRow({ received_qty: String(q) })} />}
-                      {/* Pending se zyada: sirf jaan-boojh kar — tick + wajah (server bhi maangta hai, MAT-08) */}
-                      {over && !isWh && (
-                        <div style={{ gridColumn: "1 / -1", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "6px 8px", background: T.redL, border: "1px solid " + T.redM, borderRadius: 6 }}>
-                          <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 700, color: T.red, cursor: "pointer" }}>
-                            <input type="checkbox" checked={!!row.excess} onChange={e => setRow({ excess: e.target.checked })} />
-                            {t("material.zyada_maal_aaya")}
-                          </label>
-                          {row.excess && (
-                            <input value={row.excessReason || ""} onChange={e => setRow({ excessReason: e.target.value })}
-                              placeholder={t("material.zyada_maal_wajah_placeholder")}
-                              style={{ flex: "1 1 180px", padding: "5px 8px", borderRadius: 5, border: "1.5px solid " + T.redM, fontSize: 11.5, outline: "none", fontFamily: "inherit" }} />
-                          )}
-                        </div>
-                      )}
-                      {recv > 0 && (
-                        <DualUnitToggle units={UNITS_MR} primaryUnit={l.unit} itemName={l.material} qty={row.received_qty}
-                          value={row.dual} onChange={d => setRow({ dual: d })} />
-                      )}
-                      {recv > 0 && (!isWh || l.kind === "po") && (
-                        <GrnStockRow st={stockU[stockKey(l.material)]} card={ucardOf(l.material)} orderUnit={l.unit}
-                          qty={row.received_qty} value={row.stockx} onChange={v => setRow({ stockx: v })}
-                          netKg={hit && hit.line ? Number(hit.line.net_kg_share) || 0 : 0} />
-                      )}
-                      {recv > 0 && (
-                        <div style={{ gridColumn: "1 / -1", marginTop: 6 }}>
-                          <GrnIssueBlock compact title={t("grn.row_problem_title", { material: l.material || t("common.material") })}
-                            value={rowIssues[l.key] || []}
-                            onChange={v => setRowIssues(p => ({ ...p, [l.key]: v }))} />
-                        </div>
-                      )}
-                    </div>
+                    <button key={k} type="button" aria-pressed={on} onClick={() => setChip(k)}
+                      style={{ padding: "5px 12px", borderRadius: 20, border: "1px solid " + (on ? T.t1 : T.b1), background: on ? T.t1 : T.surface, color: on ? "#fff" : T.t2,
+                        fontSize: 12, fontWeight: on ? 700 : 600, cursor: "pointer", fontFamily: "inherit" }}>
+                      {t(lk)} <span style={{ opacity: 0.7 }}>{counts[k]}</span>
+                    </button>
                   );
                 })}
-                <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 10, paddingTop: 8, borderTop: "1.5px solid " + T.b1 }}>
-                  <button type="button" onClick={() => receiveVendor(vendor)} disabled={saving || !meta.challan || filled === 0}
-                    title={!meta.challan ? t("material.challan_no_daalo") : filled === 0 ? t("material.kam_se_kam_ek_material_ka_2") : ""}
-                    style={{ padding: "8px 18px", borderRadius: 6, background: (meta.challan && filled > 0) ? T.grn : T.b1, border: "none", color: "white", fontSize: 12.5, fontWeight: 700, cursor: (meta.challan && filled > 0) ? "pointer" : "not-allowed", whiteSpace: "nowrap" }}>
-                    {saving ? "…" : t("grn.receive_n", { n: filled })}
-                  </button>
-                </div>
               </div>
+              {lockV !== null && <div style={{ fontSize: 11.5, color: T.t3, marginBottom: 8 }}>{t("grn_ord.lock_hint", { vendor: lockV || t("grn_ord.no_vendor") })}</div>}
+              {cards.length === 0 && <div style={{ textAlign: "center", padding: "24px", color: T.t4, fontSize: 12 }}>{t("grn_ord.none_here")}</div>}
+              {cards.map(vendorCard)}
+            </>
+          )}
+        </div>
+
+        {/* ── Step 3: challan, photo, chuni line ki qty → Record GRN ── */}
+        <div style={{ display: review ? "block" : "none" }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 10 }}>
+            <span style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 700, color: T.t1, ...ell }}>{lockV || t("grn_ord.no_vendor")}</span>
+            <span style={{ fontSize: 11.5, color: T.t3 }}>{t("grn_ord.items", { n: sel.length })}</span>
+          </div>
+          <div style={{ padding: "10px 12px", background: T.surface, border: "1px solid " + T.b1, borderRadius: 8, display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 10 }}>
+            <div>
+              <label style={lblS}>{t("material.challan_no")}</label>
+              <input value={meta.challan || ""} onChange={e => setMeta({ challan: e.target.value })} placeholder={t("material.e_g_ch_445")} style={inpS} />
             </div>
-          );
-        })}
+            <div>
+              <label style={lblS}>{t("material.delivery_date")}</label>
+              <input type="date" value={meta.date || oToday} onChange={e => setMeta({ date: e.target.value })} style={inpS} />
+            </div>
+            <div>
+              <label style={lblS}>{t("common.received_by")}</label>
+              <input value={meta.received_by !== undefined ? meta.received_by : (meUser?.name || "")}
+                onChange={e => setMeta({ received_by: e.target.value })}
+                placeholder={meUser?.name || t("material.site_person")}
+                title={t("material.default_logged_in_user_override_karne")} style={inpS} />
+            </div>
+          </div>
+          {tiles}
+          <div style={{ fontSize: 10.5, fontWeight: 700, color: T.t3, textTransform: "uppercase", letterSpacing: ".4px", margin: "12px 0 4px" }}>{t("grn_ord.review_title")}</div>
+          <div style={{ background: T.surface, border: "1px solid " + T.b1, borderRadius: 8, padding: "4px 14px 10px" }}>
+            <div style={{ display: "grid", gridTemplateColumns: cols, gap: 7, padding: "6px 0", fontSize: 9, fontWeight: 700, color: T.t4, textTransform: "uppercase", letterSpacing: ".3px" }}>
+              <span>{t("material.mr_no")}</span><span>{t("common.material")}</span>
+              <span style={{ textAlign: "right" }}>{t("common.pending")}</span>
+              <span style={{ textAlign: "right" }}>{t("material.receive_qty")}</span><span></span>
+              {isWh && <span style={{ textAlign: "right" }}>{t("common.rate")}</span>}
+            </div>
+            {sel.map(l => {
+              const row = grnRows[l.key] || {};
+              const recv = Number(row.received_qty || 0);
+              const over = recv > l.pending + 0.0005;
+              const setRow = (p) => setGrnRows(r => ({ ...r, [l.key]: { ...r[l.key], ...p } }));
+              const hit = hitFor(l);
+              return (
+                <div key={l.key} style={{ display: "grid", gridTemplateColumns: cols, gap: 7, padding: "7px 0", borderTop: "1px dashed " + T.b1, alignItems: "center" }}>
+                  <div>
+                    <span style={{ fontSize: 11, color: T.amb, fontWeight: 700, fontFamily: "monospace" }}>{l.label}</span>
+                    {l.partial && <div style={{ fontSize: 9, color: T.amb, fontWeight: 700, background: T.ambL, border: "1px solid " + T.ambM, borderRadius: 4, padding: "1px 5px", marginTop: 2, display: "inline-block" }}>{t("common.partial")}</div>}
+                  </div>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: T.t1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{l.material}</div>
+                    {l.partial
+                      ? <div style={{ fontSize: 10, color: T.amb }}><Rich k="material.ordered_orderedqty_received_alreadyreceived_pending_pendingqty" params={{ orderedQty: l.ordered, alreadyReceived: l.received, pendingQty: l.pending }} /></div>
+                      : !isWh && l.approxAmount > 0 && <div style={{ fontSize: 10, color: T.t4 }}>@ ₹{Math.round(l.approxAmount / (l.ordered || 1)).toLocaleString("en-IN")}/{l.unit}</div>}
+                  </div>
+                  <span style={{ fontSize: 11.5, color: l.partial ? T.amb : T.t2, fontWeight: 700, textAlign: "right" }}>{l.pending} {l.unit}</span>
+                  <input type="number" value={row.received_qty || ""} onChange={e => setRow({ received_qty: e.target.value })}
+                    placeholder={String(l.pending)}
+                    style={{ padding: "6px 8px", borderRadius: 5, border: "1.5px solid " + (over ? T.red : T.b1), fontSize: 11.5, textAlign: "right", fontFamily: "inherit", outline: "none", background: over ? T.redL : T.surface, color: over ? T.red : T.t1 }} />
+                  <span title={t("unit.order_unit")} style={{ fontSize: 10.5, color: T.t4 }}>{l.unit}</span>
+                  {isWh && l.kind === "po" && (
+                    <span title={t("grn.rate_from_po")} style={{ fontSize: 11.5, textAlign: "right", color: T.t2, padding: "6px 8px" }}>₹{l.rate}</span>
+                  )}
+                  {isWh && l.kind !== "po" && (
+                    <input type="number" value={row.rate !== undefined ? row.rate : (l.rate || "")} onChange={e => setRow({ rate: e.target.value })}
+                      placeholder={t("common.rate")} title={t("grn.rate_fifo_hint")}
+                      style={{ padding: "6px 8px", borderRadius: 5, border: "1px solid " + T.b1, fontSize: 11.5, textAlign: "right", fontFamily: "inherit", outline: "none" }} />
+                  )}
+                  {hit && <WeighChip hit={hit} unit={l.unit} more={truck ? 0 : moreFor(l)} onMore={() => { setStep("list"); setShowTrucks(true); }} onUseNet={(q) => setRow({ received_qty: String(q) })} />}
+                  {/* Pending se zyada: sirf jaan-boojh kar — tick + wajah (server bhi maangta hai, MAT-08) */}
+                  {over && !isWh && (
+                    <div style={{ gridColumn: "1 / -1", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "6px 8px", background: T.redL, border: "1px solid " + T.redM, borderRadius: 6 }}>
+                      <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 700, color: T.red, cursor: "pointer" }}>
+                        <input type="checkbox" checked={!!row.excess} onChange={e => setRow({ excess: e.target.checked })} />
+                        {t("material.zyada_maal_aaya")}
+                      </label>
+                      {row.excess && (
+                        <input value={row.excessReason || ""} onChange={e => setRow({ excessReason: e.target.value })}
+                          placeholder={t("material.zyada_maal_wajah_placeholder")}
+                          style={{ flex: "1 1 180px", padding: "5px 8px", borderRadius: 5, border: "1.5px solid " + T.redM, fontSize: 11.5, outline: "none", fontFamily: "inherit" }} />
+                      )}
+                    </div>
+                  )}
+                  {recv > 0 && (
+                    <DualUnitToggle units={UNITS_MR} primaryUnit={l.unit} itemName={l.material} qty={row.received_qty}
+                      value={row.dual} onChange={d => setRow({ dual: d })} />
+                  )}
+                  {recv > 0 && (!isWh || l.kind === "po") && (
+                    <GrnStockRow st={stockU[stockKey(l.material)]} card={ucardOf(l.material)} orderUnit={l.unit}
+                      qty={row.received_qty} value={row.stockx} onChange={v => setRow({ stockx: v })}
+                      netKg={hit && hit.line ? Number(hit.line.net_kg_share) || 0 : 0} />
+                  )}
+                  {recv > 0 && (
+                    <div style={{ gridColumn: "1 / -1", marginTop: 6 }}>
+                      <GrnIssueBlock compact title={t("grn.row_problem_title", { material: l.material || t("common.material") })}
+                        value={rowIssues[l.key] || []}
+                        onChange={v => setRowIssues(p => ({ ...p, [l.key]: v }))} />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
         {doneLines.length > 0 && (
           <div style={{ marginTop: 10, padding: "8px 12px", background: T.grnL, border: "1px solid " + T.grnM, borderRadius: 7, fontSize: 11.5, color: T.grn, fontWeight: 600, display: "flex", alignItems: "center", gap: 8 }}>
             <span style={{ fontSize: 13 }}>✓</span>
             <span>{t("material.donemrs_materialdonemrs2_received_this_session_donemrs3", { doneMRs: doneLines.length, doneMRs2: doneLines.length > 1 ? "s" : "", doneMRs3: doneLines.map(l => l.material).join(", ") })}</span>
           </div>
         )}
-        {tiles}
+
+        {/* Neeche chipka button: step 1-2 "Aage (N item)", step 3 "Record GRN" */}
+        {(visible.length > 0 || review) && (
+          <div style={{ position: "sticky", bottom: 0, display: "flex", gap: 8, justifyContent: "flex-end", padding: "10px 0", marginTop: 12, background: T.bg, borderTop: "1px solid " + T.b1 }}>
+            {review ? (
+              <>
+                <button type="button" onClick={() => setStep("list")}
+                  style={{ padding: "8px 14px", borderRadius: 6, border: "1px solid " + T.b1, background: T.surface, color: T.t2, fontSize: 12.5, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>{t("grn_ord.back")}</button>
+                <button type="button" onClick={receiveVendor} disabled={saving}
+                  style={{ padding: "8px 20px", borderRadius: 6, border: "none", background: saving ? T.b1 : T.grn, color: "#fff", fontSize: 12.5, fontWeight: 700, cursor: saving ? "not-allowed" : "pointer", fontFamily: "inherit" }}>
+                  {saving ? "…" : t("grn_ord.record")}
+                </button>
+              </>
+            ) : (
+              <button type="button" onClick={() => setStep("review")} disabled={!sel.length}
+                style={{ padding: "8px 20px", borderRadius: 6, border: "none", background: sel.length ? T.blu : T.b1, color: "#fff", fontSize: 12.5, fontWeight: 700, cursor: sel.length ? "pointer" : "not-allowed", fontFamily: "inherit" }}>
+                {t("grn_ord.next", { n: sel.length })}
+              </button>
+            )}
+          </div>
+        )}
       </div>
     );
   }

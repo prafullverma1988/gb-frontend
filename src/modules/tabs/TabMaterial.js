@@ -201,6 +201,10 @@ function TabMaterial({ project }) {
   const [newMatUnit, setNewMatUnit] = useState("Nos");
   const [newMatSaving, setNewMatSaving] = useState(false);
   const [showGRN, setShowGRN] = useState(false);
+  // Store issue / transfer ke card band rehte hain (27 Oct 2026) — tap = khule.
+  // "Mil gaya — receive karo" (Material Zimmedari) wala issue sabse upar, khula, halka rang.
+  const [inOpen, setInOpen] = useState({});      // { "i"+issueId | "t"+transferId: true }
+  const [grnFocus, setGrnFocus] = useState(null);
   const [saving, setSaving] = useState(false);
   const mrSubmitRef = useRef(false);
   // Multi-item MR — each row is a separate material+qty+amount.
@@ -1162,13 +1166,14 @@ function TabMaterial({ project }) {
                         <span style={{fontSize:14}}>📦</span>
                         <span style={{fontSize:11.5,fontWeight:700,color:T.amb}}>{t("material.issues_from_warehouse_site_team_receive", { pendingIssues: pendingIssues.length })}</span>
                       </div>
-                      {pendingIssues.map(iss=>{
+                      {[...pendingIssues].sort((a,b)=>(grnFocus==="i"+b.id)-(grnFocus==="i"+a.id)).map(iss=>{
                         const isDone=issueReceiveDone.includes(iss.id);
+                        const ck="i"+iss.id; const open=!!inOpen[ck]; const hi=grnFocus===ck;
                         const totalQty=(iss.items||[]).reduce((s,it)=>s+Number(it.qty||0),0);
                         const totalValue=Number(iss.total_value||iss.total||0);
                         return(
-                          <div key={iss.id} style={{background:isDone?T.grnL:T.surface,border:"1px solid "+(isDone?T.grnM:T.ambM),borderRadius:8,padding:"12px 14px",marginBottom:8,borderLeft:"3px solid "+(isDone?T.grn:T.amb)}}>
-                            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:isDone?0:10}}>
+                          <div key={iss.id} style={{background:isDone?T.grnL:hi?T.bluL:T.surface,border:"1px solid "+(isDone?T.grnM:hi?T.bluM:T.b1),borderRadius:8,padding:"12px 14px",marginBottom:8}}>
+                            <div role="button" aria-expanded={open} onClick={()=>setInOpen(p=>({...p,[ck]:!p[ck]}))} style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:isDone||!open?0:10,cursor:"pointer"}}>
                               <div>
                                 <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:3}}>
                                   <span style={{fontSize:12,fontWeight:700,color:T.amb,fontFamily:"monospace"}}>{iss.issue_no}</span>
@@ -1176,6 +1181,7 @@ function TabMaterial({ project }) {
                                   {iss.status==="Partial"&&<span style={{fontSize:10,padding:"1px 7px",borderRadius:10,background:T.bluL,color:T.blu,fontWeight:600}}>{t("common.partial")}</span>}
                                 </div>
                                 <div style={{fontSize:12.5,fontWeight:700,color:T.t1}}>{t("material.from_warehouse")}</div>
+                                <div style={{fontSize:11.5,color:T.t3,marginTop:2}}>{(iss.items||[]).map(it=>it.name||it.material_name).join(", ")}</div>
                                 <div style={{fontSize:11,color:T.t4,marginTop:2}}>{t("material.qty_totalqty_value_totalvalue_issued_to", { totalQty: totalQty.toFixed(2), totalValue: totalValue.toLocaleString("en-IN"), iss: iss.issued_to_name||"—", iss2: iss.issued_by_name||"—" })}</div>
                                 {iss.remarks&&<div style={{fontSize:11,color:T.t4,marginTop:2,fontStyle:"italic"}}>{iss.remarks}</div>}
                                 {Array.isArray(iss.challan_photos)&&iss.challan_photos.length>0&&(
@@ -1191,10 +1197,12 @@ function TabMaterial({ project }) {
                                   </div>
                                 )}
                               </div>
-                              {isDone&&<span style={{fontSize:11,fontWeight:700,color:T.grn,background:T.grnL,padding:"3px 10px",borderRadius:20,border:"1px solid "+T.grnM}}>{t("common.received_2")}</span>}
+                              {isDone?<span style={{fontSize:11,fontWeight:700,color:T.grn,background:T.grnL,padding:"3px 10px",borderRadius:20,border:"1px solid "+T.grnM}}>{t("common.received_2")}</span>
+                                :<span style={{fontSize:11.5,color:T.t3,whiteSpace:"nowrap"}}>{t("grn_ord.items",{n:(iss.items||[]).length})} {open?"▴":"▾"}</span>}
                             </div>
+                            {/* Band card bhi bana rehta hai (sirf chhupa) — lagi photo na mite */}
                             {!isDone&&(
-                              <>
+                              <div style={{display:open?"block":"none"}}>
                                 <div style={{background:T.surfaceB,borderRadius:7,padding:"8px 10px",marginBottom:9,border:"1px solid "+T.b1}}>
                                   <div style={{fontSize:9.5,color:T.t4,fontWeight:700,textTransform:"uppercase",letterSpacing:".4px",marginBottom:5}}>{t("material.items_received")}</div>
                                   {(iss.items||[]).map(it=>{
@@ -1228,7 +1236,7 @@ function TabMaterial({ project }) {
                                     {issueReceiving?"...":t("material.receive_grn_bana_do")}
                                   </button>}
                                 </div>
-                              </>
+                              </div>
                             )}
                           </div>
                         );
@@ -1245,11 +1253,12 @@ function TabMaterial({ project }) {
                       </div>
                       {pendingTransfers.map(tr=>{
                         const isDone=trReceiveDone.includes(tr.id);
+                        const ck="t"+tr.id; const open=!!inOpen[ck];
                         const totalQty=(tr.items||[]).reduce((s,it)=>s+Number(it.qty||0),0);
                         const totalValue=Number(tr.total_value||0);
                         return(
-                          <div key={tr.id} style={{background:isDone?T.grnL:T.surface,border:"1px solid "+(isDone?T.grnM:T.cynM),borderRadius:8,padding:"12px 14px",marginBottom:8,borderLeft:"3px solid "+(isDone?T.grn:T.cyn)}}>
-                            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:isDone?0:10}}>
+                          <div key={tr.id} style={{background:isDone?T.grnL:T.surface,border:"1px solid "+(isDone?T.grnM:T.b1),borderRadius:8,padding:"12px 14px",marginBottom:8}}>
+                            <div role="button" aria-expanded={open} onClick={()=>setInOpen(p=>({...p,[ck]:!p[ck]}))} style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:isDone||!open?0:10,cursor:"pointer"}}>
                               <div>
                                 <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:3}}>
                                   <span style={{fontSize:12,fontWeight:700,color:T.cyn,fontFamily:"monospace"}}>{tr.transfer_no}</span>
@@ -1257,12 +1266,14 @@ function TabMaterial({ project }) {
                                   {tr.status==="Partial"&&<span style={{fontSize:10,padding:"1px 7px",borderRadius:10,background:T.bluL,color:T.blu,fontWeight:600}}>{t("common.partial")}</span>}
                                 </div>
                                 <div style={{fontSize:12.5,fontWeight:700,color:T.t1}}>{t("material.from_tr", { tr: tr.from_project_name||tr.from_location||"—" })}</div>
+                                <div style={{fontSize:11.5,color:T.t3,marginTop:2}}>{(tr.items||[]).map(it=>it.material_name).join(", ")}</div>
                                 <div style={{fontSize:11,color:T.t4,marginTop:2}}>{t("material.qty_totalqty_value_totalvalue_by_tr", { totalQty: totalQty.toFixed(2), totalValue: totalValue.toLocaleString("en-IN"), tr: tr.transferred_by_name||"—" })}</div>
                               </div>
-                              {isDone&&<span style={{fontSize:11,fontWeight:700,color:T.grn,background:T.grnL,padding:"3px 10px",borderRadius:20,border:"1px solid "+T.grnM}}>{t("common.received_2")}</span>}
+                              {isDone?<span style={{fontSize:11,fontWeight:700,color:T.grn,background:T.grnL,padding:"3px 10px",borderRadius:20,border:"1px solid "+T.grnM}}>{t("common.received_2")}</span>
+                                :<span style={{fontSize:11.5,color:T.t3,whiteSpace:"nowrap"}}>{t("grn_ord.items",{n:(tr.items||[]).length})} {open?"▴":"▾"}</span>}
                             </div>
                             {!isDone&&(
-                              <>
+                              <div style={{display:open?"block":"none"}}>
                                 <div style={{background:T.surfaceB,borderRadius:7,padding:"8px 10px",marginBottom:9,border:"1px solid "+T.b1}}>
                                   <div style={{fontSize:9.5,color:T.t4,fontWeight:700,textTransform:"uppercase",letterSpacing:".4px",marginBottom:5}}>{t("material.items_received")}</div>
                                   {(tr.items||[]).map(it=>{
@@ -1293,7 +1304,7 @@ function TabMaterial({ project }) {
                                     {trReceiving?"...":t("material.receive_grn_bana_do")}
                                   </button>}
                                 </div>
-                              </>
+                              </div>
                             )}
                           </div>
                         );
@@ -1368,7 +1379,7 @@ function TabMaterial({ project }) {
             <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2.5}><path d="M12 5v14M5 12h14"/></svg>
            {t("common.new_request")}
           </button>}
-          {canGrn&&<button onClick={()=>setShowGRN(true)}
+          {canGrn&&<button onClick={()=>{ setGrnFocus(null); setInOpen({}); setShowGRN(true); }}
             style={{padding:"7px 13px",borderRadius:7,background:T.grn,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
             <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2.5}><path d="M20 6L9 17l-5-5"/></svg>
            {t("common.record_grn")}
@@ -1896,7 +1907,7 @@ function TabMaterial({ project }) {
 
       {/* TAB 5: MATERIAL ZIMMEDARI — store issue kiske zimme, kitna baaki (14 Oct 2026) */}
       {activeTab==="custody"&&(
-        <MaterialCustodyTab projectId={projectId} onReceive={()=>{ setGrnTab("ordered"); setShowGRN(true); }}/>
+        <MaterialCustodyTab projectId={projectId} onReceive={(d)=>{ const k=d&&d.id?"i"+d.id:null; setGrnFocus(k); setInOpen(k?{[k]:true}:{}); setGrnTab("ordered"); setShowGRN(true); }}/>
       )}
 
       {/* ── MATERIAL LEDGER DRAWER (material click → GRN/Used/MR tabs) ── */}
