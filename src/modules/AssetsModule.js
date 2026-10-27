@@ -3627,6 +3627,20 @@ function MovementsTab({ refreshKey, meta, pickers, canCreate, onIssue, onTransfe
 // bandh jaata hai. Band karte waqt sirf gini hui line ka antar adjust voucher
 // me jaata hai — bina gini line ko haath nahi lagta.
 
+// Kya ginna hai — store ki ginti jaisa (28 Oct 2026): Saare / Ek category / Chune
+// hue. Category aur "Chune hue" ki list us jagah ke asset se banti hai (server ka
+// /verifications/scope-items — wahi niyam jo ginti kholte waqt), isliye wahi
+// category dikhti hai jiska yahan kuch pada hai.
+const verifScopeLabel = (v) => (v.scope === "category" ? t("assets.verify_scope_cat_x", { name: v.scope_value || "—" })
+  : v.scope === "items" ? t("assets.verify_scope_items_n", { n: N(v.line_count) }) : t("assets.verify_scope_all"));
+const ScopeOpt = ({ on, label, sub, onPick }) => (
+  <label style={{ display: "flex", gap: 9, alignItems: "flex-start", padding: "9px 11px", borderRadius: 8, cursor: "pointer",
+    border: `1.5px solid ${on ? T.ind : T.b1}`, background: on ? T.indL : T.surface, marginBottom: 7 }}>
+    <input type="radio" checked={on} onChange={onPick} style={{ marginTop: 2 }} />
+    <div><div style={{ fontSize: 12.5, fontWeight: 700, color: T.t1 }}>{label}</div><div style={{ fontSize: 11, color: T.t3 }}>{sub}</div></div>
+  </label>
+);
+
 function NewVerificationModal({ open, meta, pickers, me, onClose, onCreated, onOpenExisting }) {
   const toast = useToast();
   const [where, setWhere] = useState("warehouse");
@@ -3634,6 +3648,11 @@ function NewVerificationModal({ open, meta, pickers, me, onClose, onCreated, onO
   const [site, setSite] = useState({ holder_type: "user" });
   const [date, setDate] = useState(todayStr());
   const [remarks, setRemarks] = useState("");
+  const [scope, setScope] = useState("all");
+  const [cat, setCat] = useState("");
+  const [picked, setPicked] = useState(() => new Set());
+  const [q, setQ] = useState("");
+  const [placeItems, setPlaceItems] = useState(null);   // null = jagah nahi chuni / load ho raha
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [existing, setExisting] = useState(null);
@@ -3643,8 +3662,34 @@ function NewVerificationModal({ open, meta, pickers, me, onClose, onCreated, onO
     if (!open) return;
     setWhere("warehouse"); setWh(soleStoreId(all)); setSite({ holder_type: "user" });
     setDate(todayStr()); setRemarks(""); setError(""); setExisting(null);
+    setScope("all"); setCat(""); setPicked(new Set()); setQ("");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, meta]);
+
+  const locOf = () => (where === "warehouse" ? (wh ? { warehouse_id: Number(wh) } : null)
+    : siteLocValid(site) ? siteLocBody(site) : null);
+  const locKey = JSON.stringify(locOf());
+  // Jagah badli to us jagah ke asset dobara — purani category / chune hue mit jaate hain.
+  useEffect(() => {
+    setCat(""); setPicked(new Set()); setPlaceItems(null);
+    const loc = JSON.parse(locKey);
+    if (!open || !loc) return undefined;
+    let alive = true;
+    api.get(`/assets/verifications/scope-items?${qs(loc)}`)
+      .then((r) => { if (alive) setPlaceItems(r && r.success ? r.data || [] : []); })
+      .catch(() => { if (alive) setPlaceItems([]); });
+    return () => { alive = false; };
+  }, [open, locKey]);
+
+  const cats = useMemo(() => {
+    const m = new Map();
+    for (const i of placeItems || []) if (i.category_id) m.set(i.category_id, { id: i.category_id, name: i.category, n: (m.get(i.category_id)?.n || 0) + 1 });
+    return [...m.values()].sort((a, b) => String(a.name).localeCompare(String(b.name)));
+  }, [placeItems]);
+  const ql = q.trim().toLowerCase();
+  const shown = (placeItems || []).filter((i) => !ql
+    || [i.name, i.spec, i.code].some((x) => String(x || "").toLowerCase().includes(ql)));
+  const toggle = (id) => setPicked((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
 
   const save = async () => {
     setError(""); setExisting(null);
@@ -3656,8 +3701,12 @@ function NewVerificationModal({ open, meta, pickers, me, onClose, onCreated, onO
       if (!siteLocValid(site)) { setError(t("assets.err_to_required")); return; }
       loc = siteLocBody(site);
     }
+    if (scope === "category" && !cat) { setError(t("assets.verify_pick_cat_err")); return; }
+    if (scope === "items" && !picked.size) { setError(t("assets.verify_pick_items_err")); return; }
     setBusy(true);
-    const r = await api.post("/assets/verifications", { ...loc, date, remarks: remarks || null });
+    const r = await api.post("/assets/verifications", { ...loc, date, remarks: remarks || null, scope,
+      category_id: scope === "category" ? Number(cat) : undefined,
+      item_ids: scope === "items" ? [...picked] : undefined });
     setBusy(false);
     if (r && r.success) { toast.success(r.message || t("assets.saved")); onCreated(r.data); onClose(); return; }
     setError((r && r.message) || t("assets.save_failed"));
@@ -3686,6 +3735,46 @@ function NewVerificationModal({ open, meta, pickers, me, onClose, onCreated, onO
         <Field label={t("assets.date")}><input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={inp} /></Field>
         <Field label={t("assets.remarks")}><input value={remarks} onChange={(e) => setRemarks(e.target.value)} style={inp} /></Field>
       </div>
+
+      <div style={{ fontSize: 11, color: T.t3, fontWeight: 600, margin: "14px 0 6px" }}>{t("assets.verify_scope_q")}</div>
+      {placeItems == null ? (
+        <div style={{ fontSize: 11.5, color: T.t4, marginBottom: 8 }}>{locOf() ? t("assets.verify_items_loading") : t("assets.verify_place_first")}</div>
+      ) : placeItems.length === 0 ? (
+        <div style={{ fontSize: 11.5, color: T.amb, marginBottom: 8 }}>{t("assets.verify_place_empty")}</div>
+      ) : null}
+      <ScopeOpt on={scope === "all"} onPick={() => setScope("all")} label={t("assets.verify_scope_all")}
+        sub={placeItems && placeItems.length ? t("assets.verify_scope_all_sub_n", { n: placeItems.length }) : t("assets.verify_scope_all_sub")} />
+      <ScopeOpt on={scope === "category"} onPick={() => setScope("category")} label={t("assets.verify_scope_cat")} sub={t("assets.verify_scope_cat_sub")} />
+      {scope === "category" && (
+        <PickSelect value={cat} onChange={(e) => setCat(e.target.value)} style={{ ...inp, marginBottom: 10 }}>
+          <option value="">{t("assets.verify_pick_cat")}</option>
+          {cats.map((c) => <option key={c.id} value={c.id}>{t("assets.verify_cat_opt", { name: c.name, n: c.n })}</option>)}
+        </PickSelect>
+      )}
+      <ScopeOpt on={scope === "items"} onPick={() => setScope("items")} label={t("assets.verify_scope_items")} sub={t("assets.verify_scope_items_sub")} />
+      {scope === "items" && (
+        <div style={{ border: `1px solid ${T.b1}`, borderRadius: 8, marginBottom: 10 }}>
+          <div style={{ padding: 8, borderBottom: `1px solid ${T.b1}`, display: "flex", gap: 8, alignItems: "center" }}>
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("assets.verify_search_item")} style={{ ...inpSm, flex: 1 }} />
+            <span style={{ fontSize: 11, color: T.t3, whiteSpace: "nowrap" }}>{t("assets.verify_picked_n", { n: picked.size })}</span>
+          </div>
+          <div style={{ maxHeight: 220, overflowY: "auto" }}>
+            {(placeItems || []).length > 0 && shown.length === 0 && <div style={{ padding: 12, fontSize: 12, color: T.t4, textAlign: "center" }}>{t("assets.verify_no_match")}</div>}
+            {shown.map((i) => (
+              <label key={i.asset_item_id} style={{ display: "flex", gap: 8, alignItems: "center", padding: "7px 10px", borderTop: `1px solid ${T.b1}`, cursor: "pointer", fontSize: 12 }}>
+                <input type="checkbox" checked={picked.has(i.asset_item_id)} onChange={() => toggle(i.asset_item_id)} />
+                <span style={{ flex: 1, minWidth: 0, color: T.t1 }}>
+                  {i.name}{i.spec ? <span style={{ color: T.t3 }}> {i.spec}</span> : null}
+                  {i.code ? <span style={{ fontSize: 10.5, color: T.t4, fontFamily: "monospace" }}> · {i.code}</span> : null}
+                </span>
+                <span style={{ color: T.t4, whiteSpace: "nowrap" }}>
+                  {fmtN(i.qty_good)}{N(i.qty_damaged) ? <span style={{ color: T.amb }}> · {t("assets.verify_n_toota", { n: fmtN(i.qty_damaged) })}</span> : null} {i.unit || ""}
+                </span>
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
       <div style={{ marginTop: 14 }}><Notice>{t("assets.verify_snapshot_hint")}</Notice></div>
       <ErrBox>{error}</ErrBox>
     </Modal>
@@ -3700,6 +3789,8 @@ function VerificationDrawer({ id, me, isAdmin, canApprove, onClose, onChanged, o
   const [note, setNote] = useState("");          // poori ginti ka note (kya kam/zyada aur kyun)
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [q, setQ] = useState("");                // store ki ginti jaisa: khoj + "Sirf farak wale" (28 Oct 2026)
+  const [onlyDiff, setOnlyDiff] = useState(false);
 
   const load = useCallback(async () => {
     setFailed("");
@@ -3797,7 +3888,39 @@ function VerificationDrawer({ id, me, isAdmin, canApprove, onClose, onChanged, o
   };
 
   const w = verifWhere(v);
-  const cols = "90px 1.5fr 1fr 80px 140px 84px 1fr";
+  const cols = "1.6fr 112px 76px 76px 78px 1.3fr";
+  // Har line ka hisaab ek jagah — upar ka counter, "Sirf farak wale" aur row teeno isi se.
+  const lineInfo = (ln) => {
+    const c = cellOf(ln);
+    // System: save ho chuki line par wahi jo save ke waqt ledger me tha; bina
+    // gini ya abhi badli line par ledger ka abhi ka stock — save hote hi server
+    // wahi likhta hai. Isliye ginti ke beech hua issue/return farq nahi banata.
+    const hasCur = draft && ln.current_good != null;
+    const saved = ln.counted_good != null, edited = !!edit[ln.id];
+    const useCur = hasCur && (edited || !saved);
+    const sg = useCur ? N(ln.current_good) : N(ln.system_good), sd = useCur ? N(ln.current_damaged) : N(ln.system_damaged);
+    const movedAfter = hasCur && saved && !edited && (N(ln.current_good) !== N(ln.system_good) || N(ln.current_damaged) !== N(ln.system_damaged));
+    const counted = c.g !== "" || c.d !== "";
+    const cg = counted ? (c.g === "" ? 0 : Number(c.g)) : 0, cd = counted ? (c.d === "" ? 0 : Number(c.d)) : 0;
+    const net = counted ? (cg + cd) - (sg + sd) : null;
+    const condChanged = counted && net === 0 && cg !== sg;
+    const off = counted && (net !== 0 || condChanged);
+    // Jiski ginti alag mili uspar wajah bina ginti bheji nahi jaati.
+    const needNote = !!draft && canCount && off && !String(c.r || "").trim();
+    return { c, sg, sd, movedAfter, counted, net, condChanged, off, needNote };
+  };
+  const lines = v ? (v.items || []).map((ln) => [ln, lineInfo(ln)]) : [];
+  const countedN = lines.filter(([, x]) => x.counted).length;
+  const diffN = lines.filter(([, x]) => x.off).length;
+  const ql = q.trim().toLowerCase();
+  const shownLines = lines.filter(([ln, x]) => (!ql || [ln.name, ln.spec, ln.code].some((s) => String(s || "").toLowerCase().includes(ql)))
+    && (!onlyDiff || x.off));
+  const cell = (ln, k, val) => (
+    <input value={val} inputMode="decimal" placeholder="—" readOnly={!canCount}
+      title={t(k === "g" ? "assets.verify_h_good" : "assets.verify_h_damaged")}
+      onChange={(e) => setCell(ln, k, e.target.value.replace(/[^0-9.]/g, ""))}
+      style={{ ...inpSm, textAlign: "right", background: canCount ? T.surface : T.surfaceB }} />
+  );
   const footer = !v ? <Btn ghost onClick={onClose}>{t("assets.close")}</Btn>
     : <>
         <Btn ghost onClick={onClose}>{t("assets.close")}</Btn>
@@ -3809,7 +3932,7 @@ function VerificationDrawer({ id, me, isAdmin, canApprove, onClose, onChanged, o
       </>;
 
   return (
-    <Drawer open onClose={onClose} width={860}
+    <Drawer open onClose={onClose} width={940}
       title={v ? v.verification_no : t("assets.tab_verify")}
       head={v ? <Pill label={verifStatusLabel(v.status)} {...verifTone(v.status)} /> : null}
       sub={v ? `${fmtD(v.date)} · ${t("assets.created_by")}: ${v.created_by_name || "—"}${v.closed_by_name ? ` · ${t("assets.closed_by")}: ${v.closed_by_name}` : ""}` : ""}
@@ -3830,7 +3953,7 @@ function VerificationDrawer({ id, me, isAdmin, canApprove, onClose, onChanged, o
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10, padding: "12px 14px", background: T.surfaceB, border: `1px solid ${T.b1}`, borderRadius: 10, marginBottom: 14 }}>
             <KV k={t("assets.verify_place")} v={<span>{w.main}{w.sub ? <span style={{ display: "block", fontSize: 11, color: T.t3, fontWeight: 400 }}>{w.sub}</span> : null}</span>} />
             <KV k={t("assets.custodian")} v={v.custodian_name} />
-            <KV k={t("assets.lines")} v={fmtN(v.line_count)} />
+            <KV k={t("assets.verify_scope")} v={verifScopeLabel(v)} />
             <KV k={t("assets.verify_pending")} v={<span style={{ color: N(v.pending_count) ? T.amb : T.t1 }}>{fmtN(v.pending_count)}</span>} />
             <KV k={t("assets.verify_diff")} v={<span style={{ color: N(v.diff_count) ? T.red : T.t1 }}>
               {fmtN(v.diff_count)}
@@ -3843,73 +3966,59 @@ function VerificationDrawer({ id, me, isAdmin, canApprove, onClose, onChanged, o
               : null} />
           </div>
 
-          <Panel title={t("assets.lines")}>
-            <Scroll minWidth={860}>
-              <Row head cols={cols}>
-                <span>{t("assets.code")}</span><span>{t("assets.item")}</span><span>{t("assets.spec")}</span>
-                <span>{t("assets.verify_system")}</span><span>{t("assets.verify_counted")}</span><span>{t("assets.verify_gap")}</span><span>{t("assets.remarks")}</span>
-              </Row>
-              {(v.items || []).map((ln) => {
-                const c = cellOf(ln);
-                // System: save ho chuki line par wahi jo save ke waqt ledger me tha; bina
-                // gini ya abhi badli line par ledger ka abhi ka stock — save hote hi server
-                // wahi likhta hai. Isliye ginti ke beech hua issue/return farq nahi banata.
-                const hasCur = draft && ln.current_good != null;
-                const saved = ln.counted_good != null, edited = !!edit[ln.id];
-                const useCur = hasCur && (edited || !saved);
-                const sg = useCur ? N(ln.current_good) : N(ln.system_good), sd = useCur ? N(ln.current_damaged) : N(ln.system_damaged);
-                const movedAfter = hasCur && saved && !edited && (N(ln.current_good) !== N(ln.system_good) || N(ln.current_damaged) !== N(ln.system_damaged));
-                const counted = c.g !== "" || c.d !== "";
-                const cg = counted ? (c.g === "" ? 0 : Number(c.g)) : 0, cd = counted ? (c.d === "" ? 0 : Number(c.d)) : 0;
-                const net = counted ? (cg + cd) - (sg + sd) : null;
-                const condChanged = counted && net === 0 && cg !== sg;
-                // Jiski ginti alag mili uspar wajah bina ginti bheji nahi jaati.
-                const needNote = !!draft && canCount && counted && (net !== 0 || condChanged) && !String(c.r || "").trim();
-                return (
-                  <Row key={ln.id} cols={cols}>
-                    <span style={{ fontSize: 11.5, color: T.t3, fontFamily: "monospace" }}>{ln.code || "—"}</span>
-                    <div>
-                      <div style={{ fontWeight: 600, color: T.t1 }}>{ln.name}</div>
-                      <div style={{ fontSize: 10.5, color: T.t4 }}>{[ln.unit, trackLabel(ln.tracking_mode)].filter(Boolean).join(" · ")}</div>
+          {/* Store ki ginti jaisa (28 Oct 2026): khoj, "Sirf farak wale", aur kitne gine / kitno me farak. */}
+          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 10 }}>
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("assets.verify_search_item")} style={{ ...inpSm, width: 240 }} />
+            <label style={{ fontSize: 12, color: T.t2, display: "flex", gap: 5, alignItems: "center", cursor: "pointer" }}>
+              <input type="checkbox" checked={onlyDiff} onChange={(e) => setOnlyDiff(e.target.checked)} /> {t("assets.verify_only_diff")}
+            </label>
+            <div style={{ flex: 1 }} />
+            <span style={{ fontSize: 12, color: T.t3 }}>{t("assets.verify_counter", { done: countedN, total: lines.length })}</span>
+            <span style={{ fontSize: 12, fontWeight: 700, color: diffN ? T.amb : T.t4 }}>{t("assets.verify_diff_n", { n: diffN })}</span>
+          </div>
+          <div style={{ border: `1px solid ${T.b1}`, borderRadius: 10, overflow: "hidden", background: T.surface }}>
+            <Scroll minWidth={760}>
+              <div style={{ display: "grid", gridTemplateColumns: cols, gap: 6, padding: "8px 14px", background: "#1E293B" }}>
+                {[t("assets.item"), t("assets.verify_h_system"), t("assets.verify_h_good"), t("assets.verify_h_damaged"), t("assets.verify_h_diff"), t("assets.verify_h_note")].map((h, i) => (
+                  <div key={i} style={{ fontSize: 9.5, fontWeight: 700, color: "rgba(255,255,255,.6)", textTransform: "uppercase", letterSpacing: ".3px", textAlign: i >= 2 && i <= 4 ? "right" : "left" }}>{h}</div>
+                ))}
+              </div>
+              {shownLines.length === 0 && <div style={{ padding: 20, textAlign: "center", fontSize: 12, color: T.t4 }}>{t("assets.verify_no_match")}</div>}
+              {shownLines.map(([ln, x], idx) => (
+                <div key={ln.id} style={{ display: "grid", gridTemplateColumns: cols, gap: 6, padding: "8px 14px", alignItems: "start",
+                  borderBottom: `1px solid ${T.b1}`, background: idx % 2 ? T.surfaceB : T.surface,
+                  borderLeft: `3px solid ${!x.counted ? "transparent" : x.needNote ? T.red : x.off ? T.amb : T.grn}` }}>
+                  <div style={{ minWidth: 0, paddingTop: 3 }}>
+                    <div style={{ fontSize: 12.5, fontWeight: 700, color: T.t1 }}>{ln.name}{ln.spec ? <span style={{ fontWeight: 400, color: T.t3 }}> {ln.spec}</span> : null}</div>
+                    <div style={{ fontSize: 10, color: T.t4 }}>{[ln.code, ln.unit, trackLabel(ln.tracking_mode)].filter(Boolean).join(" · ")}</div>
+                    {/* Dono box khaali = abhi gina nahi. Ek bhi bhara to khaali doosra 0 (server aur app jaisa). */}
+                    {!x.counted && draft && canCount && <span style={{ fontSize: 9.5, fontWeight: 700, color: T.amb }}>{t("assets.verify_not_counted")}</span>}
+                  </div>
+                  <div style={{ fontSize: 11.5, color: T.t2, paddingTop: 6 }}>
+                    {fmtN(x.sg)} · <span style={{ color: T.amb }}>{fmtN(x.sd)}</span>
+                    {x.movedAfter && <div style={{ fontSize: 10, color: T.amb }}>{t("assets.verify_moved_after_count", { n: fmtN(N(ln.current_good) + N(ln.current_damaged)) })}</div>}
+                  </div>
+                  {cell(ln, "g", x.c.g)}
+                  {cell(ln, "d", x.c.d)}
+                  <div style={{ textAlign: "right", paddingTop: 5 }}>
+                    <div style={{ fontSize: 13, fontWeight: 800, color: x.net == null ? T.t4 : x.net < 0 ? T.red : x.net > 0 ? T.blu : x.condChanged ? T.amb : T.grn }}>
+                      {x.net == null ? "—" : x.net > 0 ? `+${fmtN(x.net)}` : fmtN(x.net)}
                     </div>
-                    <span style={{ color: T.t3 }}>{ln.spec || "—"}</span>
-                    <div>
-                      <div style={{ fontWeight: 600 }}>{fmtN(sg)}</div>
-                      {sd > 0 && <div style={{ fontSize: 10.5, color: T.amb }}>{fmtN(sd)} {t("assets.damaged").toLowerCase()}</div>}
-                      {movedAfter && <div style={{ fontSize: 10, color: T.amb }}>{t("assets.verify_moved_after_count", { n: fmtN(N(ln.current_good) + N(ln.current_damaged)) })}</div>}
-                    </div>
-                    <div>
-                      <div style={{ display: "flex", gap: 4 }}>
-                        <input value={c.g} inputMode="decimal" placeholder="—" title={t("assets.good")} readOnly={!canCount}
-                          onChange={(e) => setCell(ln, "g", e.target.value.replace(/[^0-9.]/g, ""))}
-                          style={{ ...inpSm, width: 60, background: canCount ? T.surface : T.surfaceB }} />
-                        <input value={c.d} inputMode="decimal" placeholder="—" title={t("assets.damaged")} readOnly={!canCount}
-                          onChange={(e) => setCell(ln, "d", e.target.value.replace(/[^0-9.]/g, ""))}
-                          style={{ ...inpSm, width: 60, background: canCount ? T.surface : T.surfaceB }} />
-                      </div>
-                      {/* Dono box khaali = abhi gina nahi. Ek bhi bhara to khaali doosra 0 (server aur app jaisa). */}
-                      {!counted && <div style={{ fontSize: 10, color: T.t4, marginTop: 3 }}>{t("assets.verify_not_counted")}</div>}
-                    </div>
-                    <div>
-                      <span style={{ fontWeight: 700, color: net == null ? T.t4 : net < 0 ? T.red : net > 0 ? T.grn : T.t4 }}>
-                        {net == null ? "—" : net > 0 ? `+${fmtN(net)}` : fmtN(net)}
-                      </span>
-                      {condChanged && <div style={{ fontSize: 10, color: T.amb }}>{t("assets.verify_cond_changed")}</div>}
-                      {/* Ginti ki kami sudhaar maani jaati hai, gum nahi — sach me gum hai to Gum report pehle. */}
-                      {draft && canCount && net != null && net < 0 && <div style={{ fontSize: 10, color: T.t4, marginTop: 2 }}>{t("assets.verify_lost_hint")}</div>}
-                    </div>
-                    <div style={{ minWidth: 0 }}>
-                      <input value={c.r} readOnly={!draft || !canCount}
-                        placeholder={needNote ? t("assets.verify_line_note_ph") : ""}
-                        style={{ ...inpSm, borderColor: needNote ? T.red : T.b1 }}
-                        onChange={(e) => setCell(ln, "r", e.target.value)} />
-                      {needNote && <div style={{ fontSize: 10, color: T.red, marginTop: 2 }}>{t("assets.verify_line_note_req")}</div>}
-                    </div>
-                  </Row>
-                );
-              })}
+                    {x.condChanged && <div style={{ fontSize: 10, color: T.amb }}>{t("assets.verify_cond_changed")}</div>}
+                  </div>
+                  <div style={{ minWidth: 0 }}>
+                    <input value={x.c.r} readOnly={!draft || !canCount}
+                      placeholder={x.off ? t("assets.verify_line_note_ph") : ""}
+                      style={{ ...inpSm, borderColor: x.needNote ? T.red : T.b1, background: draft && canCount ? T.surface : T.surfaceB }}
+                      onChange={(e) => setCell(ln, "r", e.target.value)} />
+                    {x.needNote && <div style={{ fontSize: 10, color: T.red, marginTop: 2 }}>{t("assets.verify_line_note_req")}</div>}
+                    {/* Ginti ki kami sudhaar maani jaati hai, gum nahi — sach me gum hai to Gum report pehle. */}
+                    {draft && canCount && x.net != null && x.net < 0 && <div style={{ fontSize: 10, color: T.t4, marginTop: 2 }}>{t("assets.verify_lost_hint")}</div>}
+                  </div>
+                </div>
+              ))}
             </Scroll>
-          </Panel>
+          </div>
           {draft && canCount ? (
             <div style={{ marginTop: 12 }}>
               <div style={{ fontSize: 11.5, fontWeight: 700, color: N(v.diff_count) && !String(note || "").trim() ? T.red : T.t2, marginBottom: 4 }}>
@@ -3961,7 +4070,7 @@ function VerificationsTab({ refreshKey, meta, pickers, canCreate, onNew, onOpen,
     return () => { alive = false; };
   }, [fl, refreshKey]);
 
-  const cols = "118px 78px 1.4fr 1.2fr 84px 56px 56px 70px 112px";
+  const cols = "118px 78px 1.3fr 1fr 1.1fr 84px 56px 56px 70px 112px";
   return (
     <Panel title={t("assets.verify_title")} action={canCreate && <Btn size="sm" icon={IcAdd} onClick={onNew}>{t("assets.verify_new")}</Btn>}>
       <div style={{ display: "flex", gap: 8, padding: "10px 14px", borderBottom: `1px solid ${T.b1}`, flexWrap: "wrap", alignItems: "center" }}>
@@ -3990,9 +4099,9 @@ function VerificationsTab({ refreshKey, meta, pickers, canCreate, onNew, onOpen,
         <Empty>{t("assets.verify_empty")}<br /><span style={{ fontSize: 11.5 }}>{t("assets.verify_empty_hint")}</span></Empty>
       )}
       {rows && rows.length > 0 && (
-        <Scroll minWidth={1000}>
+        <Scroll minWidth={1100}>
           <Row head cols={cols}>
-            <span>{t("assets.verify_no")}</span><span>{t("assets.date")}</span><span>{t("assets.verify_place")}</span><span>{t("assets.verify_owner")}</span>
+            <span>{t("assets.verify_no")}</span><span>{t("assets.date")}</span><span>{t("assets.verify_place")}</span><span>{t("assets.verify_scope")}</span><span>{t("assets.verify_owner")}</span>
             <span>{t("assets.status")}</span><span>{t("assets.lines")}</span><span>{t("assets.verify_pending")}</span><span>{t("assets.verify_diff")}</span><span>{t("assets.verify_adjust_voucher")}</span>
           </Row>
           {rows.map((v) => {
@@ -4005,6 +4114,7 @@ function VerificationsTab({ refreshKey, meta, pickers, canCreate, onNew, onOpen,
                   <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{w.main}</div>
                   <div style={{ fontSize: 10.5, color: T.t4 }}>{w.sub}</div>
                 </div>
+                <span style={{ fontSize: 11.5, color: T.t2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{verifScopeLabel(v)}</span>
                 <div style={{ minWidth: 0 }}>
                   <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.custodian_name || v.created_by_name || "—"}</div>
                   {v.custodian_name && v.created_by_name && <div style={{ fontSize: 10.5, color: T.t4 }}>{t("assets.created_by")}: {v.created_by_name}</div>}
