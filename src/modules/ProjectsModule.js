@@ -1573,7 +1573,8 @@ function PhotoStrip({ photos, accent = "#2563EB" }) {
         ))}
       </div>
       {zoom && (
-        <div 
+        // Badi photo par kahin bhi click = band (pehle band hi nahi hoti thi, 28 Oct 2026).
+        <div onClick={()=>setZoom(null)}
           style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:2500,display:"flex",alignItems:"center",justifyContent:"center",cursor:"zoom-out"}}>
           <img src={cld(zoom, "full")} alt="" style={{maxWidth:"92vw",maxHeight:"92vh",borderRadius:8,boxShadow:"0 20px 60px rgba(0,0,0,0.5)"}}/>
         </div>
