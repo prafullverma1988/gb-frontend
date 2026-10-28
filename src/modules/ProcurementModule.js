@@ -811,7 +811,7 @@ function GRNModal({po,onClose,onSave}){
 const poCanOrder=(p)=>p.approval==="Approved"&&p.poStatus==="Open"&&(p.orderStatus||"NotOrdered")==="NotOrdered";
 const poCanReceive=(p)=>p.approval==="Approved"&&p.poStatus==="Open"&&["Ordered","PartiallyReceived"].includes(p.orderStatus);
 
-function PODetailDrawer({po,onClose,onApprove,onShare,onGRN,onEdit,onCancel,onSendToVendor,onSplit}){
+function PODetailDrawer({po,onClose,onApprove,onShare,onGRN,onEdit,onCancel,onSendToVendor,onSplit,onDivert}){
   const [detail, setDetail] = useState(po);
   const [fetching, setFetching] = useState(true);
   const [cancelling, setCancelling] = useState(false);
@@ -1036,6 +1036,12 @@ function PODetailDrawer({po,onClose,onApprove,onShare,onGRN,onEdit,onCancel,onSe
         {poCanSplit(d)&&onSplit&&(
           <button onClick={()=>onSplit(d)} style={{flex:"1 1 110px",padding:"8px",borderRadius:7,background:T.surfaceB,color:T.t2,border:"1px solid "+T.b1,fontSize:11.5,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:4}}>
             {t("procurement.split_title")}
+          </button>
+        )}
+        {/* Project badlo (divert) — poora PO doosri jagah (28 Oct 2026), Procurement Edit */}
+        {poCanSplit(d)&&onDivert&&(
+          <button onClick={()=>onDivert(d)} style={{flex:"1 1 110px",padding:"8px",borderRadius:7,background:T.surfaceB,color:T.t2,border:"1px solid "+T.b1,fontSize:11.5,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:4}}>
+            <IcTruck size={12} color={T.t2}/> {t("procurement.divert_title")}
           </button>
         )}
         {/* Share — secondary, available anytime for sharing PO copy */}
@@ -1899,7 +1905,6 @@ function SendToVendorModal({po,onClose,onSent,srcMr,vendorPhone:vPhone=""}){
 // Asset ki kharid sirf store me receive hoti hai — wahan sirf store. Server
 // yahi sab dobara jaanchta hai. PO ka total wahi — dobara approval nahi.
 const poCanSplit=(p)=>p.approval==="Approved"&&p.poStatus==="Open"&&p.orderStatus!=="Received";
-const splitLinesOf=(p)=>(p.items||[]).filter(it=>it.id&&it.qty>0&&(it.receivedQty||0)<it.qty-0.001);
 const splitR3=(n)=>Math.round((Number(n)||0)*1000)/1000;
 const splitDest=(k)=>k.startsWith("w:")?{warehouse_id:Number(k.slice(2))}:{project_id:Number(k.slice(2))};
 // Store "chunne" wali list (?scope=all) — store ka access na ho tab bhi wahan maal bheja ja sakta hai
@@ -2030,84 +2035,329 @@ const splitOpts=(dbProjects,stores,storeOnly)=>[
 ];
 const splitSaveLbl=(saving,st)=>saving?t("procurement.split_saving"):st.destChange?t("procurement.split_dest_change_save"):t("procurement.split_save");
 
-function SplitPOModal({po,mrs,dbProjects,initLineId,onClose,onDone}){
-  const lines=splitLinesOf(po);
-  const line0=lines.find(l=>String(l.id)===String(initLineId))||lines[0]||null;
-  const [lineId,setLineId]=useState(line0?line0.id:null);
-  const line=lines.find(l=>String(l.id)===String(lineId))||null;
-  const [first,setFirst]=useState(line0?String(line0.qty):"");
-  const [rows,setRows]=useState([]);           // nayi jagah: {key:"p:12"|"w:3"|"", qty:""}
+// "Order split karo" — poora order 2-4 jagah ek saath (28 Oct 2026, Prafull: "kai bar ek order
+// aadha aadha 2 3 project me bhejna hota hai"). Pehle ek baar me ek hi line baant-ti thi. Ab
+// jagah chuno + % (ya "Barabar baanto") → har line ki qty apne aap; haath se bhi badal sakte ho.
+// "Yahin" = bacha hissa (kul − baanta) — aaya / kaante par tuli gadi / MR par aaya se kam nahi
+// (GET /pos/:id/split-plan). Yahin 0 = wahi line + MR pehli nayi jagah par khisakti hai.
+// Save: POST /pos/:id/split-order (har line par wahi split engine).
+const SO_MAX=4;
+const soOk=(list,l,i)=>{
+  const k=list[i]&&list[i].key;
+  if(!k||k===l.orig_key) return false;
+  if(l.is_asset&&k.startsWith("p:")) return false;
+  return l.floor<l.total-0.0005;
+};
+const soNum=(v)=>{ const n=parseFloat(v); return Number.isFinite(n)?n:0; };
+const soWhy=(l)=>{
+  const p={qty:l.floor,unit:l.unit};
+  return l.why==="received"?t("procurement.divert_why_received",p)
+    :l.why==="truck"?t("procurement.divert_why_truck",p)
+    :l.why==="mr_received"?t("procurement.divert_why_mr",p)
+    :null;
+};
+function SplitOrderModal({po,dbProjects,initLineId,onClose,onDone}){
   const stores=useSplitStores();
+  const [plan,setPlan]=useState(null);
+  const [dests,setDests]=useState([{key:"",pct:"",contacts:[]}]);
+  const [cells,setCells]=useState({});     // `${line_id}:${i}` → qty (string)
   const [saving,setSaving]=useState(false);
   const [err,setErr]=useState("");
-
-  // Line ki abhi wali jagah: asset → uska store; store ki apni MR ("Procurement ko bhejo") → wo store; warna line ka project
-  const srcMr=line&&line.linked_mr_id?(mrs||[]).find(m=>String(m.id)===String(line.linked_mr_id))||null:null;
-  const isAsset=!!(line&&(line.asset_item_id||line.asset_warehouse_id));
-  const origWh=isAsset?line.asset_warehouse_id:(srcMr&&!srcMr.project_id&&srcMr.restock_warehouse_id?srcMr.restock_warehouse_id:null);
-  const origKey=origWh?"w:"+origWh:(line&&line.project_id?"p:"+line.project_id:"");
-  const whName=(id)=>(stores.find(w=>String(w.id)===String(id))||{}).name;
-  const origName=origWh?(whName(origWh)||srcMr?.store_warehouse_name||line.delivery_site||"—"):(line?(line.project_name||line.delivery_site||po.project||"—"):"—");
-  const total=line?line.qty:0;
-  const unit=line?line.unit||"":"";
-  const recv=line?line.receivedQty||0:0;
-  const trk=useSplitTrucks(line?"po_item_id="+line.id:"");
-  const st=splitStateOf({total,recv:splitR3(recv+(trk.n?trk.qty:0)),origKey,first,rows,withContacts:false});
-  const canSave=!!line&&poCanSplit(po)&&st.ok&&!saving;
-
-  const pickLine=(id)=>{
-    const l=lines.find(x=>String(x.id)===String(id));
-    setLineId(id); setRows([]); setFirst(l?String(l.qty):""); setErr("");
+  useEffect(()=>{
+    let alive=true;
+    api.get(`/procurement/pos/${po.id}/split-plan`)
+      .then(r=>{ if(!alive) return; if(r?.success) setPlan(r.data); else setErr(r?.message||t("procurement.split_failed")); })
+      .catch(e=>{ if(alive) setErr(e?.message||t("procurement.split_failed")); });
+    return ()=>{ alive=false; };
+  },[po.id]);
+  const lines=(plan?plan.lines:[]).filter(l=>l.total>0);
+  const cellOf=(l,i)=>cells[l.line_id+":"+i]??"";
+  const movedOf=(l)=>splitR3(dests.reduce((sum,_,i)=>sum+(soOk(dests,l,i)?soNum(cellOf(l,i)):0),0));
+  const hereOf=(l)=>splitR3(l.total-movedOf(l));
+  const overOf=(l)=>hereOf(l)<-0.0005;
+  const belowOf=(l)=>!overOf(l)&&movedOf(l)>0&&(hereOf(l)<l.floor-0.001||(l.must_keep&&hereOf(l)<=0.0005));
+  // % se bharo — kul ka %; "Yahin" aaye / kaante wale se kam ho jaaye to naye hisse utne ghatao
+  // share = barabar baantne par seedha 1/n (33.33% se 1.666 jaisa ghisa hua nahi)
+  const fillPct=(list,share)=>{
+    const next={};
+    for(const l of lines){
+      const idx=list.map((_,i)=>i).filter(i=>soOk(list,l,i)&&soNum(list[i].pct)>0);
+      if(!idx.length) continue;
+      let qs=idx.map(i=>splitR3(share!=null?l.total*share:l.total*soNum(list[i].pct)/100));
+      const sum=qs.reduce((a,b)=>a+b,0);
+      const room=splitR3(l.total-l.floor);
+      if(sum>room+0.0005&&sum>0) qs=qs.map(q=>splitR3(q*Math.max(0,room)/sum));
+      idx.forEach((i,j)=>{ next[l.line_id+":"+i]=qs[j]>0?String(qs[j]):""; });
+    }
+    setCells(c=>({...c,...next}));
   };
+  const upd=(i,patch,refill)=>{
+    const list=dests.map((d,j)=>j===i?{...d,...patch}:d);
+    setDests(list); setErr("");
+    if(refill) fillPct(list);
+  };
+  const equal=()=>{
+    const n=dests.length+1;
+    const list=dests.map(d=>({...d,pct:String(Math.round(10000/n)/100)}));
+    setDests(list); setErr(""); fillPct(list,1/n);
+  };
+  const addDest=()=>{ if(dests.length<SO_MAX) setDests([...dests,{key:"",pct:"",contacts:[]}]); };
+  const removeDest=(i)=>{
+    if(dests.length<=1) return;
+    setDests(dests.filter((_,j)=>j!==i));
+    const next={};
+    for(const [k,v] of Object.entries(cells)){
+      const [lid,ci]=k.split(":"); const c=Number(ci);
+      if(c===i) continue;
+      next[lid+":"+(c>i?c-1:c)]=v;
+    }
+    setCells(next);
+  };
+  const keys=dests.map(d=>d.key).filter(Boolean);
+  const dup=keys.length!==new Set(keys).size;
+  const taken=(i)=>new Set(dests.filter((_,j)=>j!==i).map(d=>d.key).filter(Boolean));
+  const opts=splitOpts(dbProjects,stores,false);
+  const nameOf=(k)=>{ for(const g of opts){ const o=g.items.find(x=>x.key===k); if(o) return o.label; } return ""; };
+  const anyMove=lines.some(l=>movedOf(l)>0);
+  const allPicked=dests.every(d=>d.key);
+  const canSave=!!plan&&!plan.blocked&&poCanSplit(po)&&allPicked&&!dup&&anyMove&&!lines.some(l=>overOf(l)||belowOf(l))&&!saving;
   const save=async()=>{
     if(!canSave) return;
     setSaving(true); setErr("");
-    const parts=[
-      {...(origKey?splitDest(origKey):{}),qty:splitR3(st.firstQty)},
-      ...rows.map(r=>({...splitDest(r.key),qty:splitR3(parseFloat(r.qty))})),
-    ];
+    const body={
+      dests:dests.map(d=>({...splitDest(d.key),receiving_contacts:d.contacts})),
+      lines:lines.map(l=>({po_item_id:l.line_id,qtys:dests.map((_,i)=>soOk(dests,l,i)?splitR3(soNum(cellOf(l,i))):0)}))
+        .filter(x=>x.qtys.some(q=>q>0)),
+    };
     try{
-      const res=await api.post(`/procurement/pos/${po.id}/split`,{po_item_id:line.id,parts});
+      const res=await api.post(`/procurement/pos/${po.id}/split-order`,body);
       if(res?.success){ onDone(res); return; }
       setErr(res?.message||t("procurement.split_failed"));
     }catch(e){ setErr(e?.message||t("procurement.split_failed")); }
     setSaving(false);
   };
-
+  const qtyInp={width:"100%",padding:"7px 8px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",textAlign:"right"};
+  const gridCols=`minmax(190px,1fr) 92px ${dests.map(()=>"96px").join(" ")}`;
+  const hint=!plan?null:!allPicked?t("procurement.so_pick_all"):dup?t("procurement.split_dup"):!anyMove?t("procurement.so_nothing"):null;
   return(
-    <Modal onClose={onClose} width={540}>
+    <Modal onClose={onClose} width={800}>
       <MHead title={t("procurement.split_title")} sub={`${po.poNum||"PO-"+po.id} · ${po.vendor||"—"}`} onClose={onClose}/>
       <MBody>
         <div style={{background:T.bluL,border:`1px solid ${T.bluM}`,borderRadius:7,padding:"9px 12px",marginBottom:12,fontSize:11.5,color:T.blu,lineHeight:1.5}}>
-          {t("procurement.split_hint")}
+          {t("procurement.so_hint")}
         </div>
-        {!poCanSplit(po)?(
+        {!poCanSplit(po)||(plan&&plan.blocked)?(
           <div style={{padding:"18px",textAlign:"center",color:T.t3,fontSize:12.5}}>{t("procurement.split_po_not_open",{status:displayPOStatus(po)})}</div>
-        ):!line?(
-          <div style={{padding:"18px",textAlign:"center",color:T.t3,fontSize:12.5}}>{t("procurement.split_no_line")}</div>
+        ):!plan?(
+          <div style={{padding:"18px",textAlign:"center",color:err?T.red:T.t3,fontSize:12.5}}>{err||t("common.loading")}</div>
         ):(<>
-          {lines.length>1&&(
-            <div style={{marginBottom:12}}>
-              <Fld label={t("procurement.split_line")}>
-                <Sel value={String(lineId)} onChange={e=>pickLine(e.target.value)}>
-                  {lines.map(l=><option key={l.id} value={String(l.id)}>{`${l.desc} — ${l.qty} ${l.unit||""}`}</option>)}
-                </Sel>
-              </Fld>
-            </div>
-          )}
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:8}}>
-            <span style={{fontSize:13,fontWeight:600,color:T.t1}}>{line.desc}</span>
-            <span style={{fontSize:13,fontWeight:700,color:T.t1}}>{t("procurement.split_total",{qty:total,unit})}</span>
+          {/* Nayi jagah — 1 se 4 */}
+          <div style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".4px",marginBottom:6}}>{t("procurement.so_dests")}</div>
+          {dests.map((d,i)=>{
+            const dd=d.key?splitDest(d.key):null;
+            return(
+              <div key={i} style={{border:`1px solid ${T.b1}`,borderRadius:8,padding:8,marginBottom:6}}>
+                <div style={{display:"grid",gridTemplateColumns:"64px 1fr 86px 28px",gap:6,alignItems:"center"}}>
+                  <span style={{fontSize:11.5,fontWeight:700,color:T.t2}}>{t("procurement.so_dest_n",{n:i+1})}</span>
+                  <Sel value={d.key} onChange={e=>upd(i,{key:e.target.value},soNum(d.pct)>0)}>
+                    <option value="">{t("procurement.split_pick_dest")}</option>
+                    {opts.map(g=>g.items.length>0&&(
+                      <optgroup key={g.grp} label={g.grp}>
+                        {g.items.map(o=><option key={o.key} value={o.key} disabled={taken(i).has(o.key)}>{o.label}</option>)}
+                      </optgroup>
+                    ))}
+                  </Sel>
+                  <div style={{position:"relative"}}>
+                    <input type="number" min={0} max={100} value={d.pct} placeholder="0" title={t("procurement.so_pct_title")}
+                      onChange={e=>upd(i,{pct:e.target.value},true)} style={{...qtyInp,paddingRight:22}}/>
+                    <span style={{position:"absolute",right:9,top:8,fontSize:11.5,color:T.t4,pointerEvents:"none"}}>%</span>
+                  </div>
+                  <button onClick={()=>removeDest(i)} disabled={dests.length<=1} title={t("procurement.split_remove_row")}
+                    style={{width:28,height:28,borderRadius:6,border:`1px solid ${T.b1}`,background:T.surface,color:T.t3,cursor:dests.length<=1?"not-allowed":"pointer",opacity:dests.length<=1?0.4:1,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                    <IcX size={12} color={T.t3}/>
+                  </button>
+                </div>
+                <div style={{marginTop:6}}>
+                  <div style={{fontSize:10,fontWeight:600,color:T.t4,marginBottom:3}}>{t("procurement.so_contacts")}</div>
+                  <ReceivingContacts theme={T} compact value={d.contacts} onChange={v=>upd(i,{contacts:v},false)}
+                    projectIds={dd&&dd.project_id?[dd.project_id]:[]} warehouseIds={dd&&dd.warehouse_id?[dd.warehouse_id]:[]}/>
+                </div>
+              </div>
+            );
+          })}
+          <div style={{display:"flex",gap:8,margin:"4px 0 12px",flexWrap:"wrap"}}>
+            {dests.length<SO_MAX&&(
+              <button onClick={addDest}
+                style={{display:"inline-flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:6,background:T.bluL,border:`1px dashed ${T.blu}`,color:T.blu,fontSize:11.5,fontWeight:700,cursor:"pointer"}}>
+                <IcAdd size={12} color={T.blu}/> {t("procurement.split_add_row")}
+              </button>
+            )}
+            <button onClick={equal}
+              style={{padding:"6px 12px",borderRadius:6,background:T.surface,border:`1px solid ${T.b1}`,color:T.t1,fontSize:11.5,fontWeight:700,cursor:"pointer"}}>
+              {t("procurement.so_equal",{n:dests.length+1})}
+            </button>
           </div>
-          <SplitRows total={total} unit={unit} recv={recv} trk={trk} origName={origName} first={first} setFirst={setFirst}
-            rows={rows} setRows={setRows} st={st} opts={splitOpts(dbProjects,stores,isAsset)} storeOnly={isAsset}
-            withContacts={false} onTouch={()=>setErr("")}/>
+
+          {/* Har line — Yahin + har jagah ki qty */}
+          <div style={{border:`1px solid ${T.b1}`,borderRadius:8,overflowX:"auto"}}>
+            <div style={{minWidth:300+(dests.length+1)*100}}>
+              <div style={{display:"grid",gridTemplateColumns:gridCols,gap:6,padding:"6px 10px",background:T.surfaceB}}>
+                <span style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase"}}>{t("procurement.so_col_item")}</span>
+                <span style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase",textAlign:"right"}}>{t("procurement.so_col_here")}</span>
+                {dests.map((d,i)=>(
+                  <span key={i} title={nameOf(d.key)} style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase",textAlign:"right",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                    {nameOf(d.key)||t("procurement.so_dest_n",{n:i+1})}
+                  </span>
+                ))}
+              </div>
+              {lines.map(l=>{
+                const full=l.floor>=l.total-0.0005;
+                const over=overOf(l), below=belowOf(l);
+                const why=soWhy(l);
+                return(
+                  <div key={l.line_id} style={{display:"grid",gridTemplateColumns:gridCols,gap:6,padding:"7px 10px",borderTop:`1px solid ${T.b1}`,alignItems:"center",
+                    background:String(l.line_id)===String(initLineId)?T.bluL:T.surface}}>
+                    <div style={{minWidth:0}}>
+                      <div title={l.item} style={{fontSize:12,color:T.t1,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{l.item}</div>
+                      <div style={{fontSize:10.5,color:T.t4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={l.orig_name}>{t("procurement.so_total",{qty:l.total,unit:l.unit})} · {l.orig_name}</div>
+                      {full?<div style={{fontSize:10.5,color:T.amb,marginTop:1}}>{t("procurement.so_full")}</div>
+                        :why?<div style={{fontSize:10.5,color:T.amb,marginTop:1}}>{why}</div>:null}
+                      {over&&<div style={{fontSize:10.5,color:T.red,marginTop:1}}>{t("procurement.so_over")}</div>}
+                      {below&&<div style={{fontSize:10.5,color:T.red,marginTop:1}}>{l.floor>0?t("procurement.so_below",{qty:l.floor,unit:l.unit}):t("procurement.so_must_keep")}</div>}
+                    </div>
+                    <span style={{fontSize:12.5,fontWeight:700,color:over||below?T.red:T.t1,textAlign:"right"}}>{`${hereOf(l)} ${l.unit}`}</span>
+                    {dests.map((d,i)=>soOk(dests,l,i)?(
+                      <input key={i} type="number" min={0} value={cellOf(l,i)} placeholder="0"
+                        onChange={e=>{ const v=e.target.value; setCells(c=>({...c,[l.line_id+":"+i]:v})); setErr(""); }}
+                        style={{...qtyInp,borderColor:over?T.red:T.b1}}/>
+                    ):(
+                      <span key={i} title={d.key?t("procurement.so_cell_na"):""} style={{fontSize:12,color:T.t4,textAlign:"right"}}>—</span>
+                    ))}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          {hint&&<div style={{marginTop:8,fontSize:11.5,color:dup?T.red:T.t3}}>{hint}</div>}
           {err&&<div style={{marginTop:8,padding:"8px 11px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,fontSize:11.5,color:T.red}}>{err}</div>}
         </>)}
       </MBody>
       <MFoot>
         <Btn onClick={onClose} outline color={T.slt} full>{t("common.cancel")}</Btn>
-        <Btn onClick={save} disabled={!canSave} color={T.blu} full>{splitSaveLbl(saving,st)}</Btn>
+        <Btn onClick={save} disabled={!canSave} color={T.blu} full>{saving?t("procurement.split_saving"):t("procurement.so_save")}</Btn>
+      </MFoot>
+    </Modal>
+  );
+}
+
+// "Project badlo (divert)" — poora PO doosre project / store (28 Oct 2026, Prafull: "kai bar
+// order divert karna padta hai — wahi kare jisko Procurement me edit permission hai"). Server
+// har line par wahi split / jagah badlo chalata hai: jo aa chuka / kaante par hai wo purani
+// jagah rehta hai, baaki nayi jagah (line + MR saath). Nayi jagah ka receiving person zaroori
+// (PO wala purani site ka hai). Dobara approval nahi.
+const divertWhy=(l)=>{
+  const p={qty:l.keep,unit:l.unit};
+  return l.why==="received"?t("procurement.divert_why_received",p)
+    :l.why==="truck"?t("procurement.divert_why_truck",p)
+    :l.why==="mr_received"?t("procurement.divert_why_mr",p)
+    :l.why==="same"?t("procurement.divert_why_same")
+    :l.why==="asset_store_only"?t("procurement.divert_why_asset")
+    :null;
+};
+function DivertPOModal({po,dbProjects,onClose,onDone}){
+  const stores=useSplitStores();
+  const curKey=po.warehouse_id?"w:"+po.warehouse_id:(po.project_id?"p:"+po.project_id:"");
+  const [key,setKey]=useState("");
+  const [contacts,setContacts]=useState([]);
+  const [reason,setReason]=useState("");
+  const [pv,setPv]=useState(null);          // GET divert-preview — har line kitna jayega / rahega
+  const [saving,setSaving]=useState(false);
+  const [err,setErr]=useState("");
+  useEffect(()=>{
+    let alive=true;
+    setPv(null); setErr("");
+    if(!key) return undefined;
+    const d=splitDest(key);
+    api.get(`/procurement/pos/${po.id}/divert-preview?${d.project_id?"project_id="+d.project_id:"warehouse_id="+d.warehouse_id}`)
+      .then(r=>{ if(!alive) return; if(r?.success) setPv(r.data); else setErr(r?.message||t("procurement.divert_failed")); })
+      .catch(e=>{ if(alive) setErr(e?.message||t("procurement.divert_failed")); });
+    return ()=>{ alive=false; };
+  },[key,po.id]);
+  const dest=key?splitDest(key):null;
+  const opts=splitOpts(dbProjects,stores,false).map(g=>({...g,items:g.items.filter(o=>o.key!==curKey)}));
+  const moving=pv?pv.moving:0;
+  const canSave=!!key&&!!pv&&!pv.blocked&&moving>0&&hasReceivingContact(contacts)&&!saving;
+  const save=async()=>{
+    if(!canSave) return;
+    setSaving(true); setErr("");
+    try{
+      const res=await api.post(`/procurement/pos/${po.id}/divert`,{...dest,receiving_contacts:contacts,reason:reason.trim()});
+      if(res?.success){ onDone(res); return; }
+      setErr(res?.message||t("procurement.divert_failed"));
+    }catch(e){ setErr(e?.message||t("procurement.divert_failed")); }
+    setSaving(false);
+  };
+  const cols="1fr 96px 96px";
+  return(
+    <Modal onClose={onClose} width={560}>
+      <MHead title={t("procurement.divert_title")} sub={`${po.poNum||"PO-"+po.id} · ${po.vendor||"—"} · ${t("procurement.divert_from",{from:po.project||"—"})}`} onClose={onClose}/>
+      <MBody>
+        <div style={{background:T.bluL,border:`1px solid ${T.bluM}`,borderRadius:7,padding:"9px 12px",marginBottom:12,fontSize:11.5,color:T.blu,lineHeight:1.5}}>
+          {t("procurement.divert_hint")}
+        </div>
+        {!poCanSplit(po)?(
+          <div style={{padding:"18px",textAlign:"center",color:T.t3,fontSize:12.5}}>{t("procurement.divert_po_not_open",{status:displayPOStatus(po)})}</div>
+        ):(<>
+          <Fld label={t("procurement.divert_to")} required>
+            <Sel value={key} onChange={e=>setKey(e.target.value)}>
+              <option value="">{t("procurement.split_pick_dest")}</option>
+              {opts.map(g=>g.items.length>0&&(
+                <optgroup key={g.grp} label={g.grp}>
+                  {g.items.map(o=><option key={o.key} value={o.key}>{o.label}</option>)}
+                </optgroup>
+              ))}
+            </Sel>
+          </Fld>
+          {key&&!pv&&!err&&<div style={{marginTop:10,fontSize:11.5,color:T.t3}}>{t("common.loading")}</div>}
+          {pv&&(
+            <div style={{marginTop:12,border:`1px solid ${T.b1}`,borderRadius:8,overflow:"hidden"}}>
+              <div style={{display:"grid",gridTemplateColumns:cols,gap:6,padding:"6px 10px",background:T.surfaceB}}>
+                {[t("procurement.divert_col_item"),t("procurement.divert_col_go"),t("procurement.divert_col_stay")].map((h,i)=>(
+                  <span key={i} style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".3px",textAlign:i?"right":"left"}}>{h}</span>
+                ))}
+              </div>
+              {pv.lines.map(l=>(
+                <div key={l.line_id} style={{display:"grid",gridTemplateColumns:cols,gap:6,padding:"7px 10px",borderTop:`1px solid ${T.b1}`,alignItems:"center"}}>
+                  <div style={{minWidth:0}}>
+                    <div title={l.item} style={{fontSize:12,color:T.t1,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{l.item}</div>
+                    {divertWhy(l)&&<div style={{fontSize:10.5,color:T.amb,marginTop:1}}>{divertWhy(l)}</div>}
+                  </div>
+                  <span style={{fontSize:12,fontWeight:700,color:l.move>0?T.grn:T.t4,textAlign:"right"}}>{l.move>0?`${l.move} ${l.unit}`:"—"}</span>
+                  <span style={{fontSize:12,color:l.keep>0?T.t2:T.t4,textAlign:"right"}}>{l.keep>0?`${l.keep} ${l.unit}`:"—"}</span>
+                </div>
+              ))}
+              {moving===0&&<div style={{padding:"8px 10px",fontSize:11.5,color:T.red,borderTop:`1px solid ${T.b1}`}}>{t("procurement.divert_nothing_ui")}</div>}
+            </div>
+          )}
+          {pv&&moving>0&&(<>
+            <div style={{marginTop:12}}>
+              <div style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:".4px",marginBottom:4}}>{t("procurement.divert_contacts")}</div>
+              <ReceivingContacts theme={T} compact value={contacts} onChange={setContacts}
+                projectIds={dest&&dest.project_id?[dest.project_id]:[]} warehouseIds={dest&&dest.warehouse_id?[dest.warehouse_id]:[]}/>
+              {!hasReceivingContact(contacts)&&<div style={{fontSize:10.5,color:T.red,marginTop:3}}>{t("procurement.split_need_contact")}</div>}
+            </div>
+            <div style={{marginTop:12}}>
+              <Fld label={t("procurement.divert_reason")}>
+                <Inp value={reason} onChange={e=>setReason(e.target.value)} placeholder={t("procurement.divert_reason_ph")}/>
+              </Fld>
+            </div>
+          </>)}
+          {err&&<div style={{marginTop:10,padding:"8px 11px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,fontSize:11.5,color:T.red}}>{err}</div>}
+        </>)}
+      </MBody>
+      <MFoot>
+        <Btn onClick={onClose} outline color={T.slt} full>{t("common.cancel")}</Btn>
+        <Btn onClick={save} disabled={!canSave} color={T.blu} full>{saving?t("procurement.split_saving"):t("procurement.divert_save")}</Btn>
       </MFoot>
     </Modal>
   );
@@ -2463,6 +2713,7 @@ function ProcurementModule(){
   const [grnTarget,setGrnTarget]=useState(null);
   const [splitTarget,setSplitTarget]=useState(null);   // "Order split karo" ka PO
   const [splitLine,setSplitLine]=useState(null);       // PO split me pehle se chuni line (MR se aaye to)
+  const [divertTarget,setDivertTarget]=useState(null); // "Project badlo (divert)" ka PO (28 Oct 2026)
   const [mrSplitTarget,setMrSplitTarget]=useState(null); // manual order (bina PO) ki MR ka split
   const [poMenu,setPoMenu]=useState(null);             // PO row ka ⋮ menu (PO id)
   const [showCreatePO,setShowCreatePO]=useState(false);
@@ -3359,6 +3610,11 @@ function ProcurementModule(){
                               onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB} onMouseLeave={e=>e.currentTarget.style.background="none"}>
                               <IcFlow size={13} color={T.t2}/> {t("procurement.split_title")}
                             </button>
+                            <button onClick={e=>{e.stopPropagation();setPoMenu(null);setDivertTarget(po);}}
+                              style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"10px 13px",border:"none",borderTop:`1px solid ${T.b1}`,background:"none",color:T.t1,fontSize:12.5,fontWeight:600,cursor:"pointer",textAlign:"left"}}
+                              onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB} onMouseLeave={e=>e.currentTarget.style.background="none"}>
+                              <IcTruck size={13} color={T.t2}/> {t("procurement.divert_title")}
+                            </button>
                           </div>
                         </>)}
                       </div>}
@@ -3419,6 +3675,7 @@ function ProcurementModule(){
       {selPO&&<PODetailDrawer po={selPO} onClose={()=>setSelPO(null)} onApprove={canApprovePO(selPO.id)?(id)=>{approvePO(id);setSelPO(p=>p?{...p,approval:"Approved"}:p);}:null} onShare={(po)=>{setShareTarget(po);setSelPO(null);}} onGRN={pReceive?(po)=>{setGrnTarget(po);setSelPO(null);}:null}
         onSendToVendor={pEdit?(po)=>{setSendToVendorTarget(po);}:null}
         onSplit={pEdit?(d)=>{setSplitTarget(pos.find(x=>String(x.id)===String(d.id))||d);setSelPO(null);}:null}
+        onDivert={pEdit?(d)=>{setDivertTarget(pos.find(x=>String(x.id)===String(d.id))||d);setSelPO(null);}:null}
         onEdit={pEdit?(po)=>{setEditPo(po);setShowCreatePO(true);setSelPO(null);}:null}
         onCancel={!pApprove?null:async(po)=>{
           let res=await api.patch("/procurement/pos/"+po.id+"/cancel",{});
@@ -3444,10 +3701,18 @@ function ProcurementModule(){
           setSelPO(p=>p&&p.id===sendToVendorTarget.id?{...p,orderStatus:"Ordered"}:p);
         }}/>}
       {grnTarget&&<GRNModal po={grnTarget} onClose={()=>setGrnTarget(null)} onSave={saveGRN}/>}
-      {splitTarget&&<SplitPOModal po={splitTarget} mrs={mrs} dbProjects={dbProjects} initLineId={splitLine} onClose={()=>{setSplitTarget(null);setSplitLine(null);}}
+      {splitTarget&&<SplitOrderModal po={splitTarget} dbProjects={dbProjects} initLineId={splitLine} onClose={()=>{setSplitTarget(null);setSplitLine(null);}}
         onDone={(res)=>{
           // PO ki lines + nayi MR dono badle — poori list taaza
           setSplitTarget(null); setSplitLine(null);
+          if(res?.data) setPOs(p=>p.map(x=>x.id===res.data.id?mapPO(res.data):x));
+          loadAll();
+          if(res?.message) window.alert(res.message);
+        }}/>}
+      {divertTarget&&<DivertPOModal po={divertTarget} dbProjects={dbProjects} onClose={()=>setDivertTarget(null)}
+        onDone={(res)=>{
+          // Lines + MR + PO ki jagah badli — poori list taaza
+          setDivertTarget(null);
           if(res?.data) setPOs(p=>p.map(x=>x.id===res.data.id?mapPO(res.data):x));
           loadAll();
           if(res?.message) window.alert(res.message);
