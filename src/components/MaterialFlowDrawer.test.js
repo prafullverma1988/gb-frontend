@@ -116,3 +116,85 @@ test("trailLines / trailWhen — English pack", async () => {
   expect(trailWhen({ at: "2026-10-21T05:00:00.000Z" })).toBe("21 Oct 2026, 10:30 AM");
   await setLang("hi-Latn", { reload: false });
 });
+
+// Trip se aayi GRN (28 Oct 2026, Prafull — "Road Work Nava Raipur City", TG-0033):
+// MR / Manzoori / Order ke khaali card nahi, ek line; Trip step me gaadi / trip no /
+// route / challan / driver / unload + photo naam ke saath; Aaya / Laga / Baaki;
+// Received by me id nahi (naam), form me bhi naam; "—" kahin nahi.
+const TRIP_STEPS = [
+  { key: "trip:500", type: "trip", at: "2026-10-22T04:00:00.000Z", date: "2026-10-22", by_name: "Ramesh Supervisor", title: "RJ19GH6367",
+    details: { items: [{ name: "Bc- soil", qty: 12, unit: "Cum" }], trip_no: 3, route: "Khadan → Nava Raipur", from: "Shiv Khadan", challan: "1377", driver: "Mohan",
+      unload_at: "2026-10-22T05:30:00.000Z", unload_by: "Ramesh Supervisor" },
+    photos: [{ url: "https://x/tl.jpg", kind: "loading" }, { url: "https://x/tu.jpg", kind: "unloading" }, { url: "https://x/ts.jpg", kind: "slip" }] },
+  { key: "grn:33", type: "grn", at: "2026-10-22T06:00:00.000Z", date: "2026-10-22", by_name: "Ramesh Supervisor", title: "TG-0033", highlight: true,
+    details: { items: [{ name: "Bc- soil", qty: 12, unit: "Cum" }], project: "Road Work Nava Raipur City" }, photos: [] },
+  { key: "use:900", type: "use", at: "2026-10-22T06:00:00.000Z", by_name: "Ramesh Supervisor", details: { items: [{ name: "Bc- soil", qty: 12, unit: "Cum" }], note: "Trip se (auto) · trip #3" },
+    photos: [{ url: "https://x/used.jpg", kind: "used" }] },
+];
+const TRIP_DATA = { kind: "grn", id: 33, material: null, finance: false, hidden: 0, approx: false, no_mr: "trip", steps: TRIP_STEPS,
+  summary: { name: "Bc- soil", unit: "Cum", in: 12, used: 12, left: 0, approx: false },
+  doc: { grn: { id: 33, grn_number: "TG-0033", project_id: 116, grn_type: "Trip", source: "Trip", received_by: "1000242", received_by_name: "Ramesh Supervisor" },
+    items: [{ id: 720, description: "Bc- soil", received_qty: "12.000", unit: "Cum" }], mr: null, issues: [] } };
+
+test("trip se aayi GRN: ek line (MR nahi), Trip step, photo naam, Aaya / Laga / Baaki, id / — nahi", async () => {
+  api.get.mockImplementation((url) => Promise.resolve(/cancel-info/.test(url) ? { success: true, data: { cancellable: false } } : { success: true, data: TRIP_DATA }));
+  await mount({ grnId: 33 });
+  const types = [...document.querySelectorAll("[data-testid^='trail-step-']")].map(e => e.getAttribute("data-testid").replace("trail-step-", ""));
+  expect(types).toEqual(["trip", "grn", "use"]);
+  expect(document.querySelector("[data-testid='trail-no-mr']").textContent).toBe("Trip se aaya — MR nahi");
+  const trip = document.querySelector("[data-testid='trail-step-trip']").textContent;
+  expect(trip).toContain("Trip");
+  expect(trip).toContain("RJ19GH6367");
+  // 04:00 UTC = 9:30 AM IST (load) · 05:30 UTC = 11:00 AM IST (unload)
+  expect(trip).toContain("22 Oct 2026, 9:30 AM · Ramesh Supervisor");
+  expect(trip).toContain("Trip #3 · Route: Khadan → Nava Raipur · Kahan se: Shiv Khadan · Driver: Mohan · Challan: 1377");
+  expect(trip).toContain("Unloading: 22 Oct 2026, 11:00 AM · Ramesh Supervisor");
+  expect(trip).toContain("Loading");
+  expect([...document.querySelectorAll("[data-testid='trail-step-trip'] figcaption")].map(f => f.textContent)).toEqual(["Loading", "Unloading", "Slip"]);
+  expect(document.querySelector("[data-testid='trail-step-use'] figcaption").textContent).toBe("Kaam par");
+  expect(document.querySelector("[data-testid='trail-summary']").textContent).toBe("Aaya 12 CumLaga 12 CumBaaki 0 Cum");
+  // header: material + maatra + project + steps
+  expect(text()).toContain("Bc- soil12 Cum");
+  expect(text()).toContain("Road Work Nava Raipur City · 3 step");
+  expect(text()).not.toContain("1000242");
+  // khaali jagah ka "—" nahi (na ": —", na akela "—")
+  expect(text()).not.toMatch(/:\s*—/);
+  expect([...document.querySelectorAll("div,span,b")].some(e => e.textContent.trim() === "—")).toBe(false);
+  expect(text()).toContain("Edit GRN🗑");
+  expect(text()).not.toMatch(/mtrail\.|material_flow\./);
+  // trip photo bada + Back / × se band
+  await act(async () => { document.querySelector("[data-testid='trail-step-trip'] img").click(); });
+  expect(document.querySelector("[data-testid='trail-zoom']")).not.toBeNull();
+  await act(async () => { document.querySelector("[data-testid='trail-zoom'] button").click(); });
+  expect(document.querySelector("[data-testid='trail-zoom']")).toBeNull();
+});
+
+test("GRN sudhaar: Received by me naam (id nahi); na badla to purana value hi jaata", async () => {
+  api.get.mockImplementation((url) => Promise.resolve(/cancel-info/.test(url) ? { success: true, data: { cancellable: false } } : { success: true, data: TRIP_DATA }));
+  api.put.mockResolvedValue({ success: true });
+  window.promptAsync = jest.fn();
+  await mount({ grnId: 33 });
+  const editBtn = [...document.querySelectorAll("button")].find(b => b.textContent.startsWith("Edit GRN"));
+  await act(async () => { editBtn.click(); });
+  const vals = [...document.querySelectorAll("input")].map(i => i.value);
+  expect(vals).toContain("Ramesh Supervisor");
+  expect(vals).not.toContain("1000242");
+  const ta = document.querySelector("textarea");
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value").set;
+  await act(async () => { setter.call(ta, "qty theek"); ta.dispatchEvent(new Event("input", { bubbles: true })); });
+  const save = [...document.querySelectorAll("button")].find(b => b.textContent.includes("Save GRN"));
+  await act(async () => { save.click(); });
+  expect(api.put).toHaveBeenCalled();
+  expect(api.put.mock.calls[0][1].received_by).toBe("1000242");
+});
+
+test("direct GRN (MR nahi) — ek line; MR wali GRN par line nahi", async () => {
+  api.get.mockImplementation((url) => Promise.resolve(/cancel-info/.test(url) ? { success: true, data: {} }
+    : { success: true, data: DATA({ no_mr: "direct", steps: STEPS.slice(4) }) }));
+  await mount({ grnId: 300 });
+  expect(document.querySelector("[data-testid='trail-no-mr']").textContent).toBe("Direct GRN — MR nahi");
+  act(() => root.unmount()); box.remove();
+  api.get.mockImplementation((url) => Promise.resolve(/cancel-info/.test(url) ? { success: true, data: {} } : { success: true, data: DATA({ no_mr: null }) }));
+  await mount({ grnId: 300 });
+  expect(document.querySelector("[data-testid='trail-no-mr']")).toBeNull();
+});

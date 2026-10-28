@@ -2,10 +2,13 @@
 // Project Material Ledger (GRN row) ya Store khaate ki line (In / Out) se
 // khulta hai: us material ka poora raasta, ek khadi timeline me — har step
 // ek chhota card:
-//   MR → Manzoori → Order → Weighbridge → GRN → Store se diya →
+//   MR → Manzoori → Order → Weighbridge / Trip → GRN → Store se diya →
 //   Project par aaya → Use · Bill (sirf Finance VIEW ko — server tay karta hai)
-// Har card: step, kab (IST, darj time), kisne, 1–2 line detail, photo (tap =
-// bada). Jis line se khola wo card highlight.
+// Har card (28 Oct 2026, saaf roop): icon + step + kab (IST, darj time) + kisne
+// ek line me, phir 1–2 line sirf bhari hui jaankari, phir photo (naam ke saath;
+// tap = bada, × / Back se band). Jis line se khola wo card highlight.
+// Upar: material, maatra, project, "{n} step" + is receipt ka Aaya / Laga / Baaki.
+// MR / Order na ho (trip se ya direct GRN) to khaali card nahi — ek chhoti line.
 //
 // Server: GET /procurement/material-trail?kind=&id=&material= (27 Oct 2026).
 // kind = grn (site / store ki grn_entries) — tab GRN ke apne kaam bhi:
@@ -71,6 +74,7 @@ const STEP = {
   approval: { c: T.blu, bg: T.bluL, k: "mtrail.type_approval" },
   order:    { c: T.pur, bg: T.purL, k: "mtrail.type_order" },
   weigh:    { c: T.pur, bg: T.purL, k: "mtrail.type_weigh" },
+  trip:     { c: T.pur, bg: T.purL, k: "mtrail.type_trip" },
   grn:      { c: T.grn, bg: T.grnL, k: "mtrail.type_grn" },
   issue:    { c: T.amb, bg: T.ambL, k: "mtrail.type_issue" },
   transfer: { c: T.blu, bg: T.bluL, k: "mtrail.type_transfer" },
@@ -78,6 +82,27 @@ const STEP = {
   use:      { c: T.t3,  bg: T.surfaceB, k: "mtrail.type_use" },
   bill:     { c: T.red, bg: T.redL, k: "mtrail.type_bill" },
 };
+// Step ka chhota icon (stroke, 24 ka box).
+const ICON = {
+  mr: "M9 4h6v3H9zM7 5H5v15h14V5h-2M8 11h8M8 15h5",
+  approval: "M5 12l4 4 10-10",
+  order: "M3 4h2l2.5 11h11L21 7H6.5M9 20h.01M18 20h.01",
+  weigh: "M12 4v16M5 20h14M6 8h12M6 8l-3 6h6zM18 8l-3 6h6z",
+  trip: "M2 7h11v9H2zM13 10h4l4 3v3h-8M6 19a2 2 0 100-4 2 2 0 000 4zM17 19a2 2 0 100-4 2 2 0 000 4z",
+  grn: "M4 8l8-4 8 4v9l-8 4-8-4zM4 8l8 4 8-4M12 12v9",
+  issue: "M4 12h12M12 6l6 6-6 6M20 4v16",
+  transfer: "M4 8h14l-4-4M20 16H6l4 4",
+  receive: "M4 8l8-4 8 4v9l-8 4-8-4zM9 13l2 2 4-4",
+  use: "M14 4l6 6-9 9H5v-6zM12 6l6 6",
+  bill: "M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6",
+};
+const StepIcon = ({ type, color }) => (
+  <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flexShrink: 0 }}>
+    <path d={ICON[type] || ICON.use}/>
+  </svg>
+);
+const PH_KINDS = ["challan", "rec_slip", "site", "material", "slip", "weigh_slip", "vehicle", "mr", "loading", "unloading", "used"];
+const photoLabel = (k) => (PH_KINDS.includes(k) ? t("mtrail.ph_" + k) : t("mtrail.photo"));
 const stepLabel = (s) => (s.type === "receive" && s.details?.store && !s.details?.project)
   ? t("mtrail.type_receive_store") : t((STEP[s.type] || STEP.use).k);
 const STATUS_KEY = { approved: "mtrail.st_approved", rejected: "mtrail.st_rejected", pending: "mtrail.st_pending",
@@ -85,26 +110,33 @@ const STATUS_KEY = { approved: "mtrail.st_approved", rejected: "mtrail.st_reject
   pendingapproval: "mtrail.st_pending" };
 const statusText = (v) => (STATUS_KEY[String(v || "").toLowerCase()] ? t(STATUS_KEY[String(v).toLowerCase()]) : String(v || ""));
 
-// Card ki 1–2 line: pehli = material + qty, doosri = baaki jaankari.
+// Card ki 1–2 line: pehli = material + qty, doosri = baaki jaankari (sirf bhari
+// hui), sub = trip ka unload (kab · kisne).
 export function trailLines(s) {
   const d = s.details || {};
   const items = (d.items || []).map(i => [i.name, i.qty != null ? fmtQ(i.qty) + (i.unit ? " " + i.unit : "") : ""].filter(Boolean).join(" "));
   const kv = (k, v) => (v == null || v === "" ? null : t(k) + ": " + v);
   const kg = (v) => fmtQ(v) + " kg";
+  const trip = s.type === "trip";
   const rest = [
     d.status ? statusText(d.status) : null,
+    d.trip_no != null ? t("mtrail.d_trip_no", { n: d.trip_no }) : null, kv("mtrail.d_route", d.route),
     kv("mtrail.d_vendor", d.vendor), kv("mtrail.d_from", d.from), kv("mtrail.d_to", d.to),
     kv("mtrail.d_store", s.type === "receive" && !d.project ? null : d.store), kv("mtrail.d_project", d.project),
     kv("mtrail.d_task", d.task), kv("mtrail.d_issued_to", d.issued_to), kv("mtrail.d_custodian", d.custodian),
-    kv("mtrail.d_driver", d.driver), kv("mtrail.d_po", s.type === "order" ? null : d.po_no), kv("mtrail.d_challan", d.challan),
-    kv("mtrail.d_rec_slip", d.rec_slip), kv("mtrail.d_vehicle", d.vehicle_no), kv("mtrail.d_weighbridge", d.weighbridge),
+    kv(trip ? "mtrail.d_trip_driver" : "mtrail.d_driver", d.driver), kv("mtrail.d_po", s.type === "order" ? null : d.po_no), kv("mtrail.d_challan", d.challan),
+    kv("mtrail.d_rec_slip", d.rec_slip), kv("mtrail.d_vehicle", trip && s.title === d.vehicle_no ? null : d.vehicle_no), kv("mtrail.d_weighbridge", d.weighbridge),
     d.gross_kg != null ? kv("mtrail.d_gross", kg(d.gross_kg)) : null, d.tare_kg != null ? kv("mtrail.d_tare", kg(d.tare_kg)) : null,
     d.net_kg != null ? kv("mtrail.d_net", kg(d.net_kg)) : null,
     d.expected ? kv("mtrail.d_expected", fmtDate(d.expected)) : null,
     d.amount != null ? kv("mtrail.d_amount", fmtINR(d.amount)) : null,
   ].filter(Boolean);
-  return { items: items.join(" · "), rest: rest.join(" · "), note: d.note || "" };
+  const sub = d.unload_at ? t("mtrail.d_unload") + ": " + [darjWhen(d.unload_at), d.unload_by].filter(Boolean).join(" · ") : "";
+  return { items: items.join(" · "), rest: rest.join(" · "), sub, note: d.note || "" };
 }
+// GRN sudhaar form me "Received by": purani / trip GRN me sirf user id — naam
+// (server received_by_name) dikhe, id kabhi nahi.
+const byShown = (g) => g.received_by_name || (/^[0-9]+$/.test(String(g.received_by ?? "").trim()) ? "" : String(g.received_by ?? ""));
 // Kab: darj time (IST) — na ho to business date.
 export const trailWhen = (s) => darjWhen(s.at) || (s.date ? fmtDate(s.date) : "");
 
@@ -164,7 +196,9 @@ export default function MaterialFlowDrawer({ grnId, trail, onClose, onChanged, i
         vendor_name:   g.vendor_name || "",
         challan_no:    g.challan_no || "",
         received_date: g.received_date ? String(g.received_date).slice(0, 10) : "",
-        received_by:   g.received_by || "",
+        // Purani / trip GRN me sirf user id — form me naam (server received_by_name);
+        // na badla to wahi purana value wapas jaata hai (handleGrnSave).
+        received_by:   byShown(g),
         items: (doc.items || []).map(it => ({
           id: it.id,
           description:  it.description || "",
@@ -184,7 +218,11 @@ export default function MaterialFlowDrawer({ grnId, trail, onClose, onChanged, i
         vendor_name:   grnForm.vendor_name?.trim() || null,
         challan_no:    grnForm.challan_no?.trim() || null,
         received_date: grnForm.received_date || null,
-        received_by:   grnForm.received_by?.trim() || null,
+        received_by:   (() => {
+          const v = grnForm.received_by?.trim() || "";
+          const g = doc?.grn || {};
+          return v === byShown(g) ? (g.received_by ?? null) : (v || null);
+        })(),
         edit_note:     grnEditNote.trim(),
         items: (grnForm.items || []).map(it => ({
           id: it.id,
@@ -255,8 +293,10 @@ export default function MaterialFlowDrawer({ grnId, trail, onClose, onChanged, i
   const openIssueCount = issues.filter(i => i.status !== "Resolved").length;
   const hot = steps.find(s => s.highlight) || null;
   const hotItems = hot?.details?.items || [];
-  const headName = data?.material ? (hotItems.find(i => String(i.name || "").trim().toLowerCase() === data.material)?.name || hotItems[0]?.name)
-    : hotItems[0]?.name;
+  const headItem = (data?.material ? hotItems.find(i => String(i.name || "").trim().toLowerCase() === data.material) : null) || hotItems[0] || null;
+  const headName = headItem?.name;
+  const headQty = headItem && headItem.qty != null ? fmtQ(headItem.qty) + (headItem.unit ? " " + headItem.unit : "") : "";
+  const sum = data?.summary || null;
 
   return (
     <>
@@ -279,11 +319,22 @@ export default function MaterialFlowDrawer({ grnId, trail, onClose, onChanged, i
               <div style={{ fontSize: 17, fontWeight: 700, color: "#fff", letterSpacing: "-.3px",
                 whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                 {headName || t("common.material")}
+                {headQty && <span style={{ fontSize: 13, color: "rgba(255,255,255,0.8)", marginLeft: 8, fontWeight: 600 }}>{headQty}</span>}
                 {hotItems.length > 1 && <span style={{ fontSize: 11, color: "rgba(255,255,255,0.55)", marginLeft: 6, fontWeight: 500 }}>{t("mtrail.more_items", { n: hotItems.length - 1 })}</span>}
               </div>
               {data && (
                 <div style={{ fontSize: 11.5, color: "rgba(255,255,255,0.55)", marginTop: 4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                   {[hot?.details?.project || hot?.details?.store, t("mtrail.n_steps", { n: steps.length })].filter(Boolean).join(" · ")}
+                </div>
+              )}
+              {/* Is receipt ka Aaya / Laga / Baaki (server summary — ek material, ek unit) */}
+              {sum && (
+                <div data-testid="trail-summary" style={{ display: "flex", gap: 6, marginTop: 9, flexWrap: "wrap" }}>
+                  {[["mtrail.sum_in", sum.in], ["mtrail.sum_used", sum.used, sum.approx], ["mtrail.sum_left", sum.left]].map(([k, v, ap]) => (
+                    <span key={k} style={{ fontSize: 11, padding: "3px 9px", borderRadius: 12, background: "rgba(255,255,255,0.09)", border: "1px solid rgba(255,255,255,0.14)", color: "rgba(255,255,255,0.7)" }}>
+                      {t(k)} <b style={{ color: "#fff", fontWeight: 700 }}>{(ap ? "~" : "") + fmtQ(v)}{sum.unit ? " " + sum.unit : ""}</b>
+                    </span>
+                  ))}
                 </div>
               )}
             </div>
@@ -352,6 +403,12 @@ export default function MaterialFlowDrawer({ grnId, trail, onClose, onChanged, i
           {!loading && data && !grnEditing && (
             <>
               {steps.length === 0 && <div style={{ padding: "30px 0", textAlign: "center", color: T.t4, fontSize: 12 }}>{t("mtrail.empty")}</div>}
+              {/* MR / Manzoori / Order nahi — khaali card ki jagah ek line */}
+              {data.no_mr && (
+                <div data-testid="trail-no-mr" style={{ fontSize: 11.5, color: T.t3, padding: "6px 10px", marginBottom: 10, background: T.surfaceB, border: `1px dashed ${T.b2}`, borderRadius: 7 }}>
+                  {t(data.no_mr === "trip" ? "mtrail.no_mr_trip" : "mtrail.no_mr_direct")}
+                </div>
+              )}
               <div style={{ position: "relative" }}>
                 {steps.map((s, i) => <TrailCard key={s.key} s={s} last={i === steps.length - 1} onZoom={setZoom}/>)}
               </div>
@@ -463,7 +520,7 @@ export default function MaterialFlowDrawer({ grnId, trail, onClose, onChanged, i
                               onError={e => { e.target.style.display = "none"; }}
                               style={{ display: "block", width: 80, height: 80, objectFit: "cover", borderRadius: 5, border: `1px solid ${resolved ? T.b1 : T.redM}`, marginBottom: 4, cursor: "zoom-in" }}/>
                           )}
-                          <div style={{ fontSize: 10.5, color: T.t3 }}>{t("material_flow.raised_by_iss", { iss: iss.raised_by_name || "—" })}</div>
+                          {iss.raised_by_name && <div style={{ fontSize: 10.5, color: T.t3 }}>{t("material_flow.raised_by_iss", { iss: iss.raised_by_name })}</div>}
                           {resolved && (
                             <div style={{ marginTop: 4, padding: "5px 7px", background: "white", borderRadius: 4, border: `1px solid ${T.b1}` }}>
                               <div style={{ fontSize: 10, fontWeight: 700, color: T.grn, marginBottom: 2 }}>{t("material_flow.resolved_by_resolved_by_name_fmtdatetime", { resolved_by_name: iss.resolved_by_name || "—", fmtDateTime: darjWhen(iss.resolved_at) || "—" })}</div>
@@ -537,10 +594,13 @@ export default function MaterialFlowDrawer({ grnId, trail, onClose, onChanged, i
 }
 
 // ── Ek step ka card (timeline par) ─────────────────────────────
+// Line 1: icon + step + document no. … kab · kisne. Phir sirf bhari hui
+// jaankari, phir photo (naam ke saath).
 function TrailCard({ s, last, onZoom }) {
   const m = STEP[s.type] || STEP.use;
   const L = trailLines(s);
   const when = trailWhen(s);
+  const meta = [when, s.by_name].filter(Boolean).join(" · ");
   return (
     <div data-testid={"trail-step-" + s.type} style={{ display: "flex", gap: 10, position: "relative" }}>
       {/* rail */}
@@ -550,25 +610,28 @@ function TrailCard({ s, last, onZoom }) {
       </div>
       <div style={{ flex: 1, minWidth: 0, marginBottom: 10, background: s.highlight ? m.bg : T.surface, border: `1px solid ${s.highlight ? m.c : T.b1}`,
         borderRadius: 9, padding: "9px 12px", boxShadow: s.highlight ? "0 0 0 2px " + m.bg : "none" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-          <span style={{ fontSize: 10.5, fontWeight: 700, padding: "1.5px 7px", borderRadius: 4, background: m.bg, color: m.c, border: `1px solid ${m.c}22` }}>{stepLabel(s)}</span>
-          {s.title && <span style={{ fontSize: 11, fontFamily: "monospace", color: T.t3, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.title}</span>}
+        <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", rowGap: 3 }}>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 700, padding: "2px 7px", borderRadius: 4, background: m.bg, color: m.c, border: `1px solid ${m.c}22` }}>
+            <StepIcon type={s.type} color={m.c}/>{stepLabel(s)}
+          </span>
+          {s.title && <span style={{ fontSize: 11, fontFamily: "monospace", color: T.t2, fontWeight: 600, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.title}</span>}
           {s.approx && <span title={t("mtrail.approx_use_note")} style={{ fontSize: 10, color: T.t4, fontWeight: 600 }}>{t("mtrail.approx_tag")}</span>}
-          <span style={{ flex: 1 }}/>
           {s.highlight && <span style={{ fontSize: 10, fontWeight: 700, color: m.c }}>{t("mtrail.you_opened")}</span>}
+          {meta && <span style={{ marginLeft: "auto", fontSize: 11, color: T.t3, whiteSpace: "nowrap" }}>{meta}</span>}
         </div>
-        {(when || s.by_name) && (
-          <div style={{ fontSize: 11, color: T.t3, marginTop: 4 }}>{[when, s.by_name].filter(Boolean).join(" · ")}</div>
-        )}
-        {L.items && <div style={{ fontSize: 12.5, fontWeight: 600, color: T.t1, marginTop: 3, wordBreak: "break-word" }}>{L.items}</div>}
+        {L.items && <div style={{ fontSize: 12.5, fontWeight: 600, color: T.t1, marginTop: 5, wordBreak: "break-word" }}>{L.items}</div>}
         {L.rest && <div style={{ fontSize: 11.5, color: T.t2, marginTop: 2, wordBreak: "break-word", lineHeight: 1.45 }}>{L.rest}</div>}
+        {L.sub && <div style={{ fontSize: 11.5, color: T.t2, marginTop: 2, wordBreak: "break-word" }}>{L.sub}</div>}
         {L.note && <div style={{ fontSize: 11, color: T.t3, marginTop: 2, fontStyle: "italic", wordBreak: "break-word" }}>{L.note}</div>}
         {s.photos?.length > 0 && (
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 7 }}>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
             {s.photos.map((p, i) => (
-              <img key={i} src={cld(p.url, "thumb")} alt={t("mtrail.photo")} onClick={() => onZoom(p.url)}
-                onError={e => { e.target.style.display = "none"; }}
-                style={{ width: 52, height: 52, objectFit: "cover", borderRadius: 6, border: `1px solid ${T.b1}`, cursor: "zoom-in" }}/>
+              <figure key={i} style={{ margin: 0, width: 60 }}>
+                <img src={cld(p.url, "thumb")} alt={photoLabel(p.kind)} onClick={() => onZoom(p.url)}
+                  onError={e => { e.target.style.display = "none"; }}
+                  style={{ display: "block", width: 60, height: 60, objectFit: "cover", borderRadius: 6, border: `1px solid ${T.b1}`, cursor: "zoom-in" }}/>
+                <figcaption style={{ fontSize: 9.5, color: T.t3, marginTop: 2, textAlign: "center", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{photoLabel(p.kind)}</figcaption>
+              </figure>
             ))}
           </div>
         )}

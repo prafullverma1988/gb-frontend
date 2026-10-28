@@ -425,7 +425,8 @@ function TabMaterial({ project }) {
                 name: matName,
                 qty: (Number.isInteger(Number(item.received_qty)) ? Number(item.received_qty) : parseFloat(item.received_qty||0)) + " " + (item.unit || ""),
                 stage: "Received",
-                by: g.received_by || (isAutoBill ? "Finance" : "Site"),
+                // received_by me purani / trip GRN ka user id — server ka naam (28 Oct 2026)
+                by: g.received_by_name || (/^[0-9]+$/.test(String(g.received_by || "").trim()) ? null : g.received_by) || (isAutoBill ? "Finance" : "Site"),
                 date: g.received_date ? new Date(g.received_date).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}) : "—",
                 createdAt: g.created_at || null, biz: g.received_date || null,
                 vendor: g.vendor_name || null,

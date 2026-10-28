@@ -19,6 +19,8 @@ import { t } from "../i18n";
 import { loadLibUnits, unitOptions, sameStockUnit, kgPerUnit } from "../components/grn/weigh";
 import PickSelect from "../components/PickSelect";
 import MaterialFlowDrawer from "../components/MaterialFlowDrawer";
+import { BackClose } from "../utils/backNav";
+import { cld } from "../utils/cloudinary";
 
 const T = {
   surface: "#FFFFFF", surfaceB: "#F8F9FB",
@@ -398,9 +400,14 @@ export function trailOf(e, material) {
   return kind && id ? { kind, id, material } : null;
 }
 
+// Line ki photo ka naam (server ka kind) — anjaan kind par sirf "Photo".
+const PH_KINDS = ["challan", "rec_slip", "site", "material", "slip", "weigh_slip", "vehicle", "mr", "loading", "unloading", "used"];
+const phLabel = (k) => (PH_KINDS.includes(k) ? t("mtrail.ph_" + k) : t("mtrail.photo"));
+
 function LedgerRowDrawer({ e, unit, material, isAdmin, grnCancel, onClose, onSaved }) {
   const km = kindMeta(e.kind);
   const [trail, setTrail] = useState(null);
+  const [zoom, setZoom] = useState(null);
   const trailRef = trailOf(e, material);
   const [qty, setQty] = useState(String(e.qty ?? ""));
   const [note, setNote] = useState("");
@@ -462,6 +469,23 @@ function LedgerRowDrawer({ e, unit, material, isAdmin, grnCancel, onClose, onSav
           <Row l={t("warehouse.ledger_row_party")} v={e._before ? "—" : partyLine(e)}/>
           <Row l={t("warehouse.ledger_row_by")} v={who}/>
           {!e._before && <Row l={t("warehouse.ledger_row_note")} v={e.note}/>}
+          {/* Line ki photo (28 Oct 2026) — GRN: challan / rec slip / gadi; issue:
+              challan / material + site par receive; transfer: bheja + receive. */}
+          {(e.photos || []).length > 0 && (
+            <div data-testid="ledger-row-photos" style={{ marginTop: 12 }}>
+              <div style={lbl}>{t("mtrail.photos")}</div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {e.photos.map((p, i) => (
+                  <figure key={i} style={{ margin: 0, width: 64 }}>
+                    <img src={cld(p.url, "thumb")} alt={phLabel(p.kind)} onClick={() => setZoom(p.url)}
+                      onError={ev => { ev.target.style.display = "none"; }}
+                      style={{ display: "block", width: 64, height: 64, objectFit: "cover", borderRadius: 7, border: `1px solid ${T.b1}`, cursor: "zoom-in" }}/>
+                    <figcaption style={{ fontSize: 9.5, color: T.t3, marginTop: 2, textAlign: "center", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{phLabel(p.kind)}</figcaption>
+                  </figure>
+                ))}
+              </div>
+            </div>
+          )}
           {trailRef && (
             <button onClick={() => setTrail(trailRef)}
               style={{ marginTop: 12, width: "100%", padding: "9px 12px", borderRadius: 7, border: `1.5px solid ${T.blu}`, background: T.surface, color: T.blu, fontSize: 12.5, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
@@ -507,6 +531,16 @@ function LedgerRowDrawer({ e, unit, material, isAdmin, grnCancel, onClose, onSav
         </div>
       </div>
       {trail && <MaterialFlowDrawer trail={trail} onClose={() => setTrail(null)}/>}
+      {zoom && (
+        <>
+          <BackClose onClose={() => setZoom(null)}/>
+          <div data-testid="ledger-photo-zoom" onClick={() => setZoom(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.88)", zIndex: 2000, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <img src={cld(zoom, "full")} alt={t("mtrail.photo")} onClick={ev => ev.stopPropagation()} style={{ maxWidth: "92vw", maxHeight: "88vh", borderRadius: 8 }}/>
+            <button onClick={() => setZoom(null)} aria-label={t("common.close")}
+              style={{ position: "absolute", top: 16, right: 16, width: 38, height: 38, borderRadius: "50%", border: "none", background: "rgba(255,255,255,.18)", color: "#fff", fontSize: 20, cursor: "pointer", lineHeight: 1 }}>×</button>
+          </div>
+        </>
+      )}
     </>
   );
 }
