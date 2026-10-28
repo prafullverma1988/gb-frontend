@@ -210,7 +210,7 @@ export default function CompanyExpenseReport() {
         <div style={{ display: "flex", border: `1px solid ${T.b1}`, borderRadius: 7, overflow: "hidden" }}>
           {["head", "place", "city"].map((g) => <button key={g} onClick={() => setGroup(g)} style={seg(group === g)}>{t("cxr.group_" + g)}</button>)}
         </div>
-        <button onClick={exportXlsx} disabled={!data} style={{ padding: "6px 12px", borderRadius: 6, fontSize: 12, fontWeight: 600, border: `1px solid ${T.grnM}`, background: T.grnL, color: T.grn, cursor: data ? "pointer" : "default", fontFamily: "inherit" }}>Excel</button>
+        <button onClick={exportXlsx} disabled={!data} style={{ padding: "6px 12px", borderRadius: 6, fontSize: 12, fontWeight: 600, border: `1px solid ${T.grnM}`, background: T.grnL, color: T.grn, cursor: data ? "pointer" : "default", fontFamily: "inherit" }}>{t("common.excel")}</button>
       </div>
 
       {err && <div style={{ ...card, color: T.red, background: T.redL, fontSize: 12.5 }}>{err}</div>}

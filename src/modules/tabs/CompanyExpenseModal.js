@@ -34,6 +34,9 @@ async function uploadBill(file) {
   return d.secure_url;
 }
 
+// Label t("cexp.mode_" + v), neeche ki line t(`cexp.mode_${v}_sub`) — template
+// hi rakho: "a" + v + "_sub" ko core pack (scripts/i18n/core.js) prefix nahi
+// samajhta, aur ye form login popup ke raste entry chunk me hai.
 const MODES = [
   { v: "paid", c: "red" },
   { v: "payable", c: "amb" },
@@ -252,7 +255,7 @@ export default function CompanyExpenseModal({ onClose, onSaved, preset }) {
                 {MODES.map((m) => (
                   <button key={m.v} onClick={() => set("mode", m.v)} style={{ ...seg(f.mode === m.v, T[m.c]), flex: "1 1 190px" }}>
                     <div style={{ fontSize: 12.5, fontWeight: 700 }}>{t("cexp.mode_" + m.v)}</div>
-                    <div style={{ fontSize: 11, color: T.t3, marginTop: 2 }}>{t("cexp.mode_" + m.v + "_sub")}</div>
+                    <div style={{ fontSize: 11, color: T.t3, marginTop: 2 }}>{t(`cexp.mode_${m.v}_sub`)}</div>
                   </button>
                 ))}
               </div>

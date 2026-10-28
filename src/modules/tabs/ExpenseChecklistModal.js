@@ -20,12 +20,15 @@ const shift = (p, n) => { const [y, m] = p.split("-").map(Number); const d = new
 const monthLabel = (p) => { const [y, m] = p.split("-").map(Number); return new Date(y, m - 1, 1).toLocaleDateString("en-IN", { month: "long", year: "numeric" }); };
 const dm = (d) => { if (!d) return ""; const [y, m, dd] = String(d).slice(0, 10).split("-").map(Number); return new Date(y, m - 1, dd).toLocaleDateString("en-IN", { day: "2-digit", month: "short" }); };
 
+// Label t("ecl.st_" + haalat) se. Ye modal login popup (ExpenseNudge) ke raste
+// entry chunk me hai — key literal prefix par rahe, taaki core pack
+// (scripts/i18n/core.js) build-time par jaane kaunsi key chahiye.
 const STATE = {
-  pending:     { c: "red", k: "ecl.st_pending" },
-  in_approval: { c: "amb", k: "ecl.st_in_approval" },
-  to_pay:      { c: "pur", k: "ecl.st_to_pay" },
-  done:        { c: "grn", k: "ecl.st_done" },
-  skipped:     { c: "slt", k: "ecl.st_skipped" },
+  pending:     { c: "red" },
+  in_approval: { c: "amb" },
+  to_pay:      { c: "pur" },
+  done:        { c: "grn" },
+  skipped:     { c: "slt" },
 };
 
 export default function ExpenseChecklistModal({ onClose, initialMine = true }) {
@@ -118,7 +121,8 @@ export default function ExpenseChecklistModal({ onClose, initialMine = true }) {
             </div>
           )}
           {!loading && rows.map((r) => {
-            const st = STATE[r.state] || STATE.pending;
+            const sk = STATE[r.state] ? r.state : "pending";
+            const st = STATE[sk];
             const where = r.location_name || r.project_name || t("ecl.company");
             const who = r.expense_mode === "paid" ? (r.payee_text || "") : (r.party_name || "");
             return (
@@ -126,7 +130,7 @@ export default function ExpenseChecklistModal({ onClose, initialMine = true }) {
                 <div style={{ flex: "1 1 260px", minWidth: 0 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
                     <span style={{ fontSize: 13, fontWeight: 700, color: T.t1 }}>{r.name}</span>
-                    <span style={{ fontSize: 10.5, fontWeight: 700, padding: "2px 8px", borderRadius: 10, background: T[st.c + "L"] || T.surfaceB, color: T[st.c] }}>{t(st.k)}</span>
+                    <span style={{ fontSize: 10.5, fontWeight: 700, padding: "2px 8px", borderRadius: 10, background: T[st.c + "L"] || T.surfaceB, color: T[st.c] }}>{t("ecl.st_" + sk)}</span>
                     {r.overdue && <span style={{ fontSize: 10.5, fontWeight: 700, color: T.red }}>{t("ecl.overdue_tag")}</span>}
                   </div>
                   <div style={{ fontSize: 11.5, color: T.t3, marginTop: 3 }}>
