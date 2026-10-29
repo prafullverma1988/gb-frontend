@@ -16,6 +16,7 @@ import { BackClose } from "../utils/backNav";
 import { cld } from "../utils/cloudinary";
 import { GrnPhotoTiles, grnPhotosOff, GRN_NO_PHOTO_BODY } from "../components/grn/GrnPhotoBox";
 import { itemName, specOf, photoLinks } from "../utils/vendorShare";
+import uploadManager from "../utils/uploadManager";
 
 const Ic=({d,size=18,color="currentColor",sw=1.8,fill="none"})=>(
   <svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke={color} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><path d={d}/></svg>
@@ -4535,8 +4536,46 @@ function IssuesDrawer({issues, loading, filter, setFilter, onClose, onIssueClose
 }
 
 // ── TODO DRAWER ─────────────────────────────────────────────────
+// ── To-Do / Work poora karte waqt ki photo (29 Oct 2026) ──────────
+// Photo Settings → "To-Do poora karne par photo" / "Work poora karne par photo".
+// Cloudinary par chadhti hai (uploadManager), URL tick ke saath server ko.
+function TodoPhotoPick({urls,onAdd,onRemove,uploading,onUploading,mode}){
+  if(mode==="off") return null;
+  const pick=e=>{
+    const files=[...(e.target.files||[])].slice(0,Math.max(0,3-urls.length));
+    e.target.value="";
+    for(const file of files){
+      onUploading(1);
+      uploadManager.add({file,folder:"gb_buildcon/todo",label:file.name,
+        onDone:url=>{ onUploading(-1); onAdd(url); },
+        onError:()=>onUploading(-1)});
+    }
+  };
+  return(
+    <div style={{marginTop:10}} onClick={e=>e.stopPropagation()}>
+      <div style={{fontSize:10,fontWeight:700,color:"#64748B",letterSpacing:".5px",marginBottom:5}}>
+        {t("projects.todo_photo_label")} <span style={{fontWeight:600,color:mode==="required"?"#B91C1C":"#94A3B8"}}>{mode==="required"?t("projects.photo_zaroori"):t("projects.photo_marzi_se")}</span>
+      </div>
+      <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
+        {urls.map(u=>(
+          <div key={u} style={{position:"relative"}}>
+            <img src={cld(u,"thumb")} alt="" style={{width:52,height:52,objectFit:"cover",borderRadius:6,border:"1px solid #E2E8F0"}}/>
+            <button type="button" onClick={()=>onRemove(u)} aria-label={t("projects.photo_hatao")} style={{position:"absolute",top:-6,right:-6,width:18,height:18,borderRadius:9,border:"1px solid #E2E8F0",background:"white",fontSize:10,cursor:"pointer",padding:0}}>×</button>
+          </div>
+        ))}
+        {urls.length<3&&(
+          <label style={{padding:"6px 12px",borderRadius:6,border:"1px dashed #CBD5E1",background:"white",color:"#475569",fontSize:11,fontWeight:600,cursor:"pointer"}}>
+            {uploading>0?t("projects.photo_upload_ho_rahi"):t("projects.photo_lagao")}
+            <input type="file" accept="image/*" multiple onChange={pick} style={{display:"none"}}/>
+          </label>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function TodoDrawer({todos,loading,onClose,onSelectProject}){
-  const [filter,setFilter]=useState("Pending"); // Pending | Done | All
+  const [filter,setFilter]=useState("Pending"); // Pending | Done | All | Work
   const [localTodos,setLocalTodos]=useState(todos);
   const [expandedId,setExpandedId]=useState(null);
   const [savingChk,setSavingChk]=useState(null);
@@ -4548,12 +4587,35 @@ function TodoDrawer({todos,loading,onClose,onSelectProject}){
   // Projects list for the scope selector — loaded once on mount.
   const [projects,setProjects]=useState([]);
   const [pinging,setPinging]=useState(null); // todo id currently being pinged
+  // Photo (29 Oct 2026): key = source:id → [url]; uploading = chadh rahi ginti
+  const [photos,setPhotos]=useState({});
+  const [uploading,setUploading]=useState({});
+  const [pol,setPol]=useState({});          // Photo Settings — todo / work ka mode
+  const [works,setWorks]=useState(null);     // meeting se mila Work (GET /work-items?scope=mine)
+  const [workMsg,setWorkMsg]=useState({});
   useEffect(()=>{ setLocalTodos(todos); },[todos]);
+  const loadWorks=()=>api.get("/work-items?scope=mine").then(r=>setWorks(r&&r.success&&Array.isArray(r.data)?r.data:[])).catch(()=>setWorks([]));
   useEffect(()=>{
     api.get("/projects").then(r=>{
       if(r && r.success && Array.isArray(r.data)) setProjects(r.data);
     }).catch(()=>{});
+    api.get("/settings/photo").then(r=>{ if(r&&r.success&&r.data&&r.data.settings) setPol(r.data.settings); }).catch(()=>{});
+    loadWorks();
   },[]);
+  const keyOf=t=>(t._source||"x")+":"+t.id;
+  const addPhoto=(k,u)=>setPhotos(p=>({...p,[k]:[...(p[k]||[]),u]}));
+  const delPhoto=(k,u)=>setPhotos(p=>({...p,[k]:(p[k]||[]).filter(x=>x!==u)}));
+  const bump=(k,d)=>setUploading(p=>({...p,[k]:Math.max(0,(p[k]||0)+d)}));
+  const modeOf=k=>(pol[k]&&pol[k].mode)||"optional";
+  const workOpen=(works||[]).filter(w=>!w.done).length;
+  const workDone=async(w,done)=>{
+    const k="w:"+w.id;
+    if(done&&(uploading[k]||0)>0){ alert(t("projects.photo_upload_ho_rahi")); return; }
+    setWorkMsg(p=>({...p,[k]:""}));
+    const r=done?await api.put("/work-items/"+w.id+"/done",{photo_urls:photos[k]||[]}):await api.put("/work-items/"+w.id+"/reopen",{});
+    if(r&&r.success){ setPhotos(p=>({...p,[k]:[]})); loadWorks(); }
+    else setWorkMsg(p=>({...p,[k]:(r&&r.message)||t("projects.save_nahi_hua")}));
+  };
   const priC={"High":{c:"#DC2626",bg:"#FEE2E2"},"Medium":{c:"#D97706",bg:"#FEF3C7"},"Low":{c:"#64748B",bg:"#F1F5F9"}};
   const fmtDate=d=>d?new Date(d).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}):"";
 
@@ -4590,15 +4652,27 @@ function TodoDrawer({todos,loading,onClose,onSelectProject}){
     return t("common.not_started");
   };
 
-  const toggleDone = async (t, e) => {
+  // Poora karte waqt photo saath (To-Do ki photo, key "todo"). Server mana kare
+  // (photo zaroori, ijazat) to tick wapas aur wajah dikhao — pehle chupchaap laga rehta tha.
+  const toggleDone = async (item, e) => {
     if (e) e.stopPropagation();
-    const newStatus = t.done ? "Not Started" : "Completed";
-    setLocalTodos(prev => prev.map(x => x.id === t.id ? { ...x, status: newStatus } : x));
-    try {
-      await api.put(apiPathFor(t), { status: newStatus });
-    } catch (err) {
-      setLocalTodos(prev => prev.map(x => x.id === t.id ? { ...x, status: t.status } : x));
+    const k = keyOf(item);
+    if (!item.done && (uploading[k] || 0) > 0) { alert(t("projects.photo_upload_ho_rahi")); return; }
+    const newStatus = item.done ? "Not Started" : "Completed";
+    const body = { status: newStatus };
+    if (!item.done) body.photo_urls = photos[k] || [];
+    setLocalTodos(prev => prev.map(x => x.id === item.id && x._source === item._source ? { ...x, status: newStatus } : x));
+    let res = null;
+    try { res = await api.put(apiPathFor(item), body); } catch (err) { res = null; }
+    if (res && res.success) {
+      if (!item.done) {
+        setPhotos(p => ({ ...p, [k]: [] }));
+        setLocalTodos(prev => prev.map(x => x.id === item.id && x._source === item._source ? { ...x, photo_urls: [...(x.photo_urls || []), ...(body.photo_urls || [])] } : x));
+      }
+      return;
     }
+    setLocalTodos(prev => prev.map(x => x.id === item.id && x._source === item._source ? { ...x, status: item.status } : x));
+    alert((res && !res._networkError && res.message) || t("projects.save_nahi_hua"));
   };
 
   const toggleChecklistItem = async (t, idx, e) => {
@@ -4651,6 +4725,11 @@ function TodoDrawer({todos,loading,onClose,onSelectProject}){
                 {f} {f==="Pending"?`(${pendingCount})`:f==="Done"?`(${doneCount})`:`(${parsed.length})`}
               </button>
             ))}
+            {/* Meeting se mila roz ka Work (29 Oct 2026) — Meri Zimmedari jaisa, web par yahin */}
+            <button onClick={()=>setFilter("Work")}
+              style={{padding:"4px 10px",borderRadius:20,border:"none",background:filter==="Work"?"white":"rgba(255,255,255,0.1)",color:filter==="Work"?"#0F172A":"rgba(255,255,255,0.6)",fontSize:11,fontWeight:filter==="Work"?700:400,cursor:"pointer"}}>
+              {t("projects.wk_filter",{n:workOpen})}
+            </button>
           </div>
           <button onClick={()=>setShowAddForm(p=>!p)}
             style={{padding:"5px 11px",borderRadius:6,border:"1px solid rgba(255,255,255,0.2)",background:showAddForm?"#7C3AED":"rgba(255,255,255,0.1)",color:"white",fontSize:11,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>
@@ -4712,7 +4791,37 @@ function TodoDrawer({todos,loading,onClose,onSelectProject}){
 
       {/* Content */}
       <div style={{flex:1,overflow:"auto",padding:"10px 14px"}}>
-        {loading?<div style={{textAlign:"center",padding:"40px 0",color:"#94A3B8",fontSize:13}}>{t("common.loading")}</div>
+        {filter==="Work"?(
+          works===null?<div style={{textAlign:"center",padding:"40px 0",color:"#94A3B8",fontSize:13}}>{t("common.loading")}</div>
+          :works.length===0?<div style={{textAlign:"center",padding:"40px 0",color:"#94A3B8",fontSize:13}}>{t("projects.wk_none")}</div>
+          :works.map(w=>{
+            const k="w:"+w.id;
+            return(
+              <div key={w.id} style={{background:"white",borderRadius:8,border:`1px solid ${w.overdue?"#FECACA":"#E2E8F0"}`,marginBottom:8,borderLeft:`3px solid ${w.done?"#22C55E":w.overdue?"#DC2626":"#4B45C4"}`,padding:"10px 13px"}}>
+                <div style={{display:"flex",alignItems:"flex-start",gap:8}}>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:13,fontWeight:600,color:w.done?"#94A3B8":"#1E293B",textDecoration:w.done?"line-through":"none",lineHeight:1.4}}>{w.title}</div>
+                    <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:4,fontSize:10.5,color:"#64748B"}}>
+                      {w.source==="meeting"&&<span style={{fontWeight:600,color:"#4B45C4",background:"#EEF0FB",padding:"1px 7px",borderRadius:10}}>{t("projects.wk_meeting_se")}</span>}
+                      {w.project_name&&<span>{w.project_name}</span>}
+                      {w.assigned_by_name&&<span>· {t("projects.wk_by",{name:w.assigned_by_name})}</span>}
+                      {w.due_date&&<span>· {t("projects.due_fmtdate",{fmtDate:fmtDate(w.due_date)})}</span>}
+                      {w.overdue&&<span style={{color:"#DC2626",fontWeight:700}}>· {t("projects.wk_overdue")}</span>}
+                    </div>
+                    {w.description&&<div style={{fontSize:11.5,color:"#475569",marginTop:5,lineHeight:1.45}}>{w.description}</div>}
+                    {(w.photo_urls||[]).length>0&&<div style={{display:"flex",gap:6,marginTop:6}}>{w.photo_urls.map(u=><img key={u} src={cld(u,"thumb")} alt="" style={{width:44,height:44,objectFit:"cover",borderRadius:6,border:"1px solid #E2E8F0"}}/>)}</div>}
+                    {!w.done&&<TodoPhotoPick urls={photos[k]||[]} onAdd={u=>addPhoto(k,u)} onRemove={u=>delPhoto(k,u)} uploading={uploading[k]||0} onUploading={d=>bump(k,d)} mode={modeOf("work")}/>}
+                    {workMsg[k]&&<div style={{fontSize:11,color:"#DC2626",marginTop:5}}>{workMsg[k]}</div>}
+                  </div>
+                  <button onClick={()=>workDone(w,!w.done)}
+                    style={{padding:"6px 12px",borderRadius:6,border:w.done?"1px solid #E2E8F0":"none",background:w.done?"white":"#15803D",color:w.done?"#475569":"white",fontSize:11,fontWeight:700,cursor:"pointer",flexShrink:0}}>
+                    {w.done?t("projects.wk_reopen"):t("projects.wk_ho_gaya")}
+                  </button>
+                </div>
+              </div>
+            );
+          })
+        ):loading?<div style={{textAlign:"center",padding:"40px 0",color:"#94A3B8",fontSize:13}}>{t("common.loading")}</div>
         :filtered.length===0?<div style={{textAlign:"center",padding:"40px 0",color:"#94A3B8",fontSize:13}}>{t("projects.no_todos_found")}</div>
         :filtered.map(item=>{
           const pr=priC[item.priority]||priC["Medium"];
@@ -4808,6 +4917,8 @@ function TodoDrawer({todos,loading,onClose,onSelectProject}){
                       {item.description}
                     </div>
                   )}
+                  {(item.photo_urls||[]).length>0&&<div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:10}}>{item.photo_urls.map(u=><img key={u} src={cld(u,"thumb")} alt="" style={{width:52,height:52,objectFit:"cover",borderRadius:6,border:"1px solid #E2E8F0"}}/>)}</div>}
+                  {!item.done&&<TodoPhotoPick urls={photos[keyOf(item)]||[]} onAdd={u=>addPhoto(keyOf(item),u)} onRemove={u=>delPhoto(keyOf(item),u)} uploading={uploading[keyOf(item)]||0} onUploading={d=>bump(keyOf(item),d)} mode={modeOf("todo")}/>}
                   <div style={{marginTop:10,display:"flex",gap:8,flexWrap:"wrap"}}>
                     {/* Ping the assignee — backend writes a todo_ping notification. */}
                     {item.assigned_to && (

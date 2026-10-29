@@ -6,6 +6,8 @@ import { T } from "../shared/tokens";
 import { Pill, Panel, AddBtn } from "../shared/ui";
 import { t } from "../../i18n";
 import { canAny, currentUser } from "../../utils/perms";
+import uploadManager from "../../utils/uploadManager";
+import { cld } from "../../utils/cloudinary";
 
 // Roles & Access (5 Oct 2026): todo = "To Do" row (transition me Tasks bhi —
 // server ["To Do","Tasks"] maanta hai). Jise todo diya hai wo apna todo
@@ -29,6 +31,41 @@ const statusFromPct=(pct)=>(pct>=100?"Completed":pct>0?"In Progress":"Pending");
 // 'In Progress' 400 (tasks.status_galat_hai) dete hain.
 const TASK_STATUS={Pending:"Not Started","In Progress":"Ongoing",Completed:"Completed"};
 const serverStatus=(todo,s)=>(todo._source==="company_todo"?s:TASK_STATUS[s]);
+
+// To-Do poora karte waqt ki photo (29 Oct 2026) — Photo Settings → "To-Do poora
+// karne par photo" (key "todo"). Cloudinary par chadhti hai, URL tick ke saath.
+function TodoPhoto({urls,onAdd,onRemove,uploading,onUploading,mode}){
+  if(mode==="off") return null;
+  const pick=e=>{
+    const files=[...(e.target.files||[])].slice(0,Math.max(0,3-urls.length));
+    e.target.value="";
+    for(const file of files){
+      onUploading(1);
+      uploadManager.add({file,folder:"gb_buildcon/todo",label:file.name,onDone:url=>{ onUploading(-1); onAdd(url); },onError:()=>onUploading(-1)});
+    }
+  };
+  return(
+    <div style={{marginBottom:8}}>
+      <div style={{fontSize:10,fontWeight:700,color:T.t4,letterSpacing:".4px",marginBottom:5}}>
+        {t("todo.photo_label")} <span style={{color:mode==="required"?T.red:T.t4}}>{mode==="required"?t("todo.photo_zaroori"):t("todo.photo_marzi_se")}</span>
+      </div>
+      <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
+        {urls.map(u=>(
+          <div key={u} style={{position:"relative"}}>
+            <img src={cld(u,"thumb")} alt="" style={{width:48,height:48,objectFit:"cover",borderRadius:6,border:`1px solid ${T.b1}`}}/>
+            <button type="button" onClick={()=>onRemove(u)} aria-label={t("todo.photo_hatao")} style={{position:"absolute",top:-6,right:-6,width:18,height:18,borderRadius:9,border:`1px solid ${T.b1}`,background:T.surface,fontSize:10,cursor:"pointer",padding:0}}>×</button>
+          </div>
+        ))}
+        {urls.length<3&&(
+          <label style={{padding:"5px 11px",borderRadius:6,border:`1px dashed ${T.b2}`,background:T.surface,color:T.t2,fontSize:11,fontWeight:600,cursor:"pointer"}}>
+            {uploading>0?t("todo.photo_upload_ho_rahi"):t("todo.photo_lagao")}
+            <input type="file" accept="image/*" multiple onChange={pick} style={{display:"none"}}/>
+          </label>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function TabTodo({projectId}) {
   const CATS=["Civil","Electrical","Plumbing","Finishing","Documentation","Admin","Other"];
@@ -82,8 +119,14 @@ function TabTodo({projectId}) {
       project_id: t.project_id,
       raisedBy: t.created_by_name || "",
       raisedAt: t.created_at || "",
+      photo_urls: Array.isArray(t.photo_urls) ? t.photo_urls : [],
     };
   };
+  // Photo (29 Oct 2026): id → [url]; uploading = chadh rahi ginti; pol = Photo Settings
+  const [photos,setPhotos]=useState({});
+  const [upl,setUpl]=useState({});
+  const [pol,setPol]=useState("optional");
+  useEffect(()=>{ api.get("/settings/photo").then(r=>{ const m=r&&r.success&&r.data&&r.data.settings&&r.data.settings.todo; if(m&&m.mode) setPol(m.mode); }).catch(()=>{}); },[]);
 
   // Source-aware endpoint helpers. project_task todo → PUT /tasks/:id (mobile
   // wala raasta): /projects/:id/tasks/:id `progress` phenk deta hai, to poora
@@ -97,11 +140,15 @@ function TabTodo({projectId}) {
   // PUT + mana hone par wapas. api.put 400/500 par throw nahi karta —
   // {success:false} lautata hai; pehle catch kabhi chalta hi nahi tha, to
   // server ke mana karne par bhi (galat status, photo ki rok) tick laga rehta.
+  // project_task wale todo par from: 'todo' — Completed par server "To-Do poora
+  // karne par photo" maangta hai, task / progress ki photo nahi (29 Oct 2026).
   const putTodo=async(todo,body)=>{
-    const res=await api.put(apiBaseFor(todo),body);
-    if(res&&res.success) return;
+    const b=todo._source==="company_todo"||!body.status?body:{...body,from:"todo"};
+    const res=await api.put(apiBaseFor(todo),b);
+    if(res&&res.success) return true;
     setTodos(p=>p.map(x=>x.id===todo.id?todo:x));
     alert((res&&!res._networkError&&res.message)||t("todo.save_nahi_hua"));
+    return false;
   };
   const pingPathFor=(t)=>(
     t._source==="company_todo" || (t._source!=="project_task" && !t.project_id)
@@ -148,8 +195,12 @@ function TabTodo({projectId}) {
     const todo=todos.find(t=>t.id===id);
     if(!todo || !canTick(todo)) return;
     const next=todo.done?"Pending":"Completed";
+    if(next==="Completed"&&(upl[id]||0)>0){ alert(t("todo.photo_upload_ho_rahi")); return; }
+    const body={status:serverStatus(todo,next)};
+    if(next==="Completed") body.photo_urls=photos[id]||[];
     setTodos(p=>p.map(x=>x.id===id?{...x,status:next,done:next==="Completed"}:x));
-    await putTodo(todo,{status:serverStatus(todo,next)});
+    const ok=await putTodo(todo,body);
+    if(ok&&next==="Completed"){ setTodos(p=>p.map(x=>x.id===id?{...x,photo_urls:[...(x.photo_urls||[]),...body.photo_urls]}:x)); setPhotos(p=>({...p,[id]:[]})); }
   };
 
   // Toggle a checklist item — emits canonical {text, done} on write AND
@@ -175,6 +226,7 @@ function TabTodo({projectId}) {
         if(todo._source!=="company_todo"&&todo.status==="Completed"&&derived==="In Progress") body.progress=pct;
         patch.done=derived==="Completed";
         patch.status=derived;
+        if(derived==="Completed") body.photo_urls=photos[todoId]||[];
       }
     }
     setTodos(p=>p.map(t=>t.id===todoId?{...t,...patch}:t));
@@ -334,7 +386,7 @@ function TabTodo({projectId}) {
               <div style={{display:"flex",alignItems:"flex-start",gap:10,padding:"10px 14px",transition:"background .1s"}}
                 onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB}
                 onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                <div onClick={()=>toggle(todo.id)} style={{width:17,height:17,borderRadius:5,border:`1.5px solid ${T.b2}`,cursor:"pointer",flexShrink:0,marginTop:2,display:"flex",alignItems:"center",justifyContent:"center",transition:"all .15s"}}
+                <div onClick={()=>toggle(todo.id)} role="checkbox" aria-checked="false" aria-label={t("projects.mark_as_done")} style={{width:17,height:17,borderRadius:5,border:`1.5px solid ${T.b2}`,cursor:"pointer",flexShrink:0,marginTop:2,display:"flex",alignItems:"center",justifyContent:"center",transition:"all .15s"}}
                   onMouseEnter={e=>e.currentTarget.style.borderColor=T.grn}
                   onMouseLeave={e=>e.currentTarget.style.borderColor=T.b2}/>
                 <div style={{flex:1,minWidth:0}}>
@@ -368,6 +420,16 @@ function TabTodo({projectId}) {
                           {todo.description}
                         </div>
                       )}
+                      {/* Photo — pehle lagi + poora karte waqt ki (29 Oct 2026) */}
+                      {todo.photo_urls.length>0&&(
+                        <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8}}>
+                          {todo.photo_urls.map(u=><img key={u} src={cld(u,"thumb")} alt="" style={{width:48,height:48,objectFit:"cover",borderRadius:6,border:`1px solid ${T.b1}`}}/>)}
+                        </div>
+                      )}
+                      {canTick(todo)&&<TodoPhoto urls={photos[todo.id]||[]} mode={pol}
+                        onAdd={u=>setPhotos(p=>({...p,[todo.id]:[...(p[todo.id]||[]),u]}))}
+                        onRemove={u=>setPhotos(p=>({...p,[todo.id]:(p[todo.id]||[]).filter(x=>x!==u)}))}
+                        uploading={upl[todo.id]||0} onUploading={d=>setUpl(p=>({...p,[todo.id]:Math.max(0,(p[todo.id]||0)+d)}))}/>}
                       {/* Checklist + progress bar (drives task status) */}
                       {todo.checklist.length>0&&(() => {
                         const cDone=todo.checklist.filter(c=>c.done).length;
@@ -414,7 +476,7 @@ function TabTodo({projectId}) {
                     onMouseLeave={e=>e.currentTarget.style.opacity=.5}>
                     <svg width={13} height={13} viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth={1.5}><path d="M3 4h8M5 4V3a1 1 0 011-1h2a1 1 0 011 1v1M6 7v3M8 7v3M4 4l.5 7a1 1 0 001 1h3a1 1 0 001-1L10 4"/></svg>
                   </button>}
-                  <button onClick={()=>setExpandId(isExp?null:todo.id)}
+                  <button onClick={()=>setExpandId(isExp?null:todo.id)} aria-expanded={isExp} aria-label={t("app.details")}
                     style={{background:"none",border:"none",cursor:"pointer",color:T.t4,padding:3}}>
                     <svg width={14} height={14} viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth={1.5}>
                       <path d={isExp?"M2 5l5 5 5-5":"M2 9l5-5 5 5"}/>

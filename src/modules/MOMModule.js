@@ -712,14 +712,51 @@ function CreateMOMModal({onClose,onSave,projectId=null,projectName=""}){
 }
 
 // ── MEETING MODE (AI: record → transcribe → extract → create) ──
+// v2 (29 Oct 2026, Prafull) — app ke Meeting Mode jaisa hi:
+//   • "Is meeting se kya banega" tick (Work · To-Do · Issue · Task · Progress · MR),
+//     project-wise yaad server par (/meetings/prefs), na mile to localStorage
+//   • Haazri (team me se tick) → meeting + MOM ke attendees
+//   • "Pichhle baaki kaam" + "Pichhli meeting" (/meetings/open-items): Ho gaya / %
+//   • review: type chip (sirf tick kiye + MOM point), "Pehle se hai" → Purane me
+//     update / Phir bhi naya, kisko diya (team se) zaroori, kab tak; autosave
+//   • commit: Work (/work-items), MOM ek baar, fail ki wajah + "Dobara try karo"
 const MM_TYPE={
-  mr:{get label() { return t("common.material"); },color:T.amb,bg:T.ambL,tip:"→ Material Request banega"},
-  task:{get label() { return t("mom.task"); },color:T.blu,bg:T.bluL,tip:"→ Project Task banega"},
-  todo:{get label() { return t("mom.todo"); },color:T.grn,bg:T.grnL,tip:"→ Todo banega"},
-  issue:{get label() { return t("mom.issue"); },color:T.red,bg:T.redL,tip:"→ Issue (Site Issues task me)"},
-  task_update:{get label() { return t("mom.task_update"); },color:T.pur,bg:T.purL,tip:"→ Existing task update hoga"},
+  work:{get label() { return t("mom.mm_work"); },color:T.pur,bg:T.purL,get tip(){ return t("mom.mm_tip_work"); }},
+  todo:{get label() { return t("mom.mm_todo"); },color:T.grn,bg:T.grnL,get tip(){ return t("mom.mm_tip_todo"); }},
+  issue:{get label() { return t("mom.issue"); },color:T.red,bg:T.redL,get tip(){ return t("mom.mm_tip_issue"); }},
+  task:{get label() { return t("mom.task"); },color:T.blu,bg:T.bluL,get tip(){ return t("mom.mm_tip_task"); }},
+  task_update:{get label() { return t("mom.task_update"); },color:T.pur,bg:T.purL,get tip(){ return t("mom.mm_tip_task_update"); }},
+  mr:{get label() { return t("common.material"); },color:T.amb,bg:T.ambL,get tip(){ return t("mom.mm_tip_mr"); }},
+  decision:{get label() { return t("mom.mm_decision"); },color:T.slt,bg:T.sltL,get tip(){ return t("mom.mm_tip_decision"); }},
 };
-const MM_ORDER=["mr","task","issue","task_update","todo"];
+const mmMeta=tp=>MM_TYPE[tp]||MM_TYPE.decision;
+const MM_ORDER=["work","todo","issue","task","task_update","mr","decision"];
+const MM_TICKS=[
+  {k:"work",get l(){ return t("mom.mm_t_work"); }},{k:"todo",get l(){ return t("mom.mm_t_todo"); }},{k:"issue",get l(){ return t("mom.mm_t_issue"); }},
+  {k:"task",get l(){ return t("mom.mm_t_task"); }},{k:"task_update",get l(){ return t("mom.mm_t_progress"); }},{k:"mr",get l(){ return t("mom.mm_t_mr"); }},
+];
+const MM_ALL=MM_TICKS.map(x=>x.k);
+const MM_NEEDS_WHO=["work","todo","issue","task"];
+const MM_NEEDS_PROJ=["mr","task","issue"];
+const mmTypeOptions=(allowed,cur)=>cur==="task_update"?["task_update","decision"]:[...((allowed&&allowed.length?allowed:MM_ALL).filter(x=>x!=="task_update")),"decision"];
+const MM_FILL=new Set(["karo","kar","do","dena","ka","ki","ke","hai","ko","se","me","aur","the","a","an","to","please","jaldi"]);
+const mmNorm=s=>String(s||"").toLowerCase().replace(/[^a-z0-9ऀ-ॿ ]+/g," ").split(/\s+/).filter(w=>w&&!MM_FILL.has(w)).join(" ");
+// AI ne na pakda ho to bhi — wahi kaam pehle se khula? (saaf title + wahi aadmi / project)
+function mmFindDup(it,open,pid){
+  if(!it||!["work","todo","issue","task","mr"].includes(it.type)) return null;
+  const a=mmNorm(it.title); if(a.length<4) return null;
+  const fam=tp=>(tp==="work"||tp==="todo"?"wt":tp);
+  for(const o of open||[]){
+    if(fam(o.type)!==fam(it.type)) continue;
+    const b=mmNorm(o.title); if(!b) continue;
+    const same=a===b||(Math.min(a.length,b.length)>=8&&(a.includes(b)||b.includes(a)));
+    if(!same) continue;
+    const who=it.assigned_to&&o.assignee_id!=null&&String(o.assignee_id)===String(it.assigned_to);
+    const proj=pid&&o.project_id&&String(o.project_id)===String(pid);
+    if(who||proj||(!pid&&!o.project_id)) return o;
+  }
+  return null;
+}
 // Fuzzy-match an AI-extracted assignee name to a real company user.
 function mmMatchUser(name,users){
   if(!name||!users||!users.length) return null;
@@ -734,32 +771,56 @@ function mmMatchUser(name,users){
 function mmMinutesText(m,refs){
   const L=[];
   L.push("📋 "+((m&&m.title)||"Meeting"));
+  if(m&&(m.attendees||[]).length) L.push(t("mom.mm_haazri_n",{n:m.attendees.length})+": "+m.attendees.map(a=>a.name).join(", "));
   if(m&&m.summary){ L.push(""); L.push(m.summary); }
   const ok=(refs||[]).filter(r=>r.ok);
-  if(ok.length){ L.push(""); L.push("Action items:"); ok.forEach(r=>L.push("• ["+(MM_TYPE[r.type]?MM_TYPE[r.type].label:r.type)+"] "+r.title+(r.ref?" ("+r.ref+")":""))); }
+  if(ok.length){ L.push(""); L.push(t("mom.mm_action_items")+":"); ok.forEach(r=>L.push("• ["+mmMeta(r.type).label+"] "+r.title+(r.ref?" ("+r.ref+")":""))); }
+  const pts=((m&&m.items)||[]).filter(it=>it.type==="decision"&&it._include!==false);
+  if(pts.length){ L.push(""); L.push(t("mom.mm_mom_points")+":"); pts.forEach(p=>L.push("• "+p.title)); }
   L.push(""); L.push("— Sanchalan Meeting Mode");
   return L.join("\n");
 }
 const MM_SAMPLE="Site pe aaj meeting hui. 50 bag cement aur 500 kg sariya kal site pe chahiye, ye urgent hai warna RCC ka kaam ruk jayega. Ramesh ne bola slab ki shuttering kal tak complete kar dega. Suresh bijli connection wale issue ko follow up karega. Aur client ko site ki updated photos bhejni hai.";
 const fmtSecs=s=>String(Math.floor(s/60)).padStart(2,"0")+":"+String(s%60).padStart(2,"0");
 const MIC_PATH="M12 1a3 3 0 00-3 3v7a3 3 0 006 0V4a3 3 0 00-3-3zM19 10v1a7 7 0 01-14 0v-1M12 18v4M8 22h8";
+const mmIstToday=()=>new Date(Date.now()+5.5*3600e3).toISOString().slice(0,10);
 
-function MMItem({it,meta,onPatch,inputStyle,allMode,projects}){
+function MMItem({it,meta,onPatch,inputStyle,allMode,projects,users,types}){
   const inp={...inputStyle,padding:"6px 8px",fontSize:12};
-  const isUpd=it.type==="task_update";
-  const needProj=allMode&&(it.type==="mr"||it.type==="task"||it.type==="issue")&&!it.project;
+  const isUpd=it.type==="task_update", isPoint=it.type==="decision";
+  const needProj=allMode&&MM_NEEDS_PROJ.includes(it.type)&&!it.project;
+  const old=it.existing_ref;
+  const needWho=MM_NEEDS_WHO.includes(it.type)&&(it.assignee||"").trim()&&!it.assigned_to&&!(old&&it._dup!=="new");
+  const typeSel=(
+    <PickSelect aria-label={t("mom.mm_type")} value={it.type} onChange={e=>onPatch(it._id,{type:e.target.value})} style={{...inp,padding:"4px 7px",width:"auto",fontWeight:700,color:meta.color,border:`1.5px solid ${meta.color}66`}}>
+      {types.map(tp=><option key={tp} value={tp}>{mmMeta(tp).label}</option>)}
+    </PickSelect>
+  );
   return(
     <div style={{background:T.surface,border:`1px solid ${it._include?meta.color+"66":T.b1}`,borderRadius:9,padding:11,marginBottom:8,opacity:it._include?1:0.55}}>
       <div style={{display:"flex",alignItems:"flex-start",gap:10}}>
-        <div onClick={()=>onPatch(it._id,{_include:!it._include})}
+        <div onClick={()=>onPatch(it._id,{_include:!it._include})} role="checkbox" aria-checked={!!it._include}
           style={{width:21,height:21,borderRadius:5,border:`2px solid ${it._include?meta.color:T.b2}`,background:it._include?meta.color:"transparent",flexShrink:0,marginTop:1,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}>
           {it._include&&<IcChk size={12} color="white"/>}
         </div>
         <div style={{flex:1,minWidth:0}}>
+          {old&&(
+            <div style={{background:T.purL,border:`1px solid ${T.purM}`,borderRadius:7,padding:"7px 9px",marginBottom:8}}>
+              <div style={{fontSize:11.5,color:T.t2,marginBottom:6}}>{t("mom.mm_pehle_se_hai",{title:old.title,days:old.days_open>0?t("mom.mm_n_din_se",{n:old.days_open}):t("mom.mm_aaj_se")})}</div>
+              <div role="radiogroup" style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                {[{k:"update",l:t("mom.mm_purane_me_update")},{k:"new",l:t("mom.mm_phir_bhi_naya")}].map(o=>{
+                  const on=(it._dup||"update")===o.k;
+                  return <button key={o.k} type="button" role="radio" aria-checked={on} onClick={()=>onPatch(it._id,{_dup:o.k})}
+                    style={{padding:"4px 10px",borderRadius:14,fontSize:11,fontWeight:700,cursor:"pointer",border:`1.5px solid ${on?T.pur:T.b1}`,background:on?T.surface:"transparent",color:on?T.pur:T.t3}}>{o.l}</button>;
+                })}
+              </div>
+            </div>
+          )}
           {isUpd?(
             <>
               <div style={{fontSize:12.5,fontWeight:600,color:T.t1,marginBottom:6}}>{it.task_name||it.title||t("mom.existing_task")}{allMode&&it.project?<span style={{fontSize:10,fontWeight:500,color:T.t4}}>  ·  {it.project}</span>:null}</div>
               <div style={{display:"flex",gap:6,marginBottom:6,flexWrap:"wrap"}}>
+                {typeSel}
                 <PickSelect value={it.status||""} onChange={e=>onPatch(it._id,{status:e.target.value})} style={{...inp,width:"auto"}}>
                   <option value="">{t("mom.status")}</option>
                   {["Not Started","Ongoing","Completed"].map(s=><option key={s}>{s}</option>)}
@@ -772,17 +833,29 @@ function MMItem({it,meta,onPatch,inputStyle,allMode,projects}){
           ):(
             <>
               <input value={it.title} onChange={e=>onPatch(it._id,{title:e.target.value})} style={{...inp,fontWeight:600,fontSize:12.5,marginBottom:6}}/>
-              {it.type==="mr"?(
+              {isPoint?null:it.type==="mr"?(
                 <div style={{display:"flex",gap:6}}>
                   <input type="number" value={it.quantity} onChange={e=>onPatch(it._id,{quantity:e.target.value})} placeholder={t("common.qty")} style={{...inp,width:70}}/>
                   <input value={it.unit} onChange={e=>onPatch(it._id,{unit:e.target.value})} placeholder="unit" style={{...inp,width:80}}/>
-                  <input value={it.due_date} onChange={e=>onPatch(it._id,{due_date:e.target.value})} placeholder={t("mom.yyyy_mm_dd")} style={{...inp,flex:1}}/>
+                  <input type="date" value={it.due_date||""} onChange={e=>onPatch(it._id,{due_date:e.target.value})} aria-label={t("mom.mm_due")} style={{...inp,flex:1}}/>
                 </div>
               ):(
                 <textarea value={it.description} onChange={e=>onPatch(it._id,{description:e.target.value})} rows={2} placeholder={t("app.details")} style={{...inp,width:"100%",resize:"none",lineHeight:1.4,fontFamily:"inherit"}}/>
               )}
+              {MM_NEEDS_WHO.includes(it.type)&&(
+                <div style={{display:"flex",gap:6,marginTop:6}}>
+                  <PickSelect aria-label={t("mom.mm_assignee_select")} value={it.assigned_to?String(it.assigned_to):""} onChange={e=>onPatch(it._id,{assigned_to:e.target.value?Number(e.target.value):null})}
+                    style={{...inp,flex:1,border:`1.5px solid ${needWho?T.red:T.b1}`}}>
+                    <option value="">{t("mom.mm_assignee_select")}</option>
+                    {users.map(u=><option key={u.id} value={String(u.id)}>{u.name}</option>)}
+                  </PickSelect>
+                  <input type="date" value={it.due_date||""} onChange={e=>onPatch(it._id,{due_date:e.target.value})} aria-label={t("mom.mm_due")} style={{...inp,width:140}}/>
+                </div>
+              )}
+              {needWho?<div style={{fontSize:10.5,color:T.red,marginTop:4}}>{t("mom.mm_assignee_nahi_mila",{name:it.assignee})}</div>:null}
               <div style={{display:"flex",alignItems:"center",gap:8,marginTop:6,flexWrap:"wrap"}}>
-                {it.type!=="mr"&&<PickSelect value={it.priority} onChange={e=>onPatch(it._id,{priority:e.target.value})} style={{...inp,padding:"4px 7px",width:"auto"}}>{["Low","Medium","High"].map(p=><option key={p}>{p}</option>)}</PickSelect>}
+                {typeSel}
+                {it.type!=="mr"&&!isPoint&&<PickSelect value={it.priority} onChange={e=>onPatch(it._id,{priority:e.target.value})} style={{...inp,padding:"4px 7px",width:"auto"}}>{["Low","Medium","High"].map(p=><option key={p}>{p}</option>)}</PickSelect>}
                 {allMode&&(
                   <PickSelect value={it.project||""} onChange={e=>onPatch(it._id,{project:e.target.value})}
                     style={{...inp,padding:"4px 7px",width:"auto",maxWidth:150,border:`1.5px solid ${needProj?T.amb:T.b1}`,color:needProj?T.amb:T.t1}}>
@@ -790,7 +863,6 @@ function MMItem({it,meta,onPatch,inputStyle,allMode,projects}){
                     {projects.map(p=><option key={p.id} value={p.name}>{p.name}</option>)}
                   </PickSelect>
                 )}
-                {it.assignee?<span style={{fontSize:10.5,color:T.t3}}>@ {it.assignee}</span>:null}
                 <span style={{marginLeft:"auto",fontSize:9.5,color:T.t4}}>{Math.round((it.confidence||0)*100)}%</span>
               </div>
             </>
@@ -801,13 +873,38 @@ function MMItem({it,meta,onPatch,inputStyle,allMode,projects}){
   );
 }
 
+// Pichhle baaki kaam ki ek row
+function MMOpenRow({o,busy,msg,onDone,onPct}){
+  const meta=mmMeta(o.type);
+  const btn={background:T.surface,border:`1px solid ${T.b1}`,borderRadius:6,padding:"4px 10px",fontSize:11,fontWeight:700,cursor:busy?"default":"pointer",flexShrink:0};
+  return(
+    <div style={{background:T.surface,border:`1px solid ${o.overdue?T.redM:T.b1}`,borderRadius:8,padding:"8px 11px",marginBottom:6}}>
+      <div style={{display:"flex",alignItems:"center",gap:8}}>
+        <span style={{fontSize:9,fontWeight:700,color:meta.color,background:meta.bg,padding:"2px 6px",borderRadius:5,flexShrink:0}}>{meta.label}</span>
+        <span style={{flex:1,minWidth:0,fontSize:12.5,fontWeight:600,color:T.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{o.title}</span>
+        {["work","todo","issue"].includes(o.type)&&<button type="button" disabled={busy} onClick={()=>onDone(o)} style={{...btn,color:T.grn}}>{busy?"…":t("mom.mm_ho_gaya")}</button>}
+        {o.type==="task"&&<button type="button" disabled={busy} onClick={()=>onPct(o)} style={{...btn,color:T.blu}}>{busy?"…":(o.progress||0)+"%"}</button>}
+      </div>
+      <div style={{fontSize:10.5,color:T.t4,marginTop:3,display:"flex",gap:6,flexWrap:"wrap"}}>
+        {o.assignee?<span>@ {o.assignee}</span>:null}
+        {o.project_name?<span>· {o.project_name}</span>:null}
+        <span>· {o.days_open>0?t("mom.mm_n_din_se",{n:o.days_open}):t("mom.mm_aaj_se")}</span>
+        {o.overdue?<span style={{color:T.red,fontWeight:700}}>· {t("mom.mm_overdue")}</span>:null}
+        {o.meeting?<span>· {t("mom.mm_meeting_se")}</span>:null}
+      </div>
+      {msg?<div style={{fontSize:11,color:T.red,marginTop:3}}>{msg}</div>:null}
+    </div>
+  );
+}
+
 // Awaaz → text aur AI extraction me der lagti hai (lambi all-projects meeting
 // ~1 minute). Aam 15 s ka timeout beech me hi "Request timed out" de deta tha
 // (24 Oct, Greenbox Bhilai) — phone app jaisa 3 minute.
 const MEETING_AI_TIMEOUT_MS = 180000;
 
-function MeetingModeModal({projectId=null,projectName="",onClose,onComplete}){
-  const [step,setStep]=useState("capture");           // capture | review | done
+// resume: review / partial meeting ko dobara kholna (AI Meetings se)
+function MeetingModeModal({projectId=null,projectName="",onClose,onComplete,resume=null}){
+  const [step,setStep]=useState("capture");           // capture | review | overview | done
   const [mode,setMode]=useState(projectId?"single":"all"); // default All at company level; Single inside a project
   const [addingTitle,setAddingTitle]=useState(false);  // "Add new" meeting-title input open
   const [customTitles,setCustomTitles]=useState([]);   // company's own saved titles (localStorage)
@@ -825,26 +922,83 @@ function MeetingModeModal({projectId=null,projectName="",onClose,onComplete}){
   const [committing,setCommitting]=useState(false);
   const [result,setResult]=useState(null);
   const [err,setErr]=useState("");
-  const [users,setUsers]=useState([]);       // staff (assignee auto-match)
+  const [users,setUsers]=useState([]);       // staff (assignee + haazri)
   const [audioUrl,setAudioUrl]=useState(null); // archived recording
   const [weather,setWeather]=useState(null);   // weather suggestions
   const [copied,setCopied]=useState(false);
-  const mrRef=useRef(null),chunksRef=useRef([]),streamRef=useRef(null),timerRef=useRef(null);
+  const [allowed,setAllowed]=useState(MM_ALL); // "Is meeting se kya banega"
+  const [attendees,setAttendees]=useState([]); // haazri — user ids
+  const [showHaazri,setShowHaazri]=useState(false);
+  const [open,setOpen]=useState(null);         // { items, last_meeting }
+  const [showOld,setShowOld]=useState(false);
+  const [rowBusy,setRowBusy]=useState({});
+  const [rowMsg,setRowMsg]=useState({});
+  const [saved,setSaved]=useState(false);
+  const mrRef=useRef(null),chunksRef=useRef([]),streamRef=useRef(null),timerRef=useRef(null),saveTimer=useRef(null),dirty=useRef(false);
+  const me=(()=>{ try{ return JSON.parse(localStorage.getItem("gb_user")||"{}"); }catch(e){ return {}; } })();
 
   useEffect(()=>{
     api.get("/projects").then(r=>{ if(r&&r.success&&Array.isArray(r.data)) setProjects(r.data); }).catch(()=>{});
     // team-members har role ko milta hai (/settings/users non-admin ko 403 — auto-match chup-chaap band tha)
     api.get("/projects/team-members").then(r=>{ if(r&&r.success&&Array.isArray(r.data)) setUsers(r.data.filter(u=>u.role!=="client"&&(u.name||"").trim())); }).catch(()=>{});
     try{ const s=JSON.parse(localStorage.getItem(mmTitleKey)||"[]"); if(Array.isArray(s)) setCustomTitles(s); }catch(e){}
-    return ()=>{ if(timerRef.current) clearInterval(timerRef.current); if(streamRef.current){ try{streamRef.current.getTracks().forEach(t=>t.stop());}catch(e){} } };
+    return ()=>{ if(timerRef.current) clearInterval(timerRef.current); if(saveTimer.current) clearTimeout(saveTimer.current); if(streamRef.current){ try{streamRef.current.getTracks().forEach(t=>t.stop());}catch(e){} } };
+  // mount par ek baar
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   },[]);
   // per-company key so each firm builds its own meeting-title nomenclature
-  const mmTitleKey=(()=>{ try{ const u=JSON.parse(localStorage.getItem("gb_user")||"{}"); return "mm_titles_"+(u.company_id||u.companyId||"x"); }catch(e){ return "mm_titles"; } })();
+  const cidKey=me.company_id||me.companyId||"x";
+  const mmTitleKey="mm_titles_"+cidKey;
   const addCustomTitle=t=>{ t=(t||"").trim(); if(!t){ setAddingTitle(false); return; } setCustomTitles(prev=>{ if(prev.includes(t)) return prev; const nx=[t,...prev].slice(0,12); try{ localStorage.setItem(mmTitleKey,JSON.stringify(nx)); }catch(e){} return nx; }); setTitle(t); setAddingTitle(false); };
+
+  // ── kya banega + pichhla baaki kaam: project / All badalte hi ──
+  const scope=mode==="all"?"all":(proj||"");
+  const typesKey="mm_types_"+cidKey+"_"+(scope||"all");
+  useEffect(()=>{
+    let live=true;
+    let local=null; try{ const s=JSON.parse(localStorage.getItem(typesKey)||"null"); if(Array.isArray(s)&&s.length) local=s; }catch(e){}
+    setAllowed(local||MM_ALL);
+    if(scope) api.get("/meetings/prefs?project_id="+scope).then(r=>{ if(live&&r&&r.success&&r.data&&Array.isArray(r.data.types)) setAllowed(r.data.types); }).catch(()=>{});
+    return ()=>{ live=false; };
+  },[scope,typesKey]);
+  const loadOpen=()=>{ if(!scope){ setOpen(null); return; } api.get("/meetings/open-items?project_id="+scope).then(r=>setOpen(r&&r.success&&r.data?r.data:null)).catch(()=>setOpen(null)); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(()=>{ setShowOld(false); setRowMsg({}); loadOpen(); },[scope]);
+  const toggleTick=k=>{
+    const next=allowed.includes(k)?allowed.filter(x=>x!==k):MM_ALL.filter(x=>x===k||allowed.includes(x));
+    if(!next.length){ setErr(t("mom.mm_ek_type_select")); return; }
+    setErr(""); setAllowed(next);
+    try{ localStorage.setItem(typesKey,JSON.stringify(next)); }catch(e){}
+    if(scope) api.put("/meetings/prefs",{project_id:scope,types:next}).catch(()=>{});
+  };
+  const toggleAttendee=id=>setAttendees(p=>p.includes(id)?p.filter(x=>x!==id):[...p,id]);
+  const attendeeList=()=>attendees.map(id=>users.find(u=>String(u.id)===String(id))).filter(Boolean).map(u=>({id:u.id,name:u.name}));
+  const rowKey=o=>o.type+":"+o.id;
+  const quickDone=async o=>{
+    const k=rowKey(o); setRowBusy(p=>({...p,[k]:true})); setRowMsg(p=>({...p,[k]:""}));
+    let r=null;
+    try{
+      if(o.type==="work") r=await api.put("/work-items/"+o.id+"/done",{});
+      else if(o.type==="todo") r=o.source==="project_task"?await api.put("/tasks/"+o.id,{status:"Completed",from:"todo"}):await api.put("/projects/company-todos/"+o.id,{status:"Completed"});
+      else if(o.type==="issue") r=await api.put("/tasks/issues/"+o.id,{status:"Resolved"});
+    }catch(e){}
+    setRowBusy(p=>({...p,[k]:false}));
+    if(r&&r.success) loadOpen(); else setRowMsg(p=>({...p,[k]:(r&&r.message)||t("mom.mm_save_nahi_hua")}));
+  };
+  const quickPct=async o=>{
+    const raw=window.prompt(t("mom.mm_pct_prompt"),String(o.progress||0)); if(raw==null) return;
+    const n=Math.round(Number(raw)); if(!Number.isFinite(n)||n<0||n>100){ alert(t("mom.mm_pct_galat")); return; }
+    const k=rowKey(o); setRowBusy(p=>({...p,[k]:true})); setRowMsg(p=>({...p,[k]:""}));
+    let r=null; try{ r=await api.put("/tasks/"+o.id,{progress:n}); }catch(e){}
+    setRowBusy(p=>({...p,[k]:false}));
+    if(r&&r.success) loadOpen(); else setRowMsg(p=>({...p,[k]:(r&&r.message)||t("mom.mm_save_nahi_hua")}));
+  };
 
   const projName=id=>projects.find(p=>String(p.id)===String(id))?.name||projectName||"";
   const loadWeather=pid=>{ setWeather(null); if(!pid) return; api.get("/meetings/weather?project_id="+pid).then(r=>{ if(r&&r.success) setWeather(r); }).catch(()=>{}); };
-  const addSuggestion=sug=>setItems(prev=>prev.some(x=>x.title===sug.title&&x.type===sug.type)?prev:[...prev,{...sug,_id:"w"+prev.length+"_"+(sug.title||"").length,_include:true}]);
+  const meetingAllowed=(meeting&&meeting.allowed_types)||allowed;
+  const fitType=tp=>meetingAllowed.includes(tp)?tp:meetingAllowed.includes("work")?"work":meetingAllowed.includes("todo")?"todo":"decision";
+  const addSuggestion=sug=>{ dirty.current=true; setItems(prev=>prev.some(x=>x.title===sug.title)?prev:[...prev,{...sug,type:fitType(sug.type),_id:"w"+prev.length+"_"+(sug.title||"").length,_include:true,_dup:"update",assigned_to:null}]); };
   const blobToB64=blob=>new Promise((res,rej)=>{ const fr=new FileReader(); fr.onerror=rej; fr.onloadend=()=>res(fr.result); fr.readAsDataURL(blob); });
 
   const startRec=async()=>{
@@ -873,121 +1027,168 @@ function MeetingModeModal({projectId=null,projectName="",onClose,onComplete}){
       const b64=await blobToB64(blob);
       const r=await api.post("/meetings/transcribe",{audio_base64:b64,mime_type:blob.type},{timeoutMs:MEETING_AI_TIMEOUT_MS});
       setTranscribing(false);
-      if(!r||!r.success){ setErr(r?.message||"Transcription fail hua."); return; }
+      if(!r||!r.success){ setErr(r?.message||t("mom.mm_transcription_fail")); return; }
       setTranscript(p=>(p&&p.trim()?p.trim()+" ":"")+(r.transcript||""));
       if(r.audio_url) setAudioUrl(r.audio_url);
-      if(r.mock) setRecInfo("Demo transcript (backend pe SARVAM_API_KEY set karein real transcription ke liye).");
+      if(r.mock) setRecInfo(t("mom.mm_demo_transcript"));
     }catch(e){ setTranscribing(false); setErr(t("mom.audio_process_nahi_hua_dobara_try")); }
   };
+
+  const openReview=(m,openList)=>{
+    setMeeting(m);
+    if(m.project_id){ setMode("single"); setProj(String(m.project_id)); }
+    if(Array.isArray(m.attendees)&&m.attendees.length) setAttendees(m.attendees.map(a=>a.id).filter(Boolean));
+    if(m.title) setTitle(m.title);
+    setItems((m.items||[]).map((it,i)=>{
+      const x={...it,_id:it._id!=null?it._id:i,_include:it._include!==undefined?it._include:true,_dup:it._dup||"update"};
+      if(x.assigned_to===undefined){ const mu=mmMatchUser(x.assignee,users); x.assigned_to=mu?mu.id:null; }
+      if(!x.existing_ref&&it._include===undefined){
+        const pid=m.project_id||(projects.find(pp=>pp.name===(x.project||""))||{}).id;
+        const d=mmFindDup(x,openList||[],pid);
+        if(d) x.existing_ref={type:d.type,id:d.id,title:d.title,days_open:d.days_open,assignee:d.assignee,source:d.source,project_id:d.project_id,client:true};
+      }
+      return x;
+    }));
+    dirty.current=false; setSaved(false);
+    if(m.project_id) loadWeather(m.project_id); else setWeather(null);
+    if(m.status==="partial"){ setResult({refs:m.committed_refs||[],mom:null}); setStep("done"); }
+    else setStep("review");
+  };
+  // AI Meetings se draft / adhoori meeting dobara
+  useEffect(()=>{ if(resume) openReview(resume,[]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[resume]);
+  // Team der se aayi — AI ke naam ka mel ab
+  useEffect(()=>{
+    if(!users.length) return;
+    setItems(prev=>prev.some(x=>x.assigned_to==null&&(x.assignee||"").trim())?prev.map(x=>x.assigned_to==null&&(x.assignee||"").trim()?{...x,assigned_to:(mmMatchUser(x.assignee,users)||{}).id||null}:x):prev);
+  },[users]);
 
   const doExtract=async()=>{
     if(mode==="single"&&!proj){ setErr(t("mom.single_project_mode_me_pehle_project")); return; }
     if(!transcript.trim()){ setErr(t("mom.pehle_record_karein_ya_transcript_daalein")); return; }
     setErr(""); setExtracting(true);
-    const r=await api.post("/meetings/extract",{transcript:transcript.trim(),mode,project_id:proj||undefined,project_name:projName(proj)||undefined,title:title.trim()||undefined,audio_url:audioUrl||undefined},{timeoutMs:MEETING_AI_TIMEOUT_MS});
+    const r=await api.post("/meetings/extract",{transcript:transcript.trim(),mode,project_id:proj||undefined,project_name:projName(proj)||undefined,title:title.trim()||undefined,audio_url:audioUrl||undefined,allowed_types:allowed,attendees:attendeeList()},{timeoutMs:MEETING_AI_TIMEOUT_MS});
     setExtracting(false);
-    if(!r||!r.success){ setErr(r?.message||"AI extraction fail hua."); return; }
-    setMeeting(r.data);
-    setItems((r.data.items||[]).map((it,i)=>({...it,_id:i,_include:true})));
-    if(mode==="single") loadWeather(proj||r.data.project_id); else setWeather(null);
-    setStep("review");
+    if(!r||!r.success){ setErr(r?.message||t("mom.mm_ai_fail")); return; }
+    openReview(r.data,(open&&open.items)||[]);
+    if(r.mock) setRecInfo(t("mom.mm_demo_ai"));
   };
-  const patchItem=(id,patch)=>setItems(p=>p.map(it=>it._id===id?{...it,...patch}:it));
+  const patchItem=(id,patch)=>{ dirty.current=true; setItems(p=>p.map(it=>it._id===id?{...it,...patch}:it)); };
+  // Draft autosave — review ka badlav 1.2 s ruk kar meeting me
+  useEffect(()=>{
+    if(!dirty.current||!meeting||!meeting.id||(step!=="review"&&step!=="overview")) return undefined;
+    if(saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current=setTimeout(()=>{ dirty.current=false; api.patch("/meetings/"+meeting.id,{items}).then(r=>{ if(r&&r.success) setSaved(true); }).catch(()=>{}); },1200);
+    return ()=>{ if(saveTimer.current) clearTimeout(saveTimer.current); };
+  },[items,meeting,step]);
 
   // resolve a project id per item (all-mode: from item.project name; single: the picked project)
   const pidFor=it=>{
     if(mode==="all"){ const p=projects.find(pp=>pp.name===(it.project||"")); return p?p.id:null; }
     return proj||(meeting&&meeting.project_id)||null;
   };
-  const missingProj=()=>items.filter(it=>it._include&&(it.type==="mr"||it.type==="task"||it.type==="issue")&&!pidFor(it));
-  // Review → Overview: validate every item has a project before the summary/submit
-  const goOverview=()=>{
+  const isUpdOld=it=>!!(it.existing_ref&&it._dup!=="new");
+  const userName=id=>(users.find(u=>String(u.id)===String(id))||{}).name||"";
+  const checkReady=()=>{
     const chosen=items.filter(it=>it._include);
-    if(!chosen.length){ setErr(t("mom.kam_se_kam_ek_item_select")); return; }
-    const need=missingProj();
-    if(need.length){ setErr(mode==="all"?`${need.length} item ko project assign karein (dropdown).`:"Material/Task/Issue ke liye project select karein."); return; }
-    setErr(""); setStep("overview");
+    if(!chosen.length) return t("mom.kam_se_kam_ek_item_select");
+    const need=chosen.filter(it=>MM_NEEDS_PROJ.includes(it.type)&&!isUpdOld(it)&&!pidFor(it));
+    if(need.length) return mode==="all"?t("mom.mm_n_item_project",{n:need.length}):t("mom.mm_project_select");
+    const who=chosen.filter(it=>MM_NEEDS_WHO.includes(it.type)&&!isUpdOld(it)&&(it.assignee||"").trim()&&!it.assigned_to);
+    if(who.length) return t("mom.mm_n_assignee_baaki",{n:who.length});
+    return "";
+  };
+  // Review → Overview: validate every item before the summary/submit
+  const goOverview=()=>{ const bad=checkReady(); if(bad){ setErr(bad); return; } setErr(""); setStep("overview"); };
+  const refOf=(it,r,extra={})=>{ const ok=!!(r&&(r.success||(r.data&&r.success!==false))); return {key:it._id,type:it.type,title:isUpdTitle(it),ok,...(ok?{}:{error:(r&&r.message)||""}),...extra}; };
+
+  const commitOne=async(it,mTitle)=>{
+    const pid=pidFor(it), who=it.assigned_to||null, whoName=who?userName(who):"";
+    let r;
+    if(isUpdOld(it)){
+      const e=it.existing_ref, text=(it.description||it.title)+(mTitle?" — "+mTitle:"");
+      if(e.type==="work") r=await api.post("/work-items/"+e.id+"/updates",{text,meeting_id:meeting.id,due_date:it.due_date||undefined});
+      else if(e.type==="todo") r=e.source==="project_task"?await api.post("/tasks/"+e.id+"/comments",{text}):await api.post("/projects/company-todos/"+e.id+"/comments",{text});
+      else if(e.type==="issue") r=await api.post("/tasks/issues/"+e.id+"/comments",{text});
+      else if(e.type==="task") r=await api.post("/tasks/"+e.id+"/comments",{text});
+      else r={success:true};
+      return {...refOf(it,r),type:e.type==="todo"&&e.source==="project_task"?"task":e.type,id:e.id,ref:t("mom.mm_updated_old"),updated:true};
+    }
+    let ref,id;
+    if(it.type==="work"){
+      r=await api.post("/work-items",{title:it.title,description:it.description||"",project_id:pid||null,assigned_to:who,due_date:it.due_date||null,priority:it.priority||"Medium",meeting_id:meeting.id});
+      ref=whoName||undefined;
+    }else if(it.type==="mr"){
+      r=await api.post("/procurement/mrs",{project_id:pid,project_name:projName(pid),item_name:it.title,quantity:Number(it.quantity)||1,unit:it.unit||"Nos",notes:it.description||null,required_date:it.due_date||null,priority:it.priority||undefined});
+      ref=r?.data?.mr_number||r?.data?.id;
+    }else if(it.type==="task"){
+      // title NAHI — title wali row To-Do list me bhi dikhti thi (29 Oct 2026)
+      r=await api.post("/tasks",{project_id:pid,parent_id:null,name:it.title,description:it.description||"",category:"General",assigned_to:who,due_date:it.due_date||undefined,priority:it.priority||undefined});
+      ref=r?.data?.task_no?("#"+r.data.task_no):r?.data?.id;
+    }else if(it.type==="todo"){
+      r=await api.post("/projects/company-todos",{title:it.title,description:it.description||"",priority:it.priority||"Medium",category:"Other",due_date:it.due_date||"",project_id:pid||null,assigned_to:who||undefined});
+      ref=whoName||r?.data?.id;
+    }else if(it.type==="issue"){
+      r=await api.post("/tasks/project/"+pid+"/issues",{title:it.title,description:it.description||"",priority:it.priority||"Medium",assigned_to:whoName||it.assignee||null});
+      ref=r?.data?.id?t("mom.mm_raised"):undefined;
+    }else if(it.type==="task_update"){
+      if(it.task_id){
+        const body={};
+        if(it.status) body.status=it.status;
+        if(typeof it.progress==="number"&&it.progress>=0) body.progress=it.progress;
+        r=(it.status||body.progress!=null)?await api.put("/tasks/"+it.task_id,body):{success:true};
+        if(it.note&&r&&r.success){ try{ await api.post("/tasks/"+it.task_id+"/comments",{text:it.note}); }catch(e){} }
+        ref=it.status||(body.progress!=null?it.progress+"%":"updated"); id=it.task_id;
+      } else r={success:false,message:t("mom.koi_existing_task_match_nahi_skip")};
+    }
+    const out=refOf(it,r,{ref}); out.id=id||(r&&r.data?r.data.id:undefined);
+    return out;
   };
 
-  const commit=async()=>{
+  // onlyKeys: "Dobara try karo" — sirf fail hue item
+  const commit=async onlyKeys=>{
     const chosen=items.filter(it=>it._include);
-    if(!chosen.length){ setErr(t("mom.kam_se_kam_ek_item_select")); return; }
-    const allMode=mode==="all";
-    const need=missingProj();
-    if(need.length){ setErr(allMode?`${need.length} item ko project assign karein (dropdown).`:"Material/Task/Issue ke liye project select karein."); setStep("review"); return; }
+    const bad=checkReady(); if(bad){ setErr(bad); setStep("review"); return; }
     setErr(""); setCommitting(true);
-    const refs=[];
-    const holderCache={}; // project_id -> "Site Issues" holder task id (issues need a parent task)
-    const getHolder=async(pid)=>{
-      if(holderCache[pid]!==undefined) return holderCache[pid];
-      let tid=null;
+    const allMode=mode==="all";
+    const mTitle=title.trim()||(meeting&&meeting.title)||"";
+    const run=chosen.filter(it=>it.type!=="decision"&&(!onlyKeys||onlyKeys.includes(it._id)));
+    const fresh=[];
+    for(const it of run){ try{ fresh.push(await commitOne(it,mTitle)); }catch(e){ fresh.push(refOf(it,null,{error:(e&&e.message)||""})); } }
+    const byKey=new Map(fresh.map(r=>[r.key,r]));
+    const refs=onlyKeys?((result&&result.refs)||[]).map(r=>byKey.get(r.key)||r):fresh;
+    // MOM — ek hi baar: charcha, action (work/todo/issue), faisle (MOM point), haazri
+    let createdMOM=(result&&result.mom)||null, momId=(meeting&&meeting.mom_id)||null;
+    if(!momId){
       try{
-        const lr=await api.get("/tasks?project_id="+pid);
-        const list=(lr&&lr.data)||[];
-        const found=list.find(t=>(t.name||"").toLowerCase()==="site issues");
-        if(found) tid=found.id;
-        else { const cr=await api.post("/tasks",{project_id:pid,name:"Site Issues",title:t("mom.site_issues"),category:"General"}); tid=cr?.data?.id||null; }
+        const grp=tp=>chosen.filter(it=>it.type===tp);
+        const tag=it=>allMode&&it.project?` [${it.project}]`:"";
+        const todoActions=[...grp("work"),...grp("todo"),...grp("issue")].map((it,i)=>({id:"A"+(i+1),task:(it.type==="issue"?"[Issue] ":"")+it.title+tag(it),assignee:userName(it.assigned_to)||it.assignee||"",dueDate:it.due_date||"",status:"Pending",priority:it.priority||"Medium"}));
+        const disc=grp("decision").map(d=>({point:d.title+tag(d)}));
+        if(grp("mr").length) disc.push({point:t("mom.mm_materials")+": "+grp("mr").map(m=>`${m.title} (${m.quantity||""} ${m.unit||""})`.trim()+tag(m)).join(", ")});
+        if(grp("task").length) disc.push({point:t("mom.mm_tasks")+": "+grp("task").map(x=>x.title+tag(x)).join(", ")});
+        if(grp("task_update").length) disc.push({point:t("mom.mm_task_updates")+": "+grp("task_update").map(x=>`${x.task_name||x.title} → ${x.status||""}${x.progress>=0?` ${x.progress}%`:""}`.trim()).join(", ")});
+        const singlePid=allMode?null:(proj||(meeting&&meeting.project_id)||null);
+        const payload={
+          title:mTitle||(meeting&&meeting.summary?meeting.summary.slice(0,50):"Meeting"),
+          type:allMode?"Progress Review":"Site Review", site:allMode?t("mom.mm_multiple_projects"):projName(singlePid), project_id:singlePid, venue:"",
+          date:mmIstToday(), time:new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"}),
+          conductedBy:me.name||"", attendees:attendeeList().map(a=>a.name), agenda:(meeting&&meeting.summary)||"",
+          notes:(meeting&&meeting.transcript)||transcript, discussion:disc, actionItems:todoActions, nextMeeting:null, status:"Finalized",
+        };
+        const mr=await api.post("/mom",payload);
+        if(mr&&mr.success){ createdMOM=mr.data; momId=mr.data&&(mr.data.id||mr.data._id)||null; }
       }catch(e){}
-      holderCache[pid]=tid; return tid;
-    };
-    for(const it of chosen){
-      const pid=pidFor(it);
-      const mu=(it.type==="task"||it.type==="todo"||it.type==="issue")?mmMatchUser(it.assignee,users):null;
-      try{
-        let r,ref;
-        if(it.type==="mr"){
-          r=await api.post("/procurement/mrs",{project_id:pid,project_name:projName(pid),item_name:it.title,quantity:Number(it.quantity)||1,unit:it.unit||"Nos",notes:it.description||null,required_date:it.due_date||null});
-          ref=r?.data?.mr_number||r?.data?.id;
-        }else if(it.type==="task"){
-          r=await api.post("/tasks",{project_id:pid,parent_id:null,name:it.title,title:it.title,description:(it.description||"")+(it.assignee&&!mu?`\n(Assignee: ${it.assignee})`:""),category:"General",assigned_to:mu?mu.id:null});
-          ref=r?.data?.task_no?("#"+r.data.task_no):r?.data?.id;
-        }else if(it.type==="todo"){
-          r=await api.post("/projects/company-todos",{title:it.title,description:it.description||"",priority:it.priority||"Medium",category:"Other",due_date:it.due_date||"",project_id:pid||null,assigned_to:mu?mu.id:undefined});
-          ref=r?.data?.id;
-        }else if(it.type==="issue"){
-          const holder=await getHolder(pid);
-          if(holder){ r=await api.post("/tasks/"+holder+"/issues",{title:it.title,description:it.description||"",priority:it.priority||"Medium",assigned_to:mu?mu.name:(it.assignee||null)}); ref=r?.data?.id?"raised":undefined; }
-          else r={success:false};
-        }else if(it.type==="task_update"){
-          if(it.task_id){
-            const body={};
-            if(it.status) body.status=it.status;
-            if(typeof it.progress==="number"&&it.progress>=0) body.progress=it.progress;
-            r=(it.status||body.progress!=null)?await api.put("/tasks/"+it.task_id,body):{success:true};
-            if(it.note){ try{ await api.post("/tasks/"+it.task_id+"/comments",{text:it.note}); }catch(e){} }
-            ref=it.status||(body.progress!=null?it.progress+"%":"updated");
-          } else r={success:false};
-        }
-        const id=it.type==="task_update"?it.task_id:(r&&r.data?r.data.id:undefined);
-        refs.push({type:it.type,title:isUpdTitle(it),ok:!!(r&&(r.success||r.data)),ref,id});
-      }catch(e){ refs.push({type:it.type,title:isUpdTitle(it),ok:false}); }
     }
-    // Create the MOM (minutes) so the meeting shows up in this list
-    let createdMOM=null;
-    try{
-      const me=JSON.parse(localStorage.getItem("gb_user")||"{}");
-      const grp=tp=>chosen.filter(it=>it.type===tp);
-      const tag=it=>allMode&&it.project?` [${it.project}]`:"";
-      const todoActions=[...grp("todo"),...grp("issue")].map((it,i)=>({id:"A"+(i+1),task:(it.type==="issue"?"[Issue] ":"")+it.title+tag(it),assignee:it.assignee||"",dueDate:it.due_date||"",status:"Pending",priority:it.priority||"Medium"}));
-      const disc=[];
-      if(grp("mr").length) disc.push({point:"Materials: "+grp("mr").map(m=>`${m.title} (${m.quantity||""} ${m.unit||""})`.trim()+tag(m)).join(", ")});
-      if(grp("task").length) disc.push({point:"Tasks: "+grp("task").map(t=>t.title+tag(t)).join(", ")});
-      if(grp("task_update").length) disc.push({point:"Task updates: "+grp("task_update").map(t=>`${t.task_name||t.title} → ${t.status||""}${t.progress>=0?` ${t.progress}%`:""}`.trim()).join(", ")});
-      const singlePid=allMode?null:(proj||(meeting&&meeting.project_id)||null);
-      const payload={
-        title:title.trim()||(meeting&&meeting.summary?meeting.summary.slice(0,50):"Meeting"),
-        type:allMode?"Progress Review":"Site Review", site:allMode?"Multiple projects":projName(singlePid), project_id:singlePid, venue:"",
-        date:TODAY, time:new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"}),
-        conductedBy:me.name||"", attendees:[], agenda:(meeting&&meeting.summary)||"",
-        notes:transcript, discussion:disc, actionItems:todoActions, nextMeeting:null, status:"Finalized",
-      };
-      const mr=await api.post("/mom",payload);
-      if(mr&&mr.success) createdMOM=mr.data;
-    }catch(e){}
-    if(meeting&&meeting.id){ try{ await api.patch("/meetings/"+meeting.id,{status:"committed",committed_refs:refs}); }catch(e){} }
+    const status=refs.length&&refs.every(r=>r.ok)?"committed":"partial";
+    if(meeting&&meeting.id){ try{ await api.patch("/meetings/"+meeting.id,{status,committed_refs:refs,mom_id:momId||undefined,attendees:attendeeList(),items}); }catch(e){} }
+    setMeeting(m=>({...m,status,committed_refs:refs,mom_id:momId}));
     setCommitting(false);
     setResult({refs,mom:createdMOM});
-    if(createdMOM&&onComplete) onComplete(createdMOM);
+    setStep("done");
+    if(createdMOM&&!onlyKeys&&onComplete) onComplete(createdMOM);
+    loadOpen();
   };
   const isUpdTitle=it=>it.type==="task_update"?(it.task_name||it.title):it.title;
 
@@ -998,6 +1199,10 @@ function MeetingModeModal({projectId=null,projectName="",onClose,onComplete}){
   const chosenCount=items.filter(it=>it._include).length;
   const MM_TITLE_PRESETS=["Daily Meeting","Morning Meeting","Evening Meeting","Site Review","Client Meeting"];
   const titleOptions=[...MM_TITLE_PRESETS,...customTitles.filter(t=>!MM_TITLE_PRESETS.includes(t))];
+  const openList=(open&&open.items)||[];
+  const recentOpen=openList.filter(o=>Number(o.days_open)<=30), oldOpen=openList.filter(o=>Number(o.days_open)>30);
+  const last=open&&open.last_meeting;
+  const failed=result?result.refs.filter(r=>!r.ok):[];
 
   return(
     <>
@@ -1010,7 +1215,7 @@ function MeetingModeModal({projectId=null,projectName="",onClose,onComplete}){
           </div>
           <div style={{flex:1}}>
             <div style={{fontSize:14,fontWeight:700,color:"white"}}>{t("mom.meeting_mode")}</div>
-            <div style={{fontSize:10,color:"rgba(255,255,255,0.5)"}}>{step==="review"?t("mom.review_edit_items_project_check_karein"):step==="overview"?t("mom.overview_ek_nazar_me_phir_submit"):step==="done"?t("mom.ho_gaya"):t("mom.record_ya_paste_karein_ai_nikalegi")}</div>
+            <div style={{fontSize:10,color:"rgba(255,255,255,0.5)"}}>{step==="review"?t("mom.review_edit_items_project_check_karein")+(saved?" · "+t("mom.mm_draft_saved"):""):step==="overview"?t("mom.overview_ek_nazar_me_phir_submit"):step==="done"?(failed.length?t("mom.mm_adhoori"):t("mom.ho_gaya")):t("mom.record_ya_paste_karein_ai_nikalegi")}</div>
           </div>
           <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",padding:4}}><IcX size={18} color="rgba(255,255,255,0.7)"/></button>
         </div>
@@ -1036,6 +1241,31 @@ function MeetingModeModal({projectId=null,projectName="",onClose,onComplete}){
               ):(
                 <div style={{marginBottom:12,fontSize:11,color:T.t2,background:T.purL,border:`1px solid ${T.purM}`,borderRadius:8,padding:"9px 11px",lineHeight:1.5}}>
                   <b style={{color:T.pur}}>{t("mom.all_projects_mode")}</b> {t("mom.ek_hi_recording_me_saare_projects")}
+                </div>
+              )}
+              {/* Is meeting se kya banega — project-wise yaad */}
+              <label style={labelStyle}>{t("mom.mm_kya_banega")}</label>
+              <div role="group" aria-label={t("mom.mm_kya_banega")} style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:12}}>
+                {MM_TICKS.map(x=>{ const on=allowed.includes(x.k); return(
+                  <button key={x.k} type="button" aria-pressed={on} onClick={()=>toggleTick(x.k)}
+                    style={{display:"flex",alignItems:"center",gap:5,padding:"5px 11px",borderRadius:16,fontSize:11.5,fontWeight:700,cursor:"pointer",border:`1.5px solid ${on?T.blu:T.b1}`,background:on?T.bluL:T.surface,color:on?T.blu:T.t3}}>
+                    {on?<IcChk size={12} color={T.blu}/>:null}{x.l}
+                  </button>
+                ); })}
+              </div>
+              {/* Haazri */}
+              <button type="button" onClick={()=>setShowHaazri(v=>!v)} style={{...btnS,width:"100%",textAlign:"left",padding:"8px 12px",fontSize:12,fontWeight:700,color:T.t2,marginBottom:showHaazri?6:12}}>
+                {t("mom.mm_haazri_n",{n:attendees.length})} <span style={{color:T.t4,fontWeight:500}}>{showHaazri?"▲":"▼"}</span>
+              </button>
+              {showHaazri&&(
+                <div style={{marginBottom:12}}>
+                  <div style={{fontSize:10.5,color:T.t4,marginBottom:6}}>{t("mom.mm_haazri_hint")}</div>
+                  <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                    {users.map(u=>{ const on=attendees.includes(u.id); return(
+                      <button key={u.id} type="button" aria-pressed={on} onClick={()=>toggleAttendee(u.id)}
+                        style={{padding:"4px 10px",borderRadius:14,fontSize:11.5,fontWeight:600,cursor:"pointer",border:`1px solid ${on?T.grn:T.b1}`,background:on?T.grnL:T.surface,color:on?T.grn:T.t2}}>{on?"✓ ":""}{u.name}</button>
+                    ); })}
+                  </div>
                 </div>
               )}
               <div style={{marginBottom:12}}>
@@ -1082,13 +1312,29 @@ function MeetingModeModal({projectId=null,projectName="",onClose,onComplete}){
               <textarea value={transcript} onChange={e=>setTranscript(e.target.value)} rows={6} placeholder={t("mom.meeting_ki_baat_cheet_yahan_paste")} style={{...inputStyle,resize:"vertical",lineHeight:1.5}}/>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:6}}>
                 <button onClick={()=>{setTranscript(MM_SAMPLE);setErr("");}} style={{background:"none",border:"none",color:T.blu,fontSize:11.5,fontWeight:600,cursor:"pointer",padding:0}}>{t("mom.sample_try_karein")}</button>
-                <span style={{fontSize:10.5,color:T.t4}}>{transcript.trim()?transcript.trim().length+" chars":""}</span>
+                <span style={{fontSize:10.5,color:T.t4}}>{transcript.trim()?t("mom.mm_n_chars",{n:transcript.trim().length}):""}</span>
               </div>
+              {/* Pichhli meeting + pichhle baaki kaam */}
+              {scope&&open&&(
+                <div style={{marginTop:14}}>
+                  {last&&<div style={{fontSize:11.5,color:T.t3,background:T.surfaceB,border:`1px solid ${T.b1}`,borderRadius:8,padding:"8px 11px",marginBottom:8}}>{t("mom.mm_pichhli_meeting",{date:fmtDate(last.created_at),n:last.total,done:last.done})}</div>}
+                  <label style={labelStyle}>{t("mom.mm_pichhle_baaki",{n:openList.length})}</label>
+                  {openList.length===0&&<div style={{fontSize:12,color:T.t4,marginBottom:6}}>{t("mom.mm_kuch_baaki_nahi")}</div>}
+                  {recentOpen.map(o=><MMOpenRow key={rowKey(o)} o={o} busy={rowBusy[rowKey(o)]} msg={rowMsg[rowKey(o)]} onDone={quickDone} onPct={quickPct}/>)}
+                  {oldOpen.length>0&&(
+                    <>
+                      <button type="button" onClick={()=>setShowOld(v=>!v)} style={{...btnS,width:"100%",padding:"7px 12px",fontSize:11.5,borderStyle:"dashed",marginBottom:6}}>{t("mom.mm_aur_purane",{n:oldOpen.length})} {showOld?"▲":"▼"}</button>
+                      {showOld&&oldOpen.map(o=><MMOpenRow key={rowKey(o)} o={o} busy={rowBusy[rowKey(o)]} msg={rowMsg[rowKey(o)]} onDone={quickDone} onPct={quickPct}/>)}
+                    </>
+                  )}
+                </div>
+              )}
             </>
           )}
 
           {step==="review"&&(
             <>
+              {recInfo&&<div style={{fontSize:11,color:T.amb,background:T.ambL,border:`1px solid ${T.ambM}`,borderRadius:8,padding:"8px 11px",marginBottom:12}}>{recInfo}</div>}
               {meeting&&meeting.summary?(
                 <div style={{background:T.bluL,border:`1px solid ${T.bluM}`,borderRadius:9,padding:"10px 13px",marginBottom:14}}>
                   <div style={{fontSize:9.5,fontWeight:700,color:T.blu,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>{t("mom.ai_summary")}</div>
@@ -1121,10 +1367,10 @@ function MeetingModeModal({projectId=null,projectName="",onClose,onComplete}){
                   </div>
                   <div style={{fontSize:11,color:T.t3,marginBottom:8}}>{weather.summary}</div>
                   {weather.suggestions.map((s,i)=>{
-                    const added=items.some(x=>x.title===s.title&&x.type===s.type);
+                    const added=items.some(x=>x.title===s.title), m=mmMeta(fitType(s.type));
                     return(
                       <div key={i} style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
-                        <span style={{fontSize:9,fontWeight:700,color:MM_TYPE[s.type]?.color,background:MM_TYPE[s.type]?.bg,padding:"2px 6px",borderRadius:5}}>{MM_TYPE[s.type]?.label}</span>
+                        <span style={{fontSize:9,fontWeight:700,color:m.color,background:m.bg,padding:"2px 6px",borderRadius:5}}>{m.label}</span>
                         <span style={{flex:1,fontSize:11.5,color:T.t2}}>{s.title}</span>
                         <button onClick={()=>addSuggestion(s)} disabled={added} style={{background:added?T.grnL:T.blu,color:added?T.grn:"white",border:"none",borderRadius:7,padding:"5px 11px",fontSize:11,fontWeight:700,cursor:added?"default":"pointer"}}>{added?t("mom.added"):t("mom.add")}</button>
                       </div>
@@ -1135,14 +1381,14 @@ function MeetingModeModal({projectId=null,projectName="",onClose,onComplete}){
               {items.length===0&&<div style={{textAlign:"center",padding:"24px",color:T.t4,fontSize:12.5}}>{t("mom.is_meeting_me_koi_action_item")}</div>}
               {MM_ORDER.map(tp=>{
                 const grp=items.filter(it=>it.type===tp); if(!grp.length) return null;
-                const meta=MM_TYPE[tp];
+                const meta=mmMeta(tp);
                 return(
                   <div key={tp} style={{marginBottom:12}}>
                     <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:7}}>
-                      <span style={{fontSize:10,fontWeight:700,color:meta.color}}>{meta.label.toUpperCase()}</span>
-                      <span style={{fontSize:10,color:T.t4}}>{meta.tip}</span>
+                      <span style={{fontSize:10,fontWeight:700,color:meta.color}}>{(tp==="decision"?t("mom.mm_mom_points"):meta.label).toUpperCase()}</span>
+                      <span style={{fontSize:10,color:T.t4}}>→ {meta.tip}</span>
                     </div>
-                    {grp.map(it=><MMItem key={it._id} it={it} meta={meta} onPatch={patchItem} inputStyle={inputStyle} allMode={mode==="all"} projects={projects}/>)}
+                    {grp.map(it=><MMItem key={it._id} it={it} meta={meta} onPatch={patchItem} inputStyle={inputStyle} allMode={mode==="all"} projects={projects} users={users} types={mmTypeOptions(meetingAllowed,it.type)}/>)}
                   </div>
                 );
               })}
@@ -1151,8 +1397,8 @@ function MeetingModeModal({projectId=null,projectName="",onClose,onComplete}){
 
           {step==="overview"&&(()=>{
             const chosen=items.filter(it=>it._include);
-            const groups={};
-            chosen.forEach(it=>{ const pn=mode==="all"?(it.project||"— No project —"):(projName(proj)||"— No project —"); (groups[pn]=groups[pn]||[]).push(it); });
+            const groups={}, noProj=t("mom.mm_no_project");
+            chosen.forEach(it=>{ const pn=mode==="all"?(it.project||noProj):(projName(proj)||noProj); (groups[pn]=groups[pn]||[]).push(it); });
             const names=Object.keys(groups);
             return(
               <>
@@ -1161,17 +1407,18 @@ function MeetingModeModal({projectId=null,projectName="",onClose,onComplete}){
                   <div key={pn} style={{marginBottom:14}}>
                     <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:7,paddingBottom:6,borderBottom:`1px solid ${T.b1}`}}>
                       <span style={{fontSize:12.5,fontWeight:800,color:T.t1}}>{pn}</span>
-                      <span style={{fontSize:10,color:T.t4}}>{groups[pn].length} item{groups[pn].length!==1?"s":""}</span>
+                      <span style={{fontSize:10,color:T.t4}}>{t("mom.mm_n_items",{n:groups[pn].length})}</span>
                     </div>
                     {groups[pn].map(it=>(
                       <div key={it._id} style={{display:"flex",alignItems:"center",gap:9,background:T.surface,border:`1px solid ${T.b1}`,borderRadius:8,padding:"8px 11px",marginBottom:6}}>
-                        <span style={{fontSize:9,fontWeight:700,color:MM_TYPE[it.type]?.color,background:MM_TYPE[it.type]?.bg,padding:"2px 6px",borderRadius:5,flexShrink:0}}>{MM_TYPE[it.type]?.label}</span>
-                        <span style={{flex:1,fontSize:12,color:T.t1,minWidth:0}}>{it.type==="task_update"?(it.task_name||it.title):it.title}{it.type==="mr"&&(it.quantity||it.unit)?<span style={{color:T.t4}}> · {it.quantity} {it.unit}</span>:null}{it.type==="task_update"?<span style={{color:T.t4}}> · {it.status||""}{it.progress>=0?` ${it.progress}%`:""}</span>:null}</span>
-                        {it.assignee?<span style={{fontSize:10,color:T.t3,flexShrink:0}}>@ {it.assignee}</span>:null}
+                        <span style={{fontSize:9,fontWeight:700,color:mmMeta(it.type).color,background:mmMeta(it.type).bg,padding:"2px 6px",borderRadius:5,flexShrink:0}}>{mmMeta(it.type).label}</span>
+                        <span style={{flex:1,fontSize:12,color:T.t1,minWidth:0}}>{isUpdTitle(it)}{it.type==="mr"&&(it.quantity||it.unit)?<span style={{color:T.t4}}> · {it.quantity} {it.unit}</span>:null}{it.type==="task_update"?<span style={{color:T.t4}}> · {it.status||""}{it.progress>=0?` ${it.progress}%`:""}</span>:null}{isUpdOld(it)?<span style={{color:T.pur}}> · {t("mom.mm_updated_old")}</span>:null}</span>
+                        {it.assigned_to?<span style={{fontSize:10,color:T.t3,flexShrink:0}}>@ {userName(it.assigned_to)}</span>:null}
                       </div>
                     ))}
                   </div>
                 ))}
+                {attendees.length>0&&<div style={{fontSize:11.5,color:T.t3}}><b>{t("mom.mm_haazri_n",{n:attendees.length})}:</b> {attendeeList().map(a=>a.name).join(", ")}</div>}
               </>
             );
           })()}
@@ -1181,15 +1428,19 @@ function MeetingModeModal({projectId=null,projectName="",onClose,onComplete}){
             return(
               <div>
                 <div style={{textAlign:"center",padding:"10px 0 16px"}}>
-                  <div style={{width:54,height:54,borderRadius:27,background:T.grnL,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 10px"}}><IcChk size={28} color={T.grn}/></div>
+                  <div style={{width:54,height:54,borderRadius:27,background:failed.length?T.ambL:T.grnL,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 10px"}}><IcChk size={28} color={failed.length?T.amb:T.grn}/></div>
                   <div style={{fontSize:16,fontWeight:700,color:T.t1}}>{t("mom.ok_itemok2_create_ho_gaye", { ok, ok2: ok!==1?"s":"" })}</div>
-                  <div style={{fontSize:12,color:T.t3,marginTop:3}}>{(MM_ORDER.filter(tp=>by(tp)>0).map(tp=>`${by(tp)} ${MM_TYPE[tp].label}`).join(" · ")||"0 items")+(result.mom?" · 1 MOM logged":"")}</div>
+                  <div style={{fontSize:12,color:T.t3,marginTop:3}}>{(MM_ORDER.filter(tp=>by(tp)>0).map(tp=>`${by(tp)} ${mmMeta(tp).label}`).join(" · ")||t("mom.mm_0_items"))+(result.mom?" · "+t("mom.mm_mom_logged"):"")}</div>
+                  {failed.length>0&&<div style={{fontSize:12,color:T.red,fontWeight:600,marginTop:4}}>{t("mom.mm_n_fail",{n:failed.length})}</div>}
                 </div>
                 {result.refs.map((r,i)=>(
-                  <div key={i} style={{display:"flex",alignItems:"center",gap:10,background:T.surface,border:`1px solid ${T.b1}`,borderRadius:8,padding:"9px 12px",marginBottom:7}}>
-                    <span style={{fontSize:9.5,fontWeight:700,color:MM_TYPE[r.type].color,background:MM_TYPE[r.type].bg,padding:"3px 7px",borderRadius:5}}>{MM_TYPE[r.type].label}</span>
-                    <span style={{flex:1,fontSize:12.5,color:T.t1}}>{r.title}</span>
-                    {r.ok?<span style={{fontSize:11,color:T.grn,fontWeight:600}}>{r.ref||"✓"}</span>:<span style={{fontSize:11,color:T.red,fontWeight:600}}>{t("mom.fail")}</span>}
+                  <div key={i} style={{background:T.surface,border:`1px solid ${r.ok?T.b1:T.redM}`,borderRadius:8,padding:"9px 12px",marginBottom:7}}>
+                    <div style={{display:"flex",alignItems:"center",gap:10}}>
+                      <span style={{fontSize:9.5,fontWeight:700,color:mmMeta(r.type).color,background:mmMeta(r.type).bg,padding:"3px 7px",borderRadius:5}}>{mmMeta(r.type).label}</span>
+                      <span style={{flex:1,fontSize:12.5,color:T.t1}}>{r.title}</span>
+                      {r.ok?<span style={{fontSize:11,color:T.grn,fontWeight:600}}>{r.ref||"✓"}</span>:<span style={{fontSize:11,color:T.red,fontWeight:600}}>{t("mom.fail")}</span>}
+                    </div>
+                    {!r.ok&&r.error?<div style={{fontSize:11,color:T.red,marginTop:4}}>{r.error}</div>:null}
                   </div>
                 ))}
               </div>
@@ -1209,18 +1460,19 @@ function MeetingModeModal({projectId=null,projectName="",onClose,onComplete}){
           {step==="review"&&(<>
             <button onClick={()=>setStep("capture")} style={btnS}>{t("common.back_2")}</button>
             <div style={{flex:1}}/>
-            <button onClick={goOverview} disabled={!chosenCount} style={btnP(!!chosenCount)}>{`Overview (${chosenCount}) →`}</button>
+            <button onClick={goOverview} disabled={!chosenCount} style={btnP(!!chosenCount)}>{t("mom.mm_overview_n",{n:chosenCount})}</button>
           </>)}
           {step==="overview"&&(<>
             <button onClick={()=>setStep("review")} style={btnS}>{t("common.back_2")}</button>
             <div style={{flex:1}}/>
-            <button onClick={commit} disabled={committing||!chosenCount} style={btnP(!committing&&!!chosenCount)}>{committing?t("common.ban_raha_hai"):`Approve & Create (${chosenCount})`}</button>
+            <button onClick={()=>commit()} disabled={committing||!chosenCount} style={btnP(!committing&&!!chosenCount)}>{committing?t("common.ban_raha_hai"):t("mom.mm_approve_create_n",{n:chosenCount})}</button>
           </>)}
           {step==="done"&&result&&(<>
-            <button onClick={()=>{const t=mmMinutesText({title:title||(meeting&&meeting.title)||"Meeting",summary:meeting&&meeting.summary},result.refs);window.open("https://wa.me/?text="+encodeURIComponent(t),"_blank");}}
+            <button onClick={()=>{const x=mmMinutesText({title:title||(meeting&&meeting.title)||"Meeting",summary:meeting&&meeting.summary,attendees:attendeeList(),items},result.refs);window.open("https://wa.me/?text="+encodeURIComponent(x),"_blank");}}
               style={{background:"#25D366",color:"white",border:"none",borderRadius:8,padding:"10px 16px",fontSize:13,fontWeight:700,cursor:"pointer"}}>{t("mom.share_on_whatsapp")}</button>
-            <button onClick={()=>{const t=mmMinutesText({title:title||(meeting&&meeting.title)||"Meeting",summary:meeting&&meeting.summary},result.refs);try{navigator.clipboard.writeText(t).then(()=>{setCopied(true);setTimeout(()=>setCopied(false),1800);});}catch(e){}}} style={btnS}>{copied?t("mom.copied"):t("mom.copy")}</button>
+            <button onClick={()=>{const x=mmMinutesText({title:title||(meeting&&meeting.title)||"Meeting",summary:meeting&&meeting.summary,attendees:attendeeList(),items},result.refs);try{navigator.clipboard.writeText(x).then(()=>{setCopied(true);setTimeout(()=>setCopied(false),1800);});}catch(e){}}} style={btnS}>{copied?t("mom.copied"):t("mom.copy")}</button>
             <div style={{flex:1}}/>
+            {failed.length>0&&<button onClick={()=>commit(failed.map(r=>r.key))} disabled={committing} style={{...btnS,color:T.blu,borderColor:T.blu}}>{committing?t("common.ban_raha_hai"):t("mom.mm_dobara_try")}</button>}
             <button onClick={onClose} style={btnP(true)}>{t("common.done")}</button>
           </>)}
         </div>
@@ -1230,7 +1482,7 @@ function MeetingModeModal({projectId=null,projectName="",onClose,onComplete}){
 }
 
 // ── AI MEETING DETAIL (analytics + items + audio + transcript + share) ──
-function MeetingDetailModal({meeting,onClose}){
+function MeetingDetailModal({meeting,onClose,onResume,onDeleted}){
   const [status,setStatus]=useState(null);
   const [copied,setCopied]=useState(false);
   useEffect(()=>{
@@ -1242,6 +1494,15 @@ function MeetingDetailModal({meeting,onClose}){
   const refs=meeting.committed_refs||[];
   const okRefs=refs.filter(r=>r.ok);
   const committed=meeting.status==="committed";
+  // Draft (review) / adhoori (partial) — Meeting Mode me dobara; draft hatana banane wala / admin
+  const me=(()=>{ try{ return JSON.parse(localStorage.getItem("gb_user")||"{}"); }catch(e){ return {}; } })();
+  const canDel=meeting.status==="review"&&(["admin","super_admin"].includes(me.role)||String(me.id)===String(meeting.created_by));
+  const delDraft=async()=>{
+    if(!window.confirm(t("mom.mm_draft_hatao_confirm"))) return;
+    const r=await api.del("/meetings/"+meeting.id).catch(()=>null);
+    if(r&&r.success){ onDeleted&&onDeleted(); onClose(); } else alert((r&&r.message)||t("mom.mm_save_nahi_hua"));
+  };
+  const points=(meeting.items||[]).filter(it=>it.type==="decision"&&it._include!==false);
   const share=()=>{ window.open("https://wa.me/?text="+encodeURIComponent(mmMinutesText(meeting,refs)),"_blank"); };
   const copy=()=>{ const t=mmMinutesText(meeting,refs); try{ navigator.clipboard.writeText(t).then(()=>{ setCopied(true); setTimeout(()=>setCopied(false),1800); }); }catch(e){} };
   return(
@@ -1281,7 +1542,7 @@ function MeetingDetailModal({meeting,onClose}){
                 const st=status&&status.items?status.items[i]:null;
                 return(
                   <div key={i} style={{display:"flex",alignItems:"center",gap:10,background:T.surface,border:`1px solid ${T.b1}`,borderRadius:8,padding:"9px 12px",marginBottom:7}}>
-                    <span style={{fontSize:9,fontWeight:700,color:MM_TYPE[r.type]?.color,background:MM_TYPE[r.type]?.bg,padding:"2px 7px",borderRadius:5}}>{MM_TYPE[r.type]?.label}</span>
+                    <span style={{fontSize:9,fontWeight:700,color:mmMeta(r.type).color,background:mmMeta(r.type).bg,padding:"2px 7px",borderRadius:5}}>{mmMeta(r.type).label}</span>
                     <span style={{flex:1,fontSize:12.5,color:T.t1}}>{r.title}</span>
                     {st?<span style={{fontSize:10,fontWeight:700,color:st.done?T.grn:T.amb,background:st.done?T.grnL:T.ambL,padding:"3px 8px",borderRadius:6}}>{st.status}</span>:(r.ok?<span style={{fontSize:11,color:T.grn,fontWeight:600}}>{r.ref||"✓"}</span>:<span style={{fontSize:11,color:T.red}}>{t("mom.fail")}</span>)}
                   </div>
@@ -1289,7 +1550,20 @@ function MeetingDetailModal({meeting,onClose}){
               })}
             </>
           )}
-          {!committed&&<div style={{fontSize:12,color:T.t4,marginBottom:14}}>{t("mom.ye_meeting_abhi_review_me_hai")}</div>}
+          {!committed&&(
+            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14,flexWrap:"wrap"}}>
+              <span style={{fontSize:12,color:T.t4,flex:1}}>{meeting.status==="partial"?t("mom.mm_adhoori_hint"):t("mom.ye_meeting_abhi_review_me_hai")}</span>
+              {onResume&&<button onClick={()=>onResume(meeting)} style={{background:T.blu,color:"white",border:"none",borderRadius:7,padding:"7px 13px",fontSize:12,fontWeight:700,cursor:"pointer"}}>{meeting.status==="partial"?t("mom.mm_dobara_try"):t("mom.mm_review_karo")}</button>}
+              {canDel&&<button onClick={delDraft} style={{background:T.surface,color:T.red,border:`1px solid ${T.redM}`,borderRadius:7,padding:"7px 13px",fontSize:12,fontWeight:700,cursor:"pointer"}}>{t("mom.mm_draft_hatao")}</button>}
+            </div>
+          )}
+          {(meeting.attendees||[]).length>0&&<div style={{fontSize:11.5,color:T.t3,marginBottom:12}}><b>{t("mom.mm_haazri_n",{n:meeting.attendees.length})}:</b> {meeting.attendees.map(a=>a.name).join(", ")}</div>}
+          {points.length>0&&(
+            <div style={{marginBottom:14}}>
+              <div style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",marginBottom:6}}>{t("mom.mm_mom_points")}</div>
+              {points.map((p,i)=><div key={i} style={{fontSize:12.5,color:T.t2,background:T.surfaceB,border:`1px solid ${T.b1}`,borderRadius:7,padding:"7px 11px",marginBottom:5}}>{p.title}</div>)}
+            </div>
+          )}
           {meeting.audio_url?(
             <div style={{marginTop:8,marginBottom:14}}>
               <div style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",marginBottom:6}}>{t("mom.recording_2")}</div>
@@ -1317,6 +1591,7 @@ function MOMModule({projectId=null,projectName="",embedded=false}={}){
   const [view,setView]=useState("cards"); // cards | actions | meetings
   const [meetings,setMeetings]=useState([]);   // AI Meeting Mode records
   const [selMeeting,setSelMeeting]=useState(null);
+  const [resumeMeeting,setResumeMeeting]=useState(null); // draft / adhoori meeting dobara Meeting Mode me
 
   // Project-scoped mode: filter to a single project on the server.
   // Otherwise companywide list.
@@ -1505,7 +1780,7 @@ function MOMModule({projectId=null,projectName="",embedded=false}={}){
         {view==="meetings"&&(
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(320px,1fr))",gap:12}}>
             {meetings.map(mt=>{
-              const made=(mt.committed_refs||[]).filter(r=>r.ok).length, n=(mt.items||[]).length, committed=mt.status==="committed";
+              const made=(mt.committed_refs||[]).filter(r=>r.ok).length, n=(mt.items||[]).length, committed=mt.status==="committed", partial=mt.status==="partial";
               return(
                 <div key={mt.id} onClick={()=>setSelMeeting(mt)} style={{background:T.surface,border:`1px solid ${T.b1}`,borderRadius:10,padding:"13px 15px",cursor:"pointer",borderLeft:`3px solid ${committed?T.grn:T.amb}`}}>
                   <div style={{display:"flex",alignItems:"center",gap:9,marginBottom:7}}>
@@ -1517,7 +1792,9 @@ function MOMModule({projectId=null,projectName="",embedded=false}={}){
                   </div>
                   {mt.summary&&<div style={{fontSize:11.5,color:T.t3,lineHeight:1.45,marginBottom:8,maxHeight:33,overflow:"hidden"}}>{mt.summary}</div>}
                   <div style={{display:"flex",alignItems:"center",gap:7}}>
-                    {committed?<span style={{fontSize:9.5,fontWeight:700,color:T.grn,background:T.grnL,padding:"3px 8px",borderRadius:6}}>{made} created</span>:<span style={{fontSize:9.5,fontWeight:700,color:T.amb,background:T.ambL,padding:"3px 8px",borderRadius:6}}>{t("mom.n_to_review", { n })}</span>}
+                    {committed?<span style={{fontSize:9.5,fontWeight:700,color:T.grn,background:T.grnL,padding:"3px 8px",borderRadius:6}}>{t("mom.mm_n_created",{n:made})}</span>
+                      :partial?<span style={{fontSize:9.5,fontWeight:700,color:T.red,background:T.redL,padding:"3px 8px",borderRadius:6}}>{t("mom.mm_adhoori_n",{n:(mt.committed_refs||[]).length-made})}</span>
+                      :<span style={{fontSize:9.5,fontWeight:700,color:T.amb,background:T.ambL,padding:"3px 8px",borderRadius:6}}>{t("mom.n_to_review", { n })}</span>}
                     {mt.audio_url&&<span style={{fontSize:9.5,color:T.t4}}>{t("mom.audio")}</span>}
                   </div>
                 </div>
@@ -1529,10 +1806,11 @@ function MOMModule({projectId=null,projectName="",embedded=false}={}){
       </div>
 
       {/* Modals */}
-      {selMeeting&&<MeetingDetailModal meeting={selMeeting} onClose={()=>setSelMeeting(null)}/>}
+      {selMeeting&&<MeetingDetailModal meeting={selMeeting} onClose={()=>setSelMeeting(null)} onDeleted={loadMeetings} onResume={m=>{ setSelMeeting(null); setResumeMeeting(m); }}/>}
       {selMOM&&<MOMDetailDrawer mom={selMOM} onClose={()=>setSelMOM(null)} onUpdate={updateMOM}/>}
       {showCreate&&<CreateMOMModal projectId={projectId} projectName={projectName} onClose={()=>setShowCreate(false)} onSave={mom=>setMoms(p=>[mom,...p])}/>}
       {showMeetingMode&&<MeetingModeModal projectId={projectId} projectName={projectName} onClose={()=>{setShowMeetingMode(false); loadMeetings();}} onComplete={mom=>{setMoms(p=>[mom,...p]); loadMeetings();}}/>}
+      {resumeMeeting&&<MeetingModeModal projectId={resumeMeeting.project_id||projectId} projectName={resumeMeeting.project_name||projectName} resume={resumeMeeting} onClose={()=>{setResumeMeeting(null); loadMeetings();}} onComplete={mom=>{setMoms(p=>[mom,...p]); loadMeetings();}}/>}
 
       <style>{`
         *{box-sizing:border-box}
@@ -1547,3 +1825,5 @@ function MOMModule({projectId=null,projectName="",embedded=false}={}){
 }
 
 export default MOMModule;
+// Test ke liye (MOMModule.meeting.test.js) — Meeting Mode akela.
+export { MeetingModeModal };
