@@ -6,6 +6,7 @@ import MapPicker from "../components/MapPicker";
 import RecycleBin from "./shared/RecycleBin";
 import { t, getLang, setLang, LANGS } from "../i18n";
 import { BackClose } from "../utils/backNav";
+import { canAny } from "../utils/perms";
 
 // ─── ICON COMPONENT ──────────────────────────────────────────────────
 const Icon = ({ d, size = 20, color = "currentColor", fill = "none", strokeWidth = 1.8 }) => (
@@ -3590,11 +3591,35 @@ function FinanceSettings() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// NOTIFICATIONS — With WhatsApp for DPR + all events
+// NOTIFICATIONS — apni settings + Role-wise (30 Oct 2026)
 // ═══════════════════════════════════════════════════════════════════════
+// Role-wise tab sirf Users & Roles wale ko dikhta hai — server bhi wahi tick
+// (strict) maangta hai. Niyam backend utils/notify.js me (roleDefault).
 function NotificationSettings() {
+  const canRoles = canAny("Users & Roles", "view", { strict: true });
+  const [tab, setTab] = useState("mine");
+  const tabs = [["mine", t("settings.notif_tab_mine")], ["roles", t("settings.notif_tab_roles")]];
+  return (
+    <div>
+      {canRoles && (
+        <div style={{ display: "flex", gap: 4, borderBottom: `1px solid ${T.border}`, marginBottom: 18 }}>
+          {tabs.map(([id, label]) => (
+            <button key={id} onClick={() => setTab(id)}
+              style={{ padding: "8px 14px", border: "none", background: "transparent", cursor: "pointer", fontSize: 13, fontWeight: tab === id ? 650 : 500, color: tab === id ? T.blue : T.textMid, borderBottom: `2px solid ${tab === id ? T.blue : "transparent"}`, marginBottom: -1 }}>
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+      {canRoles && tab === "roles" ? <NotificationRoleSettings /> : <MyNotificationPrefs />}
+    </div>
+  );
+}
+
+function MyNotificationPrefs() {
   const [catalog, setCatalog] = useState([]);
   const [prefs, setPrefs] = useState({});       // notif_type -> bool
+  const [locked, setLocked] = useState(() => new Set()); // role ke liye admin ne band kiya
   const [expanded, setExpanded] = useState({}); // module key -> bool
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -3607,16 +3632,18 @@ function NotificationSettings() {
         if (r && r.success) {
           setCatalog(r.catalog || []);
           setPrefs(r.preferences || {});
+          setLocked(new Set(r.locked || []));
         }
       })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
 
+  const isOn = (type) => prefs[type] !== false && !locked.has(type);
   const setType = (type, val) => setPrefs(p => ({ ...p, [type]: val }));
   const setModule = (mod, val) => setPrefs(p => {
     const next = { ...p };
-    (mod.events || []).forEach(e => { next[e.type] = val; });
+    (mod.events || []).forEach(e => { if (!locked.has(e.type)) next[e.type] = val; });
     return next;
   });
   const toggleExpand = (key) => setExpanded(e => ({ ...e, [key]: !e[key] }));
@@ -3638,7 +3665,7 @@ function NotificationSettings() {
     );
   }
 
-  const totalOn = Object.values(prefs).filter(Boolean).length;
+  const totalOn = Object.keys(prefs).filter(isOn).length;
   const totalAll = Object.keys(prefs).length;
 
   return (
@@ -3665,8 +3692,9 @@ function NotificationSettings() {
 
       {catalog.map(mod => {
         const evs = mod.events || [];
-        const onCount = evs.filter(e => prefs[e.type] !== false).length;
-        const allOn = evs.length > 0 && onCount === evs.length;
+        const free = evs.filter(e => !locked.has(e.type));
+        const onCount = evs.filter(e => isOn(e.type)).length;
+        const allOn = free.length > 0 && free.every(e => isOn(e.type));
         const isOpen = !!expanded[mod.module];
         return (
           <div key={mod.module} style={{ background: T.card, borderRadius: T.radius, border: `1px solid ${T.border}`, boxShadow: T.shadow, marginBottom: 14 }}>
@@ -3681,7 +3709,7 @@ function NotificationSettings() {
                 <div style={{ fontSize: 11.5, color: onCount ? T.textMid : T.textLight, marginTop: 1 }}>{onCount} of {evs.length} on</div>
               </div>
               <div onClick={e => e.stopPropagation()} style={{ display: "flex" }}>
-                <Toggle value={allOn} onChange={v => setModule(mod, v)} />
+                <Toggle value={allOn} onChange={v => setModule(mod, v)} disabled={!free.length} />
               </div>
             </div>
             {/* per-event toggles */}
@@ -3693,8 +3721,9 @@ function NotificationSettings() {
                     <div style={{ flex: 1 }}>
                       <div style={{ fontSize: 13, fontWeight: 600, color: T.text }}>{ev.label}</div>
                       {ev.desc && <div style={{ fontSize: 11.5, color: T.textLight, marginTop: 1 }}>{ev.desc}</div>}
+                      {locked.has(ev.type) && <div style={{ fontSize: 11.5, color: T.amber, marginTop: 2 }}>{t("settings.notif_locked")}</div>}
                     </div>
-                    <Toggle value={prefs[ev.type] !== false} onChange={v => setType(ev.type, v)} />
+                    <Toggle value={isOn(ev.type)} onChange={v => setType(ev.type, v)} disabled={locked.has(ev.type)} />
                   </div>
                 ))}
               </div>
@@ -3702,6 +3731,202 @@ function NotificationSettings() {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+// Role-wise grid: line me notification, column me role. Khaana = admin ka
+// badla ?? default. Draft me sirf wo khaane jo save hue se alag hain; server
+// default ke barabar wale ki row khud hata deta hai.
+function NotificationRoleSettings() {
+  const canEdit = canAny("Users & Roles", "edit", { strict: true });
+  const [data, setData] = useState(null);   // { roles, catalog, overrides, defaultOff: {roleId: Set} }
+  const [draft, setDraft] = useState({});   // "roleId|type" -> bool
+  const [open, setOpen] = useState({});     // module -> bool
+  const [loadErr, setLoadErr] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState(null);     // { ok, text }
+
+  const apply = (r) => setData({
+    roles: r.roles || [], catalog: r.catalog || [], overrides: r.overrides || {},
+    defaultOff: Object.fromEntries(Object.entries(r.defaultOff || {}).map(([k, v]) => [k, new Set(v)])),
+  });
+  useEffect(() => {
+    api.get("/notifications/role-settings")
+      .then(r => { if (r && r.success) apply(r); else setLoadErr((r && r.message) || t("settings.notif_roles_load_failed")); })
+      .catch(() => setLoadErr(t("settings.notif_roles_load_failed")));
+  }, []);
+
+  if (loadErr || !data) {
+    return (
+      <SectionCard title={t("settings.notif_roles_title")}>
+        <div style={{ padding: 20, textAlign: "center", fontSize: 13, color: loadErr ? T.red : T.textLight }}>{loadErr || t("common.loading")}</div>
+      </SectionCard>
+    );
+  }
+
+  const { roles, catalog } = data;
+  const def = (rid, type) => !(data.defaultOff[rid] && data.defaultOff[rid].has(type));
+  const saved = (rid, type) => {
+    const o = data.overrides[rid] && data.overrides[rid][type];
+    return o === undefined ? def(rid, type) : o;
+  };
+  const cur = (rid, type) => {
+    const k = rid + "|" + type;
+    return k in draft ? draft[k] : saved(rid, type);
+  };
+  const putCells = (cells) => setDraft(d => {
+    const next = { ...d };
+    for (const [rid, type, v] of cells) {
+      const k = rid + "|" + type;
+      if (v === saved(rid, type)) delete next[k]; else next[k] = v;
+    }
+    return next;
+  });
+  const resetAll = () => {
+    const cells = [];
+    for (const r of roles) for (const m of catalog) for (const e of m.events || []) cells.push([r.id, e.type, def(r.id, e.type)]);
+    setDraft({});
+    putCells(cells);
+  };
+  const dirty = Object.keys(draft).length;
+  let differs = 0;
+  for (const r of roles) for (const m of catalog) for (const e of m.events || []) if (cur(r.id, e.type) !== def(r.id, e.type)) differs++;
+
+  const save = async () => {
+    const changes = Object.entries(draft).map(([k, v]) => {
+      const [rid, type] = k.split("|");
+      return { role_id: Number(rid), type, enabled: v };
+    });
+    setSaving(true); setMsg(null);
+    try {
+      const r = await api.put("/notifications/role-settings", { changes });
+      if (r && r.success) { apply(r); setDraft({}); setMsg({ ok: true, text: t("settings.notif_roles_saved", { n: r.changed || 0 }) }); }
+      else setMsg({ ok: false, text: (r && r.message) || t("settings.notif_roles_save_failed") });
+    } catch (_) { setMsg({ ok: false, text: t("settings.notif_roles_save_failed") }); }
+    setSaving(false);
+  };
+
+  const COLW = 96;
+  const stickyTd = { position: "sticky", left: 0, zIndex: 1, minWidth: 300, maxWidth: 360, padding: "10px 14px", borderBottom: `1px solid ${T.borderLight}`, borderRight: `1px solid ${T.border}`, textAlign: "left" };
+  const tdCell = { width: COLW, minWidth: COLW, padding: "8px 4px", borderBottom: `1px solid ${T.borderLight}`, textAlign: "center" };
+  // Ek khaana: ✓ / – (module me kuch) / khaali. Amber bindu = default se alag,
+  // halka amber = abhi save nahi hua.
+  const box = ({ on, mixed, changed, differ, title, onClick, key }) => (
+    <td key={key} style={{ ...tdCell, background: changed ? T.amberSoft : undefined }}>
+      <button type="button" title={title} disabled={!canEdit} onClick={onClick}
+        style={{ position: "relative", width: 20, height: 20, borderRadius: 5, border: `1.5px solid ${on || mixed ? T.blue : "#CBD5E1"}`, background: on ? T.blue : mixed ? T.blueSoft : "white", color: on ? "white" : T.blue, fontSize: 13, fontWeight: 700, lineHeight: "16px", padding: 0, cursor: canEdit ? "pointer" : "default" }}>
+        {on ? "✓" : mixed ? "–" : ""}
+        {differ && <span style={{ position: "absolute", top: -4, right: -4, width: 7, height: 7, borderRadius: "50%", background: T.amber, border: "1.5px solid white" }} />}
+      </button>
+    </td>
+  );
+
+  return (
+    <div>
+      <SectionCard
+        title={t("settings.notif_roles_title")}
+        desc={t("settings.notif_roles_desc")}
+        action={canEdit && (
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            {dirty > 0 && <button onClick={() => setDraft({})} disabled={saving}
+              style={{ padding: "8px 12px", borderRadius: 8, border: `1px solid ${T.border}`, background: T.card, color: T.textMid, fontSize: 12.5, cursor: "pointer" }}>{t("settings.notif_roles_discard")}</button>}
+            <button onClick={save} disabled={saving || !dirty}
+              style={{ padding: "8px 18px", borderRadius: 8, background: T.blue, color: "white", fontSize: 13, fontWeight: 600, border: "none", cursor: saving ? "wait" : dirty ? "pointer" : "default", opacity: saving || !dirty ? 0.5 : 1 }}>
+              {saving ? t("common.saving") : t("common.save")}
+            </button>
+          </div>
+        )}>
+        <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 16, fontSize: 12, color: T.textMid, padding: "4px 0" }}>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <span style={{ width: 7, height: 7, borderRadius: "50%", background: T.amber }} />{t("settings.notif_roles_differs", { n: differs })}
+          </span>
+          {dirty > 0 && <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <span style={{ width: 12, height: 12, borderRadius: 3, background: T.amberSoft, border: `1px solid ${T.amber}` }} />{t("settings.notif_roles_unsaved", { n: dirty })}
+          </span>}
+          {canEdit && differs > 0 && <button onClick={resetAll} disabled={saving}
+            style={{ border: "none", background: "transparent", color: T.blue, fontSize: 12, fontWeight: 600, cursor: "pointer", padding: 0 }}>{t("settings.notif_roles_reset")}</button>}
+          {!canEdit && <span style={{ color: T.textLight }}>{t("settings.notif_roles_readonly")}</span>}
+          {msg && <span style={{ color: msg.ok ? T.green : T.red, fontWeight: 600 }}>{msg.text}</span>}
+        </div>
+      </SectionCard>
+
+      {!roles.length ? (
+        <div style={{ padding: 20, textAlign: "center", fontSize: 13, color: T.textLight }}>{t("settings.notif_roles_no_roles")}</div>
+      ) : (
+        <div style={{ background: T.card, borderRadius: T.radius, border: `1px solid ${T.border}`, boxShadow: T.shadow, overflow: "auto", maxHeight: "calc(100vh - 330px)" }}>
+          <table style={{ borderCollapse: "separate", borderSpacing: 0, width: "100%", fontSize: 13 }}>
+            <thead>
+              <tr>
+                <th style={{ ...stickyTd, zIndex: 3, top: 0, background: T.card, fontSize: 11, fontWeight: 700, color: T.textLight, textTransform: "uppercase", letterSpacing: "0.5px", borderBottom: `1px solid ${T.border}` }}>
+                  {t("settings.notif_roles_col_notif")}
+                </th>
+                {roles.map(r => (
+                  <th key={r.id} style={{ ...tdCell, position: "sticky", top: 0, zIndex: 2, background: T.card, fontSize: 11.5, fontWeight: 650, color: T.textMid, borderBottom: `1px solid ${T.border}` }}>{r.name}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {catalog.map(mod => {
+                const evs = mod.events || [];
+                const isOpen = !!open[mod.module];
+                return (
+                  <Fragment key={mod.module}>
+                    <tr>
+                      <td onClick={() => setOpen(o => ({ ...o, [mod.module]: !o[mod.module] }))}
+                        style={{ ...stickyTd, background: T.bg, cursor: "pointer" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <span style={{ display: "flex", transform: isOpen ? "rotate(90deg)" : "none", transition: "transform 0.15s" }}><IcChevR size={13} color={T.textLight} /></span>
+                          <span style={{ fontWeight: 700, color: T.text }}>{mod.label}</span>
+                          <span style={{ fontSize: 11.5, color: T.textLight }}>{evs.length}</span>
+                        </div>
+                      </td>
+                      {roles.map(r => {
+                        const on = evs.filter(e => cur(r.id, e.type)).length;
+                        const all = on === evs.length && on > 0;
+                        return box({
+                          key: r.id, on: all, mixed: on > 0 && !all,
+                          changed: evs.some(e => (r.id + "|" + e.type) in draft),
+                          differ: evs.some(e => cur(r.id, e.type) !== def(r.id, e.type)),
+                          title: `${r.name} · ${mod.label}: ${on}/${evs.length}`,
+                          onClick: () => putCells(evs.map(e => [r.id, e.type, !all])),
+                        });
+                      })}
+                    </tr>
+                    {isOpen && evs.map(ev => {
+                      const selfOff = ev.byRole ? [] : roles.filter(r => !cur(r.id, ev.type));
+                      return (
+                        <tr key={ev.type}>
+                          <td style={{ ...stickyTd, background: T.card, paddingLeft: 35 }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                              <span style={{ fontWeight: 600, color: T.text }}>{ev.label}</span>
+                              {!ev.byRole && <span style={{ fontSize: 10.5, fontWeight: 600, color: T.teal, background: T.tealSoft, borderRadius: 4, padding: "1px 6px" }}>{t("settings.notif_roles_self_chip")}</span>}
+                            </div>
+                            {ev.desc && <div style={{ fontSize: 11.5, color: T.textLight, marginTop: 2 }}>{ev.desc}</div>}
+                            {selfOff.length > 0 && <div style={{ fontSize: 11.5, color: T.amber, marginTop: 3 }}>{t("settings.notif_roles_self_off_warn", { roles: selfOff.map(r => r.name).join(", ") })}</div>}
+                          </td>
+                          {roles.map(r => {
+                            const d = def(r.id, ev.type);
+                            const tip = !ev.byRole ? t("settings.notif_roles_tip_self") : d ? t("settings.notif_roles_tip_def_on") : t("settings.notif_roles_tip_def_off");
+                            const v = cur(r.id, ev.type);
+                            return box({
+                              key: r.id, on: v, mixed: false,
+                              changed: (r.id + "|" + ev.type) in draft,
+                              differ: v !== d,
+                              title: `${r.name} — ${tip}`,
+                              onClick: () => putCells([[r.id, ev.type, !v]]),
+                            });
+                          })}
+                        </tr>
+                      );
+                    })}
+                  </Fragment>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
