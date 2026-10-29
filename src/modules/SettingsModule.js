@@ -3694,7 +3694,11 @@ function MyNotificationPrefs() {
         const evs = mod.events || [];
         const free = evs.filter(e => !locked.has(e.type));
         const onCount = evs.filter(e => isOn(e.type)).length;
-        const allOn = free.length > 0 && free.every(e => isOn(e.type));
+        // Module ka switch = "is module ke notification chalu hain": ek bhi ON
+        // ho to ON. Pehle sab ON hone par hi ON dikhta tha, to neeche ek band
+        // karte hi upar wala bhi band dikhne lagta (30 Oct 2026). Kitne ON hain
+        // wo "x of y on" batata hai; switch band karo to poora module band.
+        const anyOn = free.some(e => isOn(e.type));
         const isOpen = !!expanded[mod.module];
         return (
           <div key={mod.module} style={{ background: T.card, borderRadius: T.radius, border: `1px solid ${T.border}`, boxShadow: T.shadow, marginBottom: 14 }}>
@@ -3709,7 +3713,7 @@ function MyNotificationPrefs() {
                 <div style={{ fontSize: 11.5, color: onCount ? T.textMid : T.textLight, marginTop: 1 }}>{onCount} of {evs.length} on</div>
               </div>
               <div onClick={e => e.stopPropagation()} style={{ display: "flex" }}>
-                <Toggle value={allOn} onChange={v => setModule(mod, v)} disabled={!free.length} />
+                <Toggle value={anyOn} onChange={v => setModule(mod, v)} disabled={!free.length} />
               </div>
             </div>
             {/* per-event toggles */}

@@ -69,6 +69,25 @@ test("Meri settings: role ke liye band type ka switch nahi chalta", async () => 
   expect(disabled.length).toBe(2);
 });
 
+test("Meri settings: neeche ek band karne par module ka switch ON rehta hai; module band = sab band", async () => {
+  const head = byText("div", "Wallet & Finance").parentElement.parentElement;
+  const modSwitch = () => head.querySelector("button");
+  const row = (label) => byText("div", label).parentElement.parentElement.querySelector("button");
+  const isOnBtn = (b) => /37, 99, 235|#2563eb/i.test(b.style.background);
+  expect(isOnBtn(modSwitch())).toBe(true);
+  await click(head);
+  await click(row("Expense rejected"));
+  expect(isOnBtn(row("Expense rejected"))).toBe(false);
+  expect(text()).toContain("1 of 2 on");
+  expect(isOnBtn(modSwitch())).toBe(true);
+  await click(modSwitch());
+  expect(isOnBtn(row("Expense needs approval"))).toBe(false);
+  expect(text()).toContain("0 of 2 on");
+  expect(isOnBtn(modSwitch())).toBe(false);
+  await click(byText("button", "Save"));
+  expect(api.put.mock.calls[0][1].preferences).toEqual(expect.objectContaining({ wallet_approval_needed: false, wallet_rejected: false }));
+});
+
 test("Role-wise: Supervisor ka poora Wallet & Finance band → Save par dono type jaate hain", async () => {
   await click(byText("button", "Role-wise"));
   expect(text()).toContain("Role-wise notification");
