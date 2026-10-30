@@ -7,6 +7,7 @@
 import { useEffect, useState, useRef } from "react";
 import api from "../config/api";
 import { t } from "../i18n";
+import BrowserPush from "./BrowserPush";
 
 // Self-contained palette (App.js's T/C tokens are not exported).
 const C = {
@@ -71,9 +72,12 @@ export default function NotificationBell({ onNavigate }) {
     const onVis = () => (document.hidden ? stop() : start());
     if (!document.hidden) start();
     document.addEventListener("visibilitychange", onVis);
+    // Push aaya aur tab khula tha (App.js → utils/push.js) — 30 s ka intezaar nahi.
+    window.addEventListener("sanchalan:push", fetchCount);
     return () => {
       stop();
       document.removeEventListener("visibilitychange", onVis);
+      window.removeEventListener("sanchalan:push", fetchCount);
     };
   }, []);
   // Load the full list only while the dropdown is open.
@@ -139,6 +143,7 @@ export default function NotificationBell({ onNavigate }) {
                   color: C.pri, fontSize: 11, fontWeight: 600 }}>{t("notification_bell.mark_all_read")}</button>
             )}
           </div>
+          <BrowserPush variant="bell"/>
           {items.length === 0 ? (
             <div style={{ padding: 28, textAlign: "center", color: C.t3, fontSize: 12.5 }}>
               {t("notification_bell.no_new_notifications")}

@@ -10,6 +10,7 @@ import { ToastProvider } from "./components/Toast";
 import { ConfirmProvider } from "./components/ConfirmDialog";
 import { PromptProvider } from "./components/PromptDialog";
 import NotificationBell from "./components/NotificationBell";
+import { startPush, stopPush, dropStalePush, listenPush } from "./utils/push";
 import AppErrorBoundary from "./components/AppErrorBoundary";
 import SahayakFab from "./components/SahayakFab";
 import ExpenseNudge from "./modules/tabs/ExpenseNudge";
@@ -2243,7 +2244,13 @@ function App(){
     window.addEventListener("keydown",handler);
     return()=>window.removeEventListener("keydown",handler);
   },[showSearch,showCheatsheet]);
-  const handleLogout=()=>{apiCache.clear();clearApprovalAuthority();resetBackSteps();clearAuth();setUser(null);setCompanies([]);setEnabledModules(null);};
+  // Pehle is browser ka push token hatao (utils/push.js) — token abhi hai, server ko
+  // bata sakte hain; warna logout ke baad is computer par pichhle user ki
+  // notification aati. 3 s se zyada intezaar nahi.
+  const handleLogout=async()=>{
+    try{ await Promise.race([stopPush(),new Promise(r=>setTimeout(r,3000))]); }catch(_){ /* push na ho to bhi logout */ }
+    apiCache.clear();clearApprovalAuthority();resetBackSteps();clearAuth();setUser(null);setCompanies([]);setEnabledModules(null);
+  };
 
   // Notification / alert click → land the user where the thing actually is.
   // A project-scoped link also carries {projectId,tab} so ProjectsWrapper can
@@ -2264,6 +2271,20 @@ function App(){
     if(dm){ try{ sessionStorage.setItem("design_open_drawing",dm[1]); }catch(_){} setTimeout(()=>window.dispatchEvent(new CustomEvent("design:open-id",{detail:dm[1]})),0); }
     if(mod) setNav(mod);
   };
+
+  // PC browser par push (30 Oct 2026, utils/push.js). Notification dabaayi → read +
+  // wahi jagah jo ghanti se (handleNotifNav). Tab khula tha aur push aaya → ghanti
+  // turant taaza. Ref se — listener ek hi baar lagta hai.
+  const notifNavRef=useRef(handleNotifNav); notifNavRef.current=handleNotifNav;
+  useEffect(()=>listenPush((n)=>{
+    if(!getToken()) return;
+    if(n.id) api.post("/notifications/"+n.id+"/read",{}).catch(()=>{});
+    const seg=n.link?String(n.link).replace(/^\//,"").split(/[/?]/)[0]:"";
+    if(seg) notifNavRef.current(seg,n.link);
+  },()=>{ try{ window.dispatchEvent(new Event("sanchalan:push")); }catch(_){} }),[]);
+  // Login par (pehle se Allow ho to) is browser ka token server ko; company badle to
+  // dobara (token naye user par). Login nahi to pichhla token mita do.
+  useEffect(()=>{ if(user) startPush(); else dropStalePush(); },[user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // password = same mobile wale doosre account ka (SEC-09) — server tabhi
   // maangta hai jab is login me us account ka saboot nahi (SWITCH_PROOF_*).

@@ -15830,6 +15830,18 @@ const dict = {
   "todo.photo_hatao": "Photo hatao",
   "todo.photo_upload_ho_rahi": "Photo upload ho rahi hai…",
   "todo.photo_lagao": "+ Photo lagao",
+  // ── web_push (PC browser notification, 30 Oct 2026) ──────────────
+  "web_push.bell_hint":                                      "Is computer par bhi notification chahiye? Sanchalan ka tab band ho tab bhi aayega",
+  "web_push.denied":                                         "Browser ne band kar rakha hai — address bar me 🔒 par click karke Notifications → Allow karo, phir page refresh karo",
+  "web_push.done":                                           "Chalu ho gaya — ab Sanchalan ka tab band ho tab bhi notification aayega",
+  "web_push.enable":                                         "Chalu karo",
+  "web_push.failed":                                         "Chalu nahi ho paaya — net dekh kar dobara koshish karo",
+  "web_push.label":                                          "Is browser par notification",
+  "web_push.later":                                          "Baad me",
+  "web_push.ok":                                             "Theek hai",
+  "web_push.on":                                             "Chalu hai",
+  "web_push.unsupported":                                    "Ye browser notification nahi deta",
+
 };
 
 export default dict;

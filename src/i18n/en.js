@@ -15828,6 +15828,18 @@ const dict = {
   "todo.photo_hatao": "Remove photo",
   "todo.photo_upload_ho_rahi": "Photo is uploading…",
   "todo.photo_lagao": "+ Add photo",
+  // ── web_push (PC browser notification, 30 Oct 2026) ──────────────
+  "web_push.bell_hint":                                      "Want notifications on this computer too? They arrive even when the Sanchalan tab is closed",
+  "web_push.denied":                                         "Blocked by the browser — click 🔒 in the address bar, set Notifications to Allow, then refresh the page",
+  "web_push.done":                                           "Turned on — notifications will arrive even when the Sanchalan tab is closed",
+  "web_push.enable":                                         "Turn on",
+  "web_push.failed":                                         "Could not turn on — check the internet and try again",
+  "web_push.label":                                          "Notifications in this browser",
+  "web_push.later":                                          "Later",
+  "web_push.ok":                                             "OK",
+  "web_push.on":                                             "On",
+  "web_push.unsupported":                                    "This browser does not support notifications",
+
 };
 
 export default dict;

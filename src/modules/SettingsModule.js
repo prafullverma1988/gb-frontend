@@ -7,6 +7,7 @@ import RecycleBin from "./shared/RecycleBin";
 import { t, getLang, setLang, LANGS } from "../i18n";
 import { BackClose } from "../utils/backNav";
 import { canAny } from "../utils/perms";
+import BrowserPush from "../components/BrowserPush";
 
 // ─── ICON COMPONENT ──────────────────────────────────────────────────
 const Icon = ({ d, size = 20, color = "currentColor", fill = "none", strokeWidth = 1.8 }) => (
@@ -3714,6 +3715,7 @@ function MyNotificationPrefs() {
         {testMsg && (
           <div style={{ fontSize: 12.5, marginTop: 10, color: testMsg.ok ? T.green : T.amber }}>{testMsg.text}</div>
         )}
+        <BrowserPush variant="settings"/>
       </SectionCard>
 
       {catalog.map(mod => {

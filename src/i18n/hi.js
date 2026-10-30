@@ -15827,6 +15827,18 @@ const dict = {
   "todo.photo_hatao": "फ़ोटो हटाओ",
   "todo.photo_upload_ho_rahi": "फ़ोटो अपलोड हो रही है…",
   "todo.photo_lagao": "+ फ़ोटो लगाओ",
+  // ── web_push (PC browser notification, 30 Oct 2026) ──────────────
+  "web_push.bell_hint":                                      "इस कंप्यूटर पर भी नोटिफिकेशन चाहिए? Sanchalan का टैब बंद हो तब भी आएगा",
+  "web_push.denied":                                         "ब्राउज़र ने बंद कर रखा है — एड्रेस बार में 🔒 पर क्लिक करके Notifications → Allow करो, फिर पेज रिफ्रेश करो",
+  "web_push.done":                                           "चालू हो गया — अब Sanchalan का टैब बंद हो तब भी नोटिफिकेशन आएगा",
+  "web_push.enable":                                         "चालू करो",
+  "web_push.failed":                                         "चालू नहीं हो पाया — नेट देखकर दोबारा कोशिश करो",
+  "web_push.label":                                          "इस ब्राउज़र पर नोटिफिकेशन",
+  "web_push.later":                                          "बाद में",
+  "web_push.ok":                                             "ठीक है",
+  "web_push.on":                                             "चालू है",
+  "web_push.unsupported":                                    "ये ब्राउज़र नोटिफिकेशन नहीं देता",
+
 };
 
 export default dict;
