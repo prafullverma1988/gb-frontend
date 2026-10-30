@@ -88,6 +88,19 @@ test("Meri settings: neeche ek band karne par module ka switch ON rehta hai; mod
   expect(api.put.mock.calls[0][1].preferences).toEqual(expect.objectContaining({ wallet_approval_needed: false, wallet_rejected: false }));
 });
 
+test("Meri settings: Test notification — pahuncha / koi phone nahi / server ki rok", async () => {
+  api.post.mockResolvedValueOnce({ success: true, push_on: true, devices: 2, sent: 2 });
+  await click(byText("button", "Test notification bhejo"));
+  expect(api.post).toHaveBeenCalledWith("/notifications/test", {});
+  expect(text()).toContain("Bhej diya — 2 phone / browser par");
+  api.post.mockResolvedValueOnce({ success: true, push_on: true, devices: 0, sent: 0 });
+  await click(byText("button", "Test notification bhejo"));
+  expect(text()).toContain("koi phone juda nahi");
+  api.post.mockResolvedValueOnce({ success: false, message: "Thoda ruko" });
+  await click(byText("button", "Test notification bhejo"));
+  expect(text()).toContain("Thoda ruko");
+});
+
 test("Role-wise: Supervisor ka poora Wallet & Finance band → Save par dono type jaate hain", async () => {
   await click(byText("button", "Role-wise"));
   expect(text()).toContain("Role-wise notification");
