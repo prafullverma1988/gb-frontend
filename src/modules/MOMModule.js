@@ -1120,7 +1120,7 @@ function MeetingModeModal({projectId=null,projectName="",onClose,onComplete,resu
       r=await api.post("/work-items",{title:it.title,description:it.description||"",project_id:pid||null,assigned_to:who,due_date:it.due_date||null,priority:it.priority||"Medium",meeting_id:meeting.id});
       ref=whoName||undefined;
     }else if(it.type==="mr"){
-      r=await api.post("/procurement/mrs",{project_id:pid,project_name:projName(pid),item_name:it.title,quantity:Number(it.quantity)||1,unit:it.unit||"Nos",notes:it.description||null,required_date:it.due_date||null,priority:it.priority||undefined});
+      r=await api.post("/procurement/mrs",{project_id:pid,project_name:projName(pid),item_name:it.title,quantity:Number(it.quantity)||1,unit:it.unit||"Nos",notes:it.description||null,required_date:it.due_date||null,priority:it.priority||undefined,meeting_id:meeting&&meeting.id||undefined});
       ref=r?.data?.mr_number||r?.data?.id;
     }else if(it.type==="task"){
       // title NAHI — title wali row To-Do list me bhi dikhti thi (29 Oct 2026)
@@ -1130,7 +1130,7 @@ function MeetingModeModal({projectId=null,projectName="",onClose,onComplete,resu
       r=await api.post("/projects/company-todos",{title:it.title,description:it.description||"",priority:it.priority||"Medium",category:"Other",due_date:it.due_date||"",project_id:pid||null,assigned_to:who||undefined});
       ref=whoName||r?.data?.id;
     }else if(it.type==="issue"){
-      r=await api.post("/tasks/project/"+pid+"/issues",{title:it.title,description:it.description||"",priority:it.priority||"Medium",assigned_to:whoName||it.assignee||null});
+      r=await api.post("/tasks/project/"+pid+"/issues",{title:it.title,description:it.description||"",priority:it.priority||"Medium",assigned_to:whoName||it.assignee||null,meeting_id:meeting&&meeting.id||undefined});
       ref=r?.data?.id?t("mom.mm_raised"):undefined;
     }else if(it.type==="task_update"){
       if(it.task_id){
