@@ -3657,6 +3657,25 @@ function MyNotificationPrefs() {
     setSaving(false);
   };
 
+  // "Test notification bhejo" (30 Oct 2026) — apne aap ko ghanti + phone par.
+  // Server Google ka jawab aane tak rukta hai: devices = kitne phone / browser
+  // jude, sent = kitne tak gaya. Isi se saaf line: pahuncha / koi phone juda
+  // nahi / juda hai par nahi pahuncha.
+  const [testing, setTesting] = useState(false);
+  const [testMsg, setTestMsg] = useState(null);   // { ok, text }
+  const sendTest = async () => {
+    setTesting(true); setTestMsg(null);
+    try {
+      const r = await api.post("/notifications/test", {});
+      if (!r || !r.success) setTestMsg({ ok: false, text: (r && r.message) || t("settings.notif_test_failed") });
+      else if (r.push_on === false) setTestMsg({ ok: false, text: t("settings.notif_test_off") });
+      else if (!r.devices) setTestMsg({ ok: false, text: t("settings.notif_test_no_device") });
+      else if (!r.sent) setTestMsg({ ok: false, text: t("settings.notif_test_not_delivered") });
+      else setTestMsg({ ok: true, text: t("settings.notif_test_sent", { n: r.sent }) });
+    } catch (_) { setTestMsg({ ok: false, text: t("settings.notif_test_failed") }); }
+    setTesting(false);
+  };
+
   if (loading) {
     return (
       <SectionCard title="Notification Preferences" desc="Loading your notification settings...">
@@ -3687,7 +3706,14 @@ function MyNotificationPrefs() {
             <div style={{ fontSize: 13.5, fontWeight: 600, color: T.text }}>{totalOn} of {totalAll} notification types are on</div>
             <div style={{ fontSize: 12, color: T.textLight, marginTop: 1 }}>Expand a module below to fine-tune individual events.</div>
           </div>
+          <button onClick={sendTest} disabled={testing}
+            style={{ padding: "7px 14px", borderRadius: 8, border: `1px solid ${T.border}`, background: T.card, color: T.text, fontSize: 12.5, fontWeight: 600, cursor: testing ? "wait" : "pointer", flexShrink: 0 }}>
+            {testing ? t("settings.notif_test_sending") : t("settings.notif_test_btn")}
+          </button>
         </div>
+        {testMsg && (
+          <div style={{ fontSize: 12.5, marginTop: 10, color: testMsg.ok ? T.green : T.amber }}>{testMsg.text}</div>
+        )}
       </SectionCard>
 
       {catalog.map(mod => {
