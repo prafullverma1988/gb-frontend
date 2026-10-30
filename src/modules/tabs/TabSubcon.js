@@ -7,7 +7,7 @@ import { T, localYMD } from "../shared/tokens";
 import { canApproveAction, approverRolesFor } from "../../utils/approvalAuthority";
 import { t, Rich } from "../../i18n";
 import { can, canAny, currentUser } from "../../utils/perms";
-import { StageBillGrid, StageLinesPanel, HandoverModal } from "./StageBilling";
+import { StageBillGrid, StageLinesPanel, HandoverModal, BackchargeList } from "./StageBilling";
 
 function TabSubcon({ projectId, project }) {
   // Roles & Access (5 Oct 2026) — buttons usi Subcon tick se jo server
@@ -893,6 +893,8 @@ function TabSubcon({ projectId, project }) {
             {/* RA BILLS TAB */}
             {subTab==="bills"&&(
               <div>
+                {/* Katauti — subcon ki galti ka dobara kaam (31 Oct 2026): baaki + kis bill me lagi */}
+                <BackchargeList key={selWo.id} woId={selWo.id} canApprove={sApprove} />
                 {sCreate&&<div style={{display:"flex",justifyContent:"flex-end",gap:8,marginBottom:12}}>
                   <button onClick={()=>{setManualBillForm({bill_date:localYMD(),remark:"",items:[{description:"",qty:"",rate:""}]});setShowManualRaBill(true);}}
                     style={{background:"white",color:"#7C3AED",border:"2px dashed #7C3AED",borderRadius:6,padding:"7px 14px",fontSize:12,fontWeight:700,cursor:"pointer"}}>
@@ -924,8 +926,11 @@ function TabSubcon({ projectId, project }) {
                          {t("subcon.auto_generated_from_task_progress_review")}
                         </div>
                       )}
-                      <div style={{display:"grid",gridTemplateColumns:"repeat("+(hasMat(b.material_amt)?5:4)+",1fr)",gap:8,marginBottom:8}}>
-                        {[{l:t("common.gross"),v:fmtC(b.gross_amount),c:T.t1},{l:t("common.retention_2"),v:fmtC(b.retention_amt),c:T.amb},{l:"TDS",v:fmtC(b.tds_amt),c:T.red},...(hasMat(b.material_amt)?[matTile(b.material_amt,fmtC)]:[]),{l:t("subcon.net_payable"),v:fmtC(b.net_payable),c:T.grn}].map(s=>(
+                      <div style={{display:"grid",gridTemplateColumns:"repeat("+(4+(hasMat(b.material_amt)?1:0)+(Number(b.other_deduction_amt)>0?1:0))+",1fr)",gap:8,marginBottom:8}}>
+                        {[{l:t("common.gross"),v:fmtC(b.gross_amount),c:T.t1},{l:t("common.retention_2"),v:fmtC(b.retention_amt),c:T.amb},{l:"TDS",v:fmtC(b.tds_amt),c:T.red},...(hasMat(b.material_amt)?[matTile(b.material_amt,fmtC)]:[]),
+                          // Katauti — subcon ki galti ka dobara kaam (31 Oct 2026)
+                          ...(Number(b.other_deduction_amt)>0?[{l:t("stage_billing.katauti_tile"),v:"− "+fmtC(b.other_deduction_amt),c:T.red}]:[]),
+                          {l:t("subcon.net_payable"),v:fmtC(b.net_payable),c:T.grn}].map(s=>(
                           <div key={s.l} style={{textAlign:"center",background:T.surfaceB,borderRadius:6,padding:"6px 8px"}}>
                             <div style={{fontSize:9,color:T.t4,textTransform:"uppercase"}}>{s.l}</div>
                             <div style={{fontSize:13,fontWeight:800,color:s.c}}>{s.v}</div>
@@ -1051,12 +1056,13 @@ function TabSubcon({ projectId, project }) {
                       {/* Body */}
                       <div style={{flex:1,overflowY:"auto",padding:14}}>
                         {/* KPI tiles */}
-                        <div style={{display:"grid",gridTemplateColumns:"repeat("+(hasMat(b.material_amt)?5:4)+",1fr)",gap:8,marginBottom:14}}>
+                        <div style={{display:"grid",gridTemplateColumns:"repeat("+(4+(hasMat(b.material_amt)?1:0)+(Number(b.other_deduction_amt)>0?1:0))+",1fr)",gap:8,marginBottom:14}}>
                           {[
                             {l:t("common.gross"),       v:fmtC(b.gross_amount),  c:T.t1},
                             {l:t("common.retention_2"),   v:fmtC(b.retention_amt), c:T.amb},
                             {l:"TDS",         v:fmtC(b.tds_amt),       c:T.red},
                             ...(hasMat(b.material_amt)?[matTile(b.material_amt,fmtC)]:[]),
+                            ...(Number(b.other_deduction_amt)>0?[{l:t("stage_billing.katauti_tile"), v:"− "+fmtC(b.other_deduction_amt), c:T.red}]:[]),
                             {l:t("subcon.net_payable"), v:fmtC(b.net_payable),   c:T.grn},
                           ].map(s=>(
                             <div key={s.l} style={{textAlign:"center",background:T.surface,border:`1px solid ${T.b1}`,borderRadius:8,padding:"10px 8px"}}>
@@ -4170,6 +4176,11 @@ function NewRaBillModal({ wo, milestones, fmtC, inpStyle, lblStyle, saving, onCl
   const [billingLedger, setBillingLedger] = useState(null);
   const [ledgerLoading, setLedgerLoading] = useState(true);
   const [stageQty,      setStageQty]      = useState({});  // manual (line-wise) — { [wo_item_id]: is bill qty }
+  const [bcRows,        setBcRows]        = useState([]);  // pehle ki galti ki katauti (pending) — server bill banate hi lagata hai
+  useEffect(() => {
+    if (!woId) return;
+    api.get("/subcon/work-orders/" + woId + "/backcharges").then(r => { if (r?.success) setBcRows(r.data?.pending || []); }).catch(() => {});
+  }, [woId]);
 
   useEffect(() => {
     if (!woId) return;
@@ -4210,6 +4221,13 @@ function NewRaBillModal({ wo, milestones, fmtC, inpStyle, lblStyle, saving, onCl
   // Material katauti (Phase B) — SD / TDS Gross par; Net = Gross − SD − TDS − Material.
   const netPay  = Math.round((grossR - retAmt - tdsAmt - (mat.amount || 0)) * 100) / 100;
   const matBody = mat.body || {};
+  // Katauti preview — server jaisa: har row poori fit ho tabhi (Gross − SD − TDS − Material ki jagah me)
+  let kat = 0;
+  for (const b of bcRows) {
+    const a = Number(b.amount) || 0;
+    if (a <= (grossR - retAmt - tdsAmt - (mat.amount || 0)) - kat + 0.005) kat = Math.round((kat + a) * 100) / 100;
+  }
+  const netShown = Math.round((netPay - kat) * 100) / 100;
 
   // ── Submit ────────────────────────────────────────────────────────────
   const handleSubmit = () => {
@@ -4574,13 +4592,14 @@ function NewRaBillModal({ wo, milestones, fmtC, inpStyle, lblStyle, saving, onCl
           {grossR > 0 && (
             <div style={{marginTop:14,background:"#0F172A",borderRadius:8,padding:14,flexShrink:0}}>
               <div style={{fontSize:11,fontWeight:700,color:"rgba(255,255,255,0.5)",textTransform:"uppercase",marginBottom:10}}>{t("subcon.bill_summary")}</div>
-              <div style={{display:"grid",gridTemplateColumns:"repeat("+(hasMat(mat.amount)?5:4)+",1fr)",gap:10}}>
+              <div style={{display:"grid",gridTemplateColumns:"repeat("+(4+(hasMat(mat.amount)?1:0)+(kat>0?1:0))+",1fr)",gap:10}}>
                 {[
                   {l:t("subcon.gross_amount"),              v:fmtC(grossR), c:"#E2E8F0"},
                   {l:t("subcon.retention_retpct", { retPct }),    v:fmtC(retAmt), c:"#FCD34D"},
                   {l:t("subcon.tds_tdspct", { tdsPct }),          v:fmtC(tdsAmt), c:"#F87171"},
                   ...(hasMat(mat.amount)?[{...matTile(mat.amount,fmtC), c: mat.amount<0?"#4ADE80":"#FDBA74"}]:[]),
-                  {l:t("subcon.net_payable"),               v:fmtC(netPay), c:"#4ADE80"},
+                  ...(kat>0?[{l:t("stage_billing.katauti_tile"), v:"− "+fmtC(kat), c:"#FDBA74"}]:[]),
+                  {l:t("subcon.net_payable"),               v:fmtC(netShown), c:"#4ADE80"},
                 ].map(s=>(
                   <div key={s.l} style={{textAlign:"center",background:"rgba(255,255,255,0.05)",borderRadius:6,padding:"8px"}}>
                     <div style={{fontSize:9,color:"rgba(255,255,255,0.4)",textTransform:"uppercase",marginBottom:3}}>{s.l}</div>
@@ -4591,6 +4610,11 @@ function NewRaBillModal({ wo, milestones, fmtC, inpStyle, lblStyle, saving, onCl
               {overBillMode && (
                 <div style={{marginTop:8,padding:"6px 10px",background:"rgba(220,38,38,0.15)",borderRadius:5,fontSize:10.5,color:"#FCA5A5",fontWeight:600}}>
                  {t("subcon.over_bill_mode_active_will_be")}
+                </div>
+              )}
+              {kat>0 && (
+                <div style={{marginTop:8,padding:"6px 10px",background:"rgba(251,146,60,0.15)",borderRadius:5,fontSize:10.5,color:"#FDBA74",fontWeight:600}}>
+                 {t("stage_billing.katauti_note", { reasons: bcRows.map(b=>b.reason).join(" · ") })}
                 </div>
               )}
             </div>

@@ -79,6 +79,7 @@ export function StageBillGrid({ items, value, onChange, overBillMode }) {
           <div style={{ minWidth: 0 }}>
             <div style={{ fontSize: 12, fontWeight: 600, color: T.t1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={nameOf(it)}>{nameOf(it)}</div>
             <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 2 }}>
+              {it.item_type === "extra" && <span style={chip(T.redL, T.red)} title={it.approval_ref || ""}>{t("stage_billing.extra_chip")}</span>}
               {it.part_of && <span style={chip(T.sltL, T.slt)}>{t("stage_billing.part_of", { item: it.part_of })}</span>}
               {task && <span style={chip(task.eligible ? T.grnL : T.sltL, task.eligible ? T.grn : T.slt)} title={task.task_name}>{t("stage_billing.task_pct", { pct: task.progress, trigger: task.trigger_pct })}</span>}
               {num(it.opening_qty) > 0 && <span style={chip(T.ambL, T.amb)} title={it.opening_note || ""}>{t("stage_billing.opening_chip", { qty: fmtQ(it.opening_qty) })}</span>}
@@ -347,6 +348,7 @@ export function StageBoard({ estimateId, projectId, subcons }) {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [woForm, setWoForm] = useState(null);
+  const [extraOpen, setExtraOpen] = useState(false);
 
   const load = useCallback(async () => {
     const r = await api.get("/customer-estimates/" + estimateId + "/stage-board").catch(e => ({ success: false, message: e.message }));
@@ -418,6 +420,7 @@ export function StageBoard({ estimateId, projectId, subcons }) {
     <div>
       <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, marginBottom: 10 }}>
         <div style={{ fontSize: 11.5, color: T.t3, flex: "1 1 260px", lineHeight: 1.45 }}>{t("stage_billing.board_hint")}</div>
+        {(data.can.estimate_edit || data.can.subcon_create) && <button type="button" disabled={busy} onClick={() => setExtraOpen(true)} style={btnS("danger", busy)}>{t("stage_billing.extra_btn")}</button>}
         {data.can.subcon_create && <button type="button" disabled={!selItems.size || busy} onClick={openWoForm} style={btnS("plain", !selItems.size || busy)}>{t("stage_billing.make_wo", { n: selItems.size })}</button>}
         <button type="button" disabled={!canBill || busy} onClick={billNow} style={btnS("primary", !canBill || busy)}>{busy ? t("common.saving_2") : t("stage_billing.bill_selected", { n: selItems.size + selWo.size })}</button>
       </div>
@@ -458,7 +461,7 @@ export function StageBoard({ estimateId, projectId, subcons }) {
                           <input type="checkbox" disabled={rem <= 0 || !data.can.estimate_create} checked={selItems.has(l.item_id)} onChange={() => toggle(selItems, setSelItems, l.item_id)} />
                         </td>
                         <td style={{ padding: "7px 8px" }}>
-                          <div style={{ fontWeight: 600, color: T.t1 }}>{l.description}</div>
+                          <div style={{ fontWeight: 600, color: T.t1 }}>{l.description} {l.item_type === "extra" && <span style={chip(T.redL, T.red)}>{t("stage_billing.extra_chip")}</span>}</div>
                           <div style={{ fontSize: 10.5, color: T.t3, fontVariantNumeric: "tabular-nums" }}>{fmtQ(l.qty)} {l.unit} · {fmtC(l.rate)}/{l.unit || "—"}</div>
                         </td>
                         <td style={{ padding: "7px 8px" }}>
@@ -516,6 +519,11 @@ export function StageBoard({ estimateId, projectId, subcons }) {
         </div>
       )}
 
+      {extraOpen && (
+        <ExtraWorkModal data={data} estimateId={estimateId} onClose={() => setExtraOpen(false)}
+          onDone={async (m) => { setExtraOpen(false); setMsg(m); await load(); }} />
+      )}
+
       {woForm && (<>
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 300 }} onClick={() => setWoForm(null)} />
         <div style={{ position: "fixed", top: "50%", left: "50%", transform: "translate(-50%,-50%)", width: 640, maxWidth: "95vw", maxHeight: "88vh",
@@ -551,6 +559,123 @@ export function StageBoard({ estimateId, projectId, subcons }) {
       </>)}
     </div>
   );
+}
+
+// ── 3b. Extra kaam — "kharcha kaun dega" (31 Oct 2026, Prafull) ─────
+// Client  → estimate me Extra line (client ki manzoori), chahe to jo thekedar
+//           karega uske WO me bhi Extra line (subcon rate)
+// Company → sirf karne wale thekedar ke WO me Extra line (site order)
+// Galti   → karne wale ke WO me Extra line + galti wale thekedar ke agle RA
+//           bill se katauti (Subcon APPROVE)
+// Contract value nahi badalti; Extra ka jod alag. Alag approval nahi — rok bill par.
+const todayYmd = () => new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
+export function ExtraWorkModal({ data, estimateId, onClose, onDone }) {
+  const can = data.can || {};
+  const live = (data.wos || []).filter(w => w.status !== "Closed" && w.status !== "Completed");
+  const opts = [
+    can.estimate_edit && { id: "client", l: t("stage_billing.bearer_client") },
+    can.subcon_create && { id: "company", l: t("stage_billing.bearer_company") },
+    can.subcon_create && can.subcon_approve && { id: "fault", l: t("stage_billing.bearer_fault") },
+  ].filter(Boolean);
+  const [f, setF] = useState({ bearer: opts[0] ? opts[0].id : "client", description: "", unit: "LS", qty: "1", approval_ref: "", approval_date: todayYmd(),
+    client_rate: "", doer_wo: "", doer_rate: "", fault_wo: "", fault_amount: "", fault_reason: "" });
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+  const set = (k, v) => setF(p => ({ ...p, [k]: v }));
+  const save = async () => {
+    const desc = f.description.trim(), ref = f.approval_ref.trim(), qty = num(f.qty);
+    if (!desc || !(qty > 0)) { setMsg(t("stage_billing.extra_need_fields")); return; }
+    if (ref.length < 3) { setMsg(t("stage_billing.extra_need_ref")); return; }
+    const base = { description: desc, unit: f.unit, qty, approval_ref: ref, approval_date: f.approval_date };
+    const wantWo = f.bearer !== "client" || (f.doer_wo && num(f.doer_rate) > 0);
+    if (f.bearer === "client" && !(f.client_rate !== "" && num(f.client_rate) >= 0)) { setMsg(t("stage_billing.extra_need_client_rate")); return; }
+    if (f.bearer !== "client" && !(f.doer_wo && f.doer_rate !== "")) { setMsg(t("stage_billing.extra_need_doer")); return; }
+    if (f.bearer === "fault" && (!f.fault_wo || !(num(f.fault_amount) > 0) || f.fault_reason.trim().length < 3)) { setMsg(t("stage_billing.extra_need_fault")); return; }
+    setBusy(true); setMsg("");
+    const done = [];
+    let clientItem = null;
+    if (f.bearer === "client") {
+      const r = await api.post("/customer-estimates/" + estimateId + "/extra-items", { ...base, rate: num(f.client_rate) }).catch(e => ({ success: false, message: e.message }));
+      if (!r?.success) { setBusy(false); setMsg(r?.message || t("stage_billing.save_failed")); return; }
+      clientItem = r.data.item_id;
+      done.push(t("stage_billing.extra_client_done", { amt: fmtC(r.data.amount) }));
+    }
+    if (wantWo) {
+      const body = { ...base, rate: num(f.doer_rate), estimate_item_id: clientItem,
+        ...(f.bearer === "fault" ? { backcharge: { wo_id: Number(f.fault_wo), amount: num(f.fault_amount), reason: f.fault_reason.trim() } } : {}) };
+      const r = await api.post("/subcon/work-orders/" + f.doer_wo + "/extra-items", body).catch(e => ({ success: false, message: e.message }));
+      if (!r?.success) { setBusy(false); setMsg((done.length ? done.join(" · ") + " · " : "") + (r?.message || t("stage_billing.save_failed"))); return; }
+      done.push(t("stage_billing.extra_wo_done", { amt: fmtC(r.data.amount) }));
+      if (r.data.backcharge_id) done.push(t("stage_billing.extra_fault_done", { amt: fmtC(f.fault_amount) }));
+    }
+    setBusy(false);
+    onDone && onDone(done.join(" · "));
+  };
+  const woOpts = (list) => list.map(w => <option key={w.wo_id} value={String(w.wo_id)}>{w.subcon_name}{w.description ? " · " + w.description : ""}</option>);
+  return (<>
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 300 }} onClick={onClose} />
+    <div style={{ position: "fixed", top: "50%", left: "50%", transform: "translate(-50%,-50%)", width: 600, maxWidth: "95vw", maxHeight: "90vh",
+      background: T.surface, borderRadius: 12, zIndex: 301, boxShadow: "0 24px 64px rgba(0,0,0,0.3)", display: "flex", flexDirection: "column" }}>
+      <div style={{ padding: "14px 18px", borderBottom: "1px solid " + T.b1 }}>
+        <div style={{ fontSize: 15, fontWeight: 700, color: T.t1 }}>{t("stage_billing.extra_title")}</div>
+        <div style={{ fontSize: 11, color: T.t3, marginTop: 3, lineHeight: 1.45 }}>{t("stage_billing.extra_hint")}</div>
+      </div>
+      <div style={{ padding: "14px 18px", overflowY: "auto", flex: 1, display: "grid", gap: 10 }}>
+        <div><label style={lblS}>{t("stage_billing.extra_work")}</label>
+          <input value={f.description} maxLength={250} placeholder={t("stage_billing.extra_work_ph")} onChange={e => set("description", e.target.value)} style={inpS} /></div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          <div><label style={lblS}>{t("stage_billing.extra_unit")}</label><input value={f.unit} maxLength={20} onChange={e => set("unit", e.target.value)} style={inpS} /></div>
+          <div><label style={lblS}>{t("stage_billing.wo_qty")}</label><input type="number" value={f.qty} onChange={e => set("qty", e.target.value)} style={inpS} /></div>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "minmax(0,2fr) 1fr", gap: 10 }}>
+          <div><label style={lblS}>{t("stage_billing.extra_ref")}</label>
+            <input value={f.approval_ref} maxLength={160} placeholder={t("stage_billing.extra_ref_ph")} onChange={e => set("approval_ref", e.target.value)} style={inpS} /></div>
+          <div><label style={lblS}>{t("stage_billing.extra_date")}</label><input type="date" value={f.approval_date} onChange={e => set("approval_date", e.target.value)} style={inpS} /></div>
+        </div>
+        <div>
+          <label style={lblS}>{t("stage_billing.bearer")}</label>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            {opts.map(o => (
+              <button key={o.id} type="button" onClick={() => set("bearer", o.id)}
+                style={{ ...btnS(f.bearer === o.id ? "primary" : "plain"), padding: "6px 12px" }}>{o.l}</button>
+            ))}
+          </div>
+          <div style={{ fontSize: 10.5, color: T.t3, marginTop: 5 }}>{t("stage_billing.bearer_hint_" + f.bearer)}</div>
+        </div>
+        {f.bearer === "client" && (
+          <div><label style={lblS}>{t("stage_billing.extra_client_rate")}</label>
+            <input type="number" value={f.client_rate} onChange={e => set("client_rate", e.target.value)} style={inpS} /></div>
+        )}
+        {f.bearer === "fault" && (
+          <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1.4fr) 1fr", gap: 10, padding: 10, background: T.redL, borderRadius: 7 }}>
+            <div><label style={lblS}>{t("stage_billing.fault_wo")}</label>
+              <select value={f.fault_wo} onChange={e => set("fault_wo", e.target.value)} style={inpS}>
+                <option value="">{t("stage_billing.wo_pick_subcon")}</option>{woOpts(data.wos || [])}
+              </select></div>
+            <div><label style={lblS}>{t("stage_billing.fault_amount")}</label>
+              <input type="number" value={f.fault_amount} onChange={e => set("fault_amount", e.target.value)} style={inpS} /></div>
+            <div style={{ gridColumn: "1 / -1" }}><label style={lblS}>{t("stage_billing.fault_reason")}</label>
+              <input value={f.fault_reason} maxLength={500} onChange={e => set("fault_reason", e.target.value)} style={inpS} /></div>
+          </div>
+        )}
+        {can.subcon_create && (
+          <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1.4fr) 1fr", gap: 10 }}>
+            <div><label style={lblS}>{f.bearer === "client" ? t("stage_billing.doer_wo_optional") : t("stage_billing.doer_wo")}</label>
+              <select value={f.doer_wo} onChange={e => set("doer_wo", e.target.value)} style={inpS}>
+                <option value="">{t("stage_billing.wo_pick_subcon")}</option>{woOpts(live)}
+              </select></div>
+            <div><label style={lblS}>{t("stage_billing.doer_rate")}</label>
+              <input type="number" value={f.doer_rate} onChange={e => set("doer_rate", e.target.value)} style={inpS} /></div>
+          </div>
+        )}
+        {msg && <div style={{ padding: "7px 10px", borderRadius: 7, background: T.redL, color: T.red, fontSize: 11.5 }}>{msg}</div>}
+      </div>
+      <div style={{ padding: "12px 18px", borderTop: "1px solid " + T.b1, display: "flex", justifyContent: "flex-end", gap: 8 }}>
+        <button type="button" onClick={onClose} style={btnS()}>{t("common.cancel")}</button>
+        <button type="button" disabled={busy || !opts.length} onClick={save} style={btnS("primary", busy || !opts.length)}>{busy ? t("common.saving_2") : t("stage_billing.extra_save")}</button>
+      </div>
+    </div>
+  </>);
 }
 
 // ── 4. Contract toota — baaki naye thekedar ko ──────────────────────
@@ -703,4 +828,42 @@ export function splitLineByParts(line, parts, itemName) {
     used = r2(used + pr);
     return { ...line, description: line.description + " · " + p.name + " (" + r2(p.pct) + "%)", rate: pr, part_of: String(itemName || "").slice(0, 160) };
   });
+}
+
+// ── 6. WO par katauti (subcon ki galti ka dobara kaam) — RA Bills tab ──
+// Baaki (pending) agle RA bill me lagti hai; galti se bani ho to "Hatao"
+// (Subcon APPROVE, wajah ke saath). Jo bill me lag chuki wo us bill ke
+// Reject / delete se hi wapas aati hai.
+export function BackchargeList({ woId, canApprove }) {
+  const [d, setD] = useState(null);
+  const load = useCallback(() => {
+    api.get("/subcon/work-orders/" + woId + "/backcharges").then(r => { if (r?.success) setD(r.data); }).catch(() => {});
+  }, [woId]);
+  useEffect(() => { load(); }, [load]);
+  if (!d || (!d.pending.length && !d.applied.length)) return null;
+  const drop = async (row) => {
+    const reason = await window.promptAsync({ message: t("stage_billing.katauti_drop_prompt", { amt: fmtC(row.amount) }), multiline: true, cancelLabel: t("common.cancel") });
+    if (reason == null) return;
+    if (String(reason).trim().length < 3) { alert(t("stage_billing.handover_reason_need")); return; }
+    const r = await api.del("/subcon/backcharges/" + row.id + "?reason=" + encodeURIComponent(String(reason).trim())).catch(e => ({ success: false, message: e.message }));
+    if (!r?.success) { alert(r?.message || t("stage_billing.save_failed")); return; }
+    load();
+  };
+  return (
+    <div style={{ border: "1px solid " + T.b1, borderRadius: 8, marginBottom: 12, background: T.surface, overflow: "hidden" }}>
+      <div style={{ padding: "8px 12px", background: T.redL, fontSize: 11.5, fontWeight: 800, color: T.red }}>
+        {t("stage_billing.katauti_list_title", { amt: fmtC(d.pending_total) })}
+      </div>
+      {[...d.pending, ...d.applied].map(r => (
+        <div key={r.id} style={{ display: "flex", gap: 8, alignItems: "center", padding: "6px 12px", borderTop: "1px solid " + T.b1, fontSize: 11.5 }}>
+          <span style={{ fontWeight: 700, color: T.t1, fontVariantNumeric: "tabular-nums" }}>{fmtC(r.amount)}</span>
+          <span style={{ flex: 1, minWidth: 0, color: T.t2 }}>{r.reason}</span>
+          {r.status === "applied"
+            ? <span style={chip(T.sltL, T.slt)}>{t("stage_billing.katauti_in_bill", { no: r.bill_no || "" })}</span>
+            : <span style={chip(T.ambL, T.amb)}>{t("stage_billing.katauti_pending")}</span>}
+          {r.status === "pending" && canApprove && <button type="button" onClick={() => drop(r)} style={{ ...btnS(), padding: "2px 8px", fontSize: 10.5 }}>{t("stage_billing.katauti_drop")}</button>}
+        </div>
+      ))}
+    </div>
+  );
 }

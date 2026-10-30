@@ -1547,6 +1547,8 @@ function TabEstimate({ project }) {
               <div style={{display:"flex",gap:16,alignItems:"center"}}>
                 {summary && [
                   {l:t("common.estimate"),v:fmtC(summary.estimate_value),c:"#94A3B8"},
+                  // Extra kaam (BOQ ke bahar, 31 Oct 2026) — contract se alag jod
+                  ...(Number(summary.extra_value) > 0 ? [{l:t("stage_billing.extra_tile"),v:fmtC(summary.extra_value),c:"#FDA4AF"}] : []),
                   {l:t("app.invoiced"),v:fmtC(summary.total_invoiced),c:"#60A5FA"},
                   {l:t("common.received"),v:fmtC(summary.total_received),c:"#4ADE80"},
                   {l:t("estimate.manual"),v:fmtC(summary.manual_extras),c:"#A78BFA"},
