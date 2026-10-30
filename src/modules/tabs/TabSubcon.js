@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useRef } from "react";
 import PickSelect from "../../components/PickSelect";
-import api from "../../config/api";
+import api, { API_BASE } from "../../config/api";
 import apiCache from "../../utils/apiCache";
 import SearchSelect from "../../components/SearchSelect";
 import { T, localYMD } from "../shared/tokens";
 import { canApproveAction, approverRolesFor } from "../../utils/approvalAuthority";
 import { t, Rich } from "../../i18n";
 import { can, canAny, currentUser } from "../../utils/perms";
+import { StageBillGrid, StageLinesPanel, HandoverModal } from "./StageBilling";
 
 function TabSubcon({ projectId, project }) {
   // Roles & Access (5 Oct 2026) — buttons usi Subcon tick se jo server
@@ -20,6 +21,7 @@ function TabSubcon({ projectId, project }) {
   const sEdit = can("Subcon", "edit");
   const sDelete = can("Subcon", "delete");
   const sExport = can("Subcon", "export");
+  const sApprove = can("Subcon", "approve");
   const [wos, setWos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selWo, setSelWo] = useState(null);
@@ -32,6 +34,7 @@ function TabSubcon({ projectId, project }) {
   const [saving, setSaving] = useState(false);
   const billSubmitRef = useRef(false);
   const [showEditWO, setShowEditWO] = useState(false);
+  const [showHandover, setShowHandover] = useState(false);   // contract toota — baaki naye thekedar ko (30 Oct 2026)
   const [amendments, setAmendments] = useState([]);
   const [expandedBill, setExpandedBill] = useState(null);
   const [showEditBillModal, setShowEditBillModal] = useState(false);
@@ -156,6 +159,21 @@ function TabSubcon({ projectId, project }) {
     }
   },[subTab, selWoId]); // loadBillingLedger/loadLinkedTasksSub are stable (no deps from render)
 
+  // RA bill ka PDF (30 Oct 2026) — fetch + blob, route ko JWT chahiye (plain <a href> nahi chalta).
+  const downloadRaPdf = async (billId, billNo) => {
+    try {
+      const token = localStorage.getItem("gb_token");
+      const res = await fetch(`${API_BASE}/subcon/ra-bills/${billId}/pdf`, { headers: token ? { Authorization: "Bearer " + token } : {} });
+      if (!res.ok) { alert(t("stage_billing.pdf_failed")); return; }
+      const url = URL.createObjectURL(await res.blob());
+      const a = document.createElement("a");
+      a.href = url; a.download = String(billNo || "RA").replace(/[/\\~]/g, "-") + ".pdf";
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1500);
+    } catch (_) {
+      alert(t("stage_billing.pdf_failed"));
+    }
+  };
   const loadWOs = async () => {
     setLoading(true);
     const r = await api.get("/subcon/work-orders?project_id="+projectId).catch(()=>({success:false}));
@@ -467,6 +485,11 @@ function TabSubcon({ projectId, project }) {
                   style={{background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.2)",color:"white",borderRadius:6,padding:"5px 12px",fontSize:11,fontWeight:600,cursor:"pointer",flexShrink:0}}>
                  {t("common.edit")}
                 </button>}
+                {/* Contract toota — WO band, baaki line naye thekedar ko (Subcon APPROVE, sirf line-wise WO) */}
+                {sApprove&&(!selWo.billing_method||selWo.billing_method==="manual")&&selWo.status!=="Closed"&&<button onClick={()=>setShowHandover(true)}
+                  style={{background:"rgba(220,38,38,0.18)",border:"1px solid rgba(254,202,202,0.5)",color:"#FECACA",borderRadius:6,padding:"5px 12px",fontSize:11,fontWeight:600,cursor:"pointer",flexShrink:0}}>
+                 {t("stage_billing.handover_btn")}
+                </button>}
               </div>
             </div>
           </div>
@@ -593,12 +616,13 @@ function TabSubcon({ projectId, project }) {
             {subTab==="schedule"&&(
               <div>
                 {/* Manual billing message */}
-                {(!selWo.billing_method || selWo.billing_method==="manual") && (
-                  <div style={{padding:"24px",textAlign:"center",color:T.t3,background:T.surface,border:"1px dashed "+T.b1,borderRadius:8}}>
-                    <div style={{fontSize:13,marginBottom:6}}>{t("subcon.this_wo_uses")} <b>manual</b> {t("estimate.billing_per_item_cumulative_qty")}</div>
-                    <div style={{fontSize:11.5,color:T.t4}}>{t("common.click")} <b>{t("estimate.set_schedule_2")}</b> {t("subcon.to_switch_to_milestone_based_item")}</div>
+                {(!selWo.billing_method || selWo.billing_method==="manual") && (<>
+                  {/* Stage billing (30 Oct 2026): line-wise WO par bill seedha line par — line ka task, pehle bill ho chuka, had */}
+                  <div style={{padding:"10px 14px",marginBottom:10,color:T.t3,background:T.surface,border:"1px dashed "+T.b1,borderRadius:8,fontSize:11.5,lineHeight:1.5}}>
+                    {t("stage_billing.manual_notice_wo")} <span style={{color:T.t4}}>{t("common.click")} <b>{t("estimate.set_schedule_2")}</b> {t("subcon.to_switch_to_milestone_based_item")}</span>
                   </div>
-                )}
+                  <StageLinesPanel key={selWo.id} kind="wo" id={selWo.id} canEdit={sEdit} canApprove={sApprove} />
+                </>)}
 
                 {/* RATE-BASED milestones: Section → Item → Milestones */}
                 {selWo.billing_method==="milestone_rate" && (() => {
@@ -936,6 +960,8 @@ function TabSubcon({ projectId, project }) {
                         </div>
                       )}
                       <div style={{display:"flex",gap:8,marginBottom:8,flexWrap:"wrap"}}>
+                        {/* RA bill ka PDF — server se (abstract: pichhle bill tak / is bill / aaj tak) */}
+                        <button onClick={()=>downloadRaPdf(b.id, b.bill_no)} style={{minWidth:70,padding:"6px 10px",borderRadius:5,background:T.surface,color:T.t2,border:"1px solid "+T.b1,fontSize:11,fontWeight:700,cursor:"pointer"}}>{t("stage_billing.pdf_btn")}</button>
                         {sEdit&&b.status==="Draft"&&<button onClick={()=>billAction(()=>api.patch("/subcon/ra-bills/"+b.id+"/status",{status:"Submitted"}))} style={{flex:1,minWidth:100,padding:"6px",borderRadius:5,background:T.blu,color:"white",border:"none",fontSize:11,fontWeight:700,cursor:"pointer"}}>{t("estimate.confirm_submit")}</button>}
                         {sEdit&&b.status==="Rejected"&&<button onClick={()=>billAction(()=>api.patch("/subcon/ra-bills/"+b.id+"/status",{status:"Submitted"}))} style={{flex:1,minWidth:100,padding:"6px",borderRadius:5,background:T.blu,color:"white",border:"none",fontSize:11,fontWeight:700,cursor:"pointer"}}>{t("subcon.resubmit_bill")}</button>}
                         {/* RA bill approve — server par Subcon APPROVE (5 Oct 2026; pehle
@@ -1120,6 +1146,10 @@ function TabSubcon({ projectId, project }) {
       </div>
 
       {/* EDIT WO MODAL */}
+      {showHandover&&selWo&&(
+        <HandoverModal wo={selWo} subcons={subcons} onClose={()=>setShowHandover(false)}
+          onDone={async (d)=>{ setShowHandover(false); alert(t("stage_billing.handover_done", { name: d?.new_wo?.subcon_name || "" })); await loadWOs(); }} />
+      )}
       {showEditWO&&selWo&&(
         <EditWOModal
           wo={selWo} subcons={subcons} projectId={projectId} fmtC={fmtC}
@@ -4139,47 +4169,27 @@ function NewRaBillModal({ wo, milestones, fmtC, inpStyle, lblStyle, saving, onCl
   // ── Data state ─────────────────────────────────────────────────────────
   const [billingLedger, setBillingLedger] = useState(null);
   const [ledgerLoading, setLedgerLoading] = useState(true);
-  const [sections,      setSections]      = useState([]);  // manual mode
-  const [cumQtys,       setCumQtys]       = useState({});  // manual mode
+  const [stageQty,      setStageQty]      = useState({});  // manual (line-wise) — { [wo_item_id]: is bill qty }
 
   useEffect(() => {
     if (!woId) return;
-    if (method === "milestone_rate" || method === "milestone_percent") {
-      // Load billing ledger for ledger-aware UI
+    if (method === "milestone_rate" || method === "milestone_percent" || method === "manual") {
+      // Load billing ledger for ledger-aware UI. Manual (line-wise) bhi ab ledger
+      // se — Floor × Stage grid (StageBilling): pehle bill ho chuka, task %, "Poora".
       setLedgerLoading(true);
       api.get("/subcon/wo/" + woId + "/billing-ledger")
         .then(r => { if (r?.success) setBillingLedger(r.data); })
         .catch(() => {})
         .finally(() => setLedgerLoading(false));
-    } else {
-      // Manual: load WO items + prev cumulative
-      setLedgerLoading(true);
-      api.get("/subcon/work-orders/" + woId).then(async r => {
-        if (!r.success) { setLedgerLoading(false); return; }
-        const secs = r.data.sections || [];
-        const unsec = r.data.unsectioned || [];
-        const allItems = [...secs.flatMap(s => s.items||[]), ...unsec];
-        const pr = await api.get("/subcon/prev-cumulative-bulk?wo_id=" + woId).catch(() => ({success:false}));
-        const prevMap = {};
-        const serverMap = pr?.data?.prev_cum || {};
-        for (const it of allItems) prevMap[it.id] = parseFloat(serverMap[it.id]||0)||0;
-        const builtSecs = secs.map(s => ({ ...s, items: (s.items||[]).map(it => ({...it, prev_cum: prevMap[it.id]||0})) }));
-        if (unsec.length) builtSecs.push({ title:t("subcon.other_items"), items: unsec.map(it=>({...it,prev_cum:prevMap[it.id]||0})) });
-        setSections(builtSecs);
-        const initCums = {};
-        allItems.forEach(it => { initCums[it.id] = String(prevMap[it.id]||""); });
-        setCumQtys(initCums);
-      }).catch(()=>{}).finally(()=>setLedgerLoading(false));
     }
   }, [woId, method]);
 
   // ── Live gross calculation ─────────────────────────────────────────────
   let gross = 0;
   if (method === "manual") {
-    gross = sections.reduce((st, sec) => st + sec.items.reduce((s, it) => {
-      const cum = parseFloat(cumQtys[it.id]||0);
-      return s + Math.max(0, cum - (it.prev_cum||0)) * parseFloat(it.rate||0);
-    }, 0), 0);
+    for (const it of (billingLedger?.mode === "manual" ? billingLedger.items : [])) {
+      gross += Math.max(0, parseFloat(stageQty[it.item_id]) || 0) * (Number(it.rate) || 0);
+    }
   } else if (method === "milestone_rate" && billingLedger?.mode === "milestone_rate") {
     for (const it of (billingLedger.items || [])) {
       for (const m of (it.milestones || [])) {
@@ -4209,28 +4219,21 @@ function NewRaBillModal({ wo, milestones, fmtC, inpStyle, lblStyle, saving, onCl
       return;
     }
     if (method === "manual") {
-      const all = sections.flatMap(sec => sec.items);
-      // An emptied box = item not touched in this bill (stays at billed qty).
-      const cumOf = (it) => {
-        const v = cumQtys[it.id];
-        return v === "" || v == null ? (it.prev_cum || 0) : (parseFloat(v) || 0);
-      };
-      // Cumulative = total done till date, so it can't go below what is
-      // already billed.
-      const below = all.find(it => cumOf(it) < (it.prev_cum||0) - 0.0001);
-      if (below) {
-        alert(t("subcon.cum_below_prev_ui", { item: below.description || ("#"+below.id), prev: below.prev_cum||0 }));
-        return;
-      }
-      const over = all.some(it => parseFloat(it.qty||0) > 0 && cumOf(it) > parseFloat(it.qty||0) + 0.0001);
+      // Line-wise WO (Stage billing grid): cumulative = aaj tak bill hua (pehle
+      // bill ho chuka samet, ledger se) + is bill. Khaali = is bill me nahi.
+      const led = billingLedger?.mode === "manual" ? (billingLedger.items || []) : [];
+      const r3 = (n) => Math.round((parseFloat(n)||0) * 1000) / 1000;
+      const picked = led.filter(it => (parseFloat(stageQty[it.item_id]) || 0) > 0);
+      if (!picked.length) { alert(t("stage_billing.nothing_entered")); return; }
+      const over = picked.some(it => (parseFloat(stageQty[it.item_id]) || 0) > (Number(it.remaining_qty) || 0) + 0.0005);
       if (over && !overBillMode) {
         alert(t("subcon.some_quantities_exceed_wo_remaining_turn"));
         return;
       }
-      const items = all.map(it => ({
-        wo_item_id: it.id,
-        cumulative_qty: cumOf(it),
-        rate: parseFloat(it.rate),
+      const items = picked.map(it => ({
+        wo_item_id: it.item_id,
+        cumulative_qty: r3((Number(it.billed_qty) || 0) + (parseFloat(stageQty[it.item_id]) || 0)),
+        rate: Number(it.rate),
       }));
       // Earlier this always sent over_bill_mode 0 — the toggle on screen did nothing.
       onSave({ bill_date: billDate, remark, items, ...matBody,
@@ -4559,57 +4562,10 @@ function NewRaBillModal({ wo, milestones, fmtC, inpStyle, lblStyle, saving, onCl
             </>);
           })()}
 
-          {/* ── MANUAL billing — per-item cumulative qty ── */}
-          {!ledgerLoading && method === "manual" && (<>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 55px 70px 70px 70px 75px 85px",background:"#1E293B",padding:"7px 12px",gap:8,borderRadius:"7px 7px 0 0"}}>
-              {["Item","Unit","WO Qty","Prev Cum","Rate","This Cum ▼","This Bill Amt"].map((h,i)=>(
-                <div key={h} style={{fontSize:8.5,fontWeight:700,color:"rgba(255,255,255,.5)",textTransform:"uppercase",textAlign:i>1?"right":"left"}}>{h}</div>
-              ))}
-            </div>
-            {sections.map((sec,si)=>{
-              const secAmt = sec.items.reduce((s,it)=>{
-                const cum=parseFloat(cumQtys[it.id]||0);
-                return s+Math.max(0,cum-(it.prev_cum||0))*parseFloat(it.rate||0);
-              },0);
-              return(
-                <div key={si}>
-                  <div style={{display:"grid",gridTemplateColumns:"1fr 55px 70px 70px 70px 75px 85px",padding:"6px 12px",gap:8,background:"#374151",borderBottom:"1px solid rgba(255,255,255,0.08)"}}>
-                    <div style={{gridColumn:"1/7",fontSize:11,fontWeight:700,color:"white"}}>{si+1}. {sec.title}</div>
-                    <div style={{fontSize:11,fontWeight:700,color:"#4ADE80",textAlign:"right"}}>{fmtC(secAmt)}</div>
-                  </div>
-                  {sec.items.map(it=>{
-                    const cum=parseFloat(cumQtys[it.id]||0);
-                    const thisBill=Math.max(0,cum-(it.prev_cum||0));
-                    const thisAmt=thisBill*parseFloat(it.rate||0);
-                    const overLimit=cum>parseFloat(it.qty||0);
-                    const belowPrev=cumQtys[it.id]!==""&&cumQtys[it.id]!=null&&cum<(it.prev_cum||0)-0.0001;
-                    return(
-                      <div key={it.id} style={{display:"grid",gridTemplateColumns:"1fr 55px 70px 70px 70px 75px 85px",padding:"8px 12px",gap:8,borderBottom:"1px solid "+T.b1,alignItems:"center",background:overLimit||belowPrev?"#FEF2F2":T.surface}}>
-                        <div style={{fontSize:11.5,color:T.t1,fontWeight:500}}>{it.description}</div>
-                        <div style={{fontSize:11,color:T.t4,textAlign:"right"}}>{it.unit}</div>
-                        <div style={{fontSize:12,color:T.t2,textAlign:"right",fontWeight:500}}>{it.qty}</div>
-                        <div style={{fontSize:12,color:T.t3,textAlign:"right"}}>{it.prev_cum||0}</div>
-                        <div style={{fontSize:12,fontWeight:700,color:T.blu,textAlign:"right"}}>₹{parseFloat(it.rate||0).toLocaleString("en-IN")}</div>
-                        <div>
-                          <input type="number" value={cumQtys[it.id]||""} min={0}
-                            onChange={e=>setCumQtys(p=>({...p,[it.id]:e.target.value}))}
-                            style={{...inpS,textAlign:"right",fontWeight:700,padding:"5px 8px",
-                              border:"1.5px solid "+(overLimit||belowPrev?T.red:cum>(it.prev_cum||0)?T.blu:T.b1),
-                              color:overLimit||belowPrev?T.red:T.t1}}/>
-                          {overLimit&&<div style={{fontSize:9,color:T.red,marginTop:1,textAlign:"right"}}>{t("subcon.exceeds_wo")}</div>}
-                          {belowPrev&&<div style={{fontSize:9,color:T.red,marginTop:1,textAlign:"right"}}>{t("subcon.below_prev")}</div>}
-                        </div>
-                        <div style={{textAlign:"right"}}>
-                          <div style={{fontSize:12,fontWeight:700,color:thisAmt>0?T.grn:T.t4}}>{thisAmt>0?fmtC(thisAmt):"—"}</div>
-                          {thisBill>0&&<div style={{fontSize:9,color:T.t4,marginTop:1}}>{thisBill} {it.unit}</div>}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              );
-            })}
-          </>)}
+          {/* ── MANUAL (line-wise) billing — Floor × Stage grid (StageBilling, 30 Oct 2026) ── */}
+          {!ledgerLoading && method === "manual" && billingLedger?.mode === "manual" && (
+            <StageBillGrid items={billingLedger.items} value={stageQty} onChange={setStageQty} overBillMode={overBillMode} />
+          )}
 
           {/* ── Material katauti (Phase B) ── */}
           <MaterialKatauti wo={wo} room={grossR - retAmt - tdsAmt} fmtC={fmtC} inpStyle={inpS} onChange={setMat}/>

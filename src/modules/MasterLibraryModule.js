@@ -7,6 +7,7 @@ import CityPicker from "../components/CityPicker";
 import ImportFixPanel, { useImportFix } from "../components/ImportFix";
 import { readSheet, sheetToRows } from "../utils/sheetRows";
 import { t, Rich } from "../i18n";
+import { ItemPartsModal } from "./tabs/StageBilling";
 import { BackClose } from "../utils/backNav";
 import { loadPartyCategories, dropPartyCategoryCache, defaultCategories, partyCategoryKeys, catLabel,
   selectionToPayload, toRoleKey, PCAT_MAX } from "../utils/partyCategories";
@@ -6059,6 +6060,7 @@ function BoqItemLibrarySection() {
   const { items: projTypes } = useSection("construction-types");
   const [editing,   setEditing]   = useState(null);  // boq_items row or null
   const [showAdd,   setShowAdd]   = useState(false);
+  const [partsFor,  setPartsFor]  = useState(null);  // fix hisse (Septic tank 60/40) — stage billing, 30 Oct 2026
   const emptyForm = { name: "", category: catOptions[0] || "", unit: uomOptions[0] || "Sq.Ft", base_rate: 0, description: "" };
   const [form,    setForm]    = useState(emptyForm);
   const [saving,  setSaving]  = useState(false);
@@ -6173,7 +6175,9 @@ function BoqItemLibrarySection() {
             <tbody>
               {filtered.map((r, idx) => (
                 <tr key={r.id} style={{ background: idx % 2 === 0 ? "white" : "#FAFAFA", borderBottom: "1px solid #F3F4F6" }}>
-                  <td style={{ padding: "9px 14px", fontWeight: 600, fontSize: 13, color: "#111827" }}>{r.name}</td>
+                  <td style={{ padding: "9px 14px", fontWeight: 600, fontSize: 13, color: "#111827" }}>{r.name}
+                    {Number(r.stage_count) > 0 && <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: "#4B45C4", background: "#EEF0FB", padding: "1px 6px", borderRadius: 999 }}>{t("stage_billing.parts_count", { n: r.stage_count })}</span>}
+                  </td>
                   <td style={{ padding: "9px 14px" }}>
                     <span style={{ fontSize: 11, fontWeight: 600, color: "#7C3AED", background: "#EDE9FE", padding: "2px 8px", borderRadius: 4 }}>{r.category || "—"}</span>
                   </td>
@@ -6181,6 +6185,10 @@ function BoqItemLibrarySection() {
                   <td style={{ padding: "9px 14px", textAlign: "right", fontSize: 13, fontWeight: 600, color: "#374151" }}>{t("master_library.rs_number", { Number: Number(r.base_rate || 0).toLocaleString() })}</td>
                   <td style={{ padding: "9px 14px", fontSize: 12, color: "#6B7280" }}>{r.description || "—"}</td>
                   <td style={{ padding: "9px 6px", textAlign: "center", whiteSpace: "nowrap" }}>
+                    {lc("edit") && <button onClick={() => setPartsFor(r)} title={t("stage_billing.parts_btn_title")}
+                      style={{ background: "none", border: "1px solid #E5E7EB", borderRadius: 5, color: "#4B45C4", cursor: "pointer", padding: "2px 6px", marginRight: 4, fontSize: 10.5, fontWeight: 700 }}>
+                      {t("stage_billing.parts_btn")}
+                    </button>}
                     {lc("edit") && <button onClick={() => openEdit(r)} title={t("common.edit_2")}
                       style={{ background: "none", border: "none", color: "#6B7280", cursor: "pointer", padding: 4, marginRight: 2 }}>
                       <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
@@ -6195,6 +6203,10 @@ function BoqItemLibrarySection() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {partsFor && (
+        <ItemPartsModal item={partsFor} onClose={() => setPartsFor(null)} onSaved={() => { setPartsFor(null); reload(); }} />
       )}
 
       {/* Add/Edit modal — Subcon-style */}

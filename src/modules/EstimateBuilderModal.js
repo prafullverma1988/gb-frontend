@@ -22,6 +22,7 @@ import PickSelect from "../components/PickSelect";
 import api from "../config/api";
 import SearchSelect from "../components/SearchSelect";
 import { t, Rich } from "../i18n";
+import { partsFromTemplate, splitLineByParts } from "./tabs/StageBilling";
 
 const inrIN = (n) => Math.round(Number(n) || 0).toLocaleString("en-IN");
 const isSet = (v) => v !== null && v !== undefined && v !== "";
@@ -777,6 +778,17 @@ export default function EstimateBuilderModal({
     if (!hasMeasurements) return alert(t("estimate_builder.add_at_least_one_section_before"));
     setSaving(true);
     try {
+      // Fix hisse (stage billing, 30 Oct 2026): library item par hisse tay hon
+      // (Septic tank: Brick work + plaster 60 · Slab casting 40) to uski line
+      // hisson me khulti hai — har hissa apne task se bill hota hai.
+      const partIds = [...new Set(breakdown.sections.flatMap(sec => sec.categories.flatMap(cat => cat.items.map(it => it.item_id))))]
+        .filter(id => Number((allBoqItems.find(b => b.id === id) || {}).stage_count) > 0);
+      const partsById = {};
+      await Promise.all(partIds.map(async id => {
+        const r = await api.get("/library/boq-items/" + id + "/stages").catch(() => null);
+        const ps = partsFromTemplate(r?.data?.lines);
+        if (ps.length) partsById[id] = ps;
+      }));
       // breakdown.sections is the computed tree (handles per-item qty mode)
       const sectionsPayload = breakdown.sections.map(sec => {
         const sectionTitle = sec.name + (sec.unit && sec.unit !== "sqft" ? ` (${sec.unit})` : "");
@@ -788,14 +800,16 @@ export default function EstimateBuilderModal({
             const masterItem = allBoqItems.find(b => b.id === it.item_id);
             const itemName = masterItem?.name || ("Item #" + it.item_id);
             const itemUnit = masterItem?.unit || (sec.unit === "lump_sum" ? "Lump Sum" : "Sq.Ft");
-            itemsPayload.push({
+            const line = {
               description: cat.name ? `[${cat.name}] ${itemName}` + (it.desc ? ` — ${it.desc}` : "")
                                     : itemName + (it.desc ? ` — ${it.desc}` : ""),
               unit:        itemUnit,
               qty:         Number(it.qty) || 0,
               rate:        (Number(it.base) || 0) + (Number(it.addOn) || 0),
               library_item_id: it.item_id || null,
-            });
+            };
+            if (partsById[it.item_id]) itemsPayload.push(...splitLineByParts(line, partsById[it.item_id], itemName));
+            else itemsPayload.push(line);
           }
         }
         // Persist the section's qty mode so render paths (BOQ tab,

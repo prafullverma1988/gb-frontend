@@ -10,6 +10,7 @@ import { canApproveAction, approverRolesFor } from "../../utils/approvalAuthorit
 import { t, Rich } from "../../i18n";
 import { companyName } from "../../utils/companyName";
 import { can } from "../../utils/perms";
+import { StageBillGrid, StageLinesPanel, StageBoard } from "./StageBilling";
 
 function TabEstimate({ project }) {
   // Roles & Access (5 Oct 2026) — har button usi Estimate tick se jo server
@@ -250,7 +251,7 @@ function TabEstimate({ project }) {
   // Helper to open New Invoice (milestone) — preloads ledger so the modal
   // renders fresh remaining/billed numbers every time.
   const openNewInvoice = async () => {
-    setInvForm(p=>({...p, source:"milestone", items:[], remark:""}));
+    setInvForm(p=>({...p, source:"milestone", items:[], remark:"", stageQty:{}}));
     setShowNewInv(true);
     if (selEst?.id) loadBillingLedger(selEst.id);
   };
@@ -840,6 +841,22 @@ function TabEstimate({ project }) {
         // Over-bill flags pass through on manual invoices too.
         is_over_bill:     invForm.overBillMode ? 1 : 0,
         over_bill_reason: invForm.overBillMode ? invForm.overBillReason.trim() : null,
+      };
+    } else if (selEst && selEst.billing_method === "manual") {
+      // Stage-wise (line) estimate — line par cumulative = aaj tak bill hua
+      // (pehle ka hisaab samet, ledger se) + is bill. BOQ se upar ka hissa
+      // usi EK invoice me line par jaata hai (server over_bill_qty) — do bill nahi.
+      const led = billingLedger?.mode === "manual" ? (billingLedger.items || []) : [];
+      const sq = invForm.stageQty || {};
+      const r3 = (n) => Math.round((parseFloat(n)||0) * 1000) / 1000;
+      const picked = led.filter(it => (parseFloat(sq[it.item_id]) || 0) > 0);
+      if (picked.length === 0) { setSaving(false); return alert(t("stage_billing.nothing_entered")); }
+      const anyOver = picked.some(it => (parseFloat(sq[it.item_id]) || 0) > (Number(it.remaining_qty) || 0) + 0.0005);
+      if (anyOver && !invForm.overBillMode) { setSaving(false); return alert(t("estimate.some_quantities_exceed_boq_remaining_to")); }
+      body = {
+        estimate_id: selEst.id, invoice_date: invForm.invoice_date, remark: invForm.remark,
+        items: picked.map(it => ({ estimate_item_id: it.item_id, cumulative_qty: r3((Number(it.billed_qty) || 0) + (parseFloat(sq[it.item_id]) || 0)) })),
+        ...(anyOver ? { is_over_bill: 1, over_bill_reason: invForm.overBillReason.trim() } : {}),
       };
     } else {
       const items = invForm.items.filter(i => i.milestone_id);
@@ -1551,6 +1568,7 @@ function TabEstimate({ project }) {
             {[
               {id:"boq",label:t("estimate.boq_items")},
               {id:"milestone",label:t("estimate.payment_schedule")},
+              {id:"board",label:t("stage_billing.board_tab")},
               {id:"invoice",label:"Invoices ("+invoices.length+")"},
               // Payments tab removed — customer receipts are managed at the
               // Party Ledger level (Party tab → Receipt), not per-estimate.
@@ -1882,15 +1900,22 @@ function TabEstimate({ project }) {
               </div>
             )}
 
+            {/* STAGE BOARD — client line + subcon WO line ek screen par (30 Oct 2026) */}
+            {subTab==="board" && selEst && (
+              <StageBoard key={selEst.id} estimateId={selEst.id} projectId={projectId} />
+            )}
+
             {/* MILESTONES TAB */}
             {subTab==="milestone" && (
               <div>
-                {selEst.billing_method === "manual" && (
-                  <div style={{padding:"24px",textAlign:"center",color:T.t3,background:T.surface,border:"1px dashed "+T.b1,borderRadius:8}}>
-                    <div style={{fontSize:13,marginBottom:6}}>{t("estimate.this_estimate_uses")} <b>manual</b> {t("estimate.billing_per_item_cumulative_qty")}</div>
-                    <div style={{fontSize:11.5,color:T.t4}}>{t("common.click")} <b>{t("estimate.set_schedule_2")}</b> {t("estimate.to_switch_to_milestone_based_item")}</div>
+                {selEst.billing_method === "manual" && (<>
+                  {/* Stage billing (30 Oct 2026): line-wise estimate par bill seedha line par —
+                      schedule ki zaroorat nahi. Yahan line ka task, pehle bill ho chuka, hisse, had. */}
+                  <div style={{padding:"10px 14px",marginBottom:10,color:T.t3,background:T.surface,border:"1px dashed "+T.b1,borderRadius:8,fontSize:11.5,lineHeight:1.5}}>
+                    {t("stage_billing.manual_notice")} <span style={{color:T.t4}}>{t("common.click")} <b>{t("estimate.set_schedule_2")}</b> {t("estimate.to_switch_to_milestone_based_item")}</span>
                   </div>
-                )}
+                  <StageLinesPanel kind="estimate" id={selEst.id} canEdit={eEdit} canApprove={eApprove} />
+                </>)}
                 {selEst.billing_method === "milestone_rate" && (estDetail?.sections||[]).map(sec => {
                   // Group items by parsed [Category] prefix — same convention
                   // as BOQ tab. Renders Section › Category › Item › Milestones.
@@ -3104,28 +3129,15 @@ function TabEstimate({ project }) {
               })()}
             </>)}
 
+            {/* Stage-wise (line) estimate — Floor × Stage grid (30 Oct 2026). Pehle yahan
+                sirf "cum qty" ka khaana tha, aaj tak bill hua dikhta hi nahi tha, aur
+                submit milestone_id wali line hi bhejta tha — line-wise estimate ka
+                invoice web se banta hi nahi tha. */}
             {invForm.source==="milestone" && selEst && selEst.billing_method === "manual" && (
-              <div>
-                <div style={{fontSize:11,color:T.t3,marginBottom:8}}>{t("estimate.estimate_uses_manual_billing_enter_cumulative")}</div>
-                {(estDetail?.sections||[]).flatMap(s=>s.items).map(it => {
-                  const picked = invForm.items.find(x => x.estimate_item_id === it.id);
-                  return (
-                    <div key={it.id} style={{display:"grid",gridTemplateColumns:"24px 1fr 100px 100px",gap:6,alignItems:"center",padding:"5px 8px",borderBottom:"1px solid "+T.b1}}>
-                      <input type="checkbox" checked={!!picked}
-                        onChange={e => {
-                          if (e.target.checked) setInvForm(p => ({...p, items:[...p.items, {estimate_item_id:it.id, cumulative_qty:"", rate:parseFloat(it.rate)}]}));
-                          else setInvForm(p => ({...p, items: p.items.filter(x => x.estimate_item_id !== it.id)}));
-                        }}/>
-                      <span style={{fontSize:12,color:T.t1}}>{it.description}</span>
-                      <span style={{fontSize:11.5,color:T.t3,textAlign:"right",paddingRight:8}}>{fmtC(it.rate)}/{it.unit}</span>
-                      <input type="number" placeholder={t("estimate.cum_qty")} disabled={!picked}
-                        value={picked?.cumulative_qty || ""}
-                        onChange={e => setInvForm(p => ({...p, items: p.items.map(x => x.estimate_item_id===it.id ? {...x, cumulative_qty:e.target.value} : x)}))}
-                        style={{...inpS,padding:"4px 8px",fontSize:11}}/>
-                    </div>
-                  );
-                })}
-              </div>
+              ledgerLoading || billingLedger?.mode !== "manual"
+                ? <div style={{textAlign:"center",padding:"20px",color:T.t4,fontSize:12}}>{t("estimate.loading_billing_ledger")}</div>
+                : <StageBillGrid items={billingLedger.items} value={invForm.stageQty || {}}
+                    onChange={v => setInvForm(p => ({...p, stageQty: v}))} overBillMode={invForm.overBillMode} />
             )}
           </div>
           <div style={{padding:"12px 18px",borderTop:"1px solid "+T.b1,display:"flex",justifyContent:"flex-end",gap:8}}>
