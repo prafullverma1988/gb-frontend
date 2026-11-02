@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useLayoutEffect, Fragment } from "react";
+import { MeasureQueue } from "./tabs/BillingV2";
 import SearchSelect from "../components/SearchSelect";
 import PickSelect from "../components/PickSelect";
 import { createPortal } from "react-dom";
@@ -5163,6 +5164,8 @@ Status: ${ledgerRow.status||"unpaid"}`;
     {key:"payments",label:t("common.payments"),tabs:[
       {id:"payreq",l:`Payment Requests${pendPR>0?` (${pendPR})`:""}`},
       {id:"pending",l:t("finance.pending_payments")},
+      // Thekedar ka naap se bill (Billing v2, 2 Nov 2026) — Finance review karke RA Draft banata hai
+      ...((can("Subcon","view")||can("Finance","view"))?[{id:"subcon_measure",l:t("stage_billing.queue_tab")}]:[]),
     ]},
     {key:"materials",label:t("common.materials"),tabs:[
       {id:"unbilled_grn",l:t("finance.unbilled_grn")},
@@ -6990,6 +6993,8 @@ Status: ${ledgerRow.status||"unpaid"}`;
         )}
         {/* SUBCONTRACTOR KE PAAS MATERIAL (Material Zimmedari, 14 Oct 2026) — sirf record */}
         {tab==="subcon_mat"&&<SubconMaterialPanel/>}
+        {/* THEKEDAR BILL — NAAP TAIYAAR (Billing v2, 2 Nov 2026): sab project ke naap wale WO */}
+        {tab==="subcon_measure"&&<div style={{padding:"14px 16px"}}><MeasureQueue title={t("stage_billing.queue_tab")}/></div>}
         {/* BILLED MATERIAL TAB ─────────────────────────────────────── */}
         {tab==="billed_mat"&&(
           <div style={{display:"flex",flexDirection:"column",flex:1,overflow:"hidden"}}>

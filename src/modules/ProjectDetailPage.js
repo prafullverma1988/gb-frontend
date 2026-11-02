@@ -47,6 +47,8 @@ const TabEstimate    = lazy(() => import("./tabs/TabEstimate"));
 const TabBudget      = lazy(() => import("./tabs/TabBudget"));
 const TabTasks       = lazy(() => import("./tabs/TabTasks"));
 const TabSubcon      = lazy(() => import("./tabs/TabSubcon"));
+// Stage Khaata (Billing v2, 2 Nov 2026) — stage par client + thekedar + kharch, sirf dekhna
+const TabStageKhaata = lazy(() => import("./tabs/BillingV2"));
 const TabMaterial    = lazy(() => import("./tabs/TabMaterial"));
 const TabAttendance  = lazy(() => import("./tabs/TabAttendance"));
 const TabOverview    = lazy(() => import("./tabs/TabOverview"));
@@ -185,6 +187,7 @@ const TABS = [
   {id:"attendance", get label() { return t("project_detail.attendance"); },  key:"a", Icon:IcAttend},
   {id:"material",   get label() { return t("common.material"); },    key:"m", Icon:IcMaterial},
   {id:"subcon",     get label() { return t("project_detail.subcon"); },      key:"b", Icon:IcSubcon},
+  {id:"khaata",     get label() { return t("project_detail.stage_khaata"); }, key:"l", Icon:IcEstimate},
   {id:"equipment",  get label() { return t("project_detail.equipment"); },   key:"q", Icon:IcEquip},
   {id:"files",      get label() { return t("project_detail.files"); },       key:"i", Icon:IcFiles},
   {id:"site",       get label() { return t("project_detail.site_dpr"); },  key:"y", Icon:IcSite},
@@ -742,6 +745,8 @@ function ProjectDetailPage({project=PROJ, onBack, onSwitchProject, onOpenPulse})
   const _isAdminRole = ["admin","super_admin"].includes(currentUser?.role);
   const canSeeTab = (id) => {
     if(_isAdminRole) return true;          // admins bypass
+    // Stage Khaata: client (Estimate) ya thekedar (Subcon) — jo bhi dekh sakta ho
+    if(id === "khaata") return canSeeTab("estimate") || canSeeTab("subcon");
     const mod = TAB_PERM[id];
     if(!mod || !_perms) return true;       // koi perm key nahi, ya perms load nahi hue
     // Sirf tab chhupao jab is module ki row MAUJOOD ho aur view band ho. Purane
@@ -867,6 +872,7 @@ function ProjectDetailPage({project=PROJ, onBack, onSwitchProject, onOpenPulse})
     attendance:  <TabAttendance project={project} onRequestPayment={canReqPay ? (p)=>setPaymentReq(p||{}) : undefined}/>,
     material:    <TabMaterial project={project}/>,
     subcon:      <TabSubcon projectId={project.id} project={project}/>,
+    khaata:      <TabStageKhaata project={project}/>,
     equipment:   <TabEquipment projectId={project.id}/>,
     files:       isSolar ? <TabFiles projectId={project.id}/> : <TabProjectFiles projectId={project.id}/>,
     site:        <TabSite project={project} isAdmin={isAdmin}/>,

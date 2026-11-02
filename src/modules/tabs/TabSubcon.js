@@ -8,6 +8,7 @@ import { canApproveAction, approverRolesFor } from "../../utils/approvalAuthorit
 import { t, Rich } from "../../i18n";
 import { can, canAny, currentUser } from "../../utils/perms";
 import { StageBillGrid, StageLinesPanel, HandoverModal, BackchargeList } from "./StageBilling";
+import { StatementView, ProjectStatementView, MeasureBillModal, BillMeasuresInline } from "./BillingV2";
 
 function TabSubcon({ projectId, project }) {
   // Roles & Access (5 Oct 2026) — buttons usi Subcon tick se jo server
@@ -35,6 +36,10 @@ function TabSubcon({ projectId, project }) {
   const billSubmitRef = useRef(false);
   const [showEditWO, setShowEditWO] = useState(false);
   const [showHandover, setShowHandover] = useState(false);   // contract toota — baaki naye thekedar ko (30 Oct 2026)
+  // Billing v2 (2 Nov 2026): naap se bill (Finance review) + statement ("Ye WO" / "Sab thekedar")
+  const [showMeasure, setShowMeasure] = useState(false);
+  const [stmtAll, setStmtAll] = useState(false);
+  const [openMeasures, setOpenMeasures] = useState({});
   const [amendments, setAmendments] = useState([]);
   const [expandedBill, setExpandedBill] = useState(null);
   const [showEditBillModal, setShowEditBillModal] = useState(false);
@@ -498,8 +503,9 @@ function TabSubcon({ projectId, project }) {
           <div style={{display:"flex",borderBottom:"1px solid "+T.b1,background:T.surfaceB,flexShrink:0,alignItems:"center"}}>
             {[
               {id:"wo",label:t("subcon.work_order")},
-              {id:"schedule",label:t("estimate.payment_schedule")},
+              {id:"schedule",label:t("stage_billing.tab_stages")},
               {id:"bills",label:t("subcon.ra_bills_length", { length: bills.length })},
+              {id:"stmt",label:t("stage_billing.tab_statement")},
               {id:"pay",label:t("common.payments")},
               {id:"amend",label:"Amendments"+(amendments.filter(a=>a.status==="Pending").length>0 ? ` 🔴${amendments.filter(a=>a.status==="Pending").length}` : ` (${amendments.length})`)},
             ].map(t=>(
@@ -549,7 +555,7 @@ function TabSubcon({ projectId, project }) {
                   border:"1px solid " + (selWo?.auto_bill_on_complete ? "#86EFAC" : T.b1),
                   borderRadius:14,padding:"4px 10px",fontSize:10.5,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:5,marginRight:4,
                 }}>{t("subcon.auto_bill_selwo", { selWo: selWo?.auto_bill_on_complete ? "ON" : "OFF" })}</button>}
-              {(sCreate||sEdit)&&<div style={{position:"relative",marginRight:8}}>
+              {(sCreate||sEdit)&&selWo?.billing_method&&selWo.billing_method!=="manual"&&<div style={{position:"relative",marginRight:8}}>
                 <button onClick={()=>setMsChooserOpen(o=>!o)}
                   style={{background:T.bluL,color:T.blu,border:"1px solid "+T.bluM,borderRadius:5,padding:"5px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>
                  {t("estimate.set_schedule")}
@@ -605,6 +611,16 @@ function TabSubcon({ projectId, project }) {
                   <div style={{fontSize:11,fontWeight:700,color:T.t2}}>{t("subcon.retention_retention_pct_tds_tds_pct", { retention_pct: selWo.retention_pct, tds_pct: selWo.tds_pct })}</div>
                   <span style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:4,background:T.grnL,color:T.grn}}>{t("subcon.total_fmtc", { fmtC: fmtC(selWo.total_value) })}</span>
                 </div>
+                {/* Client estimate ki qty amendment se badli — WO line par sujhaav (rate kabhi nahi chhuti; D2, 2 Nov 2026) */}
+                {(selWo.qty_hints||[]).length>0&&(
+                  <div style={{padding:"8px 12px",marginBottom:10,borderRadius:8,background:T.ambL,border:"1px solid "+T.amb,fontSize:11.5,color:T.amb,lineHeight:1.5}}>
+                    <b>{t("stage_billing.qty_hint_title")}</b>
+                    {selWo.qty_hints.map(h=>(
+                      <div key={h.wo_item_id}>{t("stage_billing.qty_hint_line",{est:h.estimate_no||"",client:h.client_qty,wo:h.wo_qty,unit:h.unit||""})}</div>
+                    ))}
+                    {sCreate&&<button onClick={()=>setShowEditWO(true)} style={{marginTop:6,padding:"4px 10px",borderRadius:6,border:"1px solid "+T.amb,background:T.surface,color:T.amb,fontSize:11,fontWeight:700,cursor:"pointer"}}>{t("stage_billing.qty_hint_btn")}</button>}
+                  </div>
+                )}
                 {/* Material kiska + Diya / Kat chuka / Baaki katna (Phase B) */}
                 <WoMaterialCard key={selWo.id+":"+bills.length} wo={selWo} canEdit={sEdit} fmtC={fmtC} onModeChanged={reloadWo}/>
                 {/* WO items table - load from API */}
@@ -619,7 +635,7 @@ function TabSubcon({ projectId, project }) {
                 {(!selWo.billing_method || selWo.billing_method==="manual") && (<>
                   {/* Stage billing (30 Oct 2026): line-wise WO par bill seedha line par — line ka task, pehle bill ho chuka, had */}
                   <div style={{padding:"10px 14px",marginBottom:10,color:T.t3,background:T.surface,border:"1px dashed "+T.b1,borderRadius:8,fontSize:11.5,lineHeight:1.5}}>
-                    {t("stage_billing.manual_notice_wo")} <span style={{color:T.t4}}>{t("common.click")} <b>{t("estimate.set_schedule_2")}</b> {t("subcon.to_switch_to_milestone_based_item")}</span>
+                    {t("stage_billing.manual_notice_wo")} {t("stage_billing.manual_notice_wo_naap")}
                   </div>
                   <StageLinesPanel key={selWo.id} kind="wo" id={selWo.id} canEdit={sEdit} canApprove={sApprove} />
                 </>)}
@@ -895,7 +911,13 @@ function TabSubcon({ projectId, project }) {
               <div>
                 {/* Katauti — subcon ki galti ka dobara kaam (31 Oct 2026): baaki + kis bill me lagi */}
                 <BackchargeList key={selWo.id} woId={selWo.id} canApprove={sApprove} />
-                {sCreate&&<div style={{display:"flex",justifyContent:"flex-end",gap:8,marginBottom:12}}>
+                {sCreate&&<div style={{display:"flex",justifyContent:"flex-end",gap:8,marginBottom:12,flexWrap:"wrap"}}>
+                  {(!selWo.billing_method||selWo.billing_method==="manual")&&selWo.status!=="Closed"&&(
+                    <button onClick={()=>setShowMeasure(true)} title={t("stage_billing.naap_btn_tip")}
+                      style={{background:T.bluL,color:T.blu,border:"1px solid "+T.blu,borderRadius:6,padding:"7px 14px",fontSize:12,fontWeight:700,cursor:"pointer"}}>
+                     {t("stage_billing.naap_btn")}
+                    </button>
+                  )}
                   <button onClick={()=>{setManualBillForm({bill_date:localYMD(),remark:"",items:[{description:"",qty:"",rate:""}]});setShowManualRaBill(true);}}
                     style={{background:"white",color:"#7C3AED",border:"2px dashed #7C3AED",borderRadius:6,padding:"7px 14px",fontSize:12,fontWeight:700,cursor:"pointer"}}>
                    {t("subcon.manual_bill")}
@@ -916,6 +938,7 @@ function TabSubcon({ projectId, project }) {
                           <span style={{fontSize:13,fontWeight:700,color:T.t1}}>{b.bill_no}</span>
                           {b.source==="auto" && <span style={{fontSize:9.5,fontWeight:700,padding:"2px 6px",borderRadius:3,background:"#EDE9FE",color:"#6D28D9",border:"1px solid #C4B5FD"}}>{t("estimate.auto")}</span>}
                           {b.source==="free_form" && <span style={{fontSize:9.5,fontWeight:700,padding:"2px 6px",borderRadius:3,background:"#F3E8FF",color:"#7C3AED",border:"1px solid #C4B5FD"}}>{t("subcon.manual")}</span>}
+                          {b.source==="measure" && <span style={{fontSize:9.5,fontWeight:700,padding:"2px 6px",borderRadius:3,background:T.bluL,color:T.blu,border:"1px solid "+T.blu}}>{t("stage_billing.naap_chip")}{b.upto_date?" · "+t("stage_billing.st_upto",{d:new Date(String(b.upto_date).slice(0,10)+"T00:00:00").toLocaleDateString("en-IN",{day:"2-digit",month:"short"})}):""}</span>}
                           {b.over_bill_mode==1 && <span title={b.over_bill_reason||t("subcon.over_bill_ra_bill")} style={{fontSize:9.5,fontWeight:700,padding:"2px 6px",borderRadius:3,background:"#FEE2E2",color:"#991B1B",border:"1px solid #FCA5A5"}}>{t("estimate.over_bill")}</span>}
                           <span style={{fontSize:10.5,color:T.t4}}>{b.bill_date?new Date(b.bill_date).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}):"—"}</span>
                         </div>
@@ -942,6 +965,8 @@ function TabSubcon({ projectId, project }) {
                           {t("subcon.mat_note_line",{note:b.material_note})}
                         </div>
                       )}
+                      {/* Naap se bill — "kab kitna kaam" (har entry), 2 Nov 2026 */}
+                      {b.source==="measure"&&openMeasures[b.id]&&<BillMeasuresInline billId={b.id}/>}
                       {/* Payment state — read off the Finance ledger. Payment is
                           made in Finance → Party Payment, never from here. */}
                       {(b.status==="Approved"||b.status==="Paid") && !b.ledger_missing && (
@@ -967,6 +992,7 @@ function TabSubcon({ projectId, project }) {
                       <div style={{display:"flex",gap:8,marginBottom:8,flexWrap:"wrap"}}>
                         {/* RA bill ka PDF — server se (abstract: pichhle bill tak / is bill / aaj tak) */}
                         <button onClick={()=>downloadRaPdf(b.id, b.bill_no)} style={{minWidth:70,padding:"6px 10px",borderRadius:5,background:T.surface,color:T.t2,border:"1px solid "+T.b1,fontSize:11,fontWeight:700,cursor:"pointer"}}>{t("stage_billing.pdf_btn")}</button>
+                        {b.source==="measure"&&<button onClick={()=>setOpenMeasures(p=>({...p,[b.id]:!p[b.id]}))} style={{padding:"6px 10px",borderRadius:5,background:T.bluL,color:T.blu,border:"1px solid "+T.blu,fontSize:11,fontWeight:700,cursor:"pointer"}}>{openMeasures[b.id]?t("stage_billing.naap_list_hide"):t("stage_billing.naap_list_show")}</button>}
                         {sEdit&&b.status==="Draft"&&<button onClick={()=>billAction(()=>api.patch("/subcon/ra-bills/"+b.id+"/status",{status:"Submitted"}))} style={{flex:1,minWidth:100,padding:"6px",borderRadius:5,background:T.blu,color:"white",border:"none",fontSize:11,fontWeight:700,cursor:"pointer"}}>{t("estimate.confirm_submit")}</button>}
                         {sEdit&&b.status==="Rejected"&&<button onClick={()=>billAction(()=>api.patch("/subcon/ra-bills/"+b.id+"/status",{status:"Submitted"}))} style={{flex:1,minWidth:100,padding:"6px",borderRadius:5,background:T.blu,color:"white",border:"none",fontSize:11,fontWeight:700,cursor:"pointer"}}>{t("subcon.resubmit_bill")}</button>}
                         {/* RA bill approve — server par Subcon APPROVE (5 Oct 2026; pehle
@@ -999,7 +1025,9 @@ function TabSubcon({ projectId, project }) {
                               const reason = await window.promptAsync({ message: t("subcon.ra_delete_reason_prompt", { bill_no: b.bill_no }), multiline: true, cancelLabel: t("common.cancel") });
                               if (reason == null) return;
                               if (String(reason).trim().length < 3) { alert(t("estimate.reason_min_3")); return; }
-                              const res = await api.del("/subcon/ra-bills/"+b.id+"?reason="+encodeURIComponent(String(reason).trim()));
+                              // Auto Draft hataya to agle progress par phir banta — "auto band" poochho (2 Nov 2026)
+                              const stopAuto = b.status==="Draft"&&b.source==="auto" ? await window.confirmAsync(t("stage_billing.stop_auto_q")) : false;
+                              const res = await api.del("/subcon/ra-bills/"+b.id+"?reason="+encodeURIComponent(String(reason).trim())+(stopAuto?"&stop_auto=1":""));
                               if(res.success){
                                 reloadWo(); // reload bills
                               } else {
@@ -1138,6 +1166,19 @@ function TabSubcon({ projectId, project }) {
             )}
 
             {/* PAYMENTS TAB */}
+            {/* STATEMENT — thekedar ka RA-standard khaata (Billing v2, 2 Nov 2026) */}
+            {subTab==="stmt"&&(
+              <div>
+                <div style={{display:"flex",gap:6,marginBottom:12}}>
+                  {[[false,t("stage_billing.stmt_this_wo")],[true,t("stage_billing.stmt_all_subcons")]].map(([v,l])=>(
+                    <button key={String(v)} onClick={()=>setStmtAll(v)}
+                      style={{padding:"5px 12px",borderRadius:6,fontSize:11.5,fontWeight:700,cursor:"pointer",border:"1px solid "+(stmtAll===v?T.blu:T.b1),background:stmtAll===v?T.bluL:T.surface,color:stmtAll===v?T.blu:T.t2}}>{l}</button>
+                  ))}
+                </div>
+                {stmtAll ? <ProjectStatementView kind="wo" projectId={projectId}/> : <StatementView key={selWo.id+":"+bills.length} kind="wo" id={selWo.id}/>}
+              </div>
+            )}
+
             {subTab==="pay"&&(
               <PaymentsTab woId={selWo.id} fmtC={fmtC} summary={summary}
                 inpStyle={inpStyle} lblStyle={lblStyle} onChanged={reloadWo}/>
@@ -1152,6 +1193,10 @@ function TabSubcon({ projectId, project }) {
       </div>
 
       {/* EDIT WO MODAL */}
+      {showMeasure&&selWo&&(
+        <MeasureBillModal woId={selWo.id} onClose={()=>setShowMeasure(false)}
+          onDone={async (m)=>{ setShowMeasure(false); await reloadWo(); setSubTab("bills"); alert(m); }}/>
+      )}
       {showHandover&&selWo&&(
         <HandoverModal wo={selWo} subcons={subcons} onClose={()=>setShowHandover(false)}
           onDone={async (d)=>{ setShowHandover(false); alert(t("stage_billing.handover_done", { name: d?.new_wo?.subcon_name || "" })); await loadWOs(); }} />

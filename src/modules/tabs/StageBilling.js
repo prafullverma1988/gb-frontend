@@ -159,7 +159,10 @@ export function StageLinesPanel({ kind, id, canEdit, canApprove }) {
     if (s?.success) {
       setSug(s.data);
       const m = {};
-      for (const x of s.data.lines || []) m[x.item_id] = { task_id: x.task_id ? String(x.task_id) : "", trigger_pct: String(x.trigger_pct || 100) };
+      for (const x of s.data.lines || []) m[x.item_id] = { task_id: x.task_id ? String(x.task_id) : "", trigger_pct: String(x.trigger_pct || 100),
+        // Billing v2 (2 Nov 2026): WO line ka tareeka (stage / naap), factor, stretch; dono me "auto band"
+        measure_mode: x.measure_mode || "stage", qty_factor: x.qty_factor == null ? "" : String(x.qty_factor),
+        alignment_id: x.alignment_id ? String(x.alignment_id) : "", no_auto: !!x.no_auto };
       setLinks(m); setDirty(false);
     } else if (s && s.message) setMsg(s.message);
   }, [base]);
@@ -192,7 +195,19 @@ export function StageLinesPanel({ kind, id, canEdit, canApprove }) {
     for (const x of sug?.lines || []) {
       const cur = links[x.item_id] || {};
       const tid = cur.task_id ? Number(cur.task_id) : null, trg = Number(cur.trigger_pct) || 100;
-      if ((x.task_id || null) !== tid || (x.trigger_pct || 100) !== trg) changed.push({ item_id: x.item_id, task_id: tid, trigger_pct: trg });
+      const row = { item_id: x.item_id, task_id: tid, trigger_pct: trg };
+      let diff = (x.task_id || null) !== tid || (x.trigger_pct || 100) !== trg;
+      if (sug.measure_ready || kind === "estimate") {
+        if (!!x.no_auto !== !!cur.no_auto) diff = true;
+        row.no_auto = !!cur.no_auto;
+      }
+      if (kind === "wo" && sug.measure_ready) {
+        const f = cur.qty_factor === "" || cur.qty_factor == null ? null : num(cur.qty_factor);
+        const al = cur.alignment_id ? Number(cur.alignment_id) : null;
+        if ((x.measure_mode || "stage") !== (cur.measure_mode || "stage") || (x.qty_factor == null ? null : Number(x.qty_factor)) !== f || (x.alignment_id || null) !== al) diff = true;
+        Object.assign(row, { measure_mode: cur.measure_mode || "stage", qty_factor: f, alignment_id: al });
+      }
+      if (diff) changed.push(row);
     }
     if (!changed.length) { setDirty(false); return; }
     setBusy(true);
@@ -285,6 +300,44 @@ export function StageLinesPanel({ kind, id, canEdit, canApprove }) {
                       </div>
                     )}
                   </div>
+                  {canEdit && (kind === "estimate" || sug?.measure_ready) && (() => {
+                    // Billing v2 (2 Nov 2026): WO line — Stage (task % par) ya Naap (task ki
+                    // darj qty × factor, Finance "Naap se bill"); dono me "Auto-bill band".
+                    const tk = (sug?.tasks || []).find(x => String(x.id) === String(cur.task_id));
+                    const isQty = kind === "wo" && cur.measure_mode === "qty";
+                    const autoF = tk && num(tk.scope_qty) > 0 ? Math.round(num(s.qty) / num(tk.scope_qty) * 1e6) / 1e6 : null;
+                    return (
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", marginTop: 6, fontSize: 11 }}>
+                        {kind === "wo" && (<>
+                          <label style={{ color: T.t3, fontWeight: 700 }} htmlFor={"mm-" + it.item_id}>{t("stage_billing.tareeka")}</label>
+                          <select id={"mm-" + it.item_id} value={cur.measure_mode || "stage"} onChange={e => setLink(it.item_id, { measure_mode: e.target.value })} style={{ ...inpS, width: 190 }}>
+                            <option value="stage">{t("stage_billing.mode_stage")}</option>
+                            <option value="qty">{t("stage_billing.mode_qty")}</option>
+                          </select>
+                          {isQty && (<>
+                            <label style={{ color: T.t3, fontWeight: 700 }} htmlFor={"qf-" + it.item_id}>{t("stage_billing.factor")}</label>
+                            <input id={"qf-" + it.item_id} type="number" min="0" step="any" value={cur.qty_factor} placeholder={autoF != null ? t("stage_billing.factor_auto", { f: autoF }) : "1"}
+                              onChange={e => setLink(it.item_id, { qty_factor: e.target.value })} style={{ ...inpS, width: 110 }} />
+                            {(sug?.alignments || []).length > 0 && (<>
+                              <label style={{ color: T.t3, fontWeight: 700 }} htmlFor={"al-" + it.item_id}>{t("stage_billing.stretch")}</label>
+                              <select id={"al-" + it.item_id} value={cur.alignment_id} onChange={e => setLink(it.item_id, { alignment_id: e.target.value })} style={{ ...inpS, width: 180 }}>
+                                <option value="">{t("stage_billing.stretch_all")}</option>
+                                {sug.alignments.map(a => <option key={a.id} value={String(a.id)}>{a.name}</option>)}
+                              </select>
+                            </>)}
+                            {tk && !(num(tk.scope_qty) > 0) && <span style={{ color: T.red }}>{t("stage_billing.naap_task_no_qty")}</span>}
+                          </>)}
+                        </>)}
+                        {!isQty && (
+                          <label style={{ display: "inline-flex", alignItems: "center", gap: 4, color: T.t2 }}>
+                            <input type="checkbox" checked={!!cur.no_auto} onChange={e => setLink(it.item_id, { no_auto: e.target.checked })} />
+                            {t("stage_billing.auto_off")}
+                          </label>
+                        )}
+                        {isQty && <span style={{ color: T.t3 }}>{t("stage_billing.qty_mode_hint")}</span>}
+                      </div>
+                    );
+                  })()}
                   {opening && opening.item_id === it.item_id && (
                     <div style={{ display: "grid", gridTemplateColumns: "120px minmax(0,1fr) auto", gap: 8, alignItems: "end", marginTop: 8, padding: 8, background: T.ambL, borderRadius: 6 }}>
                       <div><label style={lblS}>{t("stage_billing.opening_qty")}</label>

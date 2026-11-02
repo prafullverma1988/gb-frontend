@@ -11,6 +11,7 @@ import { t, Rich } from "../../i18n";
 import { companyName } from "../../utils/companyName";
 import { can } from "../../utils/perms";
 import { StageBillGrid, StageLinesPanel, StageBoard } from "./StageBilling";
+import { StatementView, ProjectStatementView, DraftLinesModal } from "./BillingV2";
 
 function TabEstimate({ project }) {
   // Roles & Access (5 Oct 2026) — har button usi Estimate tick se jo server
@@ -77,6 +78,9 @@ function TabEstimate({ project }) {
   const [showSetMs, setShowSetMs] = useState(false);
   // Payment Schedule mode chooser dropdown (Item-wise / % / Manual)
   const [msChooserOpen, setMsChooserOpen] = useState(false);
+  // Billing v2 (2 Nov 2026): statement ("Ye estimate" / "Sab client") + line-wise Draft ki qty
+  const [stmtAll, setStmtAll] = useState(false);
+  const [draftEdit, setDraftEdit] = useState(null);
   const [showPay, setShowPay] = useState(null);
   const [saving, setSaving] = useState(false);
   const [customers, setCustomers] = useState([]);
@@ -1172,7 +1176,8 @@ function TabEstimate({ project }) {
     const reason = await askInvoiceReason(previewInv.invoice.invoice_no);
     if (reason == null) return;
     setPreviewConfirming(true);
-    const r = await api.del("/customer-estimates/invoices/"+previewInv.invoice.id+"?reason="+encodeURIComponent(reason))
+    const stopAuto = await window.confirmAsync(t("stage_billing.stop_auto_q"));
+    const r = await api.del("/customer-estimates/invoices/"+previewInv.invoice.id+"?reason="+encodeURIComponent(reason)+(stopAuto?"&stop_auto=1":""))
       .catch(e => ({ success:false, message:e.message }));
     setPreviewConfirming(false);
     if (!r?.success) { alert(r?.message || "Reject failed"); return; }
@@ -1314,7 +1319,10 @@ function TabEstimate({ project }) {
   const deleteInvoice = async (invId, no) => {
     const reason = await askInvoiceReason(no);
     if (reason == null) return;
-    const r = await api.del("/customer-estimates/invoices/" + invId + "?reason=" + encodeURIComponent(reason));
+    // Auto Draft hataya to agle progress par phir banta — "auto band" poochho (2 Nov 2026)
+    const iv = invoices.find(x => x.id === invId);
+    const stopAuto = iv && iv.source === "auto" && iv.status === "Draft" ? await window.confirmAsync(t("stage_billing.stop_auto_q")) : false;
+    const r = await api.del("/customer-estimates/invoices/" + invId + "?reason=" + encodeURIComponent(reason) + (stopAuto ? "&stop_auto=1" : ""));
     if (r.success) { showLockedInvoices(r.data?.locked); await reloadSel(); }
     else alert(r.message || "Delete failed");
   };
@@ -1569,9 +1577,10 @@ function TabEstimate({ project }) {
           <div style={{display:"flex",borderBottom:"1px solid "+T.b1,background:T.surfaceB,flexShrink:0}}>
             {[
               {id:"boq",label:t("estimate.boq_items")},
-              {id:"milestone",label:t("estimate.payment_schedule")},
+              {id:"milestone",label:t("stage_billing.tab_stages")},
               {id:"board",label:t("stage_billing.board_tab")},
               {id:"invoice",label:"Invoices ("+invoices.length+")"},
+              {id:"stmt",label:t("stage_billing.tab_statement")},
               // Payments tab removed — customer receipts are managed at the
               // Party Ledger level (Party tab → Receipt), not per-estimate.
               {id:"amend",label:"Amendments ("+amendments.length+")", dot: pendingAmendCount > 0},
@@ -1693,7 +1702,7 @@ function TabEstimate({ project }) {
                       display:"flex",alignItems:"center",gap:5,
                     }}>{t("estimate.auto_bill_selest", { selEst: selEst.auto_bill_on_complete ? "ON" : "OFF" })}</button>}
                 {/* Schedule banana = CREATE; billing method badalna = EDIT */}
-                {(eCreate || eEdit) && <div style={{position:"relative"}}>
+                {(eCreate || eEdit) && selEst.billing_method && selEst.billing_method !== "manual" && <div style={{position:"relative"}}>
                   <button onClick={()=>setMsChooserOpen(o=>!o)}
                     style={{background:T.bluL,color:T.blu,border:"1px solid "+T.bluM,borderRadius:5,padding:"5px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>
                    {t("estimate.set_schedule")}
@@ -1914,7 +1923,7 @@ function TabEstimate({ project }) {
                   {/* Stage billing (30 Oct 2026): line-wise estimate par bill seedha line par —
                       schedule ki zaroorat nahi. Yahan line ka task, pehle bill ho chuka, hisse, had. */}
                   <div style={{padding:"10px 14px",marginBottom:10,color:T.t3,background:T.surface,border:"1px dashed "+T.b1,borderRadius:8,fontSize:11.5,lineHeight:1.5}}>
-                    {t("stage_billing.manual_notice")} <span style={{color:T.t4}}>{t("common.click")} <b>{t("estimate.set_schedule_2")}</b> {t("estimate.to_switch_to_milestone_based_item")}</span>
+                    {t("stage_billing.manual_notice")}
                   </div>
                   <StageLinesPanel kind="estimate" id={selEst.id} canEdit={eEdit} canApprove={eApprove} />
                 </>)}
@@ -2173,8 +2182,15 @@ function TabEstimate({ project }) {
                         <span style={{fontSize:9.5,fontWeight:700,padding:"2px 8px",borderRadius:4,background:stC+"22",color:stC}}>{inv.status}</span>
                       </div>
                       {isAutoDraft && (
-                        <div style={{padding:"7px 10px",background:"#F5F3FF",border:"1px solid #DDD6FE",borderRadius:6,marginBottom:8,fontSize:11,color:"#5B21B6",lineHeight:1.45}}>
-                         {t("estimate.auto_generated_from_task_progress_click")}
+                        <div style={{padding:"7px 10px",background:"#F5F3FF",border:"1px solid #DDD6FE",borderRadius:6,marginBottom:8,fontSize:11,color:"#5B21B6",lineHeight:1.45,display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+                         <span style={{flex:"1 1 240px"}}>{t("estimate.auto_generated_from_task_progress_click")}</span>
+                         {/* Line-wise Draft ki qty (Billing v2, 2 Nov 2026) — pehle sirf header badalta tha */}
+                         {eEdit && selEst?.billing_method === "manual" && (
+                           <button onClick={(e)=>{ e.stopPropagation(); setDraftEdit(inv.id); }}
+                             style={{padding:"3px 9px",borderRadius:5,border:"1px solid #C4B5FD",background:"white",color:"#6D28D9",fontSize:10.5,fontWeight:700,cursor:"pointer"}}>
+                             {t("stage_billing.draft_edit_btn")}
+                           </button>
+                         )}
                         </div>
                       )}
                       {/* ── Item summary line (P2+ enhancement) ──
@@ -2280,6 +2296,22 @@ function TabEstimate({ project }) {
                   </>
                 )}
               </div>
+            )}
+
+            {/* STATEMENT — client ka RA-standard khaata (Billing v2, 2 Nov 2026) */}
+            {subTab==="stmt" && selEst && (
+              <div>
+                <div style={{display:"flex",gap:6,marginBottom:12}}>
+                  {[[false,t("stage_billing.stmt_this_est")],[true,t("stage_billing.stmt_all_clients")]].map(([v,l])=>(
+                    <button key={String(v)} onClick={()=>setStmtAll(v)}
+                      style={{padding:"5px 12px",borderRadius:6,fontSize:11.5,fontWeight:700,cursor:"pointer",border:"1px solid "+(stmtAll===v?T.blu:T.b1),background:stmtAll===v?T.bluL:T.surface,color:stmtAll===v?T.blu:T.t2}}>{l}</button>
+                  ))}
+                </div>
+                {stmtAll ? <ProjectStatementView kind="estimate" projectId={selEst.project_id}/> : <StatementView key={selEst.id+":"+invoices.length} kind="estimate" id={selEst.id}/>}
+              </div>
+            )}
+            {draftEdit && (
+              <DraftLinesModal invoiceId={draftEdit} onClose={()=>setDraftEdit(null)} onDone={async ()=>{ setDraftEdit(null); await reloadSel(); setSubTab("invoice"); }}/>
             )}
 
             {/* PAYMENTS TAB */}

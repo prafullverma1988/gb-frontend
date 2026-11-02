@@ -3753,10 +3753,16 @@ function QtyProgressBox({task,meIsPriv,onProgress,projectId,showMic=true,showNot
   // Entries load na hon to "0 hua, koi entry nahi" jhooth hai — tab task ka
   // apna darj done_qty dikhao aur saaf batao ki entries nahi aayi.
   const [loadErr,setLoadErr]=useState(false);
+  // Naap se thekedar ka bill (Billing v2, 2 Nov 2026): is task par 2+ thekedar
+  // ki naap line ho to entry batati hai kaam kiska tha; ek ho to wahi apne aap.
+  const [qtyWos,setQtyWos]=useState([]);
+  const [woPick,setWoPick]=useState("");
+  const [woErr,setWoErr]=useState(false);
   const load=useCallback(async()=>{
     const r=await api.get("/budget/task/"+task.id);
     setLoadErr(!r?.success);
     setEntries(r?.success?(r.data?.progress||[]):null);
+    if(r?.success) setQtyWos(Array.isArray(r.data?.qty_wos)?r.data.qty_wos:[]);
   },[task.id]);
   useEffect(()=>{load();},[load]);
 
@@ -3768,13 +3774,16 @@ function QtyProgressBox({task,meIsPriv,onProgress,projectId,showMic=true,showNot
   const save=async()=>{
     const q=Number(qty);
     if(!(q>0)||saving)return;
+    const woIds=[...new Set(qtyWos.map(w=>w.wo_id))];
+    if(woIds.length>=2&&!woPick){setWoErr(true);return;}
+    const woId=woIds.length===1?woIds[0]:(woPick?Number(woPick):undefined);
     setSaving(true);
     const r=await api.post("/budget/task/"+task.id+"/progress",
       {report_date:repDate||todayISO(),done_qty:q,remarks:note.trim()||"Web se darj",
-       alignment_id:lineId?Number(lineId):undefined});
+       alignment_id:lineId?Number(lineId):undefined, wo_id:woId});
     setSaving(false);
     if(!r?.success){window.alert(r?.message||"Save nahi hua");return;}
-    setQty("");setNote("");setVSug(null);setRepDate(null);
+    setQty("");setNote("");setVSug(null);setRepDate(null);setWoPick("");setWoErr(false);
     push(done+q);
     load();
   };
@@ -3857,6 +3866,17 @@ function QtyProgressBox({task,meIsPriv,onProgress,projectId,showMic=true,showNot
           <option value="">{t("tasks.nahi_bataya")}</option>
           {lines.map(l=>(<option key={l.id} value={l.id}>{l.name}{l.length_m?` · ${Math.round(l.length_m)} m`:""}</option>))}
         </PickSelect>
+      </div>
+    )}
+    {[...new Set(qtyWos.map(w=>w.wo_id))].length>=2&&(
+      <div style={{marginBottom:8}}>
+        <div style={{fontSize:11,color:"#64748B",marginBottom:4}}>{t("task.kis_thekedar_ka")}</div>
+        <PickSelect value={woPick} onChange={e=>{setWoPick(e.target.value);setWoErr(false);}}
+          style={{width:"100%",padding:"8px 10px",borderRadius:8,border:"1px solid "+(woErr?"#FCA5A5":"#E2E8F0"),fontSize:12.5,background:"white"}}>
+          <option value="">—</option>
+          {[...new Map(qtyWos.map(w=>[w.wo_id,w])).values()].map(w=>(<option key={w.wo_id} value={w.wo_id}>{w.subcon_name}</option>))}
+        </PickSelect>
+        {woErr&&<div style={{fontSize:10.5,color:"#DC2626",marginTop:3}}>{t("task.thekedar_select_karo")}</div>}
       </div>
     )}
     {/* Aaj ka kaam — Tasks Entry */}
