@@ -327,7 +327,7 @@ function CustodyDrawer({ issueId, onClose, onChanged, onReceive }) {
                   <span>{u.task_name ? t("custody.use_task", { task: u.task_name }) : t("custody.use_notask")}</span>
                   <span style={{ color: T.t4 }}>{u.by_name}{u.remark ? " · " + u.remark : ""}</span>
                   {(u.photos || []).map((p, i) => <a key={i} href={p} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: T.blu }}>📷{i + 1}</a>)}
-                  <span style={{ marginLeft: "auto", fontWeight: 700, color: u.status === "pending" ? T.amb : u.status === "approved" ? T.grn : T.red }}>{t("custody.use_st_" + u.status)}</span>
+                  <span style={{ marginLeft: "auto", fontWeight: 700, color: u.status === "pending" || u.status === "flagged" ? T.amb : u.status === "approved" ? T.grn : T.red }}>{t("custody.use_st_" + u.status)}</span>
                 </div>
                 {u.decide_note && <div style={{ color: T.t4, fontSize: 11 }}>{u.decided_by_name}: {u.decide_note}</div>}
                 {u.status === "pending" && d.can_decide_use && (

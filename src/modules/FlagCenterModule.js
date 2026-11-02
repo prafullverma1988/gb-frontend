@@ -1,6 +1,8 @@
 // ════════════════════════════════════════════════════════════════
 // FLAG CENTER (28 Oct 2026) — saare flag ek jagah.
-// Trip · Kaanta · GPS · Fuel · Attendance · Progress ghata · AI photo jaanch.
+// Trip · Kaanta · GPS · Fuel · Attendance · Progress ghata · AI photo jaanch · Zimmedari ka material.
+// Do tab (2 Nov 2026, Prafull): "Logic flag" (system ke check) · "AI flag" (AI ne photo / parchi
+// padh kar shak kiya) — server har item par groups deta hai, ?group= se chhanta hai.
 // Yahan sirf DEKHNA aur "Dekha" tick — faisla (approve / Theek hai / Finance dekhe)
 // har flag ke apne module me hota hai ("Kholo" wahin le jaata hai).
 // Data: GET /api/flags (services/flagCenter.js), tick: POST /api/flags/seen.
@@ -11,7 +13,13 @@ import { T } from "./shared/tokens";
 import { t } from "../i18n";
 import { can } from "../utils/perms";
 
-const SOURCES = ["trip", "kaanta", "gps", "fuel", "attendance", "progress_drop", "ai_check"];
+const SOURCES = ["trip", "kaanta", "gps", "fuel", "attendance", "progress_drop", "ai_check", "custody_task"];
+// Kis tab me kaunse source ki tile — trip / kaanta / fuel me dono tarah ke kaaran hote hain.
+const GROUPS = ["logic", "ai"];
+const GROUP_SOURCES = {
+  logic: ["trip", "kaanta", "gps", "fuel", "attendance", "progress_drop", "custody_task"],
+  ai: ["ai_check", "trip", "kaanta", "fuel"],
+};
 const STATUS_CHIPS = ["new", "seen", "done", "all"];
 const DAYS = [7, 30, 90];
 
@@ -67,15 +75,22 @@ function detailLine(it) {
     case "ai_check":
       if (d.task) bits.push(d.task);
       break;
+    case "custody_task":
+      bits.push([d.material, d.qty, d.unit].filter((x) => x != null && x !== "").join(" "));
+      bits.push(d.mark_used ? t("flagc.d_ct_markused", { line: d.line_task || "—" })
+        : t("flagc.d_ct_task", { line: d.line_task || "—", used: d.used_task || "—" }));
+      if (d.issue_no) bits.push(d.issue_no);
+      break;
     default: break;
   }
-  return bits.join(" · ");
+  return bits.filter(Boolean).join(" · ");
 }
 const extraLine = (it) => {
   const d = it.data || {};
   if (it.source === "fuel" && d.note) return d.note;
   if (it.source === "progress_drop" && d.note) return d.note;
   if (it.source === "ai_check" && d.summary) return d.summary;
+  if (it.source === "custody_task") return t("flagc.d_ct_zimmedar", { name: d.zimmedar || "—" });
   return "";
 };
 
@@ -107,6 +122,7 @@ function useNarrow() {
 export default function FlagCenterModule({ onNavigate }) {
   const canTick = can("Flags", "edit");
   const narrow = useNarrow();
+  const [group, setGroup] = useState("logic");
   const [status, setStatus] = useState("new");
   const [source, setSource] = useState("");
   const [project, setProject] = useState("");
@@ -124,7 +140,7 @@ export default function FlagCenterModule({ onNavigate }) {
 
   const load = useCallback(() => {
     const my = ++seq.current;
-    const qs = new URLSearchParams({ status, days: String(days), limit: "300" });
+    const qs = new URLSearchParams({ status, days: String(days), limit: "300", group });
     if (source) qs.set("source", source);
     if (project) qs.set("project_id", project);
     if (q) qs.set("q", q);
@@ -135,10 +151,12 @@ export default function FlagCenterModule({ onNavigate }) {
         else setErr((r && r.message) || t("flagc.load_fail"));
       })
       .catch(() => { if (my === seq.current) setErr(t("flagc.load_fail")); });
-  }, [status, source, project, days, q]);
+  }, [group, status, source, project, days, q]);
   useEffect(() => { load(); }, [load, tick]);
   // Chhanni badli → chuni hui row chhodo
-  useEffect(() => { setSel(new Set()); }, [status, source, project, days, q]);
+  useEffect(() => { setSel(new Set()); }, [group, status, source, project, days, q]);
+  // Tab badla aur chuna source us tab me nahi → source chhodo
+  useEffect(() => { setSource((s) => (s && !GROUP_SOURCES[group].includes(s) ? "" : s)); }, [group]);
 
   const items = (data && data.items) || [];
   const counts = (data && data.counts) || { new: 0, seen: 0, done: 0, all: 0, by_source: {} };
@@ -164,12 +182,12 @@ export default function FlagCenterModule({ onNavigate }) {
   const open = (it) => {
     if (!onNavigate) return;
     const pid = it.project_id;
-    if (pid && ["trip", "kaanta", "progress_drop", "ai_check"].includes(it.source)) {
-      const tab = it.source === "trip" ? "equipment" : it.source === "kaanta" ? "material" : "task";
+    if (pid && ["trip", "kaanta", "progress_drop", "ai_check", "custody_task"].includes(it.source)) {
+      const tab = it.source === "trip" ? "equipment" : ["kaanta", "custody_task"].includes(it.source) ? "material" : "task";
       onNavigate("projects", `/projects/${pid}/${tab}`);
       return;
     }
-    const mod = { trip: "machinery", kaanta: "warehouse", gps: "machinery", fuel: "fuel", attendance: "payroll" }[it.source];
+    const mod = { trip: "machinery", kaanta: "warehouse", gps: "machinery", fuel: "fuel", attendance: "payroll", custody_task: "warehouse" }[it.source];
     if (mod) onNavigate(mod, "/" + mod);
   };
 
@@ -243,6 +261,25 @@ export default function FlagCenterModule({ onNavigate }) {
     );
   };
 
+  // Do bade tab — har tab par naye + dekhe (faisla baaki) ki ginti
+  const groupTab = (g) => {
+    const c = (counts.by_group && counts.by_group[g]) || { new: 0, seen: 0, done: 0 };
+    const on = group === g;
+    return (
+      <button key={g} type="button" onClick={() => setGroup(g)}
+        style={{ flex: "1 1 0", minWidth: 0, textAlign: "left", cursor: "pointer", fontFamily: "inherit", padding: "10px 14px", borderRadius: 10,
+          background: on ? T.ind : T.surface, border: `1.5px solid ${on ? T.ind : T.b1}`, color: on ? "#fff" : T.t1 }}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 14, fontWeight: 800 }}>{t(`flagc.g_${g}`)}</span>
+          <span style={{ fontSize: 11.5, fontWeight: 700, color: on ? "#fff" : c.new > 0 ? T.red : T.t4, opacity: on ? .9 : 1 }}>
+            {c.new > 0 ? t("flagc.tile_new", { n: c.new }) : t("flagc.tile_clear")}
+          </span>
+        </div>
+        <div style={{ fontSize: 11, marginTop: 3, color: on ? "rgba(255,255,255,.85)" : T.t3, lineHeight: 1.4 }}>{t(`flagc.g_${g}_hint`)}</div>
+      </button>
+    );
+  };
+
   const inp = { padding: "8px 11px", borderRadius: 8, border: `1.5px solid ${T.b1}`, fontSize: 12.5, fontFamily: "inherit", color: T.t1, background: T.surface, outline: "none" };
 
   const rowCols = "30px 150px minmax(0,2.4fr) minmax(0,1.3fr) 118px minmax(0,1.5fr) 74px";
@@ -260,9 +297,12 @@ export default function FlagCenterModule({ onNavigate }) {
         </button>
       </div>
 
+      {/* Logic flag · AI flag */}
+      <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>{GROUPS.map(groupTab)}</div>
+
       {/* source tiles */}
       <div style={{ display: "grid", gridTemplateColumns: `repeat(auto-fill, minmax(${narrow ? 140 : 150}px, 1fr))`, gap: 8, marginBottom: 14 }}>
-        {SOURCES.filter((s) => shownSources.includes(s)).map(tileBtn)}
+        {SOURCES.filter((s) => shownSources.includes(s) && GROUP_SOURCES[group].includes(s)).map(tileBtn)}
       </div>
 
       {/* filters */}
