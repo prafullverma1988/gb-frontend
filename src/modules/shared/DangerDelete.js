@@ -62,12 +62,20 @@ export default function DangerDelete({ kind, id, name, onArchived, onDeleted }) 
   // archive par server ne list lautayi (409 open_trips).
   const [tripAct, setTripAct] = useState("cancel");
   const [archTrips, setArchTrips] = useState(null);
+  // Khuli Material Zimmedari (2 Nov 2026, Prafull — NAYA RAIPUR DEMO): store issue
+  // hamesha rakhe jaate hain, unki zimmedari "Meri Zimmedari" me atki rehti thi.
+  // Ab faisla zaroori — "purge" | "return" | "history"; khud se koi nahi chuna.
+  const [custAct, setCustAct] = useState("");
 
-  useEffect(() => { setStep("idle"); setPrev(null); setPw(""); setTyped(""); setForce(false); setErr(""); setDone(null); setDelGroups([]); setOpenG(""); setAckRecent(false); setTripAct("cancel"); setArchTrips(null); }, [kind, id]);
+  useEffect(() => { setStep("idle"); setPrev(null); setPw(""); setTyped(""); setForce(false); setErr(""); setDone(null); setDelGroups([]); setOpenG(""); setAckRecent(false); setTripAct("cancel"); setArchTrips(null); setCustAct(""); }, [kind, id]);
   const groups = prev?.groups || null;
   const openTrips = prev?.open_trips || [];
   // Trip project ke saath rakhi ja rahi hain (Machinery "Rakho" ya band)? "Hatao" me wo mit jaati hain.
   const tripsKept = !!groups && groups.some((g) => g.key === "machinery" && (g.locked || !delGroups.includes("machinery")));
+  const openCustody = prev?.open_custody || [];
+  // Store issue rakhe ja rahe hain (Material group "Rakho" ya band — store stock se bandha to hamesha band).
+  const custodyKept = !!groups && groups.some((g) => g.key === "material" && (g.locked || !delGroups.includes("material")));
+  const custodyNeed = openCustody.length > 0 && custodyKept;
   const recentOthers = prev?.recent?.others || 0;
   const keepsSome = !!groups && groups.some((g) => g.locked || !delGroups.includes(g.key));
   // Sach me kitni rows mitengi — apni + jo linked group Hatao chune (band wale nahi)
@@ -101,7 +109,8 @@ export default function DangerDelete({ kind, id, name, onArchived, onDeleted }) 
         // Paise wala group khud "Hatao" chuna = wahi "phir bhi hatao" wali haan
         force: force || delGroups.includes("money"),
         delete_groups: delGroups, ack_recent: ackRecent,
-        ...(openTrips.length && tripsKept ? { open_trips_action: tripAct } : {}) }, { timeoutMs: 180000 })
+        ...(openTrips.length && tripsKept ? { open_trips_action: tripAct } : {}),
+        ...(custodyNeed ? { open_custody_action: custAct } : {}) }, { timeoutMs: 180000 })
       .catch((e) => ({ success: false, message: e?.message }));
     setBusy("");
     if (!r?.success) {
@@ -189,6 +198,7 @@ export default function DangerDelete({ kind, id, name, onArchived, onDeleted }) 
         {openTrips.length > 0 && (tripsKept
           ? <OpenTripsBox trips={openTrips} act={tripAct} setAct={setTripAct} />
           : <div style={{ fontSize: 12, color: T.t3, marginBottom: 11 }}>{t("danger_delete.ot_gone", { n: openTrips.length })}</div>)}
+        {custodyNeed && <OpenCustodyBox list={openCustody} act={custAct} setAct={setCustAct} />}
 
         {!groups && prev.money?.length > 0 && (
           <div style={{ background: "#FEF3C7", border: "1px solid #FDE68A", borderRadius: 7, padding: "9px 12px", fontSize: 12, color: "#92400E", marginBottom: 11, lineHeight: 1.55 }}>
@@ -206,11 +216,11 @@ export default function DangerDelete({ kind, id, name, onArchived, onDeleted }) 
             style={{ flex: 1, padding: "8px", borderRadius: 7, background: T.surface, border: `1px solid ${T.b1}`, color: T.t3, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
            {t("danger_delete.rehne_do")}
           </button>
-          <button onClick={() => setStep("typing")} disabled={!prev.has_password}
-            title={prev.has_password ? "" : t("danger_delete.company_par_delete_password_set_nahi")}
+          <button onClick={() => setStep("typing")} disabled={!prev.has_password || (custodyNeed && !custAct)}
+            title={prev.has_password ? (custodyNeed && !custAct ? t("danger_delete.oc_choose") : "") : t("danger_delete.company_par_delete_password_set_nahi")}
             style={{ flex: 2, padding: "8px", borderRadius: 7, border: "none",
-              background: prev.has_password ? T.red : T.b1, color: prev.has_password ? "white" : T.t4,
-              fontSize: 12, fontWeight: 700, cursor: prev.has_password ? "pointer" : "not-allowed" }}>
+              background: prev.has_password && (!custodyNeed || custAct) ? T.red : T.b1, color: prev.has_password && (!custodyNeed || custAct) ? "white" : T.t4,
+              fontSize: 12, fontWeight: 700, cursor: prev.has_password && (!custodyNeed || custAct) ? "pointer" : "not-allowed" }}>
            {t("danger_delete.aage_badho")}
           </button>
         </div>
@@ -269,10 +279,10 @@ export default function DangerDelete({ kind, id, name, onArchived, onDeleted }) 
             style={{ flex: 1, padding: "9px", borderRadius: 7, background: T.surface, border: `1px solid ${T.b1}`, color: T.t3, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
            {t("danger_delete.peechhe")}
           </button>
-          <button onClick={doDelete} disabled={!!busy || !nameOk || !pw || (recentOthers > 0 && !ackRecent)}
+          <button onClick={doDelete} disabled={!!busy || !nameOk || !pw || (recentOthers > 0 && !ackRecent) || (custodyNeed && !custAct)}
             style={{ flex: 2, padding: "9px", borderRadius: 7, border: "none",
-              background: (nameOk && pw && !busy && (!recentOthers || ackRecent)) ? T.red : T.b1, color: (nameOk && pw && !busy && (!recentOthers || ackRecent)) ? "white" : T.t4,
-              fontSize: 12.5, fontWeight: 700, cursor: (nameOk && pw && !busy && (!recentOthers || ackRecent)) ? "pointer" : "not-allowed" }}>
+              background: (nameOk && pw && !busy && (!recentOthers || ackRecent) && (!custodyNeed || custAct)) ? T.red : T.b1, color: (nameOk && pw && !busy && (!recentOthers || ackRecent) && (!custodyNeed || custAct)) ? "white" : T.t4,
+              fontSize: 12.5, fontWeight: 700, cursor: (nameOk && pw && !busy && (!recentOthers || ackRecent) && (!custodyNeed || custAct)) ? "pointer" : "not-allowed" }}>
             {busy === "delete" ? t("danger_delete.mit_raha_hai") : t("danger_delete.hamesha_ke_liye_hatao")}
           </button>
         </div>
@@ -302,6 +312,36 @@ function OpenTripsBox({ trips, act, setAct }) {
         {opt("cancel", t("danger_delete.ot_cancel"), t("danger_delete.ot_cancel_sub"))}
         {opt("complete", t("danger_delete.ot_complete"), t("danger_delete.ot_complete_sub"))}
       </div>
+    </div>
+  );
+}
+
+// ── Khuli Material Zimmedari — delete se pehle stock ka faisla (2 Nov 2026) ──
+function OpenCustodyBox({ list, act, setAct }) {
+  const opt = (v, title, sub) => (
+    <label key={v} style={{ display: "flex", gap: 8, alignItems: "flex-start", padding: "7px 9px", borderRadius: 6, cursor: "pointer",
+      background: act === v ? "white" : "transparent", border: `1px solid ${act === v ? "#F59E0B" : "transparent"}` }}>
+      <input type="radio" name="dd_open_custody" checked={act === v} onChange={() => setAct(v)} style={{ marginTop: 2 }} />
+      <span><b style={{ color: T.t1 }}>{title}</b><span style={{ display: "block", fontSize: 11, color: T.t3, marginTop: 1 }}>{sub}</span></span>
+    </label>
+  );
+  const shown = list.slice(0, 8);
+  return (
+    <div style={{ background: "#FEF3C7", border: "1px solid #FDE68A", borderRadius: 7, padding: "10px 12px", marginBottom: 11, fontSize: 12, color: "#92400E", lineHeight: 1.5 }}>
+      <div style={{ fontWeight: 700, marginBottom: 3 }}>{t("danger_delete.oc_title", { n: list.length })}</div>
+      <div style={{ marginBottom: 6 }}>{t("danger_delete.oc_hint")}</div>
+      {shown.map((x) => (
+        <div key={x.id} style={{ fontSize: 11.5, color: T.t2 }}>• {t("danger_delete.oc_row", {
+          no: x.issue_no, who: x.custodian_name || x.party_name || "—",
+          what: (x.lines || []).map((l) => `${l.material} ${l.qty} ${l.unit || ""}`.trim()).join(", ") || "—" })}</div>
+      ))}
+      {list.length > shown.length && <div style={{ fontSize: 11.5, color: T.t3 }}>{t("danger_delete.oc_more", { n: list.length - shown.length })}</div>}
+      <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 8 }}>
+        {opt("purge", t("danger_delete.oc_purge"), t("danger_delete.oc_purge_sub"))}
+        {opt("return", t("danger_delete.oc_return"), t("danger_delete.oc_return_sub"))}
+        {opt("history", t("danger_delete.oc_history"), t("danger_delete.oc_history_sub"))}
+      </div>
+      {!act && <div style={{ marginTop: 6, fontWeight: 600 }}>{t("danger_delete.oc_choose")}</div>}
     </div>
   );
 }
