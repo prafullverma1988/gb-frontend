@@ -91,6 +91,7 @@ function WorkChip({ line }) {
     const m = line.manual || {};
     return <span style={chip(T.purL, T.pur)} title={[m.by, fmtD(m.at), m.note].filter(Boolean).join(" · ")}>{t("chalu_bill.chip_manual", { pct: w.pct })}</span>;
   }
+  if (w.source === "billed") return <span style={chip(T.bluL, T.blu)}>{t("chalu_bill.chip_billed", { pct: w.pct })}</span>;
   if (w.source === "task") {
     if (w.status === "done") return null;
     return <span style={chip(T.ambL, T.amb)} title={line.task ? line.task.name : ""}>{t("chalu_bill.chip_task", { pct: w.task_pct, trigger: w.trigger_pct })}</span>;
@@ -252,7 +253,7 @@ export function ChaluBillView({ estimateId, onChanged }) {
               </div>
             ))}
           </div>
-          {TT.advance_shared > 0 && <div style={{ fontSize: 10.5, color: T.amb, marginTop: 6 }}>{t("chalu_bill.advance_shared", { amt: fmtC(TT.advance_shared) })}</div>}
+          {TT.advance_shared > 0 && <div style={{ fontSize: 10.5, color: T.amb, marginTop: 6 }}>{t(TT.other_sales ? "chalu_bill.advance_sales" : "chalu_bill.advance_shared", { amt: fmtC(TT.advance_shared) })}</div>}
         </div>
       </div>
 

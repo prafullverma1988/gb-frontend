@@ -16272,6 +16272,8 @@ const dict = {
   "chalu_bill.prev_cell": "RB-{n} · {date}",
   "chalu_bill.rb_no": "RB-{n}",
   "chalu_bill.rb_col": "Bill no.",
+  "chalu_bill.chip_billed": "As billed {pct}%",
+  "chalu_bill.advance_sales": "{amt} of receipts without a project are not counted — this client also bought goods / RMC, so they may be for those sales. If they're for the house, set the project on the receipt in Finance.",
 };
 
 export default dict;

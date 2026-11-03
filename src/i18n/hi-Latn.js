@@ -16274,6 +16274,8 @@ const dict = {
   "chalu_bill.prev_cell": "RB-{n} · {date}",
   "chalu_bill.rb_no": "RB-{n}",
   "chalu_bill.rb_col": "Bill no.",
+  "chalu_bill.chip_billed": "Bill jitna {pct}%",
+  "chalu_bill.advance_sales": "{amt} ki bina-project receipt yahan nahi gini — is client ko saamaan / RMC bhi becha gaya hai, receipt us bikri ki ho sakti hai. Ghar ki ho to Finance me receipt par project likho.",
 };
 
 export default dict;

@@ -2314,7 +2314,7 @@ function TabEstimate({ project }) {
                 </div>
                 {chaluAll
                   ? <ProjectChaluView projectId={selEst.project_id} onOpen={(id)=>{ const e = estimates.find(x=>x.id===id); if (e) { setChaluAll(false); selectEst(e); } }}/>
-                  : <ChaluBillView key={selEst.id+":"+invoices.length} estimateId={selEst.id} onChanged={reloadSel}/>}
+                  : <ChaluBillView key={selEst.id} estimateId={selEst.id} onChanged={reloadSel}/>}
               </div>
             )}
 
