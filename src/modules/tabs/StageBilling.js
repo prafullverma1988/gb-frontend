@@ -206,8 +206,8 @@ export function StageLinesPanel({ kind, id, canEdit, canApprove }) {
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
   const [opening, setOpening] = useState(null);   // { item_id, qty, note }
-  const [split, setSplit] = useState(null);       // { item_id, parts: [{ name, pct }] }
-  const [lastParts, setLastParts] = useState(null); // pichhli line ke hisse — GF ke baad FF par wahi
+  const [split, setSplit] = useState(null);       // { item_id, mode: "pct" | "rate", parts: [{ name, pct, rate, group }], others }
+  const [lastParts, setLastParts] = useState(null); // { mode, parts } pichhli line ke hisse — GF ke baad FF par wahi
   const [limit, setLimit] = useState("");
 
   const load = useCallback(async () => {
@@ -286,16 +286,40 @@ export function StageLinesPanel({ kind, id, canEdit, canApprove }) {
     if (!r?.success) { setMsg(r?.message || t("stage_billing.save_failed")); return; }
     setOpening(null); setMsg(t("stage_billing.opening_saved")); await load();
   };
-  const doSplit = async (fromLibrary) => {
+  // % se ya ₹ se (Chalu Bill, 4 Nov 2026 — Excel me Advance 200, G Beam 50 …).
+  // "others" = isi unit ki baaki line (FF, SF) par bhi wahi hisse; alag rate wali
+  // line par server ₹ ko usi anupaat me baant deta hai.
+  const bodyParts = (sp) => sp.parts.map(p => sp.mode === "rate"
+    ? { name: p.name, rate: num(p.rate), group: (p.group || "").trim() || null }
+    : { name: p.name, pct: num(p.pct), group: (p.group || "").trim() || null });
+  const doSplit = async (fromLibrary, similarLines = []) => {
     if (!split) return;
     setBusy(true);
-    const body = fromLibrary ? { from_library: true } : { parts: split.parts.map(p => ({ name: p.name, pct: num(p.pct) })) };
+    const body = fromLibrary ? { from_library: true } : { parts: bodyParts(split) };
     const r = await api.post(base + "/items/" + split.item_id + "/split", body).catch(e => ({ success: false, message: e.message }));
+    if (!r?.success) { setBusy(false); setMsg(r?.message || t("stage_billing.save_failed")); return; }
+    let more = 0;
+    const stuck = [];
+    if (!fromLibrary && split.others) {
+      for (const x of similarLines) {
+        const rx = await api.post(base + "/items/" + x.item_id + "/split", { parts: bodyParts(split) }).catch(e => ({ success: false, message: e.message }));
+        if (rx?.success) more++; else stuck.push(nameOf(x) + ": " + (rx?.message || t("stage_billing.save_failed")));
+      }
+    }
     setBusy(false);
-    if (!r?.success) { setMsg(r?.message || t("stage_billing.save_failed")); return; }
-    if (!fromLibrary) setLastParts(split.parts.map(p => ({ name: p.name, pct: p.pct })));
-    setSplit(null); setMsg(t("stage_billing.split_done", { n: (r.data?.lines || []).length })); await load();
+    if (!fromLibrary) setLastParts({ mode: split.mode, parts: split.parts.map(p => ({ ...p })) });
+    setSplit(null);
+    setMsg(split.others && !fromLibrary
+      ? t("stage_billing.split_done_many", { n: 1 + more, stuck: stuck.length }) + (stuck.length ? " — " + stuck.join("; ") : "")
+      : t("stage_billing.split_done", { n: (r.data?.lines || []).length }));
+    await load();
   };
+  const switchMode = (mode) => setSplit(sp => {
+    const rate = num((ledger.items.find(x => x.item_id === sp.item_id) || {}).rate);
+    return { ...sp, mode, parts: sp.parts.map(p => mode === "rate"
+      ? { ...p, rate: p.pct !== "" && p.pct != null ? String(r2(rate * num(p.pct) / 100)) : (p.rate || "") }
+      : { ...p, pct: rate > 0 && p.rate !== "" && p.rate != null ? String(r2(num(p.rate) / rate * 100)) : (p.pct || "") }) };
+  });
   const saveLimit = async () => {
     setBusy(true);
     const r = await api.put(base + "/extra-limit", { pct: limit === "" ? null : num(limit) }).catch(e => ({ success: false, message: e.message }));
@@ -303,7 +327,16 @@ export function StageLinesPanel({ kind, id, canEdit, canApprove }) {
     setMsg(r?.success ? t("stage_billing.limit_saved") : (r?.message || t("stage_billing.save_failed")));
   };
   const unlinked = (sug?.lines || []).filter(x => !(links[x.item_id]?.task_id) && x.suggestions?.length).length;
-  const splitSum = split ? split.parts.reduce((s, p) => s + num(p.pct), 0) : 0;
+  const splitLine = split ? ledger.items.find(x => x.item_id === split.item_id) : null;
+  const splitRate = num(splitLine && splitLine.rate);
+  const splitSum = split ? split.parts.reduce((s, p) => s + num(split.mode === "rate" ? p.rate : p.pct), 0) : 0;
+  const splitOk = !!split && split.parts.length >= 2
+    && split.parts.every(p => String(p.name || "").trim() && num(split.mode === "rate" ? p.rate : p.pct) > 0)
+    && (split.mode === "rate" ? Math.abs(splitSum - splitRate) < 0.01 : Math.abs(splitSum - 100) < 0.01);
+  const partRateOf = (p) => split.mode === "rate" ? num(p.rate) : splitRate * num(p.pct) / 100;
+  // Isi unit ki baaki bina-hisse line (GF ke baad FF, SF) — "baaki line par bhi".
+  const similar = splitLine ? ledger.items.filter(x => x.item_id !== splitLine.item_id && !x.part_of && x.item_type !== "extra"
+    && num(x.planned_qty) > 0 && String(x.unit || "").toLowerCase() === String(splitLine.unit || "").toLowerCase()) : [];
 
   return (
     <div style={{ marginBottom: 14 }}>
@@ -360,8 +393,9 @@ export function StageLinesPanel({ kind, id, canEdit, canApprove }) {
                       <div style={{ display: "flex", gap: 4, justifyContent: "flex-end", flexWrap: "wrap" }}>
                         <button type="button" onClick={() => setOpening({ item_id: it.item_id, qty: String(it.opening_qty || ""), note: it.opening_note || "" })} style={btnS()}>{t("stage_billing.opening_btn")}</button>
                         {!it.part_of && (
-                          <button type="button" onClick={() => setSplit({ item_id: it.item_id,
-                            parts: lastParts ? lastParts.map(p => ({ ...p })) : [{ name: "", pct: "" }, { name: "", pct: "" }] })} style={btnS()}>{t("stage_billing.split_btn")}</button>
+                          <button type="button" onClick={() => setSplit({ item_id: it.item_id, others: false,
+                            mode: lastParts ? lastParts.mode : "pct",
+                            parts: lastParts ? lastParts.parts.map(p => ({ ...p })) : [{ name: "", pct: "", rate: "", group: "" }, { name: "", pct: "", rate: "", group: "" }] })} style={btnS()}>{t("stage_billing.split_btn")}</button>
                         )}
                       </div>
                     )}
@@ -419,28 +453,49 @@ export function StageLinesPanel({ kind, id, canEdit, canApprove }) {
                   )}
                   {split && split.item_id === it.item_id && (
                     <div style={{ marginTop: 8, padding: 8, background: T.sltL, borderRadius: 6 }}>
-                      <div style={{ fontSize: 10.5, color: T.t3, marginBottom: 6 }}>{t("stage_billing.split_hint")}</div>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center", marginBottom: 6 }}>
+                        {[["pct", t("stage_billing.mode_pct")], ["rate", t("stage_billing.mode_rate")]].map(([m, l]) => (
+                          <button key={m} type="button" onClick={() => switchMode(m)} style={{ ...btnS(split.mode === m ? "primary" : "plain"), padding: "2px 10px" }}>{l}</button>
+                        ))}
+                        <span style={{ fontSize: 10.5, color: T.t3, flex: "1 1 260px" }}>{split.mode === "rate" ? t("stage_billing.split_hint_rate", { rate: fmtC(it.rate), unit: it.unit || "—" }) : t("stage_billing.split_hint")}</span>
+                      </div>
+                      <datalist id="sb-grp-list"><option value={t("stage_billing.grp_civil")} /><option value={t("stage_billing.grp_finishing")} /></datalist>
                       {split.parts.map((p, i, arr) => (
-                        <div key={i} style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 70px 90px 120px auto", gap: 6, marginBottom: 4, alignItems: "center" }}>
+                        <div key={i} style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 80px 100px 90px 120px auto", gap: 6, marginBottom: 4, alignItems: "center" }}>
                           <input value={p.name} placeholder={t("stage_billing.part_name_ph")} onChange={e => setSplit(s => ({ ...s, parts: s.parts.map((x, j) => j === i ? { ...x, name: e.target.value } : x) }))} style={inpS} />
-                          <input type="number" value={p.pct} placeholder="%" onChange={e => setSplit(s => ({ ...s, parts: s.parts.map((x, j) => j === i ? { ...x, pct: e.target.value } : x) }))} style={inpS} />
-                          <span style={{ fontSize: 11, color: T.t3, fontVariantNumeric: "tabular-nums" }}>{fmtC(num(it.rate) * num(p.pct) / 100)}/{it.unit || "—"}</span>
+                          {split.mode === "rate"
+                            ? <input type="number" value={p.rate ?? ""} placeholder="₹" aria-label={t("stage_billing.part_rate_ph")} onChange={e => setSplit(s => ({ ...s, parts: s.parts.map((x, j) => j === i ? { ...x, rate: e.target.value } : x) }))} style={inpS} />
+                            : <input type="number" value={p.pct ?? ""} placeholder="%" onChange={e => setSplit(s => ({ ...s, parts: s.parts.map((x, j) => j === i ? { ...x, pct: e.target.value } : x) }))} style={inpS} />}
+                          <input value={p.group || ""} list="sb-grp-list" placeholder={t("stage_billing.part_group_ph")} onChange={e => setSplit(s => ({ ...s, parts: s.parts.map((x, j) => j === i ? { ...x, group: e.target.value } : x) }))} style={inpS} />
+                          <span style={{ fontSize: 11, color: T.t3, fontVariantNumeric: "tabular-nums" }}>
+                            {split.mode === "rate" ? (splitRate > 0 ? r2(num(p.rate) / splitRate * 100) + "%" : "—") : fmtC(partRateOf(p)) + "/" + (it.unit || "—")}
+                          </span>
                           <span style={{ fontSize: 10.5, fontWeight: 700, color: T.ind, fontVariantNumeric: "tabular-nums" }}>
-                            {t("stage_billing.part_cum", { amt: fmtC(arr.slice(0, i + 1).reduce((s2, x) => s2 + num(it.rate) * num(x.pct) / 100, 0)) })}
+                            {t("stage_billing.part_cum", { amt: fmtC(arr.slice(0, i + 1).reduce((s2, x) => s2 + partRateOf(x), 0)) })}
                           </span>
                           <button type="button" disabled={split.parts.length <= 2} onClick={() => setSplit(s => ({ ...s, parts: s.parts.filter((_, j) => j !== i) }))} style={btnS("plain", split.parts.length <= 2)}>×</button>
                         </div>
                       ))}
                       <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center", marginTop: 6 }}>
-                        <button type="button" onClick={() => setSplit(s => ({ ...s, parts: [...s.parts, { name: "", pct: "" }] }))} style={btnS()}>{t("stage_billing.add_part")}</button>
-                        <button type="button" onClick={() => setSplit(s => ({ ...s, parts: housePreset() }))} style={btnS("soft")}>
+                        <button type="button" onClick={() => setSplit(s => ({ ...s, parts: [...s.parts, { name: "", pct: "", rate: "", group: "" }] }))} style={btnS()}>{t("stage_billing.add_part")}</button>
+                        <button type="button" onClick={() => setSplit(s => ({ ...s, mode: "pct", parts: housePreset() }))} style={btnS("soft")}>
                           {t("stage_billing.preset_house", { parts: housePreset().map(x => x.name + " " + x.pct).join(" · ") })}
                         </button>
-                        <span style={{ fontSize: 11, fontWeight: 700, color: Math.abs(splitSum - 100) < 0.01 ? T.grn : T.red }}>{t("stage_billing.parts_total", { pct: r2(splitSum) })}</span>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: splitOk ? T.grn : T.red }}>
+                          {split.mode === "rate"
+                            ? t("stage_billing.parts_total_rate", { sum: fmtC(splitSum), rate: fmtC(splitRate), unit: it.unit || "—" })
+                            : t("stage_billing.parts_total", { pct: r2(splitSum) })}
+                        </span>
+                        {similar.length > 0 && (
+                          <label style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, color: T.t2 }}>
+                            <input type="checkbox" checked={!!split.others} onChange={e => setSplit(s => ({ ...s, others: e.target.checked }))} />
+                            {t("stage_billing.split_others", { n: similar.length, names: similar.slice(0, 3).map(nameOf).join(", ") })}
+                          </label>
+                        )}
                         <div style={{ flex: 1 }} />
                         {kind === "estimate" && <button type="button" disabled={busy} onClick={() => doSplit(true)} style={btnS("soft", busy)}>{t("stage_billing.split_from_library")}</button>}
                         <button type="button" onClick={() => setSplit(null)} style={btnS()}>{t("common.cancel")}</button>
-                        <button type="button" disabled={busy || Math.abs(splitSum - 100) > 0.01} onClick={() => doSplit(false)} style={btnS("primary", busy || Math.abs(splitSum - 100) > 0.01)}>{t("stage_billing.split_save")}</button>
+                        <button type="button" disabled={busy || !splitOk} onClick={() => doSplit(false, similar)} style={btnS("primary", busy || !splitOk)}>{t("stage_billing.split_save")}</button>
                       </div>
                     </div>
                   )}
@@ -873,49 +928,70 @@ export function HandoverModal({ wo, subcons, onClose, onDone }) {
 // chadhta hua). Yahan hissa ka apna % (jod 100) — save par cum_pct banta hai.
 // Estimate banate waqt is item ki line in hisson me khulti hai (EstimateBuilderModal).
 export function ItemPartsModal({ item, onClose, onSaved }) {
-  const [parts, setParts] = useState(null);
+  const [parts, setParts] = useState(null);       // [{ name, pct, rate, grp }]
+  const [mode, setMode] = useState("pct");         // "pct" | "rate" — ₹ se (Ghar package ₹1,530: Advance 200 …)
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   useEffect(() => {
     api.get("/library/boq-items/" + item.id + "/stages").then(r => {
       const lines = (r?.success && r.data?.lines) || [];
+      const byRate = lines.length >= 2 && lines.every(l => num(l.rate) > 0);
       let prev = 0;
-      const ps = lines.map(l => { const cum = num(l.cum_pct); const p = { name: l.name || "", pct: String(r2(cum - prev)) }; prev = cum; return p; });
-      setParts(ps.length ? ps : [{ name: "", pct: "" }, { name: "", pct: "" }]);
-    }).catch(() => setParts([{ name: "", pct: "" }, { name: "", pct: "" }]));
+      const ps = lines.map(l => { const cum = num(l.cum_pct); const x = { name: l.name || "", pct: String(r2(cum - prev)), rate: l.rate == null ? "" : String(r2(l.rate)), grp: l.grp || "" }; prev = cum; return x; });
+      setMode(byRate ? "rate" : "pct");
+      setParts(ps.length ? ps : [{ name: "", pct: "", rate: "", grp: "" }, { name: "", pct: "", rate: "", grp: "" }]);
+    }).catch(() => setParts([{ name: "", pct: "", rate: "", grp: "" }, { name: "", pct: "", rate: "", grp: "" }]));
   }, [item.id]);
-  const sum = (parts || []).reduce((s, p) => s + num(p.pct), 0);
-  const filled = (parts || []).filter(p => p.name.trim() || num(p.pct) > 0);
-  const valid = filled.length === 0 || (filled.length >= 2 && filled.every(p => p.name.trim() && num(p.pct) > 0) && Math.abs(sum - 100) < 0.01);
+  const key = mode === "rate" ? "rate" : "pct";
+  const sum = (parts || []).reduce((s2, x) => s2 + num(x[key]), 0);
+  const filled = (parts || []).filter(x => x.name.trim() || num(x[key]) > 0);
+  const valid = filled.length === 0 || (filled.length >= 2 && filled.every(x => x.name.trim() && num(x[key]) > 0)
+    && (mode === "rate" || Math.abs(sum - 100) < 0.01));
   const save = async () => {
     let cum = 0;
-    const lines = filled.map((p, i) => { cum = r2(cum + num(p.pct)); return { seq: i, name: p.name.trim(), cum_pct: cum }; });
+    const lines = filled.map((x, i) => {
+      const last = i === filled.length - 1;
+      cum = mode === "rate" ? (last ? 100 : r3(cum + num(x.rate) / sum * 100)) : r2(cum + num(x.pct));
+      return { seq: i, name: x.name.trim(), cum_pct: cum, rate: mode === "rate" ? r2(x.rate) : null, grp: x.grp.trim() || null };
+    });
     setBusy(true);
     const r = await api.put("/library/boq-items/" + item.id + "/stages", { lines }).catch(e => ({ success: false, message: e.message }));
     setBusy(false);
     if (!r?.success) { setMsg(r?.message || t("stage_billing.save_failed")); return; }
     onSaved && onSaved(lines.length);
   };
+  const setPart = (i, patch) => setParts(ps => ps.map((x, j) => j === i ? { ...x, ...patch } : x));
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", zIndex: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>
-      <div style={{ background: T.surface, borderRadius: 12, width: "min(520px, 95vw)", maxHeight: "88vh", display: "flex", flexDirection: "column", boxShadow: "0 24px 64px rgba(0,0,0,0.35)" }}>
+      <div style={{ background: T.surface, borderRadius: 12, width: "min(600px, 95vw)", maxHeight: "88vh", display: "flex", flexDirection: "column", boxShadow: "0 24px 64px rgba(0,0,0,0.35)" }}>
         <div style={{ padding: "14px 18px", borderBottom: "1px solid " + T.b1 }}>
           <div style={{ fontSize: 15, fontWeight: 700, color: T.t1 }}>{t("stage_billing.parts_title", { item: item.name })}</div>
-          <div style={{ fontSize: 11, color: T.t3, marginTop: 3, lineHeight: 1.45 }}>{t("stage_billing.parts_hint")}</div>
+          <div style={{ fontSize: 11, color: T.t3, marginTop: 3, lineHeight: 1.45 }}>{mode === "rate" ? t("stage_billing.parts_hint_rate") : t("stage_billing.parts_hint")}</div>
+          <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+            {[["pct", t("stage_billing.mode_pct")], ["rate", t("stage_billing.mode_rate")]].map(([m, l]) => (
+              <button key={m} type="button" onClick={() => setMode(m)} style={{ ...btnS(mode === m ? "primary" : "plain"), padding: "2px 10px" }}>{l}</button>
+            ))}
+          </div>
         </div>
         <div style={{ padding: "14px 18px", overflowY: "auto", flex: 1 }}>
           {!parts && <div style={{ fontSize: 12, color: T.t4 }}>{t("common.loading")}</div>}
-          {(parts || []).map((p, i) => (
-            <div key={i} style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 80px auto", gap: 6, marginBottom: 6 }}>
-              <input value={p.name} placeholder={t("stage_billing.part_name_ph")} onChange={e => setParts(ps => ps.map((x, j) => j === i ? { ...x, name: e.target.value } : x))} style={inpS} />
-              <input type="number" value={p.pct} placeholder="%" onChange={e => setParts(ps => ps.map((x, j) => j === i ? { ...x, pct: e.target.value } : x))} style={inpS} />
+          <datalist id="ip-grp-list"><option value={t("stage_billing.grp_civil")} /><option value={t("stage_billing.grp_finishing")} /></datalist>
+          {(parts || []).map((x, i) => (
+            <div key={i} style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 90px 110px auto", gap: 6, marginBottom: 6 }}>
+              <input value={x.name} placeholder={t("stage_billing.part_name_ph")} onChange={e => setPart(i, { name: e.target.value })} style={inpS} />
+              {mode === "rate"
+                ? <input type="number" value={x.rate} placeholder="₹" aria-label={t("stage_billing.part_rate_ph")} onChange={e => setPart(i, { rate: e.target.value })} style={inpS} />
+                : <input type="number" value={x.pct} placeholder="%" onChange={e => setPart(i, { pct: e.target.value })} style={inpS} />}
+              <input value={x.grp} list="ip-grp-list" placeholder={t("stage_billing.part_group_ph")} onChange={e => setPart(i, { grp: e.target.value })} style={inpS} />
               <button type="button" onClick={() => setParts(ps => ps.filter((_, j) => j !== i))} style={btnS()}>×</button>
             </div>
           ))}
           {parts && (
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6 }}>
-              <button type="button" onClick={() => setParts(ps => [...ps, { name: "", pct: "" }])} style={btnS()}>{t("stage_billing.add_part")}</button>
-              <span style={{ fontSize: 11.5, fontWeight: 700, color: Math.abs(sum - 100) < 0.01 || !filled.length ? T.grn : T.red }}>{t("stage_billing.parts_total", { pct: r2(sum) })}</span>
+              <button type="button" onClick={() => setParts(ps => [...ps, { name: "", pct: "", rate: "", grp: "" }])} style={btnS()}>{t("stage_billing.add_part")}</button>
+              <span style={{ fontSize: 11.5, fontWeight: 700, color: valid ? T.grn : T.red }}>
+                {mode === "rate" ? t("stage_billing.parts_total_rate_lib", { sum: fmtC(sum) }) : t("stage_billing.parts_total", { pct: r2(sum) })}
+              </span>
             </div>
           )}
           <div style={{ fontSize: 10.5, color: T.t4, marginTop: 10 }}>{t("stage_billing.parts_clear_hint")}</div>
@@ -934,11 +1010,16 @@ export function ItemPartsModal({ item, onClose, onSaved }) {
 // Library template (cum_pct chadhta hua) → hisse; line → hisson ki line
 // (qty wahi, rate = rate × %, aakhri hisse me baaki rate — jod line rate ke barabar).
 export function partsFromTemplate(lines) {
+  const sorted = (lines || []).slice().sort((a, b) => (a.seq || 0) - (b.seq || 0));
+  // Har hisse ka ₹ ho to ₹ se (group ke saath) — "Ghar package ₹1,530" (4 Nov 2026).
+  if (sorted.length >= 2 && sorted.every(l => num(l.rate) > 0)) {
+    return sorted.map(l => ({ name: l.name || "", rate: r2(l.rate), pct: null, group: l.grp || null }));
+  }
   const out = [];
   let prev = 0;
-  for (const l of (lines || []).slice().sort((a, b) => (a.seq || 0) - (b.seq || 0))) {
+  for (const l of sorted) {
     const cum = num(l.cum_pct), pct = r2(cum - prev);
-    if (pct > 0) out.push({ name: l.name || "", pct });
+    if (pct > 0) out.push({ name: l.name || "", pct, group: l.grp || null });
     prev = cum;
   }
   const total = out.reduce((s, p) => s + p.pct, 0);
@@ -946,12 +1027,18 @@ export function partsFromTemplate(lines) {
 }
 export function splitLineByParts(line, parts, itemName) {
   const rate = num(line.rate);
+  // ₹ wale hisse: jod line rate ke barabar to wahi ₹, warna usi anupaat me (server jaisa).
+  const byRate = parts.every(p => num(p.rate) > 0);
+  const rs = byRate ? parts.reduce((s, p) => s + num(p.rate), 0) : 0;
+  const exact = byRate && Math.abs(rs - rate) < 0.005;
   let used = 0;
   return parts.map((p, i) => {
     const last = i === parts.length - 1;
-    const pr = last ? r2(rate - used) : r2(rate * num(p.pct) / 100);
+    const pct = byRate ? num(p.rate) / rs * 100 : num(p.pct);
+    const pr = last ? r2(rate - used) : exact ? r2(p.rate) : r2(rate * pct / 100);
     used = r2(used + pr);
-    return { ...line, description: line.description + " · " + p.name + " (" + r2(p.pct) + "%)", rate: pr, part_of: String(itemName || "").slice(0, 160) };
+    return { ...line, description: line.description + " · " + p.name + " (" + (byRate ? "₹" + pr : r2(p.pct) + "%") + ")", rate: pr,
+             part_of: String(itemName || "").slice(0, 160), part_group: p.group || null };
   });
 }
 

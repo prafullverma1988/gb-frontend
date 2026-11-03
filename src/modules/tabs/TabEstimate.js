@@ -12,6 +12,7 @@ import { companyName } from "../../utils/companyName";
 import { can } from "../../utils/perms";
 import { StageBillGrid, StageLinesPanel, StageBoard } from "./StageBilling";
 import { StatementView, ProjectStatementView, DraftLinesModal } from "./BillingV2";
+import { ChaluBillView, ProjectChaluView } from "./ChaluBill";
 
 function TabEstimate({ project }) {
   // Roles & Access (5 Oct 2026) — har button usi Estimate tick se jo server
@@ -80,6 +81,7 @@ function TabEstimate({ project }) {
   const [msChooserOpen, setMsChooserOpen] = useState(false);
   // Billing v2 (2 Nov 2026): statement ("Ye estimate" / "Sab client") + line-wise Draft ki qty
   const [stmtAll, setStmtAll] = useState(false);
+  const [chaluAll, setChaluAll] = useState(false);   // Chalu Bill: ye client / sab client
   const [draftEdit, setDraftEdit] = useState(null);
   const [showPay, setShowPay] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -734,9 +736,11 @@ function TabEstimate({ project }) {
     setLoading(false);
   };
 
-  const selectEst = async (est) => {
+  const selectEst = async (est, keepTab = false) => {
     setSelEst(est);
-    setSubTab("boq");
+    // Line-wise estimate par pehla tab Chalu Bill (4 Nov 2026) — Excel jaisa ek page.
+    // Reload (keepTab) par jis tab par ho wahi rehta hai.
+    if (!keepTab) setSubTab((est.billing_method || "manual") === "manual" ? "chalu" : "boq");
     const [det, sum, inv, pay, ms] = await Promise.all([
       api.get("/customer-estimates/"+est.id).catch(()=>({success:false})),
       api.get("/customer-estimates/"+est.id+"/summary").catch(()=>({success:false})),
@@ -768,7 +772,7 @@ function TabEstimate({ project }) {
       .catch(()=>{});
   };
 
-  const reloadSel = async () => { if (selEst) await selectEst(selEst); };
+  const reloadSel = async () => { if (selEst) await selectEst(selEst, true); };
 
   // Deep-link from Pending Approvals → "Open in Project — full details".
   // Without this the drawer only opened the Estimate tab and the approver had
@@ -1576,6 +1580,7 @@ function TabEstimate({ project }) {
           {/* Sub Tabs */}
           <div style={{display:"flex",borderBottom:"1px solid "+T.b1,background:T.surfaceB,flexShrink:0}}>
             {[
+              ...((selEst?.billing_method || "manual") === "manual" ? [{id:"chalu",label:t("chalu_bill.tab")}] : []),
               {id:"boq",label:t("estimate.boq_items")},
               {id:"milestone",label:t("stage_billing.tab_stages")},
               {id:"board",label:t("stage_billing.board_tab")},
@@ -2295,6 +2300,21 @@ function TabEstimate({ project }) {
                     })}
                   </>
                 )}
+              </div>
+            )}
+
+            {/* CHALU BILL — Excel jaisa running bill ek page par (4 Nov 2026) */}
+            {subTab==="chalu" && selEst && (
+              <div>
+                <div style={{display:"flex",gap:6,marginBottom:12}}>
+                  {[[false,t("chalu_bill.this_client")],[true,t("chalu_bill.all_clients")]].map(([v,l])=>(
+                    <button key={String(v)} onClick={()=>setChaluAll(v)}
+                      style={{padding:"5px 12px",borderRadius:6,fontSize:11.5,fontWeight:700,cursor:"pointer",border:"1px solid "+(chaluAll===v?T.blu:T.b1),background:chaluAll===v?T.bluL:T.surface,color:chaluAll===v?T.blu:T.t2}}>{l}</button>
+                  ))}
+                </div>
+                {chaluAll
+                  ? <ProjectChaluView projectId={selEst.project_id} onOpen={(id)=>{ const e = estimates.find(x=>x.id===id); if (e) { setChaluAll(false); selectEst(e); } }}/>
+                  : <ChaluBillView key={selEst.id+":"+invoices.length} estimateId={selEst.id} onChanged={reloadSel}/>}
               </div>
             )}
 
