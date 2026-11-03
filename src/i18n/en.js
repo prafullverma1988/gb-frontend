@@ -15885,8 +15885,8 @@ const dict = {
   "stage_billing.opening_note_ph": "e.g. Onsite bill / old bill no.",
   "stage_billing.opening_hint": "Only the qty is recorded — no new bill or ledger entry is made (that bill is already in the ledger). It cannot change once a bill exists on the line.",
   "stage_billing.opening_saved": "Already-billed qty saved.",
-  "stage_billing.split_btn": "Parts",
-  "stage_billing.split_hint": "Split the line into fixed parts (e.g. Brick work + plaster 60 · Slab casting 40). Each part becomes its own line; qty and total stay the same.",
+  "stage_billing.split_btn": "% schedule",
+  "stage_billing.split_hint": "Split the line into % parts — e.g. Plinth 30 · Slab 30 · Tile 20 · Completion 20. Each part becomes its own line: same qty, rate = line rate × % (1800 × 30% = 540/sqft), same total. Works on client and subcontractor lines.",
   "stage_billing.part_name_ph": "Part name",
   "stage_billing.add_part": "+ Part",
   "stage_billing.parts_total": "Total {pct}%",
@@ -16152,6 +16152,16 @@ const dict = {
   "stage_billing.sk_wo_line": "billed {billed} / WO {value}",
   "stage_billing.skipped_measure_line": "Measured lines aren't billed here — use Subcon → RA Bills → \"Bill from measurements\".",
   "stage_billing.naap_minus_note": "Minus entries always stay in the bill (correction)",
+  "stage_billing.preset_house": "House: {parts}",
+  "stage_billing.ps_plinth": "Plinth",
+  "stage_billing.ps_slab": "Slab casting",
+  "stage_billing.ps_tile": "Tiles",
+  "stage_billing.ps_completion": "Completion",
+  "stage_billing.part_cum": "Up to here {amt}",
+  "stage_billing.per_unit_upto_of": "{rate} of {total}/{unit} to date",
+  "stage_billing.pu_done": "Of {rate}/{unit}: work done {done} ({pct}%) · billed {billed}",
+  "stage_billing.pu_billed": "Of {rate}/{unit}: billed {billed} ({pct}%)",
+  "stage_billing.pu_hint": "Work done = full rate of the parts whose task reached its trigger %. Billed = amount billed so far ÷ area.",
 };
 
 export default dict;

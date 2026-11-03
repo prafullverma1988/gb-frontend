@@ -18,6 +18,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import api from "../../config/api";
 import { T } from "../shared/tokens";
 import { t } from "../../i18n";
+import { perUnitSummary, PerUnitNote } from "./StageBilling";
 
 const num = (v) => { const n = parseFloat(v); return Number.isFinite(n) ? n : 0; };
 const r2 = (n) => Math.round(num(n) * 100) / 100;
@@ -137,6 +138,10 @@ export function StatementView({ kind, id }) {
             {groups.map((g) => (
               <React.Fragment key={g.key || "_"}>
                 {g.key && <tr><td colSpan={10} style={{ ...tdS, background: T.indL, color: T.ind, fontWeight: 800, fontSize: 10.5 }}>{g.key}</td></tr>}
+                {perUnitSummary(g.rows.map((l) => ({ unit: l.unit, qty: l.qty, rate: l.rate, billed: l.billed_qty, task: l.task,
+                  item_type: l.item_type, part_of: l.part_of }))).map((s, i) => (
+                  <tr key={"pu" + i}><td colSpan={10} style={{ ...tdS, background: T.indL, color: T.ind, fontSize: 11 }}><PerUnitNote s={s} /></td></tr>
+                ))}
                 {g.rows.map((l) => {
                   const changed = Math.abs(num(l.orig_qty) - num(l.qty)) > 0.0005 || Math.abs(num(l.orig_rate) - num(l.rate)) > 0.005;
                   return (

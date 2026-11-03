@@ -5,6 +5,7 @@ import { createRoot } from "react-dom/client";
 import api from "../../config/api";
 import { loadFullPack, setLang } from "../../i18n";
 import { StatementView, MeasureBillModal, MeasureQueue, StageKhaataView, ProjectStatementView, DraftLinesModal } from "./BillingV2";
+import { StageLinesPanel } from "./StageBilling";
 
 jest.mock("../../config/api", () => {
   const api = jest.fn();
@@ -85,4 +86,31 @@ test("queue + stage khaata + sab thekedar + draft edit", async () => {
   act(() => root.unmount()); box.remove();
   await mount(<DraftLinesModal invoiceId={116} onClose={() => {}} onDone={() => {}} />);
   expect(noKeys()).toContain("plinth");
+});
+
+// % schedule (4 Nov 2026, Prafull): GF 1500 sqft × ₹1,800 → plinth 30 · slab 30 ·
+// tile 20 · completion 20. Floor note "1800 me 1080" + thekedar line par button.
+test("% schedule: floor ka ₹/sqft note + WO line par ghar wala preset", async () => {
+  const part = (id, nm, rate, prog, billed) => ({ wo_item_id: id, description: "Construction · " + nm, category: "GF", part_of: "Construction", unit: "Sqft",
+    item_type: "boq", measure_mode: "stage", orig_qty: 1500, orig_rate: rate, qty: 1500, rate, amount: 1500 * rate, billed_qty: billed, pending_qty: 0,
+    balance_qty: 1500 - billed, pct: billed ? 100 : 0, task: prog == null ? null : { id: id, name: "GF " + nm, progress: prog, trigger_pct: 100 } });
+  const S2 = { ...STMT, lines: [part(21, "Plinth (30%)", 540, 100, 1500), part(22, "Slab casting (30%)", 540, 100, 0), part(23, "Tile (20%)", 360, 40, 0), part(24, "Completion (20%)", 360, null, 0)] };
+  api.get.mockImplementation(async (url) => {
+    if (url.includes("statement")) return { success: true, data: S2 };
+    if (url.includes("billing-ledger")) return { success: true, data: { mode: "manual", items: [{ item_id: 30, description: "Construction", category: "FF", unit: "Sqft", planned_qty: 1260, rate: 1800, billed_qty: 0 }] } };
+    if (url.includes("task-suggest")) return { success: true, data: { lines: [{ item_id: 30, suggestions: [] }], tasks: [], measure_ready: true } };
+    return { success: false };
+  });
+  await mount(<StatementView kind="wo" id={2} />);
+  expect(noKeys()).toContain("₹1,800/Sqft me kaam hua ₹1,080 (60%) · bill hua ₹540");
+  act(() => root.unmount()); box.remove();
+
+  await mount(<StageLinesPanel kind="wo" id={2} canEdit canApprove={false} />);
+  const btn = (re) => [...document.querySelectorAll("button")].find((b) => re.test(b.textContent));
+  await act(async () => { btn(/^% Schedule$/).click(); });
+  await act(async () => { btn(/^Ghar wala:/).click(); });
+  const txt = noKeys();
+  expect(txt).toContain("Yahan tak ₹1,080");
+  expect(txt).toContain("₹540/Sqft");
+  expect(btn(/Library ke hisse/)).toBeUndefined();
 });

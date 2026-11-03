@@ -15887,8 +15887,8 @@ const dict = {
   "stage_billing.opening_note_ph": "Jaise Onsite bill / purana bill no.",
   "stage_billing.opening_hint": "Sirf qty yaad rakhi jaati hai — koi naya bill ya khaate me entry nahi banti (wo bill pehle se ledger me hai). Line par bill banne ke baad ye nahi badalta.",
   "stage_billing.opening_saved": "Pehle bill ho chuka save hua.",
-  "stage_billing.split_btn": "Hisse",
-  "stage_billing.split_hint": "Line ko fix hisson me todo (jaise Brick work + plaster 60 · Slab casting 40). Har hissa apni line banega, qty wahi, total wahi.",
+  "stage_billing.split_btn": "% Schedule",
+  "stage_billing.split_hint": "Line ko % hisson me todo — jaise Plinth 30 · Slab 30 · Tile 20 · Completion 20. Har hissa apni line banega: qty wahi, rate = line rate × % (1800 × 30% = 540/sqft), total wahi. Client aur thekedar dono line par.",
   "stage_billing.part_name_ph": "Hisse ka naam",
   "stage_billing.add_part": "+ Hissa",
   "stage_billing.parts_total": "Total {pct}%",
@@ -16154,6 +16154,16 @@ const dict = {
   "stage_billing.sk_wo_line": "bill {billed} / WO {value}",
   "stage_billing.skipped_measure_line": "Naap wali line yahan se bill nahi hoti — Subcon → RA Bills → \"Naap se bill\".",
   "stage_billing.naap_minus_note": "Minus entry hamesha bill me (sudhaar)",
+  "stage_billing.preset_house": "Ghar wala: {parts}",
+  "stage_billing.ps_plinth": "Plinth",
+  "stage_billing.ps_slab": "Slab casting",
+  "stage_billing.ps_tile": "Tile",
+  "stage_billing.ps_completion": "Completion",
+  "stage_billing.part_cum": "Yahan tak {amt}",
+  "stage_billing.per_unit_upto_of": "{total}/{unit} me se {rate} aaj tak",
+  "stage_billing.pu_done": "{rate}/{unit} me kaam hua {done} ({pct}%) · bill hua {billed}",
+  "stage_billing.pu_billed": "{rate}/{unit} me bill hua {billed} ({pct}%)",
+  "stage_billing.pu_hint": "Kaam hua = jin hisson ka task trigger % tak pahunch gaya, unka poora rate. Bill hua = ab tak bill hui rakam ÷ area.",
 };
 
 export default dict;

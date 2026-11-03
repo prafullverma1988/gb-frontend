@@ -15884,8 +15884,8 @@ const dict = {
   "stage_billing.opening_note_ph": "जैसे Onsite बिल / पुराना बिल no.",
   "stage_billing.opening_hint": "सिर्फ qty याद रखी जाती है — कोई नया बिल या खाते में entry नहीं बनती (वह बिल पहले से ledger में है)। Line पर बिल बनने के बाद यह नहीं बदलता।",
   "stage_billing.opening_saved": "पहले बिल हो चुका save हुआ।",
-  "stage_billing.split_btn": "हिस्से",
-  "stage_billing.split_hint": "Line को fix हिस्सों में तोड़ो (जैसे Brick work + plaster 60 · Slab casting 40)। हर हिस्सा अपनी line बनेगा, qty वही, total वही।",
+  "stage_billing.split_btn": "% शेड्यूल",
+  "stage_billing.split_hint": "Line को % हिस्सों में तोड़ो — जैसे Plinth 30 · Slab 30 · Tile 20 · Completion 20। हर हिस्सा अपनी line बनेगा: qty वही, rate = line rate × % (1800 × 30% = 540/sqft), total वही। Client और ठेकेदार दोनों line पर।",
   "stage_billing.part_name_ph": "हिस्से का नाम",
   "stage_billing.add_part": "+ हिस्सा",
   "stage_billing.parts_total": "Total {pct}%",
@@ -16151,6 +16151,16 @@ const dict = {
   "stage_billing.sk_wo_line": "bill {billed} / WO {value}",
   "stage_billing.skipped_measure_line": "नाप वाली लाइन यहाँ से bill नहीं होती — Subcon → RA Bills → \"नाप से bill\"।",
   "stage_billing.naap_minus_note": "Minus entry हमेशा bill में (सुधार)",
+  "stage_billing.preset_house": "घर वाला: {parts}",
+  "stage_billing.ps_plinth": "प्लिंथ",
+  "stage_billing.ps_slab": "स्लैब ढलाई",
+  "stage_billing.ps_tile": "टाइल",
+  "stage_billing.ps_completion": "काम पूरा",
+  "stage_billing.part_cum": "यहाँ तक {amt}",
+  "stage_billing.per_unit_upto_of": "{total}/{unit} में से {rate} आज तक",
+  "stage_billing.pu_done": "{rate}/{unit} में काम हुआ {done} ({pct}%) · bill हुआ {billed}",
+  "stage_billing.pu_billed": "{rate}/{unit} में bill हुआ {billed} ({pct}%)",
+  "stage_billing.pu_hint": "काम हुआ = जिन हिस्सों का task trigger % तक पहुँच गया, उनका पूरा rate। Bill हुआ = अब तक bill हुई रकम ÷ area।",
 };
 
 export default dict;

@@ -5,7 +5,9 @@
 //   StageBillGrid    — bill form: floor (category) ke group me har stage,
 //                      aaj tak bill hua, task %, "Poora" / "Task % jitna"
 //   StageLinesPanel  — line ka task (sujhaav ke saath), trigger %, pehle bill
-//                      ho chuka (opening), fix hisse, extra qty ki had
+//                      ho chuka (opening), % schedule (hisse) client + thekedar
+//                      dono line par, extra qty ki had
+//   PerUnitNote      — floor / line ka "₹1,800/sqft me kaam hua ₹1,080"
 //   StageBoard       — office ka ek screen: client line + subcon WO line,
 //                      chuni line ka baaki ek saath Draft, estimate se WO
 //   HandoverModal    — contract toota: WO band, baaki naye thekedar ko
@@ -53,6 +55,61 @@ function perUnitOf(rows, amount, qtyKey = "planned_qty") {
   return area > 0 ? { value: amount / area, unit: rows[0].unit || "" } : null;
 }
 const nameOf = (it) => it.name || it.description || "";
+
+// "1800 me 1080 ho gaya" (4 Nov 2026, Prafull) — ek area (ek unit, ek qty) ki
+// lines: poora ₹/unit, kaam hua (jis hisse ka task trigger % tak pahuncha uska
+// poora rate) aur bill hua ₹/unit. Rows: { unit, qty, rate, billed, task,
+// item_type, part_of }. Extra kaam bahar. Ek hi line ho to kuch nahi (rate
+// line par dikh hi raha hai).
+export function perUnitDone(rows) {
+  const rs = (rows || []).filter(r => r.item_type !== "extra");
+  if (rs.length < 2) return null;
+  const units = new Set(rs.map(r => String(r.unit || "").toLowerCase()));
+  const qtys = new Set(rs.map(r => r3(r.qty)));
+  if (units.size !== 1 || qtys.size !== 1) return null;
+  const area = [...qtys][0];
+  if (!(area > 0)) return null;
+  let rate = 0, done = 0, billed = 0, withTask = 0;
+  for (const r of rs) {
+    rate += num(r.rate);
+    billed += num(r.billed) * num(r.rate);
+    if (r.task) {
+      withTask++;
+      if (num(r.task.progress) >= (num(r.task.trigger_pct) || 100)) done += num(r.rate);
+    }
+  }
+  return { unit: rs[0].unit || "", rate: r2(rate), done: withTask ? r2(done) : null, billed: r2(billed / area) };
+}
+// Poora floor (group) ek area par ho to ek note; warna har % schedule wali
+// line (part_of) ka alag note. [{ name, unit, rate, done, billed }]
+export function perUnitSummary(rows) {
+  const whole = perUnitDone(rows);
+  if (whole) return [{ name: null, ...whole }];
+  const by = {}, order = [];
+  for (const r of rows || []) {
+    if (!r.part_of) continue;
+    if (!by[r.part_of]) { by[r.part_of] = []; order.push(r.part_of); }
+    by[r.part_of].push(r);
+  }
+  return order.map(k => { const x = perUnitDone(by[k]); return x ? { name: k, ...x } : null; }).filter(Boolean);
+}
+export function PerUnitNote({ s }) {
+  const base = s.done != null ? s.done : s.billed;
+  const pct = s.rate > 0 ? Math.round((base / s.rate) * 1000) / 10 : 0;
+  return (
+    <span title={t("stage_billing.pu_hint")} style={{ fontVariantNumeric: "tabular-nums" }}>
+      {s.name && <b>{s.name} · </b>}
+      {s.done != null
+        ? t("stage_billing.pu_done", { rate: fmtC(s.rate), unit: s.unit, done: fmtC(s.done), pct, billed: fmtC(s.billed) })
+        : t("stage_billing.pu_billed", { rate: fmtC(s.rate), unit: s.unit, billed: fmtC(s.billed), pct })}
+    </span>
+  );
+}
+// Ghar ka aam % schedule — Prafull: plinth 30 · slab 30 · tile 20 · completion 20.
+const housePreset = () => [
+  { name: t("stage_billing.ps_plinth"), pct: "30" }, { name: t("stage_billing.ps_slab"), pct: "30" },
+  { name: t("stage_billing.ps_tile"), pct: "20" }, { name: t("stage_billing.ps_completion"), pct: "20" },
+];
 
 // ── 1. Bill form grid ───────────────────────────────────────────────
 // items = billing-ledger (mode manual) ki line. value = { [item_id]: "is bill qty" }.
@@ -109,13 +166,15 @@ export function StageBillGrid({ items, value, onChange, overBillMode }) {
     });
     totalThis += gThis;
     const pu = perUnitOf(g.rows, gUpto);
+    const puAll = pu ? perUnitOf(g.rows, g.rows.reduce((s, r) => s + num(r.planned_qty) * num(r.rate), 0)) : null;
     return (
       <div key={g.key} style={{ border: "1px solid " + T.b1, borderRadius: 8, marginBottom: 10, overflow: "hidden", background: T.surface }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, padding: "7px 10px", background: T.indL }}>
           <span style={{ fontSize: 11.5, fontWeight: 800, color: T.ind, letterSpacing: ".3px" }}>{g.category || g.section || t("stage_billing.no_category")}</span>
           <span style={{ fontSize: 11, color: T.ind, fontVariantNumeric: "tabular-nums" }}>
             {t("stage_billing.group_this_upto", { this: fmtC(gThis), upto: fmtC(gUpto) })}
-            {pu && <> · {t("stage_billing.per_unit_upto", { rate: fmtC(pu.value), unit: pu.unit })}</>}
+            {pu && <> · {puAll ? t("stage_billing.per_unit_upto_of", { rate: fmtC(pu.value), total: fmtC(puAll.value), unit: pu.unit })
+              : t("stage_billing.per_unit_upto", { rate: fmtC(pu.value), unit: pu.unit })}</>}
           </span>
         </div>
         {rows}
@@ -148,6 +207,7 @@ export function StageLinesPanel({ kind, id, canEdit, canApprove }) {
   const [busy, setBusy] = useState(false);
   const [opening, setOpening] = useState(null);   // { item_id, qty, note }
   const [split, setSplit] = useState(null);       // { item_id, parts: [{ name, pct }] }
+  const [lastParts, setLastParts] = useState(null); // pichhli line ke hisse — GF ke baad FF par wahi
   const [limit, setLimit] = useState("");
 
   const load = useCallback(async () => {
@@ -233,6 +293,7 @@ export function StageLinesPanel({ kind, id, canEdit, canApprove }) {
     const r = await api.post(base + "/items/" + split.item_id + "/split", body).catch(e => ({ success: false, message: e.message }));
     setBusy(false);
     if (!r?.success) { setMsg(r?.message || t("stage_billing.save_failed")); return; }
+    if (!fromLibrary) setLastParts(split.parts.map(p => ({ name: p.name, pct: p.pct })));
     setSplit(null); setMsg(t("stage_billing.split_done", { n: (r.data?.lines || []).length })); await load();
   };
   const saveLimit = async () => {
@@ -264,6 +325,10 @@ export function StageLinesPanel({ kind, id, canEdit, canApprove }) {
         {groups.map(g => (
           <div key={g.key}>
             <div style={{ padding: "6px 12px", fontSize: 10.5, fontWeight: 800, color: T.slt, background: T.sltL, letterSpacing: ".4px", textTransform: "uppercase" }}>{g.category || g.section || t("stage_billing.no_category")}</div>
+            {perUnitSummary(g.rows.map(it => ({ unit: it.unit, qty: it.planned_qty, rate: it.rate, billed: it.billed_qty, task: it.linked_task,
+              item_type: it.item_type, part_of: it.part_of }))).map((s, i) => (
+              <div key={"pu" + i} style={{ padding: "4px 12px", fontSize: 11, color: T.ind, background: T.indL, borderTop: "1px solid " + T.b1 }}><PerUnitNote s={s} /></div>
+            ))}
             {g.rows.map(it => {
               const s = sugById[it.item_id] || { suggestions: [] };
               const cur = links[it.item_id] || { task_id: "", trigger_pct: "100" };
@@ -294,8 +359,9 @@ export function StageLinesPanel({ kind, id, canEdit, canApprove }) {
                     {canEdit && (
                       <div style={{ display: "flex", gap: 4, justifyContent: "flex-end", flexWrap: "wrap" }}>
                         <button type="button" onClick={() => setOpening({ item_id: it.item_id, qty: String(it.opening_qty || ""), note: it.opening_note || "" })} style={btnS()}>{t("stage_billing.opening_btn")}</button>
-                        {kind === "estimate" && !it.part_of && (
-                          <button type="button" onClick={() => setSplit({ item_id: it.item_id, parts: [{ name: "", pct: "" }, { name: "", pct: "" }] })} style={btnS()}>{t("stage_billing.split_btn")}</button>
+                        {!it.part_of && (
+                          <button type="button" onClick={() => setSplit({ item_id: it.item_id,
+                            parts: lastParts ? lastParts.map(p => ({ ...p })) : [{ name: "", pct: "" }, { name: "", pct: "" }] })} style={btnS()}>{t("stage_billing.split_btn")}</button>
                         )}
                       </div>
                     )}
@@ -354,19 +420,25 @@ export function StageLinesPanel({ kind, id, canEdit, canApprove }) {
                   {split && split.item_id === it.item_id && (
                     <div style={{ marginTop: 8, padding: 8, background: T.sltL, borderRadius: 6 }}>
                       <div style={{ fontSize: 10.5, color: T.t3, marginBottom: 6 }}>{t("stage_billing.split_hint")}</div>
-                      {split.parts.map((p, i) => (
-                        <div key={i} style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 80px 70px auto", gap: 6, marginBottom: 4, alignItems: "center" }}>
+                      {split.parts.map((p, i, arr) => (
+                        <div key={i} style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 70px 90px 120px auto", gap: 6, marginBottom: 4, alignItems: "center" }}>
                           <input value={p.name} placeholder={t("stage_billing.part_name_ph")} onChange={e => setSplit(s => ({ ...s, parts: s.parts.map((x, j) => j === i ? { ...x, name: e.target.value } : x) }))} style={inpS} />
                           <input type="number" value={p.pct} placeholder="%" onChange={e => setSplit(s => ({ ...s, parts: s.parts.map((x, j) => j === i ? { ...x, pct: e.target.value } : x) }))} style={inpS} />
-                          <span style={{ fontSize: 11, color: T.t3, fontVariantNumeric: "tabular-nums" }}>{fmtC(num(it.rate) * num(p.pct) / 100)}</span>
+                          <span style={{ fontSize: 11, color: T.t3, fontVariantNumeric: "tabular-nums" }}>{fmtC(num(it.rate) * num(p.pct) / 100)}/{it.unit || "—"}</span>
+                          <span style={{ fontSize: 10.5, fontWeight: 700, color: T.ind, fontVariantNumeric: "tabular-nums" }}>
+                            {t("stage_billing.part_cum", { amt: fmtC(arr.slice(0, i + 1).reduce((s2, x) => s2 + num(it.rate) * num(x.pct) / 100, 0)) })}
+                          </span>
                           <button type="button" disabled={split.parts.length <= 2} onClick={() => setSplit(s => ({ ...s, parts: s.parts.filter((_, j) => j !== i) }))} style={btnS("plain", split.parts.length <= 2)}>×</button>
                         </div>
                       ))}
                       <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center", marginTop: 6 }}>
                         <button type="button" onClick={() => setSplit(s => ({ ...s, parts: [...s.parts, { name: "", pct: "" }] }))} style={btnS()}>{t("stage_billing.add_part")}</button>
+                        <button type="button" onClick={() => setSplit(s => ({ ...s, parts: housePreset() }))} style={btnS("soft")}>
+                          {t("stage_billing.preset_house", { parts: housePreset().map(x => x.name + " " + x.pct).join(" · ") })}
+                        </button>
                         <span style={{ fontSize: 11, fontWeight: 700, color: Math.abs(splitSum - 100) < 0.01 ? T.grn : T.red }}>{t("stage_billing.parts_total", { pct: r2(splitSum) })}</span>
                         <div style={{ flex: 1 }} />
-                        <button type="button" disabled={busy} onClick={() => doSplit(true)} style={btnS("soft", busy)}>{t("stage_billing.split_from_library")}</button>
+                        {kind === "estimate" && <button type="button" disabled={busy} onClick={() => doSplit(true)} style={btnS("soft", busy)}>{t("stage_billing.split_from_library")}</button>}
                         <button type="button" onClick={() => setSplit(null)} style={btnS()}>{t("common.cancel")}</button>
                         <button type="button" disabled={busy || Math.abs(splitSum - 100) > 0.01} onClick={() => doSplit(false)} style={btnS("primary", busy || Math.abs(splitSum - 100) > 0.01)}>{t("stage_billing.split_save")}</button>
                       </div>
