@@ -82,3 +82,35 @@ test("Milestone-wise: sab floor ka Plinth ek row, contract ka %", async () => {
   expect(txt).toContain("GF, FF");
   expect(txt).toContain("Naap (qty) se");   // thekedar ke card me naap
 });
+
+test("milestone estimate: sirf Stage Board wala hissa (thekedar line, WO banao)", async () => {
+  LEDGER = { mode: "milestone_rate", milestones: [] };
+  await mount(<StageLinesPanel kind="estimate" id={7} canEdit canApprove={false} projectId={70} />);
+  const txt = noKeys();
+  expect(txt).toContain("Ye estimate line-wise nahi hai");
+  expect(txt).toContain("Ramesh Mistri");
+  expect(txt).not.toContain("Schedule kaise banana hai");
+  expect(btn(/^Subcon WO banao \(0\)$/)).toBeTruthy();
+});
+
+test("Subcon WO banao: WO line par client line ka task jaata hai", async () => {
+  LEDGER.items[0].linked_task = { task_id: 5, task_name: "GF Plinth", progress: 0, trigger_pct: 100, eligible: false };
+  const get0 = api.get.getMockImplementation();
+  api.get.mockImplementation(async (url) => url.includes("/library/subcontractors")
+    ? { success: true, data: [{ id: 1, name: "Ramesh Mistri" }] } : get0(url));
+  api.post.mockResolvedValue({ success: true, data: { id: 99 } });
+  await mount(<StageLinesPanel kind="estimate" id={7} canEdit canApprove={false} projectId={70} />);
+  await act(async () => { document.querySelector("input[aria-label='Bill / WO ke liye line']").click(); });
+  await act(async () => { btn(/^Subcon WO banao \(1\)$/).click(); });
+  await act(async () => {});
+  const dlg = document.querySelector("[role=dialog]");
+  const sel = dlg.querySelector("select");
+  const setVal = (el, v) => { const proto = Object.getPrototypeOf(el); Object.getOwnPropertyDescriptor(proto, "value").set.call(el, v); el.dispatchEvent(new Event(el.tagName === "SELECT" ? "change" : "input", { bubbles: true })); };
+  await act(async () => { setVal(sel, "Ramesh Mistri"); });
+  const rate = [...dlg.querySelectorAll("input[type=number]")].pop();
+  await act(async () => { setVal(rate, "220"); });
+  await act(async () => { btn(/^WO banao$/).click(); });
+  const call = api.post.mock.calls.find(c => c[0] === "/subcon/work-orders");
+  expect(call).toBeTruthy();
+  expect(call[1].sections[0].items[0]).toEqual(expect.objectContaining({ estimate_item_id: 1, task_id: 5, rate: 220 }));
+});

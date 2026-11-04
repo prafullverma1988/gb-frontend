@@ -248,15 +248,22 @@ export function StageLinesPanel({ kind, id, canEdit, canApprove, projectId }) {
     return m;
   }, [sug]);
   const taskOpts = useMemo(() => (sug?.tasks || []).slice().sort((a, b) => String(a.name).localeCompare(String(b.name))), [sug]);
-  if (!ledger || ledger.mode !== "manual") return null;
-  const groups = groupLines(ledger.items);
+  if (!ledger) return null;
+  // Milestone (purane Payment Schedule) estimate: task / hisse nahi, par Stage
+  // Board ka kaam (thekedar ka bill, WO banao, Extra kaam) yahin chalta rahe.
+  const manual = ledger.mode === "manual";
+  if (!manual && !(kind === "estimate" && board)) return null;
+  const groups = groupLines(manual ? ledger.items : []);
   // Stage Board ka hissa: client line par thekedar ki WO line (estimate_item_id
   // se, warna usi task se); kisi client line se na judi = "Sirf subcon ki line".
   const woLines = board ? (board.wos || []).flatMap(w => w.lines.map(l => ({ ...l, wo: w }))) : [];
   const usedWo = new Set();
   const boardLine = {};
   for (const l of (board ? board.lines : [])) {
-    const subs = woLines.filter(x => (x.estimate_item_id ? x.estimate_item_id === l.item_id : (l.task_id && x.task_id === l.task_id)));
+    // Bina estimate-link wali WO line task se sirf pehli client line par (warna ek hi
+    // task wali kai line par dohri ginti — Milestone-wise ek task sab line par lagata hai).
+    const subs = woLines.filter(x => (x.estimate_item_id ? x.estimate_item_id === l.item_id
+      : (l.task_id && x.task_id === l.task_id && !usedWo.has(x.wo_item_id))));
     for (const x of subs) usedWo.add(x.wo_item_id);
     boardLine[l.item_id] = { ...l, subs };
   }
@@ -350,22 +357,23 @@ export function StageLinesPanel({ kind, id, canEdit, canApprove, projectId }) {
   const doSplit = async (fromLibrary, similarLines = []) => {
     if (!split) return;
     setBusy(true);
-    // "Baaki line par bhi" = ek hi transaction (/schedule/apply), ruki line ki wajah saath.
+    // Mukhya line pehle (wo ruki to baaki bhi nahi — pehle jaisa); phir "baaki line
+    // par bhi" ek transaction (/schedule/apply), ruki line ki wajah saath.
+    const r = await api.post(base + "/items/" + split.item_id + "/split", fromLibrary ? { from_library: true } : { parts: bodyParts(split) }).catch(e => ({ success: false, message: e.message }));
+    if (!r?.success) { setBusy(false); setMsg(r?.message || t("stage_billing.save_failed")); return; }
     const many = !fromLibrary && split.others && similarLines.length > 0;
-    const r = many
-      ? await api.post(base + "/schedule/apply", { item_ids: [split.item_id, ...similarLines.map(x => x.item_id)], parts: bodyParts(split) }).catch(e => ({ success: false, message: e.message }))
-      : await api.post(base + "/items/" + split.item_id + "/split", fromLibrary ? { from_library: true } : { parts: bodyParts(split) }).catch(e => ({ success: false, message: e.message }));
+    const rm = many
+      ? await api.post(base + "/schedule/apply", { item_ids: similarLines.map(x => x.item_id), parts: bodyParts(split) }).catch(e => ({ success: false, message: e.message }))
+      : null;
     setBusy(false);
-    if (!r?.success) {
-      setMsg((r?.message || t("stage_billing.save_failed")) + ((r?.data?.skipped || []).length ? " — " + r.data.skipped.map(k => (k.name || "#" + k.item_id) + ": " + k.reason).join("; ") : ""));
-      return;
-    }
     if (!fromLibrary) setLastParts({ mode: split.mode, parts: split.parts.map(p => ({ ...p })) });
     setSplit(null);
-    setMsg(many
-      ? t("stage_billing.split_done_many", { n: r.data.done.length, stuck: r.data.skipped.length })
-        + (r.data.skipped.length ? " — " + r.data.skipped.map(k => (k.name || "#" + k.item_id) + ": " + k.reason).join("; ") : "")
-      : t("stage_billing.split_done", { n: (r.data?.lines || []).length }));
+    if (many) {
+      const sk = (rm?.success ? rm.data.skipped : rm?.data?.skipped) || [];
+      const done = rm?.success ? rm.data.done.length : 0;
+      setMsg(t("stage_billing.split_done_many", { n: 1 + done, stuck: similarLines.length - done })
+        + (sk.length ? " — " + sk.map(k => (k.name || "#" + k.item_id) + ": " + k.reason).join("; ") : (!rm?.success && rm?.message ? " — " + rm.message : "")));
+    } else setMsg(t("stage_billing.split_done", { n: (r.data?.lines || []).length }));
     await load();
   };
   const switchMode = (mode) => setSplit(sp => {
@@ -392,7 +400,64 @@ export function StageLinesPanel({ kind, id, canEdit, canApprove, projectId }) {
   const similar = splitLine ? ledger.items.filter(x => x.item_id !== splitLine.item_id && !x.part_of && x.item_type !== "extra"
     && num(x.planned_qty) > 0 && String(x.unit || "").toLowerCase() === String(splitLine.unit || "").toLowerCase()) : [];
 
+  // Tick wali client line → WO form; task client line ka (ledger me linked_task, board me task_id).
+  const woLinesFor = (src) => src.filter(x => selItems.has(x.item_id)).map(x => ({ ...x,
+    task_id: (boardLine[x.item_id] || {}).task_id || (x.linked_task && x.linked_task.task_id) || x.task_id || null }));
   const qtyCount = Object.values(links).filter(x => x && x.measure_mode === "qty").length;
+  const boardActions = board && (<>
+    {(can.estimate_edit || can.subcon_create) && <button type="button" disabled={busy} onClick={() => setExtraOpen(true)} style={btnS("danger", busy)}>{t("stage_billing.extra_btn")}</button>}
+    {can.subcon_create && <button type="button" disabled={!selItems.size || busy} onClick={() => setWoFor(woLinesFor(manual ? ledger.items : board.lines))} style={btnS("plain", !selItems.size || busy)}>{t("stage_billing.make_wo", { n: selItems.size })}</button>}
+    <button type="button" disabled={!canBill || busy} onClick={billNow} style={btnS("primary", !canBill || busy)}>{busy ? t("common.saving_2") : t("stage_billing.bill_selected", { n: selItems.size + selWo.size })}</button>
+  </>);
+  const boardModals = (<>
+    {extraOpen && board && (
+      <ExtraWorkModal data={board} estimateId={id} onClose={() => setExtraOpen(false)}
+        onDone={async (m) => { setExtraOpen(false); setMsg(m); await load(); }} />
+    )}
+    {woFor && (
+      <WoFromLinesModal lines={woFor} projectId={projectId || (board && board.estimate && board.estimate.project_id)}
+        estimateNo={board && board.estimate ? board.estimate.estimate_no : ""} onClose={() => setWoFor(null)}
+        onDone={async (m) => { setWoFor(null); setMsg(m); await load(); }} />
+    )}
+  </>);
+  // Milestone estimate: sirf Stage Board wala hissa (purana board jaisa)
+  if (!manual) {
+    const bGroups = groupLines(board.lines.map(l => ({ ...l, planned_qty: l.qty })));
+    return (
+      <div style={{ marginTop: 14 }}>
+        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, marginBottom: 8 }}>
+          <div style={{ fontSize: 11.5, color: T.t3, flex: "1 1 260px", lineHeight: 1.45 }}>{t("stage_billing.board_not_stage_wise")}</div>
+          {boardActions}
+        </div>
+        {msg && <div style={{ padding: "7px 10px", borderRadius: 7, background: T.indL, color: T.ind, fontSize: 11.5, fontWeight: 600, marginBottom: 8 }}>{msg}</div>}
+        {bGroups.map(g => (
+          <div key={g.key} style={{ border: "1px solid " + T.b1, borderRadius: 8, marginBottom: 10, overflow: "hidden", background: T.surface }}>
+            <div style={{ padding: "6px 12px", background: T.sltL, fontSize: 10.5, fontWeight: 800, color: T.slt, textTransform: "uppercase", letterSpacing: ".4px" }}>{g.category || g.section || t("stage_billing.no_category")}</div>
+            {g.rows.map(l => {
+              const rem = r3(num(l.qty) - num(l.billed_qty));
+              const subs = (boardLine[l.item_id] || {}).subs || [];
+              return (
+                <div key={l.item_id} style={{ borderTop: "1px solid " + T.b1, padding: "7px 12px", display: "grid", gap: 4 }}>
+                  <label style={{ display: "flex", gap: 7, alignItems: "flex-start", fontSize: 12 }}>
+                    <input type="checkbox" disabled={rem <= 0 || !can.estimate_create} checked={selItems.has(l.item_id)} onChange={() => toggleSel(selItems, setSelItems, l.item_id)} />
+                    <span><b style={{ color: T.t1 }}>{l.description}</b> <span style={{ color: T.t3, fontSize: 10.5 }}>{fmtQ(l.qty)} {l.unit} × {fmtC(l.rate)} · {fmtC(l.billed_amount)} ({fmtQ(l.billed_qty)} / {fmtQ(l.qty)})</span></span>
+                  </label>
+                  {subHead && subs.length > 0 && <div style={{ paddingLeft: 22, display: "grid", gap: 3 }}>{subs.map(subRow)}</div>}
+                </div>
+              );
+            })}
+          </div>
+        ))}
+        {subHead && orphan.length > 0 && (
+          <div style={{ border: "1px solid " + T.b1, borderRadius: 8, background: T.surface }}>
+            <div style={{ padding: "6px 12px", background: T.sltL, fontSize: 10.5, fontWeight: 800, color: T.slt }}>{t("stage_billing.only_subcon")}</div>
+            <div style={{ padding: "6px 12px", display: "grid", gap: 3 }}>{orphan.map(subRow)}</div>
+          </div>
+        )}
+        {boardModals}
+      </div>
+    );
+  }
   return (
     <div style={{ marginBottom: 14 }}>
       <ScheduleMethods kind={kind} id={id} items={ledger.items} canEdit={canEdit} qtyCount={qtyCount}
@@ -416,9 +481,7 @@ export function StageLinesPanel({ kind, id, canEdit, canApprove, projectId }) {
           <button key={v} type="button" onClick={() => setView(v)} style={{ ...btnS(view === v ? "primary" : "plain"), padding: "3px 10px" }}>{l}</button>
         ))}
         <div style={{ flex: 1 }} />
-        {board && (can.estimate_edit || can.subcon_create) && <button type="button" disabled={busy} onClick={() => setExtraOpen(true)} style={btnS("danger", busy)}>{t("stage_billing.extra_btn")}</button>}
-        {board && can.subcon_create && <button type="button" disabled={!selItems.size || busy} onClick={() => setWoFor(ledger.items.filter(x => selItems.has(x.item_id)))} style={btnS("plain", !selItems.size || busy)}>{t("stage_billing.make_wo", { n: selItems.size })}</button>}
-        {board && <button type="button" disabled={!canBill || busy} onClick={billNow} style={btnS("primary", !canBill || busy)}>{busy ? t("common.saving_2") : t("stage_billing.bill_selected", { n: selItems.size + selWo.size })}</button>}
+        {boardActions}
       </div>
       {board && <div style={{ padding: "4px 12px 6px", fontSize: 10.5, color: T.t3, background: T.surfaceB, borderLeft: "1px solid " + T.b1, borderRight: "1px solid " + T.b1 }}>{t("stage_billing.board_hint")}</div>}
       {msg && <div style={{ padding: "6px 12px", fontSize: 11.5, color: T.t2, background: T.surfaceB, borderLeft: "1px solid " + T.b1, borderRight: "1px solid " + T.b1 }}>{msg}</div>}
@@ -621,15 +684,7 @@ export function StageLinesPanel({ kind, id, canEdit, canApprove, projectId }) {
           </div>
         )}
       </div>
-      {extraOpen && board && (
-        <ExtraWorkModal data={board} estimateId={id} onClose={() => setExtraOpen(false)}
-          onDone={async (m) => { setExtraOpen(false); setMsg(m); await load(); }} />
-      )}
-      {woFor && (
-        <WoFromLinesModal lines={woFor} projectId={projectId || (board && board.estimate && board.estimate.project_id)}
-          estimateNo={board && board.estimate ? board.estimate.estimate_no : ""} onClose={() => setWoFor(null)}
-          onDone={async (m) => { setWoFor(null); setMsg(m); await load(); }} />
-      )}
+      {boardModals}
     </div>
   );
 }

@@ -1928,6 +1928,10 @@ function TabEstimate({ project }) {
                   {/* Stage Board bhi isi me (5 Nov 2026) — client aaj tak, thekedar ki WO line, Bill banao / Subcon WO banao / Extra kaam */}
                   <StageLinesPanel key={selEst.id} kind="estimate" id={selEst.id} canEdit={eEdit} canApprove={eApprove} projectId={projectId} />
                 </>)}
+                {/* Milestone estimate par bhi Stage Board wala hissa (thekedar ka bill, WO banao, Extra kaam) — 5 Nov 2026 */}
+                {selEst.billing_method !== "manual" && (
+                  <StageLinesPanel key={"b" + selEst.id} kind="estimate" id={selEst.id} canEdit={eEdit} canApprove={eApprove} projectId={projectId} />
+                )}
                 {selEst.billing_method === "milestone_rate" && (estDetail?.sections||[]).map(sec => {
                   // Group items by parsed [Category] prefix — same convention
                   // as BOQ tab. Renders Section › Category › Item › Milestones.
