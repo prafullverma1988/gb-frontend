@@ -102,6 +102,7 @@ test("Sab client: row + total", async () => {
 
 test("% Schedule box: ₹ se par preset ₹ me badalta hai, baaki line ka tick", async () => {
   await mount(<StageLinesPanel kind="estimate" id={9} canEdit canApprove={false} />);
+  await act(async () => { [...document.querySelectorAll("button")].find((b) => b.textContent === "Line-wise").click(); });
   await act(async () => { btn(/^% Schedule$/).click(); });
   await act(async () => { btn(/^Ghar wala:/).click(); });
   await act(async () => { btn(/^₹ se$/).click(); });

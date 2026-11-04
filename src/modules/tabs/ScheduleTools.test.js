@@ -43,6 +43,7 @@ const btn = (re) => [...document.querySelectorAll("button")].find((b) => re.test
 
 test("ek tab: tareeke ke card + thekedar ki line + line tick karke Bill banao", async () => {
   await mount(<StageLinesPanel kind="estimate" id={7} canEdit canApprove={false} projectId={70} />);
+  await act(async () => { [...document.querySelectorAll("button")].find((b) => b.textContent === "Line-wise").click(); });
   const txt = noKeys();
   expect(txt).toContain("Schedule kaise banana hai (BOQ se)");
   expect(txt).toContain("Poore contract ka % (construction-linked)");
@@ -100,6 +101,7 @@ test("Subcon WO banao: WO line par client line ka task jaata hai", async () => {
     ? { success: true, data: [{ id: 1, name: "Ramesh Mistri" }] } : get0(url));
   api.post.mockResolvedValue({ success: true, data: { id: 99 } });
   await mount(<StageLinesPanel kind="estimate" id={7} canEdit canApprove={false} projectId={70} />);
+  await act(async () => { [...document.querySelectorAll("button")].find((b) => b.textContent === "Line-wise").click(); });
   await act(async () => { document.querySelector("input[aria-label='Bill / WO ke liye line']").click(); });
   await act(async () => { btn(/^Subcon WO banao \(1\)$/).click(); });
   await act(async () => {});
@@ -113,4 +115,59 @@ test("Subcon WO banao: WO line par client line ka task jaata hai", async () => {
   const call = api.post.mock.calls.find(c => c[0] === "/subcon/work-orders");
   expect(call).toBeTruthy();
   expect(call[1].sections[0].items[0]).toEqual(expect.objectContaining({ estimate_item_id: 1, task_id: 5, rate: 220 }));
+});
+
+// JAGVEER jaisa: GF Structure 1820 sqft × ₹900 = plinth 30 · lintel 20 · slab level 10 · slab casting 30 · plaster 10; septic ek line
+const jag = () => {
+  const S = [["Plinth", 270], ["Lintel", 180], ["Slab level", 90], ["Slab casting", 270], ["Plaster", 90]];
+  return { mode: "manual", items: [
+    ...S.map(([n, r], i) => L(40 + i, "GF", "Structure · " + n + " (" + Math.round(r / 9) + "%)", 1820, r, { part_of: "Structure" })),
+    L(60, "OTHER", "Septic tank", 100, 900),
+  ] };
+};
+
+test("Payment Schedule (client): kaam poora hone par kitna — ₹, %, kul", async () => {
+  LEDGER = jag();
+  LEDGER.items[0].billed_qty = 1820;   // plinth ka bill ban chuka
+  await mount(<StageLinesPanel kind="estimate" id={7} canEdit canApprove={false} projectId={70} />);
+  const txt = noKeys();
+  expect(txt).toContain("GF · Structure");
+  expect(txt).toContain("1,820 Sqft × ₹900 = ₹16,38,000");
+  expect(txt).toContain("1. Plinth poora hone par");
+  expect(txt).toContain("₹4,91,400");               // 1820 × 270
+  expect(txt).toContain("Kul ₹8,19,000");           // plinth + lintel
+  expect(txt).toContain("Bill bana");
+  expect(txt).toContain("1. Kaam poora hone par");  // septic ek line
+  expect(txt).toContain("Kul contract ₹17,28,000");
+  expect(txt).toContain("Ab tak bill bana ₹4,91,400");
+});
+
+test("Hisse hatao: pakka poochh kar unsplit route", async () => {
+  LEDGER = jag();
+  api.post.mockResolvedValue({ success: true, data: { merged_item_id: 99, removed: 5, rate: 900 } });
+  await mount(<StageLinesPanel kind="estimate" id={7} canEdit canApprove={false} projectId={70} />);
+  await act(async () => { btn(/^Line-wise$/).click(); });
+  await act(async () => { btn(/^Hisse hatao$/).click(); });
+  expect(noKeys()).toContain("\"Structure\" ke 5 hisse hata kar wapas ek line (₹900/Sqft)?");
+  await act(async () => { btn(/^Haan, ek line karo$/).click(); });
+  expect(api.post).toHaveBeenCalledWith("/customer-estimates/7/items/40/unsplit", {});
+});
+
+test("stage jaisi line (ek floor, same area) ka tick hata, chetavni", async () => {
+  LEDGER = { mode: "manual", items: [L(1, "GF", "plinth", 1600, 300), L(2, "GF", "gf lintel", 1600, 200), L(3, "GF", "gf slab", 1600, 200), L(4, "FF", "Structure", 1500, 900)] };
+  await mount(<StageLinesPanel kind="estimate" id={7} canEdit canApprove={false} projectId={70} />);
+  await act(async () => { btn(/^Contract % lagao$/).click(); });
+  const txt = noKeys();
+  expect(txt).toContain("Kuch line pehle se stage jaisi hain");
+  expect(txt).toContain("Stage jaisi line");
+  expect(txt).toContain("Line (1) · ₹13,50,000");   // sirf FF Structure tick
+});
+
+test("GF Structure + GF Finishing (same area) stage jaisi NAHI — dono tick", async () => {
+  LEDGER = { mode: "manual", items: [L(1, "GF", "Structure", 1820, 900), L(2, "GF", "Finishing", 1820, 850)] };
+  await mount(<StageLinesPanel kind="estimate" id={7} canEdit canApprove={false} projectId={70} />);
+  await act(async () => { btn(/^Hisse lagao$/).click(); });
+  const txt = noKeys();
+  expect(txt).not.toContain("Stage jaisi line");
+  expect(txt).toContain("Line (2) · ₹31,85,000");
 });

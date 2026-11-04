@@ -18,7 +18,7 @@ import React, { useState, useEffect, useCallback, useMemo } from "react";
 import api from "../../config/api";
 import { T } from "../shared/tokens";
 import { t } from "../../i18n";
-import { ScheduleMethods, MilestoneView, WoFromLinesModal } from "./ScheduleTools";
+import { ScheduleMethods, MilestoneView, WoFromLinesModal, ClientScheduleView } from "./ScheduleTools";
 
 const num = (v) => { const n = parseFloat(v); return Number.isFinite(n) ? n : 0; };
 const r2 = (n) => Math.round(num(n) * 100) / 100;
@@ -219,7 +219,8 @@ export function StageLinesPanel({ kind, id, canEdit, canApprove, projectId }) {
   const [selWo, setSelWo] = useState(() => new Set());
   const [woFor, setWoFor] = useState(null);          // chuni client line → thekedar ka WO
   const [extraOpen, setExtraOpen] = useState(false);
-  const [view, setView] = useState("line");          // "line" | "milestone"
+  const [view, setView] = useState("client");        // "client" (saaf schedule) | "line" | "milestone"
+  const [unsplit, setUnsplit] = useState(null);      // hisse wali line jiske "Hisse hatao" ka pakka poocha
 
   const load = useCallback(async () => {
     const [l, s, b] = await Promise.all([
@@ -382,6 +383,17 @@ export function StageLinesPanel({ kind, id, canEdit, canApprove, projectId }) {
       ? { ...p, rate: p.pct !== "" && p.pct != null ? String(r2(rate * num(p.pct) / 100)) : (p.rate || "") }
       : { ...p, pct: rate > 0 && p.rate !== "" && p.rate != null ? String(r2(num(p.rate) / rate * 100)) : (p.pct || "") }) };
   });
+  // "Hisse hatao" — galti se tooti line wapas ek (usi line ke saare hisse)
+  const doUnsplit = async (it, fam) => {
+    setBusy(true);
+    const r = await api.post(base + "/items/" + it.item_id + "/unsplit", {}).catch(e => ({ success: false, message: e.message }));
+    setBusy(false);
+    setUnsplit(null);
+    setMsg(r?.success ? t("stage_billing.unsplit_done", { name: it.part_of, n: r.data.removed }) : (r?.message || t("stage_billing.save_failed")));
+    if (r?.success) await load();
+  };
+  const familyOf = (it) => ledger.items.filter(x => x.part_of === it.part_of && (x.category || "") === (it.category || "")
+    && String(x.unit || "") === String(it.unit || "") && r3(x.planned_qty) === r3(it.planned_qty));
   const saveLimit = async () => {
     setBusy(true);
     const r = await api.put(base + "/extra-limit", { pct: limit === "" ? null : num(limit) }).catch(e => ({ success: false, message: e.message }));
@@ -477,7 +489,7 @@ export function StageLinesPanel({ kind, id, canEdit, canApprove, projectId }) {
       </div>
       <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6, padding: "7px 12px", background: T.surfaceB,
         borderLeft: "1px solid " + T.b1, borderRight: "1px solid " + T.b1 }}>
-        {[["line", t("schedule.view_line")], ["milestone", t("schedule.view_milestone")]].map(([v, l]) => (
+        {[["client", t("schedule.view_client")], ["line", t("schedule.view_line")], ["milestone", t("schedule.view_milestone")]].map(([v, l]) => (
           <button key={v} type="button" onClick={() => setView(v)} style={{ ...btnS(view === v ? "primary" : "plain"), padding: "3px 10px" }}>{l}</button>
         ))}
         <div style={{ flex: 1 }} />
@@ -486,6 +498,11 @@ export function StageLinesPanel({ kind, id, canEdit, canApprove, projectId }) {
       {board && <div style={{ padding: "4px 12px 6px", fontSize: 10.5, color: T.t3, background: T.surfaceB, borderLeft: "1px solid " + T.b1, borderRight: "1px solid " + T.b1 }}>{t("stage_billing.board_hint")}</div>}
       {msg && <div style={{ padding: "6px 12px", fontSize: 11.5, color: T.t2, background: T.surfaceB, borderLeft: "1px solid " + T.b1, borderRight: "1px solid " + T.b1 }}>{msg}</div>}
       <div style={{ border: "1px solid " + T.b1, borderTop: "none", borderRadius: "0 0 8px 8px", overflow: "hidden", background: T.surface }}>
+        {view === "client" && (
+          <div style={{ padding: 10 }}>
+            <ClientScheduleView items={ledger.items} />
+          </div>
+        )}
         {view === "milestone" && (
           <div style={{ padding: 10 }}>
             <MilestoneView items={ledger.items} links={links} setLink={setLink} taskOpts={taskOpts} canEdit={canEdit} />
@@ -550,6 +567,9 @@ export function StageLinesPanel({ kind, id, canEdit, canApprove, projectId }) {
                     {canEdit && (
                       <div style={{ display: "flex", gap: 4, justifyContent: "flex-end", flexWrap: "wrap" }}>
                         <button type="button" onClick={() => setOpening({ item_id: it.item_id, qty: String(it.opening_qty || ""), note: it.opening_note || "" })} style={btnS()}>{t("stage_billing.opening_btn")}</button>
+                        {it.part_of && (
+                          <button type="button" onClick={() => setUnsplit(unsplit === it.item_id ? null : it.item_id)} style={btnS()}>{t("stage_billing.unsplit_btn")}</button>
+                        )}
                         {!it.part_of && (
                           <button type="button" onClick={() => setSplit({ item_id: it.item_id, others: false,
                             mode: lastParts ? lastParts.mode : "pct",
@@ -593,6 +613,17 @@ export function StageLinesPanel({ kind, id, canEdit, canApprove, projectId }) {
                           </label>
                         )}
                         {isQty && <span style={{ color: T.t3 }}>{t("stage_billing.qty_mode_hint")}</span>}
+                      </div>
+                    );
+                  })()}
+                  {unsplit === it.item_id && (() => {
+                    const fam = familyOf(it);
+                    const rate = fam.reduce((a, x) => a + num(x.rate), 0);
+                    return (
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", marginTop: 8, padding: 8, background: T.ambL, borderRadius: 6, fontSize: 11.5, color: T.amb }}>
+                        <span style={{ flex: "1 1 240px" }}>{t("stage_billing.unsplit_confirm", { name: it.part_of, n: fam.length, rate: fmtC(rate), unit: it.unit || "—" })}</span>
+                        <button type="button" onClick={() => setUnsplit(null)} style={btnS()}>{t("common.cancel")}</button>
+                        <button type="button" disabled={busy} onClick={() => doUnsplit(it, fam)} style={btnS("danger", busy)}>{t("stage_billing.unsplit_yes")}</button>
                       </div>
                     );
                   })()}

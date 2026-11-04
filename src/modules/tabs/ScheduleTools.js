@@ -14,6 +14,11 @@
 //                      server /schedule/apply)
 //   MilestoneView    — hisse naam se jode: "Plinth" sab floor ka ek row (₹,
 //                      contract ka %, bill hua, task ek saath)
+//   ClientScheduleView — client ke liye saaf schedule: har BOQ kaam ka card,
+//                      "Plinth poora hone par — 30% — ₹4,91,400", kul ab tak
+//   Stage jaisi line (ek floor ki kai line, same area — "plinth / lintel / slab"
+//   pehle se stage) par dobara % = double (5 Nov ka Deepnarayan) — box me unka
+//   tick hata hua + chetavni.
 //   WoFromLinesModal — chuni client line se thekedar ka WO (pehle Stage Board me)
 // Server: routes/customer-estimates.js + routes/subcon.js (schedule/apply).
 // ════════════════════════════════════════════════════════════════
@@ -46,6 +51,8 @@ export function partNameOf(it) {
   return s.replace(/\s*\((?:₹[\d.,]+|[\d.]+%)\)\s*$/, "").trim() || s;
 }
 
+// Stage ke aam naam (BOQ line ka naam inme se ho to wo line khud ek stage hai)
+const STAGE_WORD = /\b(plinth|lintel|slab|beam|casting|footing|foundation|column|roof|shuttering|excavation|plaster|brick ?work|dpc|parapet)\b|प्लिंथ|लिंटल|स्लैब|ढलाई/i;
 const blankPart = () => ({ name: "", pct: "", rate: "", group: "" });
 // Industry ke aam plan — naam user ki bhasha me (line par wahi likha jaata hai).
 const presets = (mode) => mode === "contract" ? [
@@ -66,8 +73,22 @@ export function ScheduleMethods({ kind, id, items, canEdit, qtyCount = 0, onDone
   const locked = (x) => num(x.billed_qty) > 0 || num(x.opening_qty) > 0;
   const splitLines = lines.filter(x => x.part_of).length;
 
+  // Ek floor (category) ki 2+ bina-hisse line ek hi unit + area par, aur naam stage
+  // jaise (plinth ₹300 / lintel ₹200 / slab ₹200) = pehle se stage — unpar dobara %
+  // lagana double hai. "GF Structure" + "GF Finishing" (same area) stage nahi.
+  const stageLike = useMemo(() => {
+    const by = {}, out = new Set();
+    for (const x of plain) {
+      const k = (x.category || x.section_title || "") + "¦" + String(x.unit || "").toLowerCase() + "¦" + r2(x.planned_qty);
+      (by[k] = by[k] || []).push(x);
+    }
+    for (const xs of Object.values(by)) {
+      if (xs.length >= 2 && xs.filter(x => STAGE_WORD.test(nameOf(x))).length >= 2) for (const x of xs) out.add(x.item_id);
+    }
+    return out;
+  }, [plain]);
   const open = (mode) => {
-    const ok = plain.filter(x => !locked(x) && (mode === "parts" || x.item_type !== "extra"));
+    const ok = plain.filter(x => !locked(x) && !stageLike.has(x.item_id) && (mode === "parts" || x.item_type !== "extra"));
     let ids = ok;
     if (mode === "parts" && ok.length) {
       // Sabse zyada wali unit (Sqft floor) ki line pehle se tick
@@ -138,6 +159,7 @@ export function ScheduleMethods({ kind, id, items, canEdit, qtyCount = 0, onDone
             {/* Kaunsi line */}
             <div>
               <label style={lblS}>{t("schedule.wiz_lines", { n: wiz.ids.size, amt: fmtC(chosenTotal) })}</label>
+              {stageLike.size > 0 && <div style={{ padding: "6px 9px", borderRadius: 6, background: T.ambL, color: T.amb, fontSize: 11, marginBottom: 6, lineHeight: 1.45 }}>{t("schedule.stage_like_hint")}</div>}
               <div style={{ border: "1px solid " + T.b1, borderRadius: 8, maxHeight: 200, overflowY: "auto" }}>
                 {plain.map(x => {
                   const lk = locked(x), ex = wiz.mode === "contract" && x.item_type === "extra";
@@ -148,6 +170,7 @@ export function ScheduleMethods({ kind, id, items, canEdit, qtyCount = 0, onDone
                       <span style={{ flex: 1, minWidth: 0 }}><span style={{ color: T.t3 }}>{x.category ? x.category + " · " : ""}</span><b style={{ color: T.t1 }}>{nameOf(x)}</b></span>
                       <span style={{ color: T.t3, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{fmtQ(x.planned_qty)} {x.unit} × {fmtC(x.rate)} = {fmtC(num(x.planned_qty) * num(x.rate))}</span>
                       {lk && <span style={chip(T.ambL, T.amb)}>{t("schedule.wiz_locked")}</span>}
+                      {!lk && stageLike.has(x.item_id) && <span style={chip(T.ambL, T.amb)} title={t("schedule.stage_like_title")}>{t("schedule.stage_like_chip")}</span>}
                       {ex && <span style={chip(T.redL, T.red)}>{t("stage_billing.extra_chip")}</span>}
                     </label>
                   );
@@ -353,4 +376,74 @@ export function WoFromLinesModal({ lines, projectId, estimateNo, onClose, onDone
       </div>
     </div>
   </>);
+}
+
+// ── 4. Client ke liye Payment Schedule — "kaam poora hone par kitna dena" ──
+// Har BOQ kaam (hisson wali line ek card) — stage, %, ₹, kul ab tak, haal. Ek
+// hi line (septic) = "Poora kaam" 100%. Extra kaam isme nahi (Chalu Bill me).
+export function ClientScheduleView({ items }) {
+  const cards = useMemo(() => {
+    const out = [], idx = {};
+    for (const x of items || []) {
+      if (x.item_type === "extra" || !(num(x.planned_qty) > 0)) continue;
+      const k = (x.category || x.section_title || "") + "¦" + (x.part_of || "#" + x.item_id);
+      if (idx[k] === undefined) { idx[k] = out.length; out.push({ key: k, category: x.category || x.section_title || "", name: x.part_of || nameOf(x), lines: [] }); }
+      out[idx[k]].lines.push(x);
+    }
+    return out;
+  }, [items]);
+  if (!cards.length) return <div style={{ padding: 14, fontSize: 12, color: T.t4 }}>{t("schedule.cl_empty")}</div>;
+  const status = (x) => {
+    const tk = x.linked_task;
+    if (num(x.planned_qty) > 0 && num(x.billed_qty) >= num(x.planned_qty) - 0.0005) return [T.grnL, T.grn, t("schedule.cl_st_billed")];
+    if (tk && tk.eligible) return [T.grnL, T.grn, t("schedule.cl_st_done")];
+    if (tk && num(tk.progress) > 0) return [T.ambL, T.amb, t("schedule.cl_st_prog", { pct: num(tk.progress) })];
+    return [T.sltL, T.slt, t("schedule.cl_st_pend")];
+  };
+  let grand = 0, billed = 0;
+  return (
+    <div style={{ display: "grid", gap: 10 }}>
+      <div style={{ fontSize: 11, color: T.t3, lineHeight: 1.45 }}>{t("schedule.cl_hint")}</div>
+      {cards.map(c => {
+        const qty = num(c.lines[0].planned_qty), unit = c.lines[0].unit || "";
+        const rate = c.lines.reduce((a, x) => a + num(x.rate), 0);
+        const amt = c.lines.reduce((a, x) => a + num(x.planned_qty) * num(x.rate), 0);
+        grand += amt;
+        billed += c.lines.reduce((a, x) => a + num(x.billed_qty) * num(x.rate), 0);
+        let cum = 0;
+        return (
+          <div key={c.key} style={{ border: "1px solid " + T.b1, borderRadius: 8, overflow: "hidden", background: T.surface }}>
+            <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", gap: 8, padding: "8px 12px", background: T.indL }}>
+              <b style={{ fontSize: 12.5, color: T.ind }}>{c.category ? c.category + " · " : ""}{c.name}</b>
+              <span style={{ fontSize: 12, color: T.ind, fontVariantNumeric: "tabular-nums" }}>{t("schedule.cl_item_head", { qty: fmtQ(qty), unit, rate: fmtC(rate), amt: fmtC(amt) })}</span>
+            </div>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+              <tbody>
+                {c.lines.map((x, i) => {
+                  const a = num(x.planned_qty) * num(x.rate);
+                  cum += a;
+                  const [bg, fg, label] = status(x);
+                  return (
+                    <tr key={x.item_id} style={{ borderTop: "1px solid " + T.b1 }}>
+                      <td style={{ padding: "7px 12px", color: T.t1 }}>
+                        {x.part_of ? t("schedule.cl_stage", { n: i + 1, stage: partNameOf(x) }) : t("schedule.cl_stage_whole", { n: i + 1 })}
+                      </td>
+                      <td style={{ padding: "7px 8px", textAlign: "right", color: T.t3, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{rate > 0 ? r2(num(x.rate) / rate * 100) + "%" : "—"}</td>
+                      <td style={{ padding: "7px 8px", textAlign: "right", fontWeight: 800, color: T.t1, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{fmtC(a)}</td>
+                      <td style={{ padding: "7px 8px", textAlign: "right", fontSize: 11, color: T.t3, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{t("schedule.cl_cum", { amt: fmtC(cum) })}</td>
+                      <td style={{ padding: "7px 12px", textAlign: "right" }}><span style={chip(bg, fg)}>{label}</span></td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        );
+      })}
+      <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "flex-end", gap: 16, padding: "8px 12px", borderRadius: 8, background: T.surfaceB, fontSize: 12.5, fontVariantNumeric: "tabular-nums" }}>
+        <span style={{ color: T.t2 }}>{t("schedule.cl_billed")} <b>{fmtC(billed)}</b></span>
+        <span style={{ color: T.ind, fontWeight: 800 }}>{t("schedule.cl_total")} {fmtC(grand)}</span>
+      </div>
+    </div>
+  );
 }
