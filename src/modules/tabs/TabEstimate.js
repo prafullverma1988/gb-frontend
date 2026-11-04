@@ -10,7 +10,7 @@ import { canApproveAction, approverRolesFor } from "../../utils/approvalAuthorit
 import { t, Rich } from "../../i18n";
 import { companyName } from "../../utils/companyName";
 import { can } from "../../utils/perms";
-import { StageBillGrid, StageLinesPanel, StageBoard } from "./StageBilling";
+import { StageBillGrid, StageLinesPanel } from "./StageBilling";
 import { StatementView, ProjectStatementView, DraftLinesModal } from "./BillingV2";
 import { ChaluBillView, ProjectChaluView } from "./ChaluBill";
 
@@ -1583,7 +1583,6 @@ function TabEstimate({ project }) {
               ...((selEst?.billing_method || "manual") === "manual" ? [{id:"chalu",label:t("chalu_bill.tab")}] : []),
               {id:"boq",label:t("estimate.boq_items")},
               {id:"milestone",label:t("stage_billing.tab_stages")},
-              {id:"board",label:t("stage_billing.board_tab")},
               {id:"invoice",label:"Invoices ("+invoices.length+")"},
               {id:"stmt",label:t("stage_billing.tab_statement")},
               // Payments tab removed — customer receipts are managed at the
@@ -1916,10 +1915,6 @@ function TabEstimate({ project }) {
               </div>
             )}
 
-            {/* STAGE BOARD — client line + subcon WO line ek screen par (30 Oct 2026) */}
-            {subTab==="board" && selEst && (
-              <StageBoard key={selEst.id} estimateId={selEst.id} projectId={projectId} />
-            )}
 
             {/* MILESTONES TAB */}
             {subTab==="milestone" && (
@@ -1930,7 +1925,8 @@ function TabEstimate({ project }) {
                   <div style={{padding:"10px 14px",marginBottom:10,color:T.t3,background:T.surface,border:"1px dashed "+T.b1,borderRadius:8,fontSize:11.5,lineHeight:1.5}}>
                     {t("stage_billing.manual_notice")}
                   </div>
-                  <StageLinesPanel kind="estimate" id={selEst.id} canEdit={eEdit} canApprove={eApprove} />
+                  {/* Stage Board bhi isi me (5 Nov 2026) — client aaj tak, thekedar ki WO line, Bill banao / Subcon WO banao / Extra kaam */}
+                  <StageLinesPanel key={selEst.id} kind="estimate" id={selEst.id} canEdit={eEdit} canApprove={eApprove} projectId={projectId} />
                 </>)}
                 {selEst.billing_method === "milestone_rate" && (estDetail?.sections||[]).map(sec => {
                   // Group items by parsed [Category] prefix — same convention
