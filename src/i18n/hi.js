@@ -16348,6 +16348,14 @@ const dict = {
   "stage_billing.unsplit_yes": "हाँ, एक line करो",
   "stage_billing.unsplit_done": "\"{name}\" के {n} हिस्से हट कर वापस एक line हो गई।",
   "schedule.cl_stage_whole": "{n}. काम पूरा होने पर",
+  "chalu_bill.st_prog": "चल रहा {pct}%",
+  "chalu_bill.open_all": "सब खोलो",
+  "chalu_bill.close_all": "सब बंद करो",
+  "chalu_bill.no_section": "बिना section",
+  "chalu_bill.sec_items": "{n} काम",
+  "chalu_bill.sec_done_pct": "{pct}% हुआ",
+  "chalu_bill.toggle_stages": "Stage दिखाओ / छुपाओ",
+  "chalu_bill.n_stages": "{n} stage",
 };
 
 export default dict;

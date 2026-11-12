@@ -73,6 +73,7 @@ const btn = (re) => [...document.querySelectorAll("button")].find((b) => re.test
 
 test("Chalu Bill: Excel jaisa summary, floor card, sthiti, advance, RB", async () => {
   await mount(<ChaluBillView estimateId={9} />);
+  await act(async () => { btn(/^Sab kholo$/).click(); });
   const txt = noKeys();
   expect(txt).toContain("Chalu Bill · RB-2");
   expect(txt).toContain("Pichhla bill RB-1");
@@ -85,9 +86,9 @@ test("Chalu Bill: Excel jaisa summary, floor card, sthiti, advance, RB", async (
   expect(txt).toContain("Naya");
   expect(txt).toContain("1 line ki qty 0 hai");
   expect(btn(/^Save karo \(RB-2\)$/)).toBeTruthy();
-  // 1st "Ho gaya" = Boundary wall (table), 2nd = Advance (floor card, haath se lagi)
+  // "Sab kholo" ke baad pehla "Ho gaya" = GF ka Advance stage (haath se lagi); Boundary wall baad me
   const ticks = [...document.querySelectorAll("button")].filter((b) => /^Ho gaya$/.test(b.textContent));
-  await act(async () => { ticks[1].click(); });
+  await act(async () => { ticks[0].click(); });
   expect(document.body.textContent).toContain("Haath wala hatao");
   expect(document.querySelector("input[placeholder^='Note']").value).toBe("Agreement par");
 });
@@ -112,4 +113,18 @@ test("% Schedule box: ₹ se par preset ₹ me badalta hai, baaki line ka tick",
   const txt = noKeys();
   expect(txt).toContain("Total ₹1,800 / line ₹1,800/Sqft");
   expect(txt).toContain("Isi tarah baaki 1 line par bhi");
+});
+
+test("BOQ jaisa: section ki line par kul, band karne par kaam chhupe", async () => {
+  await mount(<ChaluBillView estimateId={9} />);
+  let txt = noKeys();
+  expect(txt).toContain("GF · 1 kaam");
+  expect(txt).toContain("OTHER · 1 kaam");
+  expect(txt).toContain("Building construction · 8 stage");
+  expect(txt).not.toContain("G Beam");                 // stage band (default)
+  const gf = [...document.querySelectorAll("tr")].find(tr => /^▾GF · 1 kaam/.test(tr.textContent));
+  await act(async () => { gf.click(); });
+  txt = noKeys();
+  expect(txt).not.toContain("Building construction · 8 stage");   // GF section band
+  expect(txt).toContain("Boundary wall");
 });

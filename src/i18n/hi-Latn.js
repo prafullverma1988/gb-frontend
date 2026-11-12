@@ -16351,6 +16351,14 @@ const dict = {
   "stage_billing.unsplit_yes": "Haan, ek line karo",
   "stage_billing.unsplit_done": "\"{name}\" ke {n} hisse hat kar wapas ek line ho gayi.",
   "schedule.cl_stage_whole": "{n}. Kaam poora hone par",
+  "chalu_bill.st_prog": "Chal raha {pct}%",
+  "chalu_bill.open_all": "Sab kholo",
+  "chalu_bill.close_all": "Sab band karo",
+  "chalu_bill.no_section": "Bina section",
+  "chalu_bill.sec_items": "{n} kaam",
+  "chalu_bill.sec_done_pct": "{pct}% hua",
+  "chalu_bill.toggle_stages": "Stage dikhao / chhupao",
+  "chalu_bill.n_stages": "{n} stage",
 };
 
 export default dict;

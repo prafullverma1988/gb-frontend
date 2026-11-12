@@ -16349,6 +16349,14 @@ const dict = {
   "stage_billing.unsplit_yes": "Yes, merge",
   "stage_billing.unsplit_done": "\"{name}\": {n} parts merged back into one line.",
   "schedule.cl_stage_whole": "{n}. On completion of the work",
+  "chalu_bill.st_prog": "In progress {pct}%",
+  "chalu_bill.open_all": "Expand all",
+  "chalu_bill.close_all": "Collapse all",
+  "chalu_bill.no_section": "No section",
+  "chalu_bill.sec_items": "{n} item(s)",
+  "chalu_bill.sec_done_pct": "{pct}% done",
+  "chalu_bill.toggle_stages": "Show / hide stages",
+  "chalu_bill.n_stages": "{n} stages",
 };
 
 export default dict;

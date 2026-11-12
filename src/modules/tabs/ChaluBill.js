@@ -1,19 +1,19 @@
 // ════════════════════════════════════════════════════════════════
 // Chalu Bill (4 Nov 2026, Prafull) — client ka Excel jaisa running bill ek
 // page par (Aakashdeep / Hemant Sahu wali sheet):
-//   • upar estimate (floor × area × ₹/sqft, parapet, septic …), har line ka
-//     kaam hua ₹, pichhle bill ke baad ₹, site ki sthiti
+//   • upar estimate BOQ jaisa (12 Nov 2026, Prafull: "clean, sober, foldable
+//     section-wise — GF ka total ek jagah, FF alag, other alag"): section →
+//     floor → kaam; har kaam ka kaam hua ₹, pichhle bill ke baad ₹, haal; ▸ se
+//     us kaam ke stage (Plinth, Lintel …) wahin — "Ho gaya" bhi wahin
 //   • bagal me Excel ka hisaab — Grand total · Kaam hua (= Bill till date) ·
 //     Aaya · Net baaki (kaam hua − aaya) · Grand baaki (grand − aaya)
-//   • neeche floor ka stage card (₹/sqft breakup, Civil / Finishing, rang:
-//     hua / chal raha / baaki) — bina task wali stage par "Ho gaya"
 //   • bill (invoice), payment (Finance receipt, bina-bill advance bhi), extra
 //   • "Save karo" (RB-n) → agle bill me pichhla bill + uske baad ka kaam; PDF;
 //     WhatsApp (wa.me khulta hai — system khud nahi bhejta)
 //   ProjectChaluView — housing / kai client: har client ki ek row.
 // Server: routes/customer-estimates.js (running-bill*), utils/runningBill.js.
 // ════════════════════════════════════════════════════════════════
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import api, { API_BASE, getToken } from "../../config/api";
 import { T } from "../shared/tokens";
 import { t, getLang } from "../../i18n";
@@ -38,8 +38,8 @@ const chip = (bg, fg) => ({ display: "inline-block", padding: "1px 7px", borderR
 const thS = { textAlign: "left", padding: "6px 8px", fontSize: 9.5, color: T.t3, textTransform: "uppercase", letterSpacing: ".4px", whiteSpace: "nowrap", background: T.surfaceB };
 const tdS = { padding: "6px 8px", borderTop: "1px solid " + T.b1, verticalAlign: "top" };
 const tdN = { ...tdS, textAlign: "right", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" };
-const stBg = (st) => (st === "done" ? T.grnL : st === "prog" ? T.ambL : "transparent");
-const stBar = (st) => (st === "done" ? T.grn : st === "prog" ? T.amb : "transparent");
+const stDot = (st) => (st === "done" ? T.grn : st === "prog" ? T.amb : T.b1);
+const Dot = ({ st }) => <i style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: stDot(st), marginRight: 6, verticalAlign: 1 }} />;
 const H3 = ({ children }) => <div style={{ fontSize: 11, fontWeight: 800, color: T.t2, margin: "2px 0 6px", textTransform: "uppercase", letterSpacing: ".4px" }}>{children}</div>;
 
 // PDF — route ko JWT chahiye, isliye fetch + blob (invoice PDF jaisa).
@@ -99,13 +99,202 @@ function WorkChip({ line }) {
   return <span style={chip(T.sltL, T.slt)}>{t("chalu_bill.chip_no_task")}</span>;
 }
 
+// ── Estimate BOQ jaisa: section → floor → kaam → (▸) stage ──
+// Section = BOQ ka section (GF / FF / Other); uske andar floor (category) alag
+// ho to chhota sub-header. Section ki line par us section ka kul (estimate, kaam
+// hua, pichhle bill ke baad) — "GF ka total ek jagah". Saadha: rang sirf Haal
+// ke dot me. Default: section khule, stage band.
+function EstimateBoq({ rows, estimateId, canTick, onReload }) {
+  const [closed, setClosed] = useState(() => new Set());   // band section
+  const [open, setOpen] = useState(() => new Set());       // khule kaam (stage dikhe)
+  const [tick, setTick] = useState(null);                  // "Ho gaya" box kis line par
+  const secs = useMemo(() => {
+    const out = [], si = {};
+    for (const r of rows || []) {
+      const sk = r.section || r.category || "";
+      if (si[sk] === undefined) { si[sk] = out.length; out.push({ key: sk, cats: [], ci: {} }); }
+      const sec = out[si[sk]];
+      const ck = r.category || "";
+      if (sec.ci[ck] === undefined) { sec.ci[ck] = sec.cats.length; sec.cats.push({ key: ck, rows: [] }); }
+      sec.cats[sec.ci[ck]].rows.push(r);
+    }
+    return out;
+  }, [rows]);
+  const sum = (rs) => {
+    const amount = rs.reduce((a, r) => a + num(r.amount), 0), done = rs.reduce((a, r) => a + num(r.done_amt), 0);
+    const since = rs.reduce((a, r) => a + Math.max(0, num(r.since_prev)), 0);
+    // Sab kaam ek area par (GF Structure + Finishing = 1820 sqft) to area + ₹/unit ka jod
+    const units = new Set(rs.map(r => String(r.unit || "").toLowerCase())), qtys = new Set(rs.map(r => r.qty));
+    const same = rs.length && units.size === 1 && qtys.size === 1 && rs[0].qty != null && rs.every(r => r.rate != null);
+    return { amount, done, since, pct: amount > 0 ? Math.round(done / amount * 1000) / 10 : 0,
+             qty: same ? rs[0].qty : null, unit: same ? rs[0].unit : "", rate: same ? rs.reduce((a, r) => a + num(r.rate), 0) : null };
+  };
+  const allRows = (rows || []);
+  const toggle = (set, setter, k) => { const n = new Set(set); if (n.has(k)) n.delete(k); else n.add(k); setter(n); };
+  // "Ho gaya" halka link (saadha table) — haath se laga ho to bainganii
+  const tickBtn = (line) => canTick && (
+    <button type="button" onClick={() => setTick(tick === line.item_id ? null : line.item_id)} title={t("chalu_bill.tick_title")}
+      style={{ borderWidth: 0, background: "transparent", cursor: "pointer", padding: 0, marginLeft: 8, fontSize: 10.5, fontWeight: 700,
+        fontFamily: "inherit", color: line.manual ? T.pur : T.ind }}>{t("chalu_bill.tick_btn")}</button>
+  );
+  // Chip sirf jab kuch batana ho: chal raha (task %), haath se, ya bill jitna
+  const showChip = (l) => l.work.status === "prog" || l.work.source === "manual" || l.work.source === "billed";
+  const tickRow = (line) => tick === line.item_id && (
+    <tr key={"tk" + line.item_id}><td colSpan={7} style={{ ...tdS, borderTop: "none" }}>
+      <TickBox line={line} estimateId={estimateId} onCancel={() => setTick(null)} onDone={async () => { setTick(null); await onReload(); }} />
+    </td></tr>
+  );
+  const stLabel = (w) => w.status === "done" ? t("chalu_bill.lg_done") : w.status === "prog" ? t("chalu_bill.st_prog", { pct: w.pct }) : t("chalu_bill.lg_pend");
+  const numCells = (x) => (<>
+    <td style={tdN}>{x.qty != null ? fmtQ(x.qty) + " " + (x.unit || "") : "—"}</td>
+    <td style={tdN}>{x.rate != null ? "₹" + fmtR(x.rate) : "—"}</td>
+  </>);
+  const total = sum(allRows);
+  return (
+    <div>
+      <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 6 }}>
+        <H3>{t("chalu_bill.h_estimate")}</H3>
+        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10, fontSize: 10.5, color: T.t3 }}>
+          <span><Dot st="done" />{t("chalu_bill.lg_done")}</span>
+          <span><Dot st="prog" />{t("chalu_bill.lg_prog")}</span>
+          <span><Dot st="pend" />{t("chalu_bill.lg_pend")}</span>
+          <button type="button" onClick={() => { setClosed(new Set()); setOpen(new Set(allRows.filter(r => r.split).map(r => r.key))); }} style={{ ...btnS(), padding: "2px 9px" }}>{t("chalu_bill.open_all")}</button>
+          <button type="button" onClick={() => { setOpen(new Set()); setClosed(new Set(secs.map(x => x.key))); }} style={{ ...btnS(), padding: "2px 9px" }}>{t("chalu_bill.close_all")}</button>
+        </div>
+      </div>
+      <div style={{ overflowX: "auto", border: "1px solid " + T.b1, borderRadius: 8 }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, minWidth: 760 }}>
+          <thead><tr>
+            <th style={thS}>{t("chalu_bill.col_work")}</th><th style={{ ...thS, textAlign: "right" }}>{t("chalu_bill.col_area")}</th>
+            <th style={{ ...thS, textAlign: "right" }}>{t("chalu_bill.col_rate")}</th><th style={{ ...thS, textAlign: "right" }}>{t("chalu_bill.col_est")}</th>
+            <th style={{ ...thS, textAlign: "right" }}>{t("chalu_bill.col_done")}</th><th style={{ ...thS, textAlign: "right" }}>{t("chalu_bill.col_since")}</th>
+            <th style={thS}>{t("chalu_bill.col_sthiti")}</th>
+          </tr></thead>
+          <tbody>
+            {secs.map(sec => {
+              const secRows = sec.cats.flatMap(c => c.rows);
+              const ss = sum(secRows);
+              const isClosed = closed.has(sec.key);
+              return (
+                <React.Fragment key={"s" + sec.key}>
+                  <tr style={{ background: T.surfaceB, cursor: "pointer" }} onClick={() => toggle(closed, setClosed, sec.key)}>
+                    <td style={{ ...tdS, fontWeight: 800, color: T.t1 }}>
+                      <span style={{ display: "inline-block", width: 14, color: T.t3 }}>{isClosed ? "▸" : "▾"}</span>
+                      {sec.key || t("chalu_bill.no_section")} <span style={{ fontWeight: 400, fontSize: 10.5, color: T.t4 }}>· {t("chalu_bill.sec_items", { n: secRows.length })}</span>
+                    </td>
+                    {numCells(ss)}
+                    <td style={{ ...tdN, fontWeight: 800 }}>{fmtC(ss.amount)}</td>
+                    <td style={{ ...tdN, fontWeight: 800 }}>{fmtC(ss.done)}</td>
+                    <td style={{ ...tdN, fontWeight: 700, color: ss.since > 0 ? T.red : T.t4 }}>{ss.since > 0 ? fmtC(ss.since) : "—"}</td>
+                    <td style={{ ...tdS, fontSize: 11, color: T.t2 }}>{t("chalu_bill.sec_done_pct", { pct: ss.pct })}</td>
+                  </tr>
+                  {!isClosed && sec.cats.map(cat => {
+                    const sub = cat.key && (sec.cats.length > 1 || cat.key !== sec.key);
+                    const cs = sum(cat.rows);
+                    return (
+                      <React.Fragment key={"c" + sec.key + "¦" + cat.key}>
+                        {sub && (
+                          <tr>
+                            <td style={{ ...tdS, paddingLeft: 24, fontWeight: 700, color: T.t2, fontSize: 11.5 }}>{cat.key}</td>
+                            {numCells(cs)}
+                            <td style={{ ...tdN, color: T.t2 }}>{fmtC(cs.amount)}</td>
+                            <td style={{ ...tdN, color: T.t2 }}>{fmtC(cs.done)}</td>
+                            <td style={{ ...tdN, color: T.t4 }}>{cs.since > 0 ? fmtC(cs.since) : "—"}</td>
+                            <td style={{ ...tdS, fontSize: 10.5, color: T.t3 }}>{t("chalu_bill.sec_done_pct", { pct: cs.pct })}</td>
+                          </tr>
+                        )}
+                        {cat.rows.map(r => {
+                          const one = !r.split ? r.parts[0] : null;
+                          const isOpen = open.has(r.key);
+                          const pct = r.rate ? Math.round(r.done_rate / r.rate * 1000) / 10 : 0;
+                          return (
+                            <React.Fragment key={r.key}>
+                              <tr>
+                                <td style={{ ...tdS, paddingLeft: sub ? 38 : 24 }}>
+                                  {r.split
+                                    ? <button type="button" aria-label={t("chalu_bill.toggle_stages")} onClick={() => toggle(open, setOpen, r.key)}
+                                        style={{ borderWidth: 0, background: "transparent", cursor: "pointer", color: T.ind, padding: 0, width: 14, fontFamily: "inherit" }}>{isOpen ? "▾" : "▸"}</button>
+                                    : <span style={{ display: "inline-block", width: 14 }} />}
+                                  <span style={{ fontWeight: 600, color: T.t1 }}>{r.name}</span>
+                                  {r.split && <span style={{ fontSize: 10.5, color: T.t4, whiteSpace: "nowrap" }}> · {t("chalu_bill.n_stages", { n: r.parts.length })}</span>}
+                                </td>
+                                {numCells(r)}
+                                <td style={tdN}>{fmtC(r.amount)}</td>
+                                <td style={{ ...tdN, fontWeight: 700 }}>
+                                  {fmtC(r.done_amt)}
+                                  <div style={{ height: 3, borderRadius: 2, background: T.b1, marginTop: 3, overflow: "hidden" }}>
+                                    <div style={{ height: "100%", width: Math.min(100, r.amount > 0 ? r.done_amt / r.amount * 100 : 0) + "%", background: T.grn }} />
+                                  </div>
+                                </td>
+                                <td style={{ ...tdN, color: r.since_prev > 0 ? T.red : T.t4 }}>{r.since_prev > 0 ? fmtC(r.since_prev) : "—"}</td>
+                                <td style={{ ...tdS, fontSize: 11, color: T.t2 }}>
+                                  <Dot st={r.status} />{r.sthiti}
+                                  {r.split && r.rate != null && <div style={{ fontSize: 10, color: T.t4 }}>{t("chalu_bill.floor_head", { rate: "₹" + fmtR(r.rate), done: "₹" + fmtR(r.done_rate), pct })}</div>}
+                                  {one && <>{showChip(one) && <> <WorkChip line={one} /></>}{tickBtn(one)}</>}
+                                </td>
+                              </tr>
+                              {one && tickRow(one)}
+                              {r.split && isOpen && (r.groups.length ? r.groups : [{ name: null }]).map(g => (
+                                <React.Fragment key={"g" + r.key + (g.name || "_")}>
+                                  {r.parts.filter(x => (x.part_group || "") === (g.name || "")).map(x => (
+                                    <React.Fragment key={x.item_id}>
+                                      <tr style={{ color: x.work.status === "pend" ? T.t3 : T.t1 }}>
+                                        <td style={{ ...tdS, paddingLeft: sub ? 58 : 44, fontSize: 11.5 }}>
+                                          {x.part_name} {x.since_prev > 0 && <span style={chip(T.redL, T.red)}>{t("chalu_bill.new_chip")}</span>}
+                                        </td>
+                                        <td style={tdN} />
+                                        <td style={{ ...tdN, fontSize: 11.5 }}>₹{fmtR(x.rate)}</td>
+                                        <td style={{ ...tdN, fontSize: 11.5 }}>{fmtC(x.amount)}</td>
+                                        <td style={{ ...tdN, fontSize: 11.5 }}>{fmtC(x.done_amt)}</td>
+                                        <td style={{ ...tdN, fontSize: 11.5, color: x.since_prev > 0 ? T.red : T.t4 }}>{x.since_prev > 0 ? fmtC(x.since_prev) : "—"}</td>
+                                        <td style={{ ...tdS, fontSize: 11 }}>
+                                          <Dot st={x.work.status} />{stLabel(x.work)}
+                                          {showChip(x) && <> <WorkChip line={x} /></>}
+                                          {tickBtn(x)}
+                                        </td>
+                                      </tr>
+                                      {tickRow(x)}
+                                    </React.Fragment>
+                                  ))}
+                                  {g.name && r.groups.length > 1 && (
+                                    <tr style={{ background: T.surfaceB }}>
+                                      <td style={{ ...tdS, paddingLeft: sub ? 58 : 44, fontWeight: 700, fontSize: 11 }}>{t("chalu_bill.group_total", { group: g.name })}</td>
+                                      <td style={tdN} /><td style={{ ...tdN, fontSize: 11 }}>₹{fmtR(g.rate)}</td>
+                                      <td style={{ ...tdN, fontSize: 11 }}>{fmtC(num(g.done_amt) + num(g.rem_amt))}</td>
+                                      <td style={{ ...tdN, fontSize: 11 }}>{fmtC(g.done_amt)}</td><td style={tdN} /><td style={tdS} />
+                                    </tr>
+                                  )}
+                                </React.Fragment>
+                              ))}
+                            </React.Fragment>
+                          );
+                        })}
+                      </React.Fragment>
+                    );
+                  })}
+                </React.Fragment>
+              );
+            })}
+            <tr style={{ borderTop: "2px solid " + T.b1, fontWeight: 800 }}>
+              <td style={tdS}>{t("chalu_bill.total")}</td><td style={tdS} /><td style={tdS} />
+              <td style={tdN}>{fmtC(total.amount)}</td>
+              <td style={tdN}>{fmtC(total.done)}</td>
+              <td style={tdN}>{total.since > 0 ? fmtC(total.since) : "—"}</td>
+              <td style={{ ...tdS, fontSize: 11, color: T.t2 }}>{t("chalu_bill.sec_done_pct", { pct: total.pct })}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 // ── 1. Ek client ka Chalu Bill ──
 export function ChaluBillView({ estimateId, onChanged }) {
   const [d, setD] = useState(null);
   const [err, setErr] = useState("");
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
-  const [tick, setTick] = useState(null);         // item_id jis par "Ho gaya" box khula
   const load = useCallback(async () => {
     const r = await api.get(`/customer-estimates/${estimateId}/running-bill`).catch((e) => ({ success: false, message: e.message }));
     if (r?.success) { setD(r.data); setErr(""); } else setErr(r?.message || t("chalu_bill.load_failed"));
@@ -140,10 +329,6 @@ export function ChaluBillView({ estimateId, onChanged }) {
   const waText = t("chalu_bill.wa_text", { name: d.estimate.customer_name || "", n: d.rb_no, date: fmtD(d.bill_date),
     grand: fmtC(TT.grand), done: fmtC(TT.done), received: fmtC(TT.received), due: fmtC(TT.net_due) });
 
-  const tickCell = (line) => canTick && (
-    <button type="button" onClick={() => setTick(tick === line.item_id ? null : line.item_id)} title={t("chalu_bill.tick_title")}
-      style={{ ...btnS(line.manual ? "soft" : "plain"), padding: "0 6px", fontSize: 10.5 }}>{t("chalu_bill.tick_btn")}</button>
-  );
   const ledger = [
     ["hd", t("chalu_bill.h_contract")],
     ["", t("chalu_bill.l_estimate"), TT.estimate],
@@ -158,7 +343,6 @@ export function ChaluBillView({ estimateId, onChanged }) {
     ["", t("chalu_bill.l_grand_due"), TT.grand_due, t("chalu_bill.l_grand_due_sub")],
     ["", t("chalu_bill.l_remaining"), TT.remaining],
   ];
-  const splitRows = (d.rows || []).filter((r) => r.split);
 
   return (
     <div style={{ display: "grid", gap: 14 }}>
@@ -188,54 +372,7 @@ export function ChaluBillView({ estimateId, onChanged }) {
       {/* Estimate + hisaab */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 14, alignItems: "start" }}>
         <div style={{ minWidth: 0, gridColumn: "span 2" }}>
-          <H3>{t("chalu_bill.h_estimate")}</H3>
-          <div style={{ overflowX: "auto", border: "1px solid " + T.b1, borderRadius: 8 }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, minWidth: 760 }}>
-              <thead><tr>
-                <th style={thS}>#</th><th style={thS}>{t("chalu_bill.col_work")}</th><th style={{ ...thS, textAlign: "right" }}>{t("chalu_bill.col_area")}</th>
-                <th style={{ ...thS, textAlign: "right" }}>{t("chalu_bill.col_rate")}</th><th style={{ ...thS, textAlign: "right" }}>{t("chalu_bill.col_est")}</th>
-                <th style={{ ...thS, textAlign: "right" }}>{t("chalu_bill.col_done")}</th><th style={{ ...thS, textAlign: "right" }}>{t("chalu_bill.col_since")}</th>
-                <th style={thS}>{t("chalu_bill.col_sthiti")}</th>
-              </tr></thead>
-              <tbody>
-                {(d.rows || []).map((r, i) => {
-                  const one = !r.split ? r.parts[0] : null;
-                  return (
-                    <React.Fragment key={r.key}>
-                      <tr style={{ background: stBg(r.status) }}>
-                        <td style={{ ...tdS, boxShadow: "inset 3px 0 0 " + stBar(r.status), color: T.t3 }}>{i + 1}</td>
-                        <td style={tdS}><span style={{ color: T.t3 }}>{r.category ? r.category + " · " : ""}</span><b style={{ color: T.t1 }}>{r.name}</b></td>
-                        <td style={tdN}>{r.qty != null ? fmtQ(r.qty) + " " + r.unit : "—"}</td>
-                        <td style={tdN}>{r.rate != null ? "₹" + fmtR(r.rate) : "—"}</td>
-                        <td style={tdN}>{fmtC(r.amount)}</td>
-                        <td style={{ ...tdN, fontWeight: 700 }}>
-                          {fmtC(r.done_amt)}
-                          <div style={{ height: 5, borderRadius: 3, background: T.b1, marginTop: 3, overflow: "hidden" }}>
-                            <div style={{ height: "100%", width: Math.min(100, r.amount > 0 ? r.done_amt / r.amount * 100 : 0) + "%", background: T.grn }} />
-                          </div>
-                        </td>
-                        <td style={tdN}>{r.since_prev > 0 ? <span style={chip(T.redL, T.red)}>{fmtC(r.since_prev)}</span> : "—"}</td>
-                        <td style={{ ...tdS, fontSize: 11, color: T.t2 }}>
-                          {r.sthiti} {one && <WorkChip line={one} />} {one && tickCell(one)}
-                        </td>
-                      </tr>
-                      {one && tick === one.item_id && (
-                        <tr><td colSpan={8} style={{ ...tdS, borderTop: "none" }}>
-                          <TickBox line={one} estimateId={estimateId} onCancel={() => setTick(null)} onDone={async () => { setTick(null); await load(); }} />
-                        </td></tr>
-                      )}
-                    </React.Fragment>
-                  );
-                })}
-                <tr style={{ background: T.surfaceB, fontWeight: 800 }}>
-                  <td style={tdS} /><td style={tdS}>{t("chalu_bill.total")}</td><td style={tdS} /><td style={tdS} />
-                  <td style={tdN}>{fmtC(TT.estimate)}</td>
-                  <td style={tdN}>{fmtC((d.rows || []).reduce((s, r) => s + r.done_amt, 0))}</td>
-                  <td style={tdN}>{fmtC((d.rows || []).reduce((s, r) => s + Math.max(0, r.since_prev), 0))}</td><td style={tdS} />
-                </tr>
-              </tbody>
-            </table>
-          </div>
+          <EstimateBoq rows={d.rows || []} estimateId={estimateId} canTick={canTick} onReload={load} />
           {d.hidden_zero > 0 && <div style={{ fontSize: 11, color: T.t4, marginTop: 4 }}>{t("chalu_bill.hidden_zero", { n: d.hidden_zero })}</div>}
         </div>
         <div style={{ minWidth: 0 }}>
@@ -256,77 +393,6 @@ export function ChaluBillView({ estimateId, onChanged }) {
           {TT.advance_shared > 0 && <div style={{ fontSize: 10.5, color: T.amb, marginTop: 6 }}>{t(TT.other_sales ? "chalu_bill.advance_sales" : "chalu_bill.advance_shared", { amt: fmtC(TT.advance_shared) })}</div>}
         </div>
       </div>
-
-      {/* Floor ka stage card */}
-      {splitRows.length > 0 && (
-        <div>
-          <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", gap: 8, alignItems: "baseline" }}>
-            <H3>{t("chalu_bill.h_floors")}</H3>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 10, fontSize: 10.5, color: T.t3 }}>
-              <span><i style={{ display: "inline-block", width: 10, height: 10, borderRadius: 2, background: T.grn, marginRight: 4 }} />{t("chalu_bill.lg_done")}</span>
-              <span><i style={{ display: "inline-block", width: 10, height: 10, borderRadius: 2, background: T.amb, marginRight: 4 }} />{t("chalu_bill.lg_prog")}</span>
-              <span><i style={{ display: "inline-block", width: 10, height: 10, borderRadius: 2, background: T.b1, marginRight: 4 }} />{t("chalu_bill.lg_pend")}</span>
-            </div>
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 10 }}>
-            {splitRows.map((r) => {
-              const pct = r.rate ? Math.round(r.done_rate / r.rate * 1000) / 10 : 0;
-              return (
-                <div key={r.key} style={{ border: "1px solid " + T.b1, borderRadius: 8, overflow: "hidden", minWidth: 0 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: 8, padding: "7px 10px", background: T.indL, color: T.ind, flexWrap: "wrap" }}>
-                    <b style={{ fontSize: 12 }}>{r.category ? r.category + " · " : ""}{r.name}{r.qty != null ? " · " + fmtQ(r.qty) + " " + r.unit : ""}</b>
-                    <span style={{ fontSize: 11.5, fontVariantNumeric: "tabular-nums" }}>{t("chalu_bill.floor_head", { rate: "₹" + fmtR(r.rate), done: "₹" + fmtR(r.done_rate), pct })}</span>
-                  </div>
-                  <div style={{ overflowX: "auto" }}>
-                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11.5 }}>
-                      <thead><tr>
-                        <th style={thS}>{t("chalu_bill.stage")}</th><th style={{ ...thS, textAlign: "right" }}>{t("chalu_bill.per_unit", { unit: r.unit })}</th>
-                        <th style={{ ...thS, textAlign: "right" }}>{t("chalu_bill.done")}</th><th style={{ ...thS, textAlign: "right" }}>{t("chalu_bill.done_amt")}</th>
-                        <th style={{ ...thS, textAlign: "right" }}>{t("chalu_bill.rem_amt")}</th>
-                      </tr></thead>
-                      <tbody>
-                        {(r.groups.length ? r.groups : [{ name: null }]).map((g) => (
-                          <React.Fragment key={g.name || "_"}>
-                            {r.parts.filter((p) => (p.part_group || "") === (g.name || "")).map((p) => (
-                              <React.Fragment key={p.item_id}>
-                                <tr style={{ background: stBg(p.work.status), color: p.work.status === "pend" ? T.t3 : T.t1 }}>
-                                  <td style={{ ...tdS, boxShadow: "inset 3px 0 0 " + stBar(p.work.status) }}>
-                                    {p.part_name}{" "}
-                                    {p.since_prev > 0 && <span style={chip(T.redL, T.red)}>{t("chalu_bill.new_chip")}</span>}{" "}
-                                    {p.work.status !== "done" && <WorkChip line={p} />}{" "}
-                                    {p.work.source === "manual" && p.work.status === "done" && <WorkChip line={p} />}{" "}
-                                    {tickCell(p)}
-                                  </td>
-                                  <td style={tdN}>{fmtR(p.rate)}</td>
-                                  <td style={tdN}>{fmtR(p.rate * p.work.frac)}</td>
-                                  <td style={tdN}>{fmtC(p.done_amt)}</td>
-                                  <td style={tdN}>{fmtC(p.amount - p.done_amt)}</td>
-                                </tr>
-                                {tick === p.item_id && (
-                                  <tr><td colSpan={5} style={{ ...tdS, borderTop: "none" }}>
-                                    <TickBox line={p} estimateId={estimateId} onCancel={() => setTick(null)} onDone={async () => { setTick(null); await load(); }} />
-                                  </td></tr>
-                                )}
-                              </React.Fragment>
-                            ))}
-                            {g.name && r.groups.length > 1 && (
-                              <tr style={{ background: T.surfaceB, fontWeight: 800 }}>
-                                <td style={tdS}>{t("chalu_bill.group_total", { group: g.name })}</td>
-                                <td style={tdN}>{fmtR(g.rate)}</td><td style={tdN}>{fmtR(g.done_rate)}</td>
-                                <td style={tdN}>{fmtC(g.done_amt)}</td><td style={tdN}>{fmtC(g.rem_amt)}</td>
-                              </tr>
-                            )}
-                          </React.Fragment>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
 
       {/* Bill, payment, extra */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 12 }}>
