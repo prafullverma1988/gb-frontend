@@ -73,7 +73,12 @@ export default function LeadDesignDrawer({ lead, onClose, onShareClick }) {
   const [drawingType, setDrawingType] = useState("3D");
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState("Normal");
-  const [refImages, setRefImages] = useState([]); // array of {url, name, uploading?}
+  const [refImages, setRefImages] = useState([]); // array of {url, name, kind, uploading?}
+  // Lead ki files + note designer ko (13 Nov 2026) — pehle se sab chuni; jo nahi bhejni untick.
+  const [sendFiles, setSendFiles] = useState({});   // { file_id: true|false }
+  const [sendNote, setSendNote] = useState(true);
+  const leadFiles = lead?.attachments || [];
+  const leadNote = String(lead?.notes || "").trim();
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
 
@@ -145,18 +150,21 @@ export default function LeadDesignDrawer({ lead, onClose, onShareClick }) {
       setDescription("");
       setPriority("Normal");
       setRefImages([]);
+      setSendFiles(Object.fromEntries((lead?.attachments || []).map(f => [f.id, true])));
+      setSendNote(!!String(lead?.notes || "").trim());
       setErr("");
       loadRequests();
     }
   }, [open, lead?.id, lead?.name, loadRequests]);
 
+  // Photo, PDF, Word / Excel — sab (13 Nov 2026; pehle sirf photo). uploadManager PDF / doc raw me chadhata hai.
   const handleAddPhoto = (e) => {
     const files = Array.from(e.target.files || []);
     files.forEach(file => {
-      if (!file.type.startsWith("image/")) return;
+      const kind = (file.type || "").startsWith("image/") ? "image" : /\.pdf$/i.test(file.name || "") || file.type === "application/pdf" ? "pdf" : "file";
       const tempId = Date.now() + Math.random();
       // Add placeholder entry
-      setRefImages(prev => [...prev, { tempId, name: file.name, url: null, uploading: true }]);
+      setRefImages(prev => [...prev, { tempId, name: file.name, kind, url: null, uploading: true }]);
       uploadManager.add({
         file,
         folder: "gb_buildcon/lead-design-refs",
@@ -189,10 +197,13 @@ export default function LeadDesignDrawer({ lead, onClose, onShareClick }) {
         title: title.trim(),
         category,
         drawing_type: drawingType,
-        description: description.trim() || null,
+        description: [description.trim(), sendNote && leadNote ? t("lead_design.lead_ka_note_prefix") + " " + leadNote : ""].filter(Boolean).join("\n\n") || null,
         priority,
         requested_by: lead.assignedTo || "CRM",
-        reference_images: refImages.filter(r => r.url).map(r => ({ url: r.url, name: r.name })),
+        reference_images: [
+          ...refImages.filter(r => r.url).map(r => ({ url: r.url, name: r.name, kind: r.kind || "image" })),
+          ...leadFiles.filter(f => sendFiles[f.id]).map(f => ({ url: f.url, name: f.name, kind: f.kind })),
+        ],
       });
       if (res?.success === false) {
         setErr(res.message || "Save failed");
@@ -238,7 +249,7 @@ export default function LeadDesignDrawer({ lead, onClose, onShareClick }) {
                 <span>🎨</span>
                 <span>{mode === "form" ? t("lead_design.new_design_request") : t("lead_design.design_requests")}</span>
               </div>
-              <div style={{ fontSize: 11, color: "rgba(255,255,255,0.5)", marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t("lead_design.lead_name_mode", { name: lead?.name, mode: mode === "list" && requests.length > 0 && ` · ${drawingsCount} drawing${drawingsCount === 1 ? "" : "s"}, ${pendingCount} pending` })}</div>
+              <div style={{ fontSize: 11, color: "rgba(255,255,255,0.5)", marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t("lead_design.lead_name_mode", { name: lead?.name, mode: mode === "list" && requests.length > 0 ? ` · ${drawingsCount} drawing${drawingsCount === 1 ? "" : "s"}, ${pendingCount} pending` : "" })}</div>
             </div>
           </div>
           <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
@@ -324,7 +335,13 @@ export default function LeadDesignDrawer({ lead, onClose, onShareClick }) {
                   {/* Reference images */}
                   {refs.length > 0 && (
                     <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
-                      {refs.map((img, i) => (
+                      {refs.map((img, i) => (img.kind && img.kind !== "image") ? (
+                        <a key={i} href={img.url} target="_blank" rel="noreferrer" title={img.name || ""}
+                          style={{ height: 60, maxWidth: 180, padding: "0 10px", borderRadius: 6, border: `1px solid ${T.b1}`, background: T.surfaceB, display: "flex", alignItems: "center", gap: 5, textDecoration: "none", overflow: "hidden" }}>
+                          <span>{img.kind === "pdf" ? "📄" : "📎"}</span>
+                          <span style={{ fontSize: 11, color: T.blu, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{img.name || t("lead_design.file")}</span>
+                        </a>
+                      ) : (
                         <a key={i} href={img.url} target="_blank" rel="noreferrer"
                           style={{ width: 60, height: 60, borderRadius: 6, background: `url(${cld(img.url, "thumb")}) center/cover`, border: `1px solid ${T.b1}`, cursor: "pointer", display: "block" }} />
                       ))}
@@ -486,13 +503,40 @@ export default function LeadDesignDrawer({ lead, onClose, onShareClick }) {
                 onFocus={e => e.target.style.borderColor = T.blu} onBlur={e => e.target.style.borderColor = T.b1} />
             </div>
 
+            {/* Lead ki files + note designer ko (13 Nov 2026) */}
+            {(leadFiles.length > 0 || leadNote) && (
+              <div style={{ marginBottom: 14, padding: "10px 12px", background: T.surfaceB, border: `1px solid ${T.b1}`, borderRadius: 8 }}>
+                <label style={lbl}>{t("lead_design.lead_ka_bhejo")}</label>
+                {leadFiles.map(f => (
+                  <label key={f.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0", fontSize: 12, color: T.t2, cursor: "pointer" }}>
+                    <input type="checkbox" checked={!!sendFiles[f.id]} onChange={e => setSendFiles(p => ({ ...p, [f.id]: e.target.checked }))} />
+                    {f.kind === "image"
+                      ? <span style={{ width: 34, height: 34, borderRadius: 5, background: `url(${cld(f.url, "thumb")}) center/cover`, border: `1px solid ${T.b1}`, flexShrink: 0 }} />
+                      : <span>{f.kind === "pdf" ? "📄" : "📎"}</span>}
+                    <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{f.name || t("lead_design.file")}</span>
+                  </label>
+                ))}
+                {leadNote && (
+                  <label style={{ display: "flex", alignItems: "flex-start", gap: 8, padding: "6px 0 0", fontSize: 12, color: T.t2, cursor: "pointer" }}>
+                    <input type="checkbox" checked={sendNote} onChange={e => setSendNote(e.target.checked)} style={{ marginTop: 2 }} />
+                    <span><b>{t("lead_design.lead_ka_note_bhi")}</b> <span style={{ color: T.t3 }}>— “{leadNote.length > 140 ? leadNote.slice(0, 140) + "…" : leadNote}”</span></span>
+                  </label>
+                )}
+              </div>
+            )}
+
             {/* Reference photos */}
             <div style={{ marginBottom: 14 }}>
-              <label style={lbl}>{t("lead_design.reference_photos_refimages", { refImages: refImages.length > 0 && `(${refImages.length})` })}</label>
+              <label style={lbl}>{t("lead_design.reference_photos_refimages", { refImages: refImages.length > 0 ? `(${refImages.length})` : "" })}</label>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
                 {refImages.map(img => (
-                  <div key={img.tempId} style={{ position: "relative", width: 72, height: 72, borderRadius: 7, border: `1px solid ${T.b1}`, overflow: "hidden", background: T.surfaceB }}>
-                    {img.uploading ? (
+                  <div key={img.tempId} title={img.name || ""} style={{ position: "relative", width: 72, height: 72, borderRadius: 7, border: `1px solid ${T.b1}`, overflow: "hidden", background: T.surfaceB }}>
+                    {!img.uploading && img.kind && img.kind !== "image" ? (
+                      <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 2, padding: 4 }}>
+                        <span style={{ fontSize: 20 }}>{img.kind === "pdf" ? "📄" : "📎"}</span>
+                        <span style={{ fontSize: 9, color: T.t3, maxWidth: "100%", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{img.name}</span>
+                      </div>
+                    ) : img.uploading ? (
                       <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", color: T.t4, fontSize: 10, flexDirection: "column", gap: 2 }}>
                         <div style={{ width: 16, height: 16, border: `2px solid ${T.b1}`, borderTopColor: T.blu, borderRadius: "50%", animation: "spin .7s linear infinite" }} />
                         <span style={{ fontSize: 9 }}>{t("lead_design.uploading")}</span>
@@ -519,6 +563,16 @@ export default function LeadDesignDrawer({ lead, onClose, onShareClick }) {
                     <polyline points="21 15 16 10 5 21" />
                   </svg>
                  {t("common.add")}
+                </label>
+                <label style={{ width: 72, height: 72, borderRadius: 7, border: `1.5px dashed ${T.b2}`, background: T.surfaceB, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, color: T.t3, fontSize: 10, fontWeight: 600 }}>
+                  <input type="file" accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx,.csv,.ppt,.pptx,.dwg,.dxf" multiple onChange={handleAddPhoto} style={{ display: "none" }} />
+                  <span style={{ fontSize: 18 }}>📄</span>
+                 {t("lead_design.file")}
+                </label>
+                <label style={{ width: 72, height: 72, borderRadius: 7, border: `1.5px dashed ${T.b2}`, background: T.surfaceB, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, color: T.t3, fontSize: 10, fontWeight: 600 }}>
+                  <input type="file" accept="image/*" capture="environment" onChange={handleAddPhoto} style={{ display: "none" }} />
+                  <span style={{ fontSize: 18 }}>📷</span>
+                 {t("lead_design.camera")}
                 </label>
               </div>
               <div style={{ fontSize: 10.5, color: T.t4, marginTop: 5 }}>{t("lead_design.upload_reference_images_sketches_or_inspiration")}</div>

@@ -4363,6 +4363,10 @@ const dict = {
   "lead_design.to_ask_for_a_building_plan":                    "बिल्डिंग प्लान या 3D व्यू मांगने के लिए जो आप इस क्लाइंट के साथ शेयर कर सकें।",
   "lead_design.type":                                          "टाइप...",
   "lead_design.upload_reference_images_sketches_or_inspiration": "रेफरेंस इमेज, स्केच या इंस्पिरेशन फोटो अपलोड करो ताकि डिजाइनर को मदद मिले।",
+  "lead_design.lead_ka_bhejo":                                 "लीड की फ़ाइलें / नोट डिज़ाइनर को भेजो",
+  "lead_design.lead_ka_note_bhi":                              "लीड का नोट भी भेजो",
+  "lead_design.lead_ka_note_prefix":                           "लीड का नोट:",
+  "lead_design.camera":                                        "कैमरा",
   "lead_design.uploading":                                     "अपलोड हो रहा है",
   "lead_design.wait_for_photos_to_finish_uploading":           "फोटो अपलोड होने का इंतज़ार करो",
 

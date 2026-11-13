@@ -4364,6 +4364,10 @@ const dict = {
   "lead_design.to_ask_for_a_building_plan":                    "to ask for a building plan or 3D view that you can share with this client.",
   "lead_design.type":                                          "Type...",
   "lead_design.upload_reference_images_sketches_or_inspiration": "Upload reference images, sketches, or inspiration photos to help the designer.",
+  "lead_design.lead_ka_bhejo":                                 "Send the lead's files / note to the designer",
+  "lead_design.lead_ka_note_bhi":                              "Send the lead's note too",
+  "lead_design.lead_ka_note_prefix":                           "Lead note:",
+  "lead_design.camera":                                        "Camera",
   "lead_design.uploading":                                     "Uploading",
   "lead_design.wait_for_photos_to_finish_uploading":           "Wait for photos to finish uploading",
 
