@@ -61,6 +61,7 @@ const RMCModule          = lazyWithPreload("rmc",          () => import("./modul
 const MapLibraryModule   = lazyWithPreload("mapping",      () => import("./modules/MapLibraryModule"));
 const TownshipCRMModule  = lazyWithPreload("township",     () => import("./modules/TownshipCRMModule"));
 const ReportsModule      = lazyWithPreload("reports",      () => import("./modules/ReportsModule"));
+const ProfitDashboardModule = lazyWithPreload("profit",    () => import("./modules/ProfitDashboardModule"));
 const TendersModule      = lazyWithPreload("tenders",      () => import("./modules/TendersModule"));
 const ProjectDetailPage  = lazyWithPreload("projectDetail",() => import("./modules/ProjectDetailPage"));
 const ProjectsPage       = lazyWithPreload("projects",     () => import("./modules/ProjectsModule"));
@@ -120,6 +121,7 @@ const PREFETCH_LIST = [
   ["mapping",     MapLibraryModule,  "MapLibraryModule"],
   ["township",    TownshipCRMModule, "TownshipCRMModule"],
   ["reports",     ReportsModule,     "ReportsModule"],
+  ["profit",      ProfitDashboardModule, "ProfitDashboardModule"],
   ["saas",        SaaSModule,        "SaaSModule"],
   ["saas-leads",  SaaSLeadsModule,   "SaaSLeadsModule"],
 ];
@@ -262,6 +264,7 @@ const NAV_GROUPS=[
   ]},
   {section:"REPORTS",items:[
     {id:"reports",  get label() { return t("common.reports"); },    Icon:IcRep, sc:"B"},
+    {id:"profit",   get label() { return t("app.profit_dashboard"); }, Icon:IcRep},
     {id:"library",  get label() { return t("common.library"); },    Icon:IcLib, sc:"L"},
     {id:"settings", get label() { return t("common.settings"); },   Icon:IcSet, sc:"S"},
     {id:"saas",     get label() { return t("app.saas_admin"); }, Icon:IcStar,badge:"SA",bc:"#7C3AED"},
@@ -280,6 +283,8 @@ const MODULE_MAP_NAV={
   dashboard:"Dashboard",projects:"Projects",design:"Design",
   finance:"Finance",procurement:"Procurement",warehouse:"Store",
   reports:"Reports",library:"Library",settings:"Settings",
+  // Profit Dashboard = paisa ka vishleshan — server bhi "Financial Reports" VIEW maangta hai.
+  profit:"Financial Reports",
   crm:"CRM",mom:"MOM",payroll:"Team & HR",team:"Team & HR",
   township:"Township CRM",tenders:"Tenders",
   // Iske bina machinery kisi bhi non-admin ko dikh hi nahi sakti (isVisible
@@ -701,6 +706,7 @@ const SEARCH_ITEMS=[
   {id:"team",      get label() { return t("app.my_team"); }, icon:"M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2",                sc:"Alt+T", section:"Navigation"},
   {id:"mom",       label:"MOM",           icon:"M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7",    sc:"Alt+M", section:"Navigation"},
   {id:"reports",   get label() { return t("common.reports"); },       icon:"M9 17v-2m3 2v-4m3 4v-6M5 21h14a2 2 0 002-2V5",           sc:"Alt+B", section:"Reports"},
+  {id:"profit",    get label() { return t("app.profit_dashboard"); }, icon:"M3 17l6-6 4 4 8-8M14 7h7v7",                              section:"Reports"},
   {id:"library",   get label() { return t("common.library"); },       icon:"M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5",            sc:"Alt+L", section:"Reports"},
   {id:"settings",  get label() { return t("common.settings"); },      icon:"M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065zM15 12a3 3 0 11-6 0 3 3 0 016 0", sc:"Alt+S", section:"Reports"},
 ];
@@ -2341,6 +2347,7 @@ function App(){
     payroll:{title:t("common.payroll"),sub:t("app.staff_payments")},
     tenders:{title:t("app.tenders"),sub:t("app.bid_emd_bg_agreement_dlp")},
     reports:{title:t("common.reports"),sub:t("app.all_reports")},
+    profit:{title:t("app.profit_dashboard"),sub:t("app.profit_dashboard_sub")},
     library:{title:t("common.library"),sub:t("app.master_data")},
     settings:{title:t("common.settings"),sub:t("app.configuration")},
     profile:{title:t("app.my_profile"),sub:t("app.your_account")},
@@ -2379,6 +2386,7 @@ function App(){
     mapping:   guard("mapping", "Site Mapping",   <MapLibraryModule/>),
     township:  guard("township", "Township CRM",   <TownshipCRMModule/>),
     reports:   guard("reports",  "Reports",        <ReportsModule/>),
+    profit:    guard("profit",   "Profit Dashboard", <ProfitDashboardModule/>),
     tenders:   guard("tenders",  "Tenders",        <TendersModule onOpenProject={(pid,tab)=>handleNotifNav("projects","/projects/"+pid+"/"+(tab||"overview"))}/>),
     settings:  <SettingsModule/>,
     profile:   <SettingsModule initialSection="profile"/>,
