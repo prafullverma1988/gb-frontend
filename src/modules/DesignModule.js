@@ -715,7 +715,7 @@ export default function DesignModule() {
                   <div style={S.title}>{req.title}</div>
                   <div style={S.metaRow}>
                     {isHouse && req.lead_name ? (
-                      <span style={{color:T.pur,fontWeight:600}}>👤 {req.lead_name}</span>
+                      <span style={{color:T.pur,fontWeight:600}}>👤 {req.lead_name}{req.lead_files?.length ? <> · 📎 {req.lead_files.length}</> : null}</span>
                     ) : (
                       <span>{req.project_name||"—"}</span>
                     )}
@@ -723,6 +723,19 @@ export default function DesignModule() {
                     {req.due_date&&<span style={{color:new Date(req.due_date)<today?T.red:T.t4}}>{t("design.due_fmtdate", { fmtDate: fmtDate(req.due_date) })}</span>}
                   </div>
                   {req.description&&<div style={{fontSize:11.5,color:T.t2,marginTop:5}}>{req.description}</div>}
+                  {/* Lead ke attachments (CRM, 13 Nov 2026) — designer yahin se dekhe. */}
+                  {req.lead_files?.length>0&&(
+                    <div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:7}}>
+                      {req.lead_files.map(f=>(
+                        <a key={f.id} href={f.url} target="_blank" rel="noreferrer" title={f.name||""}
+                          style={{display:"flex",alignItems:"center",gap:5,maxWidth:200,padding:f.kind==="image"?0:"5px 9px",borderRadius:6,border:"1px solid "+T.b1,background:T.surfaceB,textDecoration:"none",overflow:"hidden"}}>
+                          {f.kind==="image"
+                            ?<img src={cld(f.url,"thumb")} alt="" style={{width:48,height:48,objectFit:"cover",display:"block"}}/>
+                            :<><span>{f.kind==="pdf"?"📄":"📎"}</span><span style={{fontSize:11,color:T.blu,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{f.name||t("design.lead_file")}</span></>}
+                        </a>
+                      ))}
+                    </div>
+                  )}
                   <div style={{display:"flex",gap:14,flexWrap:"wrap",marginTop:5}}>
                     {req.requested_by&&<Credit label={t("common.requested_by")} name={req.requested_by} time={req.created_at}/>}
                     {req.assigned_to&&<Credit label={t("design.assigned_to")} name={req.assigned_to}/>}

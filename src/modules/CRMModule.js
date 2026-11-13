@@ -11,7 +11,9 @@ import ImportFileModal from "../components/ImportFileModal";
 import { t } from "../i18n";
 import { companyName } from "../utils/companyName";
 import { todayISO, isoDate } from "../utils/today";
-import { can } from "../utils/perms";
+import { can, currentUser } from "../utils/perms";
+import uploadManager from "../utils/uploadManager";
+import { cld } from "../utils/cloudinary";
 
 // ── ICONS ──────────────────────────────────────────────────────────
 const Ic=({d,size=18,color="currentColor",sw=1.8,fill="none"})=>(
@@ -491,7 +493,7 @@ function KanbanBoard({leads,filters,onOpenLead,onMoveLead,onWhatsApp,onDesign,on
 }
 
 // ── LEAD DETAIL DRAWER ───────────────────────────────────────────
-function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab}){
+function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab,onFiles}){
   const [tab,setTab]=useState(initialTab||"overview");
   const [newNote,setNewNote]=useState("");
   const [history,setHistory]=useState(lead.followupHistory||[]);
@@ -855,6 +857,7 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab}
               <div style={{fontSize:9.5,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>{t("common.notes")}</div>
               <div style={{fontSize:12.5,color:T.t2,lineHeight:1.6}}>{lead.notes}</div>
             </div>}
+            <LeadFilesBox lead={lead} onFiles={onFiles}/>
             {lead.tags?.length>0&&<div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
               {lead.tags.map(tg=><span key={tg} style={{background:T.ambL,color:T.amb,fontSize:11,fontWeight:600,padding:"3px 10px",borderRadius:20,border:`1px solid ${T.ambM}`}}>{tg}</span>)}
             </div>}
@@ -3048,6 +3051,9 @@ function AddLeadModal({onClose,onSave,assignedToList,defaultStage}){
   });
   const [show,setShow]=useState(false);
   const upd=(k)=>e=>setForm(p=>({...p,[k]:e.target.value}));
+  // Attachments (13 Nov 2026) — File / Gallery / Camera, upload turant (background).
+  const [att,setAtt]=useState([]);
+  const attBusy=att.some(a=>a.uploading);
 
   // Library lookups for city + construction-type dropdowns.
   const [libCities, setLibCities] = useState([]);
@@ -3093,7 +3099,7 @@ function AddLeadModal({onClose,onSave,assignedToList,defaultStage}){
   // aur seedha Follow Up / Proposal / Converted me banate waqt bhi (server
   // POST par wahi niyam, CRM-05).
   const stageNeedsCityType = ["followup","proposal","converted"].includes(form.stage);
-  const canSave = form.name.trim() && form.phone.trim() && (!stageNeedsCityType || (form.cityId && form.constructionTypeId));
+  const canSave = form.name.trim() && form.phone.trim() && (!stageNeedsCityType || (form.cityId && form.constructionTypeId)) && !attBusy;
   return(<>
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:400,backdropFilter:"blur(1px)"}}/>
     <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:T.surface,borderRadius:14,width:"min(560px,95vw)",maxHeight:"90vh",display:"flex",flexDirection:"column",boxShadow:"0 24px 64px rgba(0,0,0,0.25)",zIndex:401,overflow:"hidden",fontFamily:"'Segoe UI',sans-serif"}}>
@@ -3175,6 +3181,10 @@ function AddLeadModal({onClose,onSave,assignedToList,defaultStage}){
             style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",resize:"vertical"}}
             onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
         </div>
+        <div style={{marginBottom:10}}>
+          <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>{t("crm.attachments")}</label>
+          <LeadAttachPicker items={att} setItems={setAtt}/>
+        </div>
         <div>
           <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>{t("crm.tags_comma_separated")}</label>
           <input value={form.tags} onChange={upd("tags")} placeholder={t("crm.e_g_hot_3bhk_premium")}
@@ -3183,13 +3193,114 @@ function AddLeadModal({onClose,onSave,assignedToList,defaultStage}){
       </div>
       <div style={{padding:"12px 18px",borderTop:`1px solid ${T.b1}`,background:T.surfaceB,display:"flex",gap:8,flexShrink:0}}>
         <button onClick={onClose} style={{flex:1,padding:"10px",borderRadius:7,background:T.surface,border:`1px solid ${T.b1}`,fontSize:12.5,fontWeight:600,color:T.t3,cursor:"pointer"}}>{t("common.cancel")}</button>
-        <button onClick={()=>{if(canSave){onSave(form);onClose();}}} disabled={!canSave}
+        <button onClick={()=>{if(canSave){onSave({...form,attachments:att.filter(a=>a.url).map(({url,name,kind,size})=>({url,name,kind,size}))});onClose();}}} disabled={!canSave} title={attBusy?t("crm.attach_upload_ho_rahi"):""}
           style={{flex:2,padding:"10px",borderRadius:7,background:canSave?T.blu:T.b1,color:canSave?"white":T.t4,fontSize:12.5,fontWeight:700,border:"none",cursor:canSave?"pointer":"not-allowed",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
           <IcAdd size={14} color={canSave?"white":T.t4}/> {t("crm.add_to_pipeline")}
         </button>
       </div>
     </div>
   </>);
+}
+
+// ── Lead ke attachments (13 Nov 2026, Prafull) ─────────────────────
+// "New lead me file, gallery, camera — note / description attach ho to alag se
+// likhna na pade, designer attach file dekh ke bhi kaam kar sake." File seedha
+// Cloudinary (uploadManager — PDF / Word / Excel / DWG raw, photo image);
+// server sirf link rakhta hai (crm_lead_files). Phone par Camera = browser ka
+// camera (capture), desktop par wahi file picker.
+const LEAD_DOC_ACCEPT="image/*,application/pdf,.doc,.docx,.xls,.xlsx,.csv,.ppt,.pptx,.dwg,.dxf";
+const leadFileKind=(f)=>(f.type||"").startsWith("image/")?"image":/\.pdf$/i.test(f.name||"")||f.type==="application/pdf"?"pdf":"file";
+const leadFileIcon=(k)=>k==="pdf"?"📄":k==="image"?"🖼":"📎";
+function LeadAttachPicker({items,setItems}){
+  const fileRef=useRef(null), galRef=useRef(null), camRef=useRef(null);
+  const add=(list)=>{
+    Array.from(list||[]).slice(0,30).forEach((file)=>{
+      const tempId=Date.now()+Math.random();
+      const kind=leadFileKind(file);
+      setItems(p=>[...p,{tempId,name:file.name,kind,size:file.size,uploading:true,url:null,local:kind==="image"?URL.createObjectURL(file):null}]);
+      uploadManager.add({file,folder:"gb_buildcon/crm-leads",label:t("crm.attach_upload_label",{name:file.name}),
+        onDone:(url)=>setItems(p=>p.map(a=>a.tempId===tempId?{...a,url,uploading:false}:a)),
+        onError:()=>{setItems(p=>p.filter(a=>a.tempId!==tempId));window.toast?.error?.(t("crm.attach_upload_fail",{name:file.name}));},
+      });
+    });
+  };
+  const btn={flex:1,padding:"8px 6px",borderRadius:7,border:`1.5px dashed ${T.b2}`,background:T.surface,color:T.blu,fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"};
+  const pick=(ref)=>(e)=>{add(e.target.files);e.target.value="";};
+  return(
+    <div>
+      <input ref={fileRef} type="file" multiple accept={LEAD_DOC_ACCEPT} style={{display:"none"}} onChange={pick(fileRef)}/>
+      <input ref={galRef} type="file" multiple accept="image/*" style={{display:"none"}} onChange={pick(galRef)}/>
+      <input ref={camRef} type="file" accept="image/*" capture="environment" style={{display:"none"}} onChange={pick(camRef)}/>
+      <div style={{display:"flex",gap:6}}>
+        <button type="button" style={btn} onClick={()=>fileRef.current?.click()}>📄 {t("crm.attach_file")}</button>
+        <button type="button" style={btn} onClick={()=>galRef.current?.click()}>🖼 {t("crm.attach_gallery")}</button>
+        <button type="button" style={btn} onClick={()=>camRef.current?.click()}>📷 {t("crm.attach_camera")}</button>
+      </div>
+      {items.length>0&&(
+        <div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:8}}>
+          {items.map(a=>(
+            <div key={a.tempId} title={a.name} style={{position:"relative",display:"flex",alignItems:"center",gap:6,maxWidth:200,padding:a.kind==="image"?0:"5px 24px 5px 8px",borderRadius:7,border:`1px solid ${T.b1}`,background:T.surfaceB,overflow:"hidden"}}>
+              {a.kind==="image"
+                ?<img src={a.url?cld(a.url,"thumb"):a.local} alt="" style={{width:56,height:56,objectFit:"cover",display:"block",opacity:a.uploading?.5:1}}/>
+                :<><span style={{fontSize:15}}>{leadFileIcon(a.kind)}</span><span style={{fontSize:11.5,color:T.t2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",opacity:a.uploading?.5:1}}>{a.name}</span></>}
+              {a.uploading&&<span style={{position:"absolute",left:3,bottom:2,fontSize:9,fontWeight:700,color:T.blu}}>…</span>}
+              <button type="button" aria-label={t("common.remove")} onClick={()=>setItems(p=>p.filter(x=>x.tempId!==a.tempId))}
+                style={{position:"absolute",top:2,right:2,width:18,height:18,borderRadius:9,border:"none",background:"rgba(0,0,0,.55)",color:"white",fontSize:11,lineHeight:"18px",padding:0,cursor:"pointer"}}>×</button>
+            </div>
+          ))}
+        </div>
+      )}
+      <div style={{fontSize:10.5,color:T.t4,marginTop:5}}>{t("crm.attach_hint")}</div>
+    </div>
+  );
+}
+// Drawer ka box — dekho (naye tab me), aur lagao, hatao (lagane wala ya CRM Edit).
+function LeadFilesBox({lead,onFiles}){
+  const [items,setItems]=useState([]);   // naye, upload ho rahe
+  const [busy,setBusy]=useState(false);
+  const files=lead.attachments||[];
+  const me=Number(currentUser().id)||0;
+  const canAdd=can("CRM","create")||can("CRM","edit");
+  const pending=items.filter(a=>a.url&&!a.uploading);
+  useEffect(()=>{
+    if(!pending.length||busy) return;
+    setBusy(true);
+    api.post("/crm/leads/"+lead.id+"/attachments",{attachments:pending.map(({url,name,kind,size})=>({url,name,kind,size}))})
+      .then(r=>{
+        if(r?.success){onFiles&&onFiles(lead.id,r.data||[]);setItems(p=>p.filter(a=>!pending.includes(a)));}
+        else{window.toast?.error?.(r?.message||t("crm.attach_nahi_judi"));setItems(p=>p.filter(a=>!pending.includes(a)));}
+      })
+      .finally(()=>setBusy(false));
+  },[pending.length,busy]); // eslint-disable-line react-hooks/exhaustive-deps
+  const remove=async(f)=>{
+    if(!window.confirm(t("crm.attach_hatana_hai",{name:f.name||leadFileIcon(f.kind)}))) return;
+    const r=await api.delete("/crm/leads/"+lead.id+"/attachments/"+f.id);
+    if(r?.success) onFiles&&onFiles(lead.id,r.data||[]); else window.toast?.error?.(r?.message||t("crm.attach_nahi_hati"));
+  };
+  if(!files.length&&!canAdd) return null;
+  return(
+    <div style={{padding:"10px 13px",background:T.surface,border:`1px solid ${T.b1}`,borderRadius:7,marginBottom:12}}>
+      <div style={{fontSize:9.5,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",marginBottom:6}}>{t("crm.attachments_n",{n:files.length})}</div>
+      {files.length>0&&(
+        <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:canAdd?8:0}}>
+          {files.map(f=>(
+            <div key={f.id} style={{position:"relative"}} title={(f.name||"")+(f.uploaded_by_name?" · "+f.uploaded_by_name:"")}>
+              <a href={f.url} target="_blank" rel="noreferrer" style={{display:"flex",alignItems:"center",gap:6,maxWidth:220,padding:f.kind==="image"?0:"6px 26px 6px 9px",borderRadius:7,border:`1px solid ${T.b1}`,background:T.surfaceB,textDecoration:"none",overflow:"hidden"}}>
+                {f.kind==="image"
+                  ?<img src={cld(f.url,"thumb")} alt="" style={{width:64,height:64,objectFit:"cover",display:"block"}}/>
+                  :<><span style={{fontSize:15}}>{leadFileIcon(f.kind)}</span><span style={{fontSize:11.5,color:T.blu,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{f.name||t("crm.attach_file")}</span></>}
+              </a>
+              {(Number(f.uploaded_by)===me||can("CRM","edit"))&&(
+                <button type="button" aria-label={t("common.remove")} onClick={()=>remove(f)}
+                  style={{position:"absolute",top:2,right:2,width:18,height:18,borderRadius:9,border:"none",background:"rgba(0,0,0,.55)",color:"white",fontSize:11,lineHeight:"18px",padding:0,cursor:"pointer"}}>×</button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+      {canAdd&&<LeadAttachPicker items={items} setItems={setItems}/>}
+    </div>
+  );
 }
 
 // ── SELECT FINAL QUOTATION (inline) ──────────────────────────────
@@ -4495,6 +4606,7 @@ function CRMModule(){
         stage:form.stage,priority:form.priority,
         contactDate:form.contactDate||null,notes:form.notes||null,
         tags:form.tags?form.tags.split(",").map(x=>x.trim()).filter(Boolean):[],
+        attachments:form.attachments||[],
       });
       if(res.success){
         loadLeads(); // Reload from API
@@ -4678,6 +4790,7 @@ function CRMModule(){
           allLeads={leads}
           onClose={()=>setSelLead(null)}
           onUpdate={updateLead}
+          onFiles={(id,list)=>{setLeads(p=>p.map(l=>l.id===id?{...l,attachments:list}:l));setSelLead(p=>p&&p.id===id?{...p,attachments:list}:p);}}
           onWhatsApp={(l)=>{setWaLead(l);setSelLead(null);}}
           initialTab={selLead._openTab||"overview"}
         />

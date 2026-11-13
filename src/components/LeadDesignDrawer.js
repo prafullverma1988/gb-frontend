@@ -262,6 +262,22 @@ export default function LeadDesignDrawer({ lead, onClose, onShareClick }) {
         {/* ─── LIST MODE ─────────────────────────────────────────────── */}
         {mode === "list" && (
           <div style={{ flex: 1, overflowY: "auto", padding: "12px 14px" }}>
+            {/* Lead ke attachments (CRM, 13 Nov 2026) — designer drawing banate waqt yahin dekhe. */}
+            {lead?.attachments?.length > 0 && (
+              <div style={{ background: T.surfaceB, border: `1px solid ${T.b1}`, borderRadius: 8, padding: "9px 11px", marginBottom: 10 }}>
+                <div style={{ fontSize: 9.5, fontWeight: 700, color: T.t4, textTransform: "uppercase", letterSpacing: ".4px", marginBottom: 6 }}>{t("lead_design.lead_ki_files", { n: lead.attachments.length })}</div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                  {lead.attachments.map(f => (
+                    <a key={f.id} href={f.url} target="_blank" rel="noreferrer" title={f.name || ""}
+                      style={{ display: "flex", alignItems: "center", gap: 5, maxWidth: 200, padding: f.kind === "image" ? 0 : "5px 9px", borderRadius: 6, border: `1px solid ${T.b1}`, background: T.surface, textDecoration: "none", overflow: "hidden" }}>
+                      {f.kind === "image"
+                        ? <img src={cld(f.url, "thumb")} alt="" style={{ width: 52, height: 52, objectFit: "cover", display: "block" }} />
+                        : <><span>{f.kind === "pdf" ? "📄" : "📎"}</span><span style={{ fontSize: 11, color: T.blu, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{f.name || t("lead_design.file")}</span></>}
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
             {loading ? (
               <div style={{ padding: "32px", textAlign: "center", color: T.t4, fontSize: 12 }}>{t("common.loading")}</div>
             ) : requests.length === 0 ? (
