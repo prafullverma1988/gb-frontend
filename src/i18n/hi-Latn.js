@@ -16580,6 +16580,18 @@ const dict = {
   "profit.got_structure_psf": "Mila structure ₹/sq ft",
   "profit.got_finishing_psf": "Mila finishing ₹/sq ft",
   "profit.k_margin_no_invoice": "Abhi koi invoice nahi bana",
+  "estimate_builder.item_edit_title": "Item edit karo",
+  "estimate_builder.item_edit_sub": "Library me: {name} · yahan ka badlaav sirf is estimate me",
+  "estimate_builder.item_edit_btn": "Item edit karo (naam, unit, rate)",
+  "estimate_builder.item_lib_value": "Library: {v}",
+  "estimate_builder.item_edit_total": "Rate ₹{rate} × {qty} = ₹{total}",
+  "estimate_builder.item_also_library": "Library me bhi save karo",
+  "estimate_builder.item_also_library_hint": "Naam / unit library ke item me badlega — har package me wahi dikhega. Rate / add-on / description sirf is package ke is section me. Pehle bane estimate nahi badlenge.",
+  "estimate_builder.item_lib_failed": "Library me save nahi hua: {msg} — badlaav is estimate me laga hai",
+  "estimate_builder.item_lib_not_found": "Library me ye item nahi mila",
+  "estimate_builder.item_remove_btn": "Is estimate se hatao",
+  "estimate_builder.item_restore_btn": "Wapas lao",
+  "estimate_builder.item_removed_chip": "Hata diya",
 };
 
 export default dict;

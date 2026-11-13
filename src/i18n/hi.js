@@ -16577,6 +16577,18 @@ const dict = {
   "profit.got_structure_psf": "मिला स्ट्रक्चर ₹/sq ft",
   "profit.got_finishing_psf": "मिला फिनिशिंग ₹/sq ft",
   "profit.k_margin_no_invoice": "अभी कोई इनवॉइस नहीं बना",
+  "estimate_builder.item_edit_title": "आइटम एडिट करो",
+  "estimate_builder.item_edit_sub": "लाइब्रेरी में: {name} · यहाँ का बदलाव सिर्फ़ इस एस्टीमेट में",
+  "estimate_builder.item_edit_btn": "आइटम एडिट करो (नाम, यूनिट, रेट)",
+  "estimate_builder.item_lib_value": "लाइब्रेरी: {v}",
+  "estimate_builder.item_edit_total": "रेट ₹{rate} × {qty} = ₹{total}",
+  "estimate_builder.item_also_library": "लाइब्रेरी में भी सेव करो",
+  "estimate_builder.item_also_library_hint": "नाम / यूनिट लाइब्रेरी के आइटम में बदलेगा — हर पैकेज में वही दिखेगा। रेट / ऐड-ऑन / विवरण सिर्फ़ इस पैकेज के इस सेक्शन में। पहले बने एस्टीमेट नहीं बदलेंगे।",
+  "estimate_builder.item_lib_failed": "लाइब्रेरी में सेव नहीं हुआ: {msg} — बदलाव इस एस्टीमेट में लगा है",
+  "estimate_builder.item_lib_not_found": "लाइब्रेरी में यह आइटम नहीं मिला",
+  "estimate_builder.item_remove_btn": "इस एस्टीमेट से हटाओ",
+  "estimate_builder.item_restore_btn": "वापस लाओ",
+  "estimate_builder.item_removed_chip": "हटा दिया",
 };
 
 export default dict;

@@ -16578,6 +16578,18 @@ const dict = {
   "profit.got_structure_psf": "Structure achieved per sq ft",
   "profit.got_finishing_psf": "Finishing achieved per sq ft",
   "profit.k_margin_no_invoice": "No invoice raised yet",
+  "estimate_builder.item_edit_title": "Edit item",
+  "estimate_builder.item_edit_sub": "In library: {name} · changes here apply to this estimate only",
+  "estimate_builder.item_edit_btn": "Edit item (name, unit, rate)",
+  "estimate_builder.item_lib_value": "Library: {v}",
+  "estimate_builder.item_edit_total": "Rate ₹{rate} × {qty} = ₹{total}",
+  "estimate_builder.item_also_library": "Also save to library",
+  "estimate_builder.item_also_library_hint": "Name / unit change on the library item — every package will show it. Rate / add-on / description change only in this section of this package. Estimates already made stay as they are.",
+  "estimate_builder.item_lib_failed": "Could not save to library: {msg} — the change is applied to this estimate",
+  "estimate_builder.item_lib_not_found": "This item was not found in the library",
+  "estimate_builder.item_remove_btn": "Remove from this estimate",
+  "estimate_builder.item_restore_btn": "Bring back",
+  "estimate_builder.item_removed_chip": "Removed",
 };
 
 export default dict;

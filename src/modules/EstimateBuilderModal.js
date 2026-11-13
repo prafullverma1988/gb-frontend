@@ -26,6 +26,12 @@ import { partsFromTemplate, splitLineByParts } from "./tabs/StageBilling";
 
 const inrIN = (n) => Math.round(Number(n) || 0).toLocaleString("en-IN");
 const isSet = (v) => v !== null && v !== undefined && v !== "";
+// Is estimate ke item override (library nahi badalti). Saari key ek jagah —
+// pehle patchItem qty_override nahi dekhta tha, to base saaf karte hi qty bhi
+// chali jaati thi. name/unit/removed 14 Nov 2026 se (item ka poora edit).
+const OV_KEYS = ["base_rate_override", "add_on_override", "description_override", "qty_override",
+                 "name_override", "unit_override", "removed"];
+const ovEmpty = (o) => OV_KEYS.every(k => !isSet(o[k]) || o[k] === false);
 
 export default function EstimateBuilderModal({
   project,                    // { id, name, city_id, construction_type_id, city_name, construction_type_name, client_name, ... }
@@ -219,6 +225,8 @@ export default function EstimateBuilderModal({
   const [allWorkCats,     setAllWorkCats]     = useState([]);
   const [allBoqItems,     setAllBoqItems]     = useState([]);
   const [allUoms,         setAllUoms]         = useState([]);
+  // Item edit modal (naam / unit / rate / description) — null = band
+  const [itemEdit,        setItemEdit]        = useState(null);
   useEffect(() => {
     (async () => {
       try {
@@ -611,10 +619,8 @@ export default function EstimateBuilderModal({
       const next = { ...cur };
       if (val === "" || val === null) delete next.qty_override;
       else next.qty_override = val;
-      const allEmpty = !isSet(next.base_rate_override) && !isSet(next.add_on_override)
-                    && !isSet(next.description_override) && !isSet(next.qty_override);
       const nextItems = { ...items };
-      if (allEmpty) delete nextItems[itemId];
+      if (ovEmpty(next)) delete nextItems[itemId];
       else nextItems[itemId] = next;
       return {
         sections: {
@@ -668,11 +674,8 @@ export default function EstimateBuilderModal({
     const cur = items[itemId] || {};
     const nextItem = { ...cur, ...patch };
     // Drop entry if all overrides cleared (cleaner JSON)
-    const allEmpty = !isSet(nextItem.base_rate_override)
-                  && !isSet(nextItem.add_on_override)
-                  && !isSet(nextItem.description_override);
     const nextItems = { ...items };
-    if (allEmpty) delete nextItems[itemId];
+    if (ovEmpty(nextItem)) delete nextItems[itemId];
     else nextItems[itemId] = nextItem;
     return {
       sections: {
@@ -687,11 +690,80 @@ export default function EstimateBuilderModal({
       },
     };
   });
-  const resetItemRow = (sid, cid, itemId) => patchItem(sid, cid, itemId, {
-    base_rate_override: null,
-    add_on_override: null,
-    description_override: null,
+  const resetItemRow = (sid, cid, itemId) =>
+    patchItem(sid, cid, itemId, Object.fromEntries(OV_KEYS.map(k => [k, null])));
+
+  // ── ITEM EDIT (14 Nov 2026) — Library jaisa poora edit, builder ke andar ──
+  // Default: sirf is estimate me (override). "Library me bhi" tick ho to naam /
+  // unit library ke item (boq_items) me, rate / add-on / description is package
+  // ke is section me (package_city_rates) — phir is item ki override hat jaati
+  // hai kyunki library ab wahi bolti hai. Pehle bane estimate nahi badalte.
+  const openItemEdit = (sec, cat, it) => setItemEdit({
+    sid: sec.id, cid: cat.id, itemId: it.item_id, perItem: !!sec.per_item_qty,
+    canLib: !!selectedPackage && !sec._scratch, lib: false, saving: false, row: it,
+    form: { name: it.name || "", unit: it.unit || "", base: String(it.base ?? ""), addOn: String(it.addOn ?? ""),
+            desc: it.desc || "", qty: String(it.qty ?? "") },
   });
+  const saveItemEdit = async () => {
+    const e = itemEdit;
+    if (!e || e.saving) return;
+    const f = e.form, r = e.row;
+    const nm = (f.name || "").trim(), un = (f.unit || "").trim(), ds = (f.desc || "").trim();
+    const num = (v) => (v === "" || v === null || v === undefined) ? null : (Number(v) || 0);
+    const b = num(f.base), a = num(f.addOn), q = num(f.qty);
+    const patch = {
+      name_override:        nm && nm !== r.masterName ? nm : null,
+      unit_override:        un && un !== r.masterUnit ? un : null,
+      base_rate_override:   b !== null && b !== r.masterBase  ? String(b) : null,
+      add_on_override:      a !== null && a !== r.masterAddOn ? String(a) : null,
+      description_override: ds && ds !== (r.masterDesc || "") ? ds : null,
+    };
+    if (e.perItem) patch.qty_override = q !== null && q !== r.masterQty ? String(q) : null;
+    patchItem(e.sid, e.cid, e.itemId, patch);
+    if (!e.lib || !e.canLib) { setItemEdit(null); return; }
+
+    setItemEdit(p => ({ ...p, saving: true }));
+    try {
+      const newName = nm || r.masterName, newUnit = un || r.masterUnit;
+      if (newName !== r.masterName || newUnit !== r.masterUnit) {
+        const master = allBoqItems.find(x => x.id === e.itemId);
+        if (!master) throw new Error(t("estimate_builder.item_lib_not_found"));
+        const res = await api.put("/library/boq-items/" + master.id, {
+          name: newName, category: master.category || "", unit: newUnit,
+          base_rate: Number(master.base_rate) || 0, description: master.description || "",
+        });
+        if (!res?.success) throw new Error(res?.message || "");
+        setAllBoqItems(p => p.map(x => x.id === master.id ? { ...x, name: newName, unit: newUnit } : x));
+      }
+      const newBase = b !== null ? b : r.masterBase, newAdd = a !== null ? a : r.masterAddOn;
+      const newDesc = ds || r.masterDesc || "";
+      if (newBase !== r.masterBase || newAdd !== r.masterAddOn || newDesc !== (r.masterDesc || "")) {
+        // Section ki saari line wapas bhejni padti hai (bulk = is section ki
+        // purani line hata kar nayi) — baaki line jaisi thi waisi, qty bhi.
+        const items = (pkgItems[e.sid] || []).map(x => {
+          const mine = x.item_id === e.itemId;
+          return {
+            item_id: x.item_id, category_id: x.category_id,
+            base_rate:   mine ? newBase : (Number(x.rate) || 0) - (Number(x.add_on_rate) || 0),
+            add_on_rate: mine ? newAdd  : Number(x.add_on_rate) || 0,
+            description: mine ? newDesc : (x.description || ""),
+            qty: x.qty,
+          };
+        });
+        const res = await api.post("/library/rate-matrix/bulk", {
+          package_id: selectedPackage.id, city_id: proj.city_id, structure_id: e.sid, items,
+        });
+        if (!res?.success) throw new Error(res?.message || "");
+      }
+      await refreshPackageTree();
+      patchItem(e.sid, e.cid, e.itemId, { name_override: null, unit_override: null, base_rate_override: null,
+                                          add_on_override: null, description_override: null });
+      setItemEdit(null);
+    } catch (er) {
+      setItemEdit(p => p && ({ ...p, saving: false }));
+      alert(t("estimate_builder.item_lib_failed", { msg: er?.message || "" }));
+    }
+  };
 
   // ── Live compute (mirrors backend computeQuotationTotals) ──────
   const breakdown = useMemo(() => {
@@ -721,6 +793,12 @@ export default function EstimateBuilderModal({
           const masterAddOn = Number(it.add_on_rate) || 0;
           const masterDesc  = it.description || "";
           const masterQty   = Number(it.qty) || 0;
+          // rate-matrix GET boq_items join se item_name / item_unit deta hai
+          const masterName  = it.item_name || it.name || ("Item #" + it.item_id);
+          const masterUnit  = it.item_unit || it.unit || "";
+          const name    = isSet(ov.name_override) ? String(ov.name_override) : masterName;
+          const unit    = isSet(ov.unit_override) ? String(ov.unit_override) : masterUnit;
+          const removed = !!ov.removed;   // "Is estimate se hatao" — total aur save dono se bahar
           const base  = isSet(ov.base_rate_override)   ? Number(ov.base_rate_override)   || 0 : masterBase;
           const addOn = isSet(ov.add_on_override)      ? Number(ov.add_on_override)      || 0 : masterAddOn;
           const desc  = isSet(ov.description_override) ? ov.description_override            : masterDesc;
@@ -729,12 +807,15 @@ export default function EstimateBuilderModal({
           const effQty = perItem
             ? (isSet(ov.qty_override) ? Number(ov.qty_override) || 0 : masterQty)
             : cArea;
-          const total = (base + addOn) * effQty;
-          cBase += base; cAddOn += addOn; cItemTotalSum += total;
+          const total = removed ? 0 : (base + addOn) * effQty;
+          if (!removed) { cBase += base; cAddOn += addOn; cItemTotalSum += total; }
           return {
             item_id: it.item_id, base, addOn, desc, qty: effQty, total,
             masterBase, masterAddOn, masterDesc, masterQty,
+            name, unit, masterName, masterUnit, removed,
+            nameEdited: name !== masterName, unitEdited: unit !== masterUnit,
             hasOverride: base !== masterBase || addOn !== masterAddOn || desc !== masterDesc
+                       || name !== masterName || unit !== masterUnit || removed
                        || (perItem && isSet(ov.qty_override) && Number(ov.qty_override) !== masterQty),
           };
         });
@@ -781,7 +862,7 @@ export default function EstimateBuilderModal({
       // Fix hisse (stage billing, 30 Oct 2026): library item par hisse tay hon
       // (Septic tank: Brick work + plaster 60 · Slab casting 40) to uski line
       // hisson me khulti hai — har hissa apne task se bill hota hai.
-      const partIds = [...new Set(breakdown.sections.flatMap(sec => sec.categories.flatMap(cat => cat.items.map(it => it.item_id))))]
+      const partIds = [...new Set(breakdown.sections.flatMap(sec => sec.categories.flatMap(cat => cat.items.filter(it => !it.removed).map(it => it.item_id))))]
         .filter(id => Number((allBoqItems.find(b => b.id === id) || {}).stage_count) > 0);
       const partsById = {};
       await Promise.all(partIds.map(async id => {
@@ -795,11 +876,13 @@ export default function EstimateBuilderModal({
         const itemsPayload = [];
         for (const cat of sec.categories) {
           for (const it of cat.items) {
-            // Skip zero-everything rows
+            // Skip zero-everything rows + "Is estimate se hatao" wale
+            if (it.removed) continue;
             if (!it.base && !it.addOn && !it.qty) continue;
             const masterItem = allBoqItems.find(b => b.id === it.item_id);
-            const itemName = masterItem?.name || ("Item #" + it.item_id);
-            const itemUnit = masterItem?.unit || (sec.unit === "lump_sum" ? "Lump Sum" : "Sq.Ft");
+            // Builder me badla naam / unit (sirf is estimate ke liye) pehle
+            const itemName = (it.nameEdited && it.name.trim()) || masterItem?.name || it.masterName || ("Item #" + it.item_id);
+            const itemUnit = (it.unitEdited && it.unit.trim()) || masterItem?.unit || (sec.unit === "lump_sum" ? "Lump Sum" : "Sq.Ft");
             const line = {
               description: cat.name ? `[${cat.name}] ${itemName}` + (it.desc ? ` — ${it.desc}` : "")
                                     : itemName + (it.desc ? ` — ${it.desc}` : ""),
@@ -1341,7 +1424,7 @@ export default function EstimateBuilderModal({
                                     <th style={{ padding:"7px 12px", textAlign:"left", fontSize:10, fontWeight:700, color:"#64748B", textTransform:"uppercase" }}>{t("common.description")}</th>
                                     <th style={{ padding:"7px 12px", textAlign:"right", fontSize:10, fontWeight:700, color:COL_TEAL, textTransform:"uppercase", width:70 }}>{t("common.area")}</th>
                                     <th style={{ padding:"7px 12px", textAlign:"right", fontSize:10, fontWeight:700, color:COL_GREEN, textTransform:"uppercase", width:110 }}>{t("common.total")}</th>
-                                    <th style={{ width:36 }}/>
+                                    <th style={{ width: canEdit ? 84 : 36 }}/>
                                   </tr>
                                 </thead>
                                 <tbody>
@@ -1349,27 +1432,30 @@ export default function EstimateBuilderModal({
                                     <tr><td colSpan={7} style={{ padding:"12px", textAlign:"center", color:"#9CA3AF", fontSize:12 }}>{t("common.no_items")}</td></tr>
                                   )}
                                   {cat.items.map((it, idx) => {
-                                    // Look up master item name from boqItems? We don't have it here.
-                                    // Instead use the pcr row's item_id mapping — we'd need to join.
-                                    // Pull name from pkgItems master rows via a quick find.
-                                    const pcr = (pkgItems[sec.id] || []).find(p => p.item_id === it.item_id) || {};
-                                    const itemName = pcr.item_name || pcr.name || ("Item #" + it.item_id);
-                                    const itemUnit = pcr.unit || "—";
+                                    // Naam / unit breakdown se — builder me badla ho to wahi
+                                    // (pehle pcr.unit padhte the jo column hai hi nahi → "—")
+                                    const itemName = it.name;
+                                    const itemUnit = it.unit || "—";
+                                    const rowEdit  = canEdit && !it.removed;
                                     const overrideEntry = measurements.sections[sec.id]?.categories?.[cat.id]?.items?.[it.item_id] || {};
                                     const baseVal  = isSet(overrideEntry.base_rate_override)   ? overrideEntry.base_rate_override   : "";
                                     const addOnVal = isSet(overrideEntry.add_on_override)      ? overrideEntry.add_on_override      : "";
                                     const descVal  = isSet(overrideEntry.description_override) ? overrideEntry.description_override : "";
                                     return (
-                                      <tr key={it.item_id} style={{ background: it.hasOverride ? "#FFFBEB" : (idx % 2 === 0 ? "white" : "#FAFAFA"), borderBottom:"1px solid #F3F4F6" }}>
-                                        <td style={{ padding:"8px 12px", fontWeight:600, fontSize:12.5, color:"#0F172A" }}>
-                                          {itemName}
-                                          {it.hasOverride && (
+                                      <tr key={it.item_id} style={{ background: it.removed ? "#F8FAFC" : it.hasOverride ? "#FFFBEB" : (idx % 2 === 0 ? "white" : "#FAFAFA"),
+                                                                     borderBottom:"1px solid #F3F4F6", opacity: it.removed ? 0.6 : 1 }}>
+                                        <td style={{ padding:"8px 12px", fontWeight:600, fontSize:12.5, color: it.removed ? "#94A3B8" : "#0F172A" }}
+                                          title={it.nameEdited ? t("estimate_builder.item_lib_value", { v: it.masterName }) : undefined}>
+                                          <span style={{ textDecoration: it.removed ? "line-through" : "none" }}>{itemName}</span>
+                                          {it.removed ? (
+                                            <span style={{ marginLeft:6, padding:"1px 6px", fontSize:9.5, fontWeight:700, background:"#94A3B8", color:"white", borderRadius:3 }}>{t("estimate_builder.item_removed_chip")}</span>
+                                          ) : it.hasOverride && (
                                             <span style={{ marginLeft:6, padding:"1px 6px", fontSize:9.5, fontWeight:700, background:COL_AMBER, color:"white", borderRadius:3 }}>EDITED</span>
                                           )}
-                                          <div style={{ fontSize:10, color:"#94A3B8", marginTop:1 }}>{itemUnit}</div>
+                                          <div style={{ fontSize:10, color: it.unitEdited ? COL_AMBER : "#94A3B8", marginTop:1 }}>{itemUnit}</div>
                                         </td>
                                         <td style={{ padding:"8px 12px", textAlign:"right" }}>
-                                          {canEdit ? (
+                                          {rowEdit ? (
                                             <input type="number" value={baseVal} placeholder={String(it.masterBase)}
                                               onChange={e => patchItem(sec.id, cat.id, it.item_id, { base_rate_override: e.target.value === "" ? null : e.target.value })}
                                               title={`Master: Rs.${inrIN(it.masterBase)} · leave blank to use master`}
@@ -1382,7 +1468,7 @@ export default function EstimateBuilderModal({
                                           )}
                                         </td>
                                         <td style={{ padding:"8px 12px", textAlign:"right" }}>
-                                          {canEdit ? (
+                                          {rowEdit ? (
                                             <input type="number" value={addOnVal} placeholder={String(it.masterAddOn)}
                                               onChange={e => patchItem(sec.id, cat.id, it.item_id, { add_on_override: e.target.value === "" ? null : e.target.value })}
                                               title={`Master: Rs.${inrIN(it.masterAddOn)} · leave blank to use master`}
@@ -1395,7 +1481,7 @@ export default function EstimateBuilderModal({
                                           )}
                                         </td>
                                         <td style={{ padding:"8px 12px" }}>
-                                          {canEdit ? (
+                                          {rowEdit ? (
                                             <input type="text" value={descVal} placeholder={it.masterDesc || t("common.optional")}
                                               onChange={e => patchItem(sec.id, cat.id, it.item_id, { description_override: e.target.value || null })}
                                               title={it.masterDesc ? `Master: ${it.masterDesc}` : t("crm.leave_blank_to_use_master")}
@@ -1410,7 +1496,7 @@ export default function EstimateBuilderModal({
                                             for THIS quote (stored as qty_override in measurements).
                                             Uniform mode: shows category/section area. */}
                                         <td style={{ padding:"8px 12px", textAlign:"right", fontSize:12, color:COL_TEAL, fontWeight:600 }}>
-                                          {secPerItem && !readOnly ? (
+                                          {secPerItem && !readOnly && !it.removed ? (
                                             (() => {
                                               const itOv = measurements.sections[sec.id]?.categories?.[cat.id]?.items?.[it.item_id] || {};
                                               const qVal = isSet(itOv.qty_override) ? String(itOv.qty_override) : "";
@@ -1430,9 +1516,30 @@ export default function EstimateBuilderModal({
                                             inrIN(it.qty != null ? it.qty : cat.area)
                                           )}
                                         </td>
-                                        <td style={{ padding:"8px 12px", textAlign:"right", fontSize:13, fontWeight:700, color:COL_GREEN }}>{t("estimate_builder.rs_inrin", { inrIN: inrIN(it.total) })}</td>
-                                        <td style={{ padding:"8px 6px", textAlign:"center" }}>
-                                          {it.hasOverride && canEdit && (
+                                        <td style={{ padding:"8px 12px", textAlign:"right", fontSize:13, fontWeight:700, color: it.removed ? "#94A3B8" : COL_GREEN }}>{it.removed ? "—" : t("estimate_builder.rs_inrin", { inrIN: inrIN(it.total) })}</td>
+                                        <td style={{ padding:"8px 6px", textAlign:"center", whiteSpace:"nowrap" }}>
+                                          {rowEdit && (
+                                            <button onClick={() => openItemEdit(sec, cat, it)}
+                                              title={t("estimate_builder.item_edit_btn")} aria-label={t("estimate_builder.item_edit_btn")}
+                                              style={{ background:"white", border:"1px solid #CBD5E1", color:"#475569", borderRadius:4, width:22, height:22, fontSize:11, cursor:"pointer", padding:0, marginRight:3 }}>
+                                              ✎
+                                            </button>
+                                          )}
+                                          {rowEdit && (
+                                            <button onClick={() => patchItem(sec.id, cat.id, it.item_id, { removed: true })}
+                                              title={t("estimate_builder.item_remove_btn")} aria-label={t("estimate_builder.item_remove_btn")}
+                                              style={{ background:"#FEF2F2", border:"1px solid #FECACA", color:COL_RED, borderRadius:4, width:22, height:22, fontSize:10.5, cursor:"pointer", padding:0, marginRight:3 }}>
+                                              🗑
+                                            </button>
+                                          )}
+                                          {it.removed && canEdit && (
+                                            <button onClick={() => patchItem(sec.id, cat.id, it.item_id, { removed: null })}
+                                              title={t("estimate_builder.item_restore_btn")} aria-label={t("estimate_builder.item_restore_btn")}
+                                              style={{ background:"transparent", border:"1px solid #E5E7EB", color:"#64748B", borderRadius:4, width:22, height:22, fontSize:11, cursor:"pointer" }}>
+                                              ↺
+                                            </button>
+                                          )}
+                                          {it.hasOverride && rowEdit && (
                                             <button onClick={() => resetItemRow(sec.id, cat.id, it.item_id)}
                                               title={t("crm.reset_to_master_rates")}
                                               style={{ background:"transparent", border:"1px solid #E5E7EB", color:"#64748B", borderRadius:4, width:22, height:22, fontSize:11, cursor:"pointer" }}>
@@ -1584,6 +1691,113 @@ export default function EstimateBuilderModal({
           </div>
         </>
       )}
+
+      {/* ═══════════════════════════════════════════════════════════════
+          ITEM EDIT MODAL — naam / unit / rate / add-on / description (14 Nov 2026)
+      ═══════════════════════════════════════════════════════════════ */}
+      {itemEdit && (() => {
+        const e = itemEdit, f = e.form, r = e.row;
+        const set = (k, v) => setItemEdit(p => ({ ...p, form: { ...p.form, [k]: v } }));
+        const L = { fontSize:10, fontWeight:700, color:"#6B7280", display:"block", marginBottom:3, textTransform:"uppercase" };
+        const I = { width:"100%", padding:"8px 11px", borderRadius:6, border:"1.5px solid #D1D5DB", fontSize:13,
+                    fontFamily:"inherit", outline:"none", boxSizing:"border-box", background:"white" };
+        const was = (cur, lib) => String(cur ?? "").trim() !== String(lib ?? "").trim() && String(cur ?? "").trim() !== ""
+          ? <div style={{ fontSize:10, color:"#94A3B8", marginTop:2 }}>{t("estimate_builder.item_lib_value", { v: String(lib ?? "") || "—" })}</div> : null;
+        const units = [...new Set([...(allUoms.length > 0 ? allUoms.map(u => u.name) : ["Sq.Ft","Nos","Lump Sum","Running Ft","Kg","Point","Unit"]),
+                                   r.masterUnit, f.unit].filter(Boolean))];
+        const nb = f.base  === "" ? r.masterBase  : (Number(f.base)  || 0);
+        const na = f.addOn === "" ? r.masterAddOn : (Number(f.addOn) || 0);
+        const nq = e.perItem ? (f.qty === "" ? r.masterQty : (Number(f.qty) || 0)) : (Number(r.qty) || 0);
+        const close = () => !e.saving && setItemEdit(null);
+        return (
+          <>
+            <div onClick={close} style={{ position:"fixed", inset:0, background:"rgba(15,23,42,0.55)", zIndex:920 }}/>
+            <div role="dialog" onClick={ev => ev.stopPropagation()}
+              style={{ position:"fixed", top:"50%", left:"50%", transform:"translate(-50%,-50%)",
+                       width:"min(520px,95vw)", maxHeight:"92vh", overflowY:"auto", background:"white", borderRadius:12, zIndex:921,
+                       boxShadow:"0 24px 64px rgba(0,0,0,0.35)" }}>
+              <div style={{ background:COL_DARK, padding:"13px 18px", borderRadius:"12px 12px 0 0",
+                            display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                <div>
+                  <div style={{ fontSize:14, fontWeight:700, color:"white" }}>{t("estimate_builder.item_edit_title")}</div>
+                  <div style={{ fontSize:10.5, color:"rgba(255,255,255,0.6)", marginTop:1 }}>{t("estimate_builder.item_edit_sub", { name: r.masterName })}</div>
+                </div>
+                <button onClick={close}
+                  style={{ background:"none", border:"none", color:"rgba(255,255,255,0.5)", fontSize:22, cursor:"pointer", lineHeight:1 }}>×</button>
+              </div>
+              <div style={{ padding:18 }}>
+                <div style={{ marginBottom:10 }}>
+                  <label style={L}>{t("common.item_name")}</label>
+                  <input autoFocus value={f.name} onChange={ev => set("name", ev.target.value)} placeholder={r.masterName} style={I}/>
+                  {was(f.name, r.masterName)}
+                </div>
+                <div style={{ display:"grid", gridTemplateColumns: e.perItem ? "1fr 1fr" : "1fr", gap:10, marginBottom:10 }}>
+                  <div>
+                    <label style={L}>{t("common.unit")}</label>
+                    <PickSelect value={f.unit} onChange={ev => set("unit", ev.target.value)} style={I}>
+                      <option value="">—</option>
+                      {units.map(u => <option key={u} value={u}>{u}</option>)}
+                    </PickSelect>
+                    {was(f.unit, r.masterUnit)}
+                  </div>
+                  {e.perItem && (
+                    <div>
+                      <label style={{ ...L, color:COL_TEAL }}>{t("common.qty")}</label>
+                      <input type="number" value={f.qty} onChange={ev => set("qty", ev.target.value)} placeholder={String(r.masterQty || 0)}
+                        style={{ ...I, textAlign:"right" }}/>
+                    </div>
+                  )}
+                </div>
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:10 }}>
+                  <div>
+                    <label style={L}>{t("common.base")} ₹</label>
+                    <input type="number" value={f.base} onChange={ev => set("base", ev.target.value)} placeholder={String(r.masterBase)}
+                      style={{ ...I, textAlign:"right" }}/>
+                    {was(f.base === "" ? "" : Number(f.base), r.masterBase)}
+                  </div>
+                  <div>
+                    <label style={{ ...L, color:COL_AMBER }}>{t("common.add_on")} ₹</label>
+                    <input type="number" value={f.addOn} onChange={ev => set("addOn", ev.target.value)} placeholder={String(r.masterAddOn)}
+                      style={{ ...I, textAlign:"right" }}/>
+                    {was(f.addOn === "" ? "" : Number(f.addOn), r.masterAddOn)}
+                  </div>
+                </div>
+                <div style={{ marginBottom:10 }}>
+                  <label style={L}>{t("common.description")}</label>
+                  <input value={f.desc} onChange={ev => set("desc", ev.target.value)} placeholder={r.masterDesc || t("common.optional")} style={I}/>
+                </div>
+                <div style={{ padding:"8px 11px", background:"#F0FDF4", border:"1px solid #BBF7D0", borderRadius:6,
+                              fontSize:12, fontWeight:700, color:COL_GREEN, marginBottom:10, textAlign:"right" }}>
+                  {t("estimate_builder.item_edit_total", { rate: inrIN(nb + na), qty: inrIN(nq), total: inrIN((nb + na) * nq) })}
+                </div>
+                {e.canLib && (
+                  <label style={{ display:"flex", gap:9, alignItems:"flex-start", padding:"9px 11px", cursor:"pointer",
+                                  background: e.lib ? "#EFF6FF" : "#F9FAFB", border:"1.5px solid " + (e.lib ? "#93C5FD" : "#E5E7EB"), borderRadius:6 }}>
+                    <input type="checkbox" checked={e.lib} onChange={ev => setItemEdit(p => ({ ...p, lib: ev.target.checked }))}
+                      style={{ width:15, height:15, marginTop:1, cursor:"pointer", flexShrink:0 }}/>
+                    <div>
+                      <div style={{ fontSize:11.5, fontWeight:700, color:"#0F172A" }}>{t("estimate_builder.item_also_library")}</div>
+                      <div style={{ fontSize:10, color:"#6B7280", marginTop:1 }}>{t("estimate_builder.item_also_library_hint")}</div>
+                    </div>
+                  </label>
+                )}
+              </div>
+              <div style={{ padding:"12px 18px", borderTop:"1px solid #E5E7EB", display:"flex", gap:8 }}>
+                <button onClick={close} disabled={e.saving}
+                  style={{ flex:1, padding:"8px", borderRadius:6, border:"1px solid #D1D5DB", background:"white",
+                           fontSize:12, color:"#374151", cursor: e.saving ? "not-allowed" : "pointer" }}>
+                  {t("common.cancel")}
+                </button>
+                <button onClick={saveItemEdit} disabled={e.saving}
+                  style={{ flex:2, padding:"8px", borderRadius:6, border:"none", background: e.saving ? "#9CA3AF" : COL_BLUE,
+                           color:"white", fontSize:12, fontWeight:700, cursor: e.saving ? "not-allowed" : "pointer" }}>
+                  {e.saving ? t("common.saving_2") : t("common.save")}
+                </button>
+              </div>
+            </div>
+          </>
+        );
+      })()}
 
       {/* ═══════════════════════════════════════════════════════════════
           ADD SECTION MODAL (centered)
