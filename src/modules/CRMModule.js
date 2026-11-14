@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo, lazy, Suspense } from "react";
 import PickSelect from "../components/PickSelect";
 import api, { API_BASE, getToken } from "../config/api";
 import SearchSelect from "../components/SearchSelect";
@@ -14,6 +14,8 @@ import { todayISO, isoDate } from "../utils/today";
 import { can, currentUser } from "../utils/perms";
 import uploadManager from "../utils/uploadManager";
 import { cld } from "../utils/cloudinary";
+// CRM → Packages (14 Nov 2026) — alag chunk, sirf tab khulne par aata hai
+const PackagesTab = lazy(() => import("./crm/PackagesTab"));
 
 // ── ICONS ──────────────────────────────────────────────────────────
 const Ic=({d,size=18,color="currentColor",sw=1.8,fill="none"})=>(
@@ -4442,6 +4444,9 @@ function CRMModule(){
   const [showAdd,setShowAdd]=useState(false);
   const [showAddSolar,setShowAddSolar]=useState(false);
   const [addStage,setAddStage]=useState("lead");
+  // CRM ke do hisse: Leads (kanban) · Packages (package sheet). Chuna hua yaad (sirf is browser me).
+  const [crmView,setCrmView]=useState(()=>{try{return localStorage.getItem("gb_crm_view")==="packages"?"packages":"leads";}catch(_){return "leads";}});
+  const pickCrmView=(v)=>{setCrmView(v);try{localStorage.setItem("gb_crm_view",v);}catch(_){/* private window */}};
 
   // Company module type — derived from stored user domain (never stale)
   const _storedUser = (() => { try { return JSON.parse(localStorage.getItem("gb_user")) || {}; } catch { return {}; } })();
@@ -4460,7 +4465,8 @@ function CRMModule(){
   const [dismissedReminders,setDismissedReminders]=useState([]);
   const [quotPromptLead,setQuotPromptLead]=useState(null);
   const [selectFinalLead,setSelectFinalLead]=useState(null);
-  const [showTemplates,setShowTemplates]=useState(false);
+  // setShowTemplates: Templates ka button abhi chhupa hai (neeche toolbar) — wapas khule to phir use hoga
+  const [showTemplates,setShowTemplates]=useState(false); // eslint-disable-line no-unused-vars
   const [showLeadImport,setShowLeadImport]=useState(false);
   const [loading,setLoading]=useState(true);
   const [teamMembers,setTeamMembers]=useState([]);
@@ -4661,6 +4667,23 @@ function CRMModule(){
   return(
     <div style={{background:T.bg,height:"100%",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',system-ui,sans-serif"}}>
 
+      {/* Leads | Packages */}
+      <div role="tablist" style={{padding:"10px 18px 2px",flexShrink:0,display:"flex",gap:6}}>
+        {[{id:"leads",lb:t("sales_pkg_ui.tab_leads")},{id:"packages",lb:t("sales_pkg_ui.tab")}].map(x=>(
+          <button key={x.id} role="tab" aria-selected={crmView===x.id} onClick={()=>pickCrmView(x.id)}
+            style={{padding:"7px 16px",minHeight:34,borderRadius:999,border:`1px solid ${crmView===x.id?T.blu:T.b1}`,background:crmView===x.id?T.blu:T.surface,color:crmView===x.id?"white":T.t2,fontSize:12.5,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
+            {x.lb}
+          </button>
+        ))}
+      </div>
+
+      {crmView==="packages"?(
+        <div style={{flex:1,minHeight:0}}>
+          <Suspense fallback={<div style={{padding:30,textAlign:"center",color:T.t3,fontSize:13}}>{t("sales_pkg_ui.loading")}</div>}>
+            <PackagesTab/>
+          </Suspense>
+        </div>
+      ):(<>
       {/* KPI Tiles */}
       <div style={{padding:"12px 18px 8px",flexShrink:0}}>
         <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
@@ -4728,10 +4751,14 @@ function CRMModule(){
              {t("crm.import_leads_btn")}
             </button>
           )}
+          {/* Purane quotation "Templates" (/crm/templates) ka button chhupa hai (14 Nov 2026,
+              Prafull): unki jagah ab CRM → Packages hai. Code aur DB data jaan-boojh kar
+              rakha hai — TemplateBuilderModal neeche waisa hi hai, wapas chahiye to ye button kholo.
           <button onClick={()=>setShowTemplates(true)}
             style={{display:"flex",alignItems:"center",gap:5,padding:"6px 13px",borderRadius:6,background:T.surfaceB,border:`1px solid ${T.b1}`,color:T.t2,fontSize:12,fontWeight:600,cursor:"pointer"}}>
            {t("crm.templates_2")}
           </button>
+          */}
           <button onClick={()=>openNewLead("lead")}
             style={{display:"flex",alignItems:"center",gap:5,padding:"6px 13px",borderRadius:6,background:canSolar&&!canConstruction?"linear-gradient(135deg,#E65100,#FF8F00)":T.blu,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:"pointer"}}>
             <IcAdd size={13} color="white"/> {canSolar&&!canConstruction?t("crm.new_solar_lead_2"):t("crm.new_lead")}
@@ -4774,6 +4801,7 @@ function CRMModule(){
           onAddLead={(stageId)=>openNewLead(stageId)}
         />
       </div>
+      </>)}
 
       {/* Modals & Drawers */}
       {reminderLead&&(
