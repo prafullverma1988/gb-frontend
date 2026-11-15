@@ -82,7 +82,10 @@ function EditTag({ onClick, label }) {
   );
 }
 
-export default function PackageDocument({ content, letterhead, editable = false, onEdit, onAdd }) {
+// fill (Round 2, client quote): { header:{quotation_no,date,client_name,contact,site_address,
+// plot_area,builtup_area}, scope, computed } — server ke renderHtml fill jaisa: header bhare,
+// rate line par rate / qty / amount, TOTAL, aur PAYMENT SCHEDULE hissa. Number sirf computed se.
+export default function PackageDocument({ content, letterhead, editable = false, onEdit, onAdd, fill }) {
   const lh = letterhead || {};
   const A = isAccent(lh.accent) ? lh.accent : "#2B3175";
   const S = useMemo(() => styles(A), [A]);
@@ -96,11 +99,18 @@ export default function PackageDocument({ content, letterhead, editable = false,
   const meta = content.meta;
   const full = scopeRate(content, "full");
   const st = (content.scopes || []).find((s) => s.key === "structure");
-  const pkgRate = full;
+  const F = fill || null;
+  const pkgRate = F ? scopeRate(content, F.scope || "full") : full;
+  const C = F && F.computed ? F.computed : null;
+  const byKey = C ? Object.fromEntries((C.rows || []).map((x) => [x.key, x])) : {};
+  const fsc = F && F.scope && F.scope !== "full" ? (content.scopes || []).find((x) => x.key === F.scope) : null;
+  const H = (F && F.header) || {};
   const rs = content.rate_schedule || { groups: [], notes: [], basis: [] };
   const addresses = Array.isArray(lh.address_lines) ? lh.address_lines : String(lh.address_lines || "").split("\n").filter(Boolean);
   const contactLine = [lh.phones ? DOC_EN.mob + " " + lh.phones : "", lh.email || "", lh.gstin ? DOC_EN.gstin + " " + lh.gstin : ""].filter(Boolean).join("  |  ");
   const blank = (suffix) => <span style={S.blank}>_______________{suffix ? " " + suffix : ""}</span>;
+  const dmy = (v) => (/^\d{4}-\d{2}-\d{2}$/.test(String(v || "")) ? String(v).split("-").reverse().join("-") : v);
+  const hv = (v, suffix) => (v ? <>{dmy(v)}{suffix ? " " + suffix : ""}</> : blank(suffix));
 
   let secNo = 0;
   const out = [];
@@ -135,24 +145,26 @@ export default function PackageDocument({ content, letterhead, editable = false,
                   ) : null,
                   ...g.rows.map((r) => {
                     sn++;
-                    const rate = r.kind === "package" ? pkgRate : r.rate;
+                    const q = byKey[g.key + "." + r.key] || null;
+                    const rate = q ? q.rate : r.kind === "package" ? pkgRate : r.rate;
                     return (
                       <tr key={g.key + "." + r.key} {...tp("rate." + g.key + "." + r.key)} style={editable ? { cursor: "pointer" } : undefined}>
                         <td style={tapS(S.td)}>{sn}</td>
-                        <td style={tapS(S.td)}>{r.description}
+                        <td style={tapS(S.td)}>{q ? q.description : r.description}
                           {editable && r.kind !== "rate" ? <span style={{ marginLeft: 6, fontFamily: "'Segoe UI',sans-serif", fontSize: 10, fontWeight: 700, color: T.pur, background: T.purL, borderRadius: 999, padding: "1px 6px", whiteSpace: "nowrap" }}>
                             {r.kind === "package" ? t("sales_pkg_ui.kind_package") : t("sales_pkg_ui.kind_lump_sum")}</span> : null}
                         </td>
                         <td style={tapS(S.td)}>{r.unit}</td>
                         <td style={tapS(S.num)}>{rate != null ? inr(rate) : "______"}</td>
-                        <td style={tapS(S.num)} />
-                        <td style={tapS(S.num)} />
+                        <td style={tapS(S.num)}>{q && q.qty != null && r.kind !== "lump_sum" ? inr(q.qty) : null}</td>
+                        <td style={tapS(S.num)}>{q && q.amount != null ? inr(q.amount) : null}</td>
                       </tr>
                     );
                   }),
                   editable && onAdd ? <AddBtn key={g.key + "_add"} inTable colSpan={6} onClick={() => onAdd("rate." + g.key)} label={t("sales_pkg_ui.add_rate_row")} /> : null,
                 ])}
-                <tr><td style={S.tot} /><td style={S.tot}>{DOC_EN.total}</td><td style={S.tot} /><td style={S.tot} /><td style={S.tot} /><td style={S.tot} /></tr>
+                <tr><td style={S.tot} /><td style={S.tot}>{DOC_EN.total}</td><td style={S.tot} /><td style={S.tot} /><td style={S.tot} />
+                  <td style={{ ...S.tot, textAlign: "right", whiteSpace: "nowrap" }} data-doc-total="1">{C && C.total ? inr(C.total) : null}</td></tr>
               </tbody>
             </table>
           </div>
@@ -175,6 +187,55 @@ export default function PackageDocument({ content, letterhead, editable = false,
             ) : null}
           </>
         ) : null}
+      </div>
+    );
+  }
+
+  // ── Payment schedule (sirf quote) — har amount wali line ke hisse; bina hisse = "On completion" ──
+  const SR = C ? (C.rows || []).filter((x) => x.amount) : [];
+  if (SR.length && SR.some((x) => x.schedule && x.schedule.length)) {
+    secNo++;
+    let n = 0, tot = 0;
+    const trs = [];
+    for (const x of SR) {
+      trs.push(
+        <tr key={x.key + "_h"}>
+          <td colSpan={3} style={S.grp}>{x.description}{x.qty != null && x.kind !== "lump_sum" ? " — " + inr(x.qty) + " " + String(x.unit || "").replace(/^per\s+/i, "") : ""}</td>
+          <td style={{ ...S.grp, textAlign: "right", whiteSpace: "nowrap" }}>{inr(x.amount)}</td>
+        </tr>
+      );
+      let lastGroup = null;
+      const parts = x.schedule && x.schedule.length ? x.schedule : [{ name: DOC_EN.on_completion, pct: 100, group: null, amount: x.amount }];
+      for (let i = 0; i < parts.length; i++) {
+        const p = parts[i];
+        n++; tot += Number(p.amount) || 0;
+        const grp = p.group && p.group !== lastGroup ? <i style={{ color: "#6b7088" }}>{p.group}: </i> : null;
+        lastGroup = p.group || lastGroup;
+        trs.push(
+          <tr key={x.key + "_" + i}>
+            <td style={S.td}>{n}</td><td style={S.td}>{grp}{p.name}</td>
+            <td style={S.num}>{inr(p.pct)}%</td><td style={S.num}>{inr(p.amount)}</td>
+          </tr>
+        );
+      }
+    }
+    const no = secNo;
+    out.push(
+      <div key="ps" data-sec="payment_schedule">
+        <div style={S.h2}>{no}. {DOC_EN.payment_schedule}</div>
+        <div style={S.scroll}>
+          <table style={{ ...S.table, minWidth: 460 }}>
+            <thead><tr>
+              <th style={{ ...S.th, width: "6%" }}>{DOC_EN.sno}</th><th style={S.th}>{DOC_EN.stage_of_work}</th>
+              <th style={{ ...S.th, textAlign: "right", width: "10%" }}>{DOC_EN.pct}</th><th style={{ ...S.th, textAlign: "right", width: "16%" }}>{DOC_EN.amount}</th>
+            </tr></thead>
+            <tbody>
+              {trs}
+              <tr><td style={S.tot} /><td style={S.tot}>{DOC_EN.total_plain}</td><td style={S.tot} /><td style={{ ...S.tot, textAlign: "right", whiteSpace: "nowrap" }}>{inr(tot)}</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div style={S.note}><b>{DOC_EN.note}</b> {DOC_EN.ps_note}</div>
       </div>
     );
   }
@@ -289,13 +350,14 @@ export default function PackageDocument({ content, letterhead, editable = false,
         {meta.package_name} {DOC_EN.pkg_word}{full != null ? "  |  ₹" + inr(full) + " " + DOC_EN.per_sqft : ""}
         {meta.show_structure_rate && st && st.rate != null ? "  ·  " + st.label + ": ₹" + inr(st.rate) + " " + DOC_EN.per_sqft : ""}
       </div>
-      {/* Quotation header — package sheet me khaane khule rehte hain (estimate me bharenge) */}
+      {fsc ? <div style={{ ...S.sub, fontStyle: "normal", fontWeight: 700, color: A }}>{DOC_EN.scope_word} {fsc.label}{fsc.rate != null ? " — ₹" + inr(fsc.rate) + " " + DOC_EN.per_sqft : ""}</div> : null}
+      {/* Quotation header — package sheet me khaane khule (quote me fill.header se bhare) */}
       <div style={S.scroll}>
         <table style={{ ...S.table, minWidth: 540 }}><tbody>
-          <tr><td style={{ ...S.lab, width: "18%" }}>{DOC_EN.quotation_no}</td><td style={S.td}>{blank()}</td><td style={{ ...S.lab, width: "18%" }}>{DOC_EN.date}</td><td style={S.td}>{blank()}</td></tr>
-          <tr><td style={S.lab}>{DOC_EN.client_name}</td><td style={S.td}>{blank()}</td><td style={S.lab}>{DOC_EN.contact}</td><td style={S.td}>{blank()}</td></tr>
-          <tr><td style={S.lab}>{DOC_EN.site}</td><td style={S.td}>{blank()}</td><td style={S.lab}>{DOC_EN.plot}</td><td style={S.td}>{blank(DOC_EN.sqft)}</td></tr>
-          <tr><td style={S.lab}>{DOC_EN.builtup}</td><td style={S.td}>{blank(DOC_EN.sqft)}</td><td style={S.lab}>{DOC_EN.valid_till}</td>
+          <tr><td style={{ ...S.lab, width: "18%" }}>{DOC_EN.quotation_no}</td><td style={S.td}>{hv(H.quotation_no)}</td><td style={{ ...S.lab, width: "18%" }}>{DOC_EN.date}</td><td style={S.td}>{hv(H.date)}</td></tr>
+          <tr><td style={S.lab}>{DOC_EN.client_name}</td><td style={S.td}>{hv(H.client_name)}</td><td style={S.lab}>{DOC_EN.contact}</td><td style={S.td}>{hv(H.contact)}</td></tr>
+          <tr><td style={S.lab}>{DOC_EN.site}</td><td style={S.td}>{hv(H.site_address)}</td><td style={S.lab}>{DOC_EN.plot}</td><td style={S.td}>{hv(H.plot_area, DOC_EN.sqft)}</td></tr>
+          <tr><td style={S.lab}>{DOC_EN.builtup}</td><td style={S.td}>{hv(H.builtup_area, DOC_EN.sqft)}</td><td style={S.lab}>{DOC_EN.valid_till}</td>
             <td {...tp("meta")} style={tapS(S.td)}>{meta.validity_days} {DOC_EN.days_from}</td></tr>
         </tbody></table>
       </div>

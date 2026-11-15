@@ -2373,7 +2373,7 @@ function App(){
     procurement:guard("procurement","Procurement", <ProcurementModule/>),
     design:    guard("design",   "Design",        <DesignModule/>),
     payroll:   guard("payroll",  "Payroll",        <PayrollModule/>),
-    crm:       guard("crm",      "CRM",            <CRMModule/>),
+    crm:       guard("crm",      "CRM",            <CRMModule onOpenProject={(pid,tab)=>handleNotifNav("projects","/projects/"+pid+"/"+(tab||"overview"))}/>),
     team:      guard("team",     "My Team",  <TeamScheduleModule/>),
     mom:       guard("mom",      "MOM",            <MOMModule/>),
     library:   guard("library",  "Library",        <MasterLibraryModule/>),

@@ -16,6 +16,8 @@ import uploadManager from "../utils/uploadManager";
 import { cld } from "../utils/cloudinary";
 // CRM → Packages (14 Nov 2026) — alag chunk, sirf tab khulne par aata hai
 const PackagesTab = lazy(() => import("./crm/PackagesTab"));
+// Lead drawer → Package Quote (15 Nov 2026) — package se final estimate, alag chunk
+const QuoteTab = lazy(() => import("./crm/QuoteTab"));
 
 // ── ICONS ──────────────────────────────────────────────────────────
 const Ic=({d,size=18,color="currentColor",sw=1.8,fill="none"})=>(
@@ -495,7 +497,7 @@ function KanbanBoard({leads,filters,onOpenLead,onMoveLead,onWhatsApp,onDesign,on
 }
 
 // ── LEAD DETAIL DRAWER ───────────────────────────────────────────
-function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab,onFiles}){
+function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab,onFiles,onOpenProject}){
   const [tab,setTab]=useState(initialTab||"overview");
   const [newNote,setNewNote]=useState("");
   const [history,setHistory]=useState(lead.followupHistory||[]);
@@ -830,6 +832,7 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab,
         {[
           {id:"overview", l:t("common.overview")},
           {id:"followup", l:t("crm.follow_ups_length", { length: history.length })},
+          {id:"pkgQuote",   l:t("sales_quote_ui.tab")},
           {id:"buildQuote", l:t("crm.build_quote_length", { length: builderQuotes.length })},
           {id:"quotations", l:t("crm.pdf_quotes_length", { length: quotations.length })},
           {id:"contact",  l:t("crm.contact_date")},
@@ -893,6 +896,14 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab,
               <button onClick={addNote} style={{padding:"9px 14px",borderRadius:8,background:T.blu,color:"white",border:"none",cursor:"pointer",fontSize:12,fontWeight:600}}>{t("common.add")}</button>
             </div>
           </div>
+        )}
+
+        {/* PACKAGE QUOTE (15 Nov 2026) — package se final estimate + payment schedule */}
+        {tab==="pkgQuote"&&(
+          <Suspense fallback={<div style={{padding:30,textAlign:"center",color:T.t3,fontSize:13}}>{t("sales_quote_ui.loading")}</div>}>
+            <QuoteTab lead={lead} onLeadConverted={()=>onUpdate(lead.id,{stage:"converted"})}
+              onOpenProject={onOpenProject?(pid,tb)=>{onClose();onOpenProject(pid,tb);}:null}/>
+          </Suspense>
         )}
 
         {/* QUOTATIONS */}
@@ -4431,7 +4442,7 @@ Total: ${amt} (incl. GST + 5yr maintenance)`;
 
 
 // ── MAIN CRM MODULE ──────────────────────────────────────────────
-function CRMModule(){
+function CRMModule({onOpenProject}={}){
   const [leads,setLeads]=useState([]);
   const [solarLeads,setSolarLeads]=useState([]);
   const [selLead,setSelLead]=useState(null);
@@ -4820,6 +4831,7 @@ function CRMModule(){
           onUpdate={updateLead}
           onFiles={(id,list)=>{setLeads(p=>p.map(l=>l.id===id?{...l,attachments:list}:l));setSelLead(p=>p&&p.id===id?{...p,attachments:list}:p);}}
           onWhatsApp={(l)=>{setWaLead(l);setSelLead(null);}}
+          onOpenProject={onOpenProject}
           initialTab={selLead._openTab||"overview"}
         />
       )}

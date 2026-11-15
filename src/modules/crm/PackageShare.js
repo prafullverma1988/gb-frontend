@@ -19,9 +19,10 @@ const stateChip = (s) => (s === "active" ? <span style={chip(T.grnL, T.grn, T.gr
   : s === "expired" ? <span style={chip(T.sltL, T.slt)}>{t("sales_pkg_ui.link_expired")}</span>
   : <span style={chip(T.redL, T.red, T.redM)}>{t("sales_pkg_ui.link_revoked")}</span>);
 
-export function ShareResult({ url, pkgName, phone }) {
+// message: apna WhatsApp text (quote ka) — warna package wala
+export function ShareResult({ url, pkgName, phone, message }) {
   const [copied, setCopied] = useState(false);
-  const msg = t("sales_pkg_ui.wa_msg", { name: pkgName, url });
+  const msg = message || t("sales_pkg_ui.wa_msg", { name: pkgName, url });
   const doCopy = async () => { const ok = await copyText(url); setCopied(ok); if (ok) setTimeout(() => setCopied(false), 2000); };
   return (
     <div data-testid="share-result" style={{ background: T.grnL, border: "1px solid " + T.grnM, borderRadius: 10, padding: 12, marginBottom: 12 }}>

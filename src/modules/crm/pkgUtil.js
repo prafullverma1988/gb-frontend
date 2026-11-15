@@ -150,6 +150,14 @@ export const DOC_EN = {
   area_rate: "Package rate",
   area_rs: "Rate Schedule",
   area_acc: "Acceptance",
+  // Quote (Round 2) — PDF ke bhare hue hisse (utils/salesPackageDoc.js renderHtml fill)
+  scope_word: "Scope:",
+  payment_schedule: "PAYMENT SCHEDULE",
+  stage_of_work: "Stage of work",
+  pct: "%",
+  total_plain: "TOTAL",
+  on_completion: "On completion of this item",
+  ps_note: "Each stage amount becomes payable when that stage of work is completed at site. Items without a stage list are payable on completion of that item.",
 };
 
 // AI op / compare row ka path → kis hisse ka hai (section › heading), dikhane ke liye
@@ -181,12 +189,14 @@ export function showVal(v) {
 }
 
 // ── PDF (route ko JWT chahiye) → naya tab ──
-export async function openPkgPdf(id, versionId) {
+export const openPkgPdf = (id, versionId) => openPdfPath(`${BASE}/${id}/pdf${versionId ? "?version=" + versionId : ""}`);
+// Koi bhi auth wala PDF route (quote: /sales-quotes/:id/pdf)
+export async function openPdfPath(path) {
   // Popup blocker: click ke andar hi khaali tab kholo, phir blob daalo.
   let w = null;
   try { w = window.open("", "_blank"); } catch (_) { w = null; }
   try {
-    const res = await fetch(`${API_BASE}${BASE}/${id}/pdf${versionId ? "?version=" + versionId : ""}`, {
+    const res = await fetch(`${API_BASE}${path}`, {
       headers: { ...(getToken() ? { Authorization: "Bearer " + getToken() } : {}), "X-Lang": getLang() },
     });
     if (!res.ok) {
@@ -239,7 +249,8 @@ export function readFileB64(file) {
 }
 
 // ── Lamba AI kaam — GET /ai/jobs/:jid har 2.5 s, jab tak status 'running' ──
-export function useJobPoll(jobId, interval = 2500) {
+// base: /sales-packages (package) ya /sales-quotes (quote ki copy ka AI edit)
+export function useJobPoll(jobId, interval = 2500, base = BASE) {
   const [job, setJob] = useState(null);
   const [fail, setFail] = useState("");
   const [elapsed, setElapsed] = useState(0);
@@ -251,7 +262,7 @@ export function useJobPoll(jobId, interval = 2500) {
     t0.current = Date.now();
     const clock = setInterval(() => { if (alive) setElapsed(Math.round((Date.now() - t0.current) / 1000)); }, 1000);
     const tick = async () => {
-      const r = await api.get(`${BASE}/ai/jobs/${jobId}`);
+      const r = await api.get(`${base}/ai/jobs/${jobId}`);
       if (!alive) return;
       if (r && r.success && r.data) {
         misses = 0;
@@ -267,6 +278,6 @@ export function useJobPoll(jobId, interval = 2500) {
     };
     tick();
     return () => { alive = false; clearTimeout(timer); clearInterval(clock); };
-  }, [jobId, interval]);
+  }, [jobId, interval, base]);
   return { job, fail, elapsed, setJob };
 }
