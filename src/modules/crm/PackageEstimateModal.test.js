@@ -35,8 +35,8 @@ const ROWS = [
   { key: "main.gf", group_key: "main", group_title: "A. Main Construction", row_key: "gf", kind: "package", description: "Ground Floor", unit: "per sq.ft.", base_rate: 920, rate: 920, qty: 1278.34, amount: 1176072.8, parts: GF, schedule: GF.map((p) => ({ ...p, amount: 1 })) },
   { key: "main.ff", group_key: "main", group_title: "A. Main Construction", row_key: "ff", kind: "package", description: "First Floor", unit: "per sq.ft.", base_rate: 920, rate: 920, qty: null, amount: null, parts: null, schedule: null },
 ];
-const QUOTE = { id: 12, quote_no: "QT/26-27/001", status: "sent", scope: "structure", lines: { "main.gf": { qty: 1278.34 } }, schedule: { "main.gf": clone(GF) }, total: 1176072.8,
-  computed: { scope_rate: 920, total: 1176072.8, rows: ROWS }, scopes: CONTENT.scopes };
+const QUOTE = { id: 12, quote_no: "QT/26-27/001", status: "sent", scope: "structure", edit_seq: 7, lines: { "main.gf": { qty: 1278.34 } }, schedule: { "main.gf": clone(GF) }, total: 1176072.8,
+  computed: { scope_rate: 920, total: 1176072.8, rows: ROWS }, scopes: CONTENT.scopes, content: clone(CONTENT) };
 
 let root, box, onSaved;
 const mount = async (el) => { box = document.createElement("div"); document.body.appendChild(box); root = createRoot(box); await act(async () => { root.render(el); }); await flush(); };
@@ -51,14 +51,16 @@ beforeEach(() => {
     if (url === "/sales-quotes/project-packages") return { success: true, data: [{ id: 5, name: "Signature", rate_full: 1800, rate_structure: 920, version_no: 3, current_version_id: 41 }] };
     if (url === "/sales-quotes/project-packages/5") return { success: true, data: { package: { id: 5, name: "Signature", version_no: 3, version_id: 41 }, content: clone(CONTENT),
       schedules: { full: {}, structure: { "main.gf": clone(GF) } } } };
-    if (url === "/sales-quotes?open=1") return { success: true, data: [
-      { id: 9, quote_no: "QT/26-27/002", status: "accepted", scope: "full", total: 500000, lead_name: "Ramesh", package_name: "Premium" },
-      { id: 12, quote_no: "QT/26-27/001", status: "sent", scope: "structure", total: 1176072.8, lead_name: "naveen ji", package_name: "Signature" }] };
+    if (url === "/sales-quotes") return { success: true, data: [
+      { id: 14, quote_no: "QT/26-27/004", status: "accepted", scope: "structure", total: 3010400, lead_name: "test", package_name: "Premium plus", used: true },
+      { id: 9, quote_no: "QT/26-27/002", status: "draft", scope: "full", total: 500000, lead_name: "Ramesh", package_name: "Premium", used: false },
+      { id: 12, quote_no: "QT/26-27/001", status: "sent", scope: "structure", total: 1176072.8, lead_name: "naveen ji", package_name: "Signature", used: false }] };
     if (url === "/sales-quotes/12") return { success: true, data: clone(QUOTE) };
+    if (url === "/sales-quotes/14") return { success: true, data: { ...clone(QUOTE), id: 14, quote_no: "QT/26-27/004", status: "accepted", lines: { "main.gf": { qty: 1250 } } } };
     return { success: false, message: "unexpected " + url };
   });
   api.post.mockImplementation(async (url, body) => {
-    if (url === "/sales-quotes/project-estimate" && body.dry_run) return { success: true, data: { dry_run: true, total: 1176072.8, lines: 1, items: 5, scheduled: 1, estimate_no: "EST-2", existing: 1, customer_name: "Naveen & Prakash" } };
+    if (url === "/sales-quotes/project-estimate" && body.dry_run) return { success: true, data: { dry_run: true, total: 1176072.8, lines: 1, items: 5, scheduled: 1, estimate_no: "EST-2", existing: 1, customer_name: "Naveen & Prakash", linked: !!body.link_quote } };
     if (url === "/sales-quotes/project-estimate") return { success: true, data: { estimate_id: 901, estimate_no: "EST-2", total_value: 1176072.8, items: 5, remembered: 0 } };
     if (url === "/sales-quotes/12/accept") return { success: true, data: { ...clone(QUOTE), status: "accepted" } };
     if (url === "/sales-quotes/12/estimate") return { success: true, data: { estimate_id: 902, estimate_no: "EST-2", total_value: 1176072.8, project_id: 716 } };
@@ -119,22 +121,68 @@ test("Kuch badla to Check dobara; galat % par rok", async () => {
   expect(api.post.mock.calls.filter((c) => c[0] === "/sales-quotes/project-estimate").length).toBe(1);
 });
 
-test("CRM Quote se: naam milta quote upar, Sent → Accept + estimate (project ke saath)", async () => {
+test("CRM Quote se: sab quote + khoj; Sent quote form me copy, qty badlo, link tick → project-estimate (quote_id, link_quote)", async () => {
   await modal();
   await click($('[data-src="quote"]'));
   let txt = noKeys();
+  expect(api.get).toHaveBeenCalledWith("/sales-quotes");
+  // Sab dikhe (draft / used bhi), naam milta upar
   const items = [...document.querySelectorAll("[data-quote]")];
-  expect(items[0].getAttribute("data-quote")).toBe("12");
+  expect(items.map((x) => x.getAttribute("data-quote"))).toEqual(["12", "14", "9"]);
   expect(txt).toContain("Naam milta hai");
+  expect($('[data-used="14"]')).not.toBeNull();
+  await typeIn($('[data-testid="pe-qsearch"]'), "ramesh");
+  await flush();
+  expect([...document.querySelectorAll("[data-quote]")].map((x) => x.getAttribute("data-quote"))).toEqual(["9"]);
+  await typeIn($('[data-testid="pe-qsearch"]'), "");
+  await flush();
   await click($('[data-quote="12"]'));
+  // Sent + use nahi hua → link tick pehle se laga
+  expect($('[data-testid="chk-link"]').checked).toBe(true);
+  // Form editable: qty quote se aayi, badal sakte
+  expect($('[data-qty="main.gf"]').value).toBe("1278.34");
+  expect(document.querySelectorAll('[data-sched="main.gf"] [data-part]').length).toBe(5);
+  await typeIn($('[data-qty="main.gf"]'), "1300");
+  await click($('[data-testid="pe-check"]'));
+  const dry = api.post.mock.calls.find((c) => c[0] === "/sales-quotes/project-estimate")[1];
+  expect(dry).toMatchObject({ project_id: 716, quote_id: 12, quote_seq: 7, link_quote: true, scope: "structure", dry_run: true });
+  expect(dry.package_id).toBeUndefined();
+  expect(dry.lines["main.gf"].qty).toBe(1300);
   txt = noKeys();
-  expect(txt).toContain("Accepted");
-  await click($('[data-testid="pe-quote-create"]'));
-  expect(window.confirmAsync).toHaveBeenCalled();
-  const urls = api.post.mock.calls.map((c) => c[0]);
-  expect(urls).toEqual(["/sales-quotes/12/accept", "/sales-quotes/12/estimate"]);
-  expect(api.post.mock.calls[1][1]).toMatchObject({ project_id: 716 });
-  expect(onSaved).toHaveBeenCalledWith(902);
+  expect(txt).toContain("Accepted ho kar is estimate se link hoga");
+  await click($('[data-testid="pe-create"]'));
+  expect(api.post.mock.calls.map((c) => c[0])).toEqual(["/sales-quotes/project-estimate", "/sales-quotes/project-estimate"]);
+  expect(onSaved).toHaveBeenCalledWith(901);
+});
+
+test("Use ho chuka quote → link tick nahi, sirf copy (link_quote false)", async () => {
+  await modal();
+  await click($('[data-src="quote"]'));
+  await click($('[data-quote="14"]'));
+  expect($('[data-testid="chk-link"]')).toBeNull();
+  expect(noKeys()).toContain("copy banegi");
+  expect($('[data-qty="main.gf"]').value).toBe("1250");
+  await click($('[data-testid="pe-check"]'));
+  const dry = api.post.mock.calls.find((c) => c[0] === "/sales-quotes/project-estimate")[1];
+  expect(dry).toMatchObject({ quote_id: 14, link_quote: false });
+});
+
+test("Payment schedule: copy ka tick hatao → khaali, wapas lagao / Reset → copy wala, Sab hatao → khaali", async () => {
+  await modal();
+  await click($('[data-pkg="5"]'));
+  await click($('[data-scope="structure"]'));
+  const parts = () => document.querySelectorAll('[data-sched="main.gf"] [data-part]').length;
+  expect(parts()).toBe(5);
+  await click($('[data-testid="chk-copy-sched"]'));
+  expect(parts()).toBe(0);
+  await click($('[data-testid="chk-copy-sched"]'));
+  expect(parts()).toBe(5);
+  await click($('[data-testid="btn-sched-clear"]'));
+  expect(parts()).toBe(0);
+  await click($('[data-testid="btn-sched-reset"]'));
+  expect(parts()).toBe(5);
+  expect($('[data-testid="chk-copy-sched"]').checked).toBe(true);
+  noKeys();
 });
 
 test("CRM permission nahi → tab nahi, sirf package", async () => {
@@ -142,7 +190,7 @@ test("CRM permission nahi → tab nahi, sirf package", async () => {
   await modal();
   expect($('[data-src="quote"]')).toBeNull();
   expect($('[data-pkg="5"]')).not.toBeNull();
-  expect(api.get).not.toHaveBeenCalledWith("/sales-quotes?open=1");
+  expect(api.get).not.toHaveBeenCalledWith("/sales-quotes");
 });
 
 test("nameHit: naam ka shabd mile (chhote / aam shabd nahi)", () => {

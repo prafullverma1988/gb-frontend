@@ -414,7 +414,8 @@ export function ClientScheduleView({ items }) {
         return (
           <div key={c.key} style={{ border: "1px solid " + T.b1, borderRadius: 8, overflow: "hidden", background: T.surface }}>
             <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", gap: 8, padding: "8px 12px", background: T.indL }}>
-              <b style={{ fontSize: 12.5, color: T.ind }}>{c.category ? c.category + " · " : ""}{c.name}</b>
+              {/* Category aur kaam ka naam ek hi ho (package se: "SEPTIC TANK · Septic tank") to naam ek baar */}
+              <b style={{ fontSize: 12.5, color: T.ind }}>{c.category && String(c.category).trim().toLowerCase() !== String(c.name || "").trim().toLowerCase() ? c.category + " · " : ""}{c.name}</b>
               <span style={{ fontSize: 12, color: T.ind, fontVariantNumeric: "tabular-nums" }}>{t("schedule.cl_item_head", { qty: fmtQ(qty), unit, rate: fmtC(rate), amt: fmtC(amt) })}</span>
             </div>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
