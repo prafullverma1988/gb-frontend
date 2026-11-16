@@ -605,6 +605,7 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab,
     // eslint-disable-next-line
   }, [tab]);
   const tryMoveStage = (newStage) => {
+    if (newStage === "project") newStage = "converted";   // solar ka stage — construction lead me = Converted + project
     if (stageNeedsRates(newStage) && !leadHasRatesInfo(lead)) {
       setPendingMove({ stage: newStage });
       return;
@@ -707,6 +708,8 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab,
       if (typeof onUpdate === "function") onUpdate(lead.id, { stage: "converted" });
       setConvertOpen(false);
       onClose();
+      const pid = r.data?.project?.id;
+      if (pid && typeof onOpenProject === "function") onOpenProject(pid);
     } catch (e) {
       setConvertErr(t("crm.cv_failed") + (e?.message ? " (" + e.message + ")" : ""));
     } finally { setConvertSaving(false); }
@@ -1373,8 +1376,17 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab,
             {!pendingMove && !convertOpen && STAGES.map(s=>{
               const isCurrentStage=s.id===lead.stage;
               const needsRates  = stageNeedsRates(s.id) && !leadHasRatesInfo(lead);
+              // "Converted to Project" construction lead ka stage nahi (sirf solar) — PATCH par server
+              // 500 deta tha (16 Nov 2026). Yahan iska matlab: project banao, ya bana ho to kholo.
+              const toProject = s.id==="project";
               return(
-                <button key={s.id} onClick={()=>{if(!isCurrentStage || (s.id==="converted" && !lead.converted_project_id)) tryMoveStage(s.id);}}
+                <button key={s.id} data-stage={s.id} onClick={()=>{
+                  if(toProject){
+                    if(lead.converted_project_id && onOpenProject){ onClose(); onOpenProject(lead.converted_project_id); }
+                    else tryMoveStage("converted");
+                    return;
+                  }
+                  if(!isCurrentStage || (s.id==="converted" && !lead.converted_project_id)) tryMoveStage(s.id);}}
                   style={{width:"100%",display:"flex",alignItems:"center",gap:12,padding:"12px 14px",borderRadius:9,border:`2px solid ${isCurrentStage?s.color:T.b1}`,background:isCurrentStage?s.bg:T.surface,marginBottom:8,cursor:isCurrentStage?"default":"pointer",transition:"all .15s"}}
                   onMouseEnter={e=>{if(!isCurrentStage){e.currentTarget.style.borderColor=s.color;e.currentTarget.style.background=s.bg;}}}
                   onMouseLeave={e=>{if(!isCurrentStage){e.currentTarget.style.borderColor=T.b1;e.currentTarget.style.background=T.surface;}}}>
@@ -4655,7 +4667,7 @@ function CRMModule({onOpenProject}={}){
     // will live alongside the snake_case ones in state until the re-fetch
     // below replaces them with authoritative server values + joined names.
     setLeads(p=>p.map(l=>l.id===id?{...l,...update}:l));
-    if(selLead?.id===id) setSelLead(p=>({...p,...update}));
+    setSelLead(p=>p&&p.id===id?{...p,...update}:p);
     try{
       const r=await api.patch("/crm/leads/"+id,update);
       // api client throw nahi karta — {success:false} par badlav wapas lo aur
@@ -4664,7 +4676,7 @@ function CRMModule({onOpenProject}={}){
         if(prev){
           const back=Object.fromEntries(Object.keys(update).map(k=>[k,prev[k]]));
           setLeads(p=>p.map(l=>l.id===id?{...l,...back}:l));
-          if(selLead?.id===id) setSelLead(p=>({...p,...back}));
+          setSelLead(p=>p&&p.id===id?{...p,...back}:p);
         }
         alert(r?.message||t("crm.error_saving_lead"));
         return false;
@@ -4678,7 +4690,7 @@ function CRMModule({onOpenProject}={}){
         const fresh = await api.get("/crm/leads/" + id);
         if (fresh?.success && fresh.data) {
           setLeads(p=>p.map(l=>l.id===id?{...l,...fresh.data}:l));
-          if(selLead?.id===id) setSelLead(p=>({...p,...fresh.data}));
+          setSelLead(p=>p&&p.id===id?{...p,...fresh.data}:p);
         }
       } catch(_) {}
       // Stage change prompts (non-blocking — stage already changed)
