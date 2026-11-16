@@ -17144,6 +17144,18 @@ const dict = {
   "crm.cv_link_btn": "Project se link karo",
   "crm.cv_failed": "Project nahi bana — dobara koshish karo.",
   "crm.cv_done": "Project ban gaya.",
+  "finance.wallet_requests_n": "Wallet ke kaam baaki ({n})",
+  "finance.cash_dep_title_n": "Cash jama confirm karo ({n})",
+  "finance.cash_dep_on": "{date} ko jama",
+  "finance.cash_dep_slip": "Slip ki photo",
+  "finance.cash_dep_received": "Mil gaya",
+  "finance.cash_dep_not_received": "Nahi mila",
+  "finance.cash_dep_confirm_q": "{name} ka ₹{amt} — {account} me add karna hai?",
+  "finance.cash_dep_reject_reason": "Kyun nahi mila?",
+  "finance.cash_dep_reject_need": "Wajah likho (kam se kam 3 akshar)",
+  "finance.cash_dep_failed": "Nahi ho paya — dobara try karo",
+  "finance.cash_held_chip": "Cash paas me ₹{amt}",
+  "finance.cash_held_tip": "Party se mila cash jo staff ne abhi na wallet me daala na company me jama kiya",
 };
 
 export default dict;

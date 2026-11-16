@@ -17142,6 +17142,18 @@ const dict = {
   "crm.cv_link_btn": "Link to project",
   "crm.cv_failed": "Project was not created — please try again.",
   "crm.cv_done": "Project created.",
+  "finance.wallet_requests_n": "Wallet requests to act on ({n})",
+  "finance.cash_dep_title_n": "Cash deposits to confirm ({n})",
+  "finance.cash_dep_on": "Deposited {date}",
+  "finance.cash_dep_slip": "Slip photo",
+  "finance.cash_dep_received": "Received",
+  "finance.cash_dep_not_received": "Not received",
+  "finance.cash_dep_confirm_q": "Add ₹{amt} from {name} to {account}?",
+  "finance.cash_dep_reject_reason": "Why not received?",
+  "finance.cash_dep_reject_need": "Write the reason (at least 3 letters)",
+  "finance.cash_dep_failed": "Could not do it — try again",
+  "finance.cash_held_chip": "Cash in hand ₹{amt}",
+  "finance.cash_held_tip": "Cash received from parties that the staff member has not yet moved to wallet or deposited to the company",
 };
 
 export default dict;

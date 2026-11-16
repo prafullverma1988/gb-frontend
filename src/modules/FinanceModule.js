@@ -4098,6 +4098,11 @@ function FinanceModule(){
   // WAL-11: pending "Salary me settle karo" requests (inbox neeche wallets tab me)
   const [settleReqs,setSettleReqs]=useState([]);
   const [settleReqBusy,setSettleReqBusy]=useState(null);
+  // "Cash mere paas" (17 Nov 2026): staff ne client ka cash company khaate me jama
+  // bataya — yahan "Mil gaya" (usi khaate me chadhta hai) / "Nahi mila".
+  const [cashDeps,setCashDeps]=useState([]);
+  const [cashDepBusy,setCashDepBusy]=useState(null);
+  const [cashDepAcct,setCashDepAcct]=useState({});
   const loadWallets=()=>{
     api.get("/wallets/staff").then(res=>{
       if(res&&res.success){
@@ -4108,6 +4113,7 @@ function FinanceModule(){
           userState:w.user_state||"staff", canTopup:w.can_topup!==false,
           balance:Number(w.posted_balance)||0,
           pending:Number(w.pending_amount)||0,
+          cash:Number(w.cash_with_staff)||0,
           limit:Number(w.wallet_limit)||0,
           color:"#2563EB",
           initials:(w.name||"?").split(/\s+/).map(x=>x[0]).join("").slice(0,2).toUpperCase(),
@@ -4120,6 +4126,33 @@ function FinanceModule(){
     api.get("/wallets/salary/settle-requests").then(res=>{
       if(res&&res.success) setSettleReqs(res.data||[]);
     }).catch(()=>{});
+    // Finance → Approve na ho to server 403 deta hai — tab box dikhta hi nahi.
+    api.get("/wallets/cash/deposits?status=pending").then(res=>{
+      setCashDeps(res&&res.success?(res.data||[]):[]);
+    }).catch(()=>setCashDeps([]));
+  };
+  const confirmCashDep=async(d)=>{
+    const accId=Number(cashDepAcct[d.id]||d.account_id);
+    const acc=(apiAccounts||[]).find(a=>Number(a.id)===accId);
+    const ok=await window.confirmAsync(t("finance.cash_dep_confirm_q",{amt:fmtN(d.amount),name:d.staff_name,account:(acc&&acc.name)||d.account_name||""}));
+    if(!ok) return;
+    setCashDepBusy(d.id);
+    try{
+      const res=await api.post(`/wallets/cash/deposit/${d.id}/confirm`,{account_id:accId});
+      window.alert((res&&res.message)||t("finance.cash_dep_failed"));
+    }catch(e){ window.alert(t("finance.cash_dep_failed")); }
+    setCashDepBusy(null); loadWallets(); refreshAccounts(); refreshTxns();
+  };
+  const rejectCashDep=async(d)=>{
+    const reason=await window.promptAsync(t("finance.cash_dep_reject_reason"));
+    if(reason===null||reason===undefined) return;
+    if(String(reason).trim().length<3){ window.alert(t("finance.cash_dep_reject_need")); return; }
+    setCashDepBusy(d.id);
+    try{
+      const res=await api.post(`/wallets/cash/deposit/${d.id}/reject`,{reason:String(reason).trim()});
+      window.alert((res&&res.message)||t("finance.cash_dep_failed"));
+    }catch(e){ window.alert(t("finance.cash_dep_failed")); }
+    setCashDepBusy(null); loadWallets();
   };
   useEffect(()=>{ loadWallets(); },[]);
   // WAL-11: staff ki "Salary me settle karo" requests (wallet ka paisa → salary).
@@ -5246,13 +5279,13 @@ Status: ${ledgerRow.status||"unpaid"}`;
             <div style={{position:"relative"}}>
               <button onClick={()=>setShowAccPanel(!showAccPanel)} style={{display:"flex",alignItems:"center",gap:5,padding:"6px 11px",borderRadius:6,border:`1px solid ${showAccPanel?"#1E40AF":"#CBD5E1"}`,background:"#FFFFFF",fontSize:11.5,fontWeight:600,color:"#475569",cursor:"pointer"}}>
                 <IcBank size={13} color="currentColor"/> {t("finance.accounts")} <IcDown size={10} color="currentColor"/>
-                {settleReqs.length>0&&<span title={t("finance.salary_settle_requests_n",{n:settleReqs.length})} style={{minWidth:15,height:15,padding:"0 4px",boxSizing:"border-box",borderRadius:8,background:T.red,color:"white",fontSize:9,fontWeight:800,display:"inline-flex",alignItems:"center",justifyContent:"center"}}>{settleReqs.length}</span>}
+                {(settleReqs.length+cashDeps.length)>0&&<span title={t("finance.wallet_requests_n",{n:settleReqs.length+cashDeps.length})} style={{minWidth:15,height:15,padding:"0 4px",boxSizing:"border-box",borderRadius:8,background:T.red,color:"white",fontSize:9,fontWeight:800,display:"inline-flex",alignItems:"center",justifyContent:"center"}}>{settleReqs.length+cashDeps.length}</span>}
               </button>
               {showAccPanel&&(<>
                 <div onClick={()=>setShowAccPanel(false)} style={{position:"fixed",inset:0,zIndex:140}}/>
                 <div style={{position:"absolute",right:0,top:"calc(100% + 6px)",background:T.surface,borderRadius:10,boxShadow:"0 8px 28px rgba(0,0,0,0.18)",border:`1px solid ${T.b1}`,zIndex:150,width:320,overflow:"hidden"}}>
                   <div style={{display:"flex",borderBottom:`1px solid ${T.b1}`,background:T.surfaceB}}>
-                    {[{id:"accounts",l:t("finance.company_accounts")},{id:"wallets",l:t("finance.staff_wallets"),n:settleReqs.length}].map(t=>(
+                    {[{id:"accounts",l:t("finance.company_accounts")},{id:"wallets",l:t("finance.staff_wallets"),n:settleReqs.length+cashDeps.length}].map(t=>(
                       <button key={t.id} onClick={()=>setAccTab(t.id)} style={{flex:1,padding:"9px 8px",border:"none",background:"none",color:accTab===t.id?T.blu:T.t3,fontSize:11.5,fontWeight:accTab===t.id?700:400,cursor:"pointer",borderBottom:accTab===t.id?`2px solid ${T.blu}`:"2px solid transparent"}}>{t.l}{t.n>0&&<span style={{marginLeft:5,padding:"0 5px",borderRadius:8,background:T.red,color:"white",fontSize:9,fontWeight:800}}>{t.n}</span>}</button>
                     ))}
                   </div>
@@ -5291,6 +5324,28 @@ Status: ${ledgerRow.status||"unpaid"}`;
                       </>
                     ):(
                       <>
+                      {cashDeps.length>0&&<div style={{marginBottom:8,padding:"7px 9px",borderRadius:7,background:T.bluL,border:`1px solid ${T.bluM}`}}>
+                        <div style={{fontSize:10,fontWeight:800,color:T.blu,textTransform:"uppercase",letterSpacing:.4,marginBottom:3}}>{t("finance.cash_dep_title_n",{n:cashDeps.length})}</div>
+                        {cashDeps.map(d=>(
+                          <div key={d.id} style={{padding:"6px 0 2px",borderTop:`1px solid ${T.bluM}`}}>
+                            <div style={{display:"flex",justifyContent:"space-between",gap:6}}>
+                              <span style={{fontSize:11.5,fontWeight:700,color:T.t1}}>{d.staff_name}</span>
+                              <span style={{fontSize:12,fontWeight:800,color:T.t1}}>₹{fmtN(d.amount)}</span>
+                            </div>
+                            <div style={{fontSize:10,color:T.t3,marginTop:1}}>{t("finance.cash_dep_on",{date:String(d.move_date||"").split("-").reverse().join("/")})}{d.note?" · "+d.note:""}{d.photo_url&&<> · <a href={d.photo_url} target="_blank" rel="noreferrer" style={{color:T.blu,fontWeight:600}}>{t("finance.cash_dep_slip")}</a></>}</div>
+                            <select value={String(cashDepAcct[d.id]||d.account_id||"")} onChange={e=>setCashDepAcct(s=>({...s,[d.id]:e.target.value}))}
+                              style={{width:"100%",marginTop:5,padding:"4px 6px",fontSize:11,borderRadius:6,border:`1px solid ${T.b1}`,background:T.surface,color:T.t1}}>
+                              {(apiAccounts||[]).map(a=><option key={a.id} value={String(a.id)}>{a.name}</option>)}
+                            </select>
+                            <div style={{display:"flex",gap:6,marginTop:5,justifyContent:"flex-end"}}>
+                              <button disabled={cashDepBusy===d.id} onClick={()=>rejectCashDep(d)}
+                                style={{fontSize:10,fontWeight:700,color:T.red,background:T.surface,border:`1px solid ${T.redM}`,borderRadius:6,padding:"3px 10px",cursor:"pointer"}}>{t("finance.cash_dep_not_received")}</button>
+                              <button disabled={cashDepBusy===d.id} onClick={()=>confirmCashDep(d)}
+                                style={{fontSize:10,fontWeight:700,color:"white",background:T.grn,border:"none",borderRadius:6,padding:"3px 10px",cursor:"pointer"}}>{t("finance.cash_dep_received")}</button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>}
                       {settleReqs.length>0&&<div style={{marginBottom:8,padding:"7px 9px",borderRadius:7,background:T.ambL,border:`1px solid ${T.ambM}`}}>
                         <div style={{fontSize:10,fontWeight:800,color:T.amb,textTransform:"uppercase",letterSpacing:.4,marginBottom:3}}>{t("finance.salary_settle_requests_n",{n:settleReqs.length})}</div>
                         {settleReqs.map(r=>(
@@ -5323,6 +5378,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
                           </div>
                           <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:w.limit>0?5:0}}>
                             {due>0&&<span style={{fontSize:9.5,fontWeight:700,color:T.red,background:T.redL,border:`1px solid ${T.redM}`,padding:"2px 7px",borderRadius:10}}>{t("finance.salary_due_fmtn", { fmtN: fmtN(due) })}</span>}
+                            {w.cash>0&&<span title={t("finance.cash_held_tip")} style={{fontSize:9.5,fontWeight:700,color:T.amb,background:T.ambL,border:`1px solid ${T.ambM}`,padding:"2px 7px",borderRadius:10}}>{t("finance.cash_held_chip",{amt:fmtN(w.cash)})}</span>}
                             <button onClick={()=>{setShowAccPanel(false);setSendStaff({...w,salaryDue:due});}}
                               style={{marginLeft:"auto",fontSize:10,fontWeight:700,color:T.blu,background:T.bluL,border:`1px solid ${T.bluM}`,borderRadius:6,padding:"3px 10px",cursor:"pointer"}}>{t("finance.send")}</button>
                           </div>
