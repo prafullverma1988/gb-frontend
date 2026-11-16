@@ -196,7 +196,8 @@ export function SavedPatterns({ scopes, canEdit, onClose }) {
   );
 }
 
-export default function QuoteSchedule({ quoteId, rows, schedule, onSchedule, editable, canEdit, badKeys, remember, onRemember, dirty, scopes, preview }) {
+// noAi / noSaved: project ke "Pick from Package" me (quote nahi, CRM permission nahi bhi ho sakti)
+export default function QuoteSchedule({ quoteId, rows, schedule, onSchedule, editable, canEdit, badKeys, remember, onRemember, dirty, scopes, preview, noAi, noSaved }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [sugg, setSugg] = useState(null);
@@ -229,9 +230,9 @@ export default function QuoteSchedule({ quoteId, rows, schedule, onSchedule, edi
           <div style={{ fontSize: 14.5, fontWeight: 800, color: T.t1 }}>{t("sales_quote_ui.sched_title")}</div>
           <div style={{ fontSize: 12, color: T.t3, marginTop: 2, lineHeight: 1.45 }}>{t("sales_quote_ui.sched_hint")}</div>
         </div>
-        <button type="button" onClick={() => setShowSaved(true)} style={{ ...btn(), fontSize: 12 }} data-testid="btn-saved-patterns">🧠 {t("sales_quote_ui.saved_link")}</button>
+        {!noSaved ? <button type="button" onClick={() => setShowSaved(true)} style={{ ...btn(), fontSize: 12 }} data-testid="btn-saved-patterns">🧠 {t("sales_quote_ui.saved_link")}</button> : null}
       </div>
-      {editable ? (
+      {editable && !noAi ? (
         <div style={{ margin: "6px 0 10px" }}>
           <button type="button" onClick={match} disabled={busy} data-testid="btn-sched-match" style={btn("ai", busy)}>
             {busy ? <Spinner size={13} color={T.pur} /> : "✨"} {t("sales_quote_ui.sched_match_btn")}

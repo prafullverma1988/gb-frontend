@@ -13,6 +13,7 @@ import { can } from "../../utils/perms";
 import { StageBillGrid, StageLinesPanel } from "./StageBilling";
 import { StatementView, ProjectStatementView, DraftLinesModal } from "./BillingV2";
 import { ChaluBillView, ProjectChaluView } from "./ChaluBill";
+import PackageEstimateModal from "../crm/PackageEstimateModal";
 
 function TabEstimate({ project }) {
   // Roles & Access (5 Oct 2026) — har button usi Estimate tick se jo server
@@ -60,6 +61,8 @@ function TabEstimate({ project }) {
   const [estBuilderOpen,   setEstBuilderOpen]   = useState(false);
   const [estBuilderMode,   setEstBuilderMode]   = useState("library");   // "library" | "scratch" | "from_quote"
   const [estBuilderQuoteId,setEstBuilderQuoteId]= useState(null);
+  // 16 Nov 2026: "📦 Pick from Package" — CRM package / quote se lines + payment schedule ek saath
+  const [pkgEstOpen, setPkgEstOpen] = useState(false);
   // CRM-quote availability for "Take from CRM" path. Loaded once per
   // project on mount; { mode: "specific"|"all"|"none", quotes: [...] }
   const [crmQuotes, setCrmQuotes] = useState({ mode: "none", quotes: [] });
@@ -1385,6 +1388,16 @@ function TabEstimate({ project }) {
                 <div style={{position:"fixed",top:148,left:240,width:320,
                              background:"white",borderRadius:8,border:"1px solid "+T.b1,
                              boxShadow:"0 12px 32px rgba(0,0,0,0.18)",zIndex:201,overflow:"hidden"}}>
+                  {/* PATH 0 — Pick from Package (CRM package / bheja hua quote): lines + payment schedule ek saath.
+                      City / Type nahi chahiye — package ki apni rate. */}
+                  <div onClick={()=>{ setPkgEstOpen(true); setEstChooserOpen(false); }} data-testid="est-pick-package"
+                    style={{padding:"10px 12px",cursor:"pointer",borderBottom:"1px solid "+T.b1}}
+                    onMouseEnter={e=>e.currentTarget.style.background="#F0FDF4"}
+                    onMouseLeave={e=>e.currentTarget.style.background="white"}>
+                    <div style={{fontSize:12,fontWeight:700,color:"#0F172A"}}>{t("estimate.pick_from_package")}</div>
+                    <div style={{fontSize:10.5,color:T.t3,marginTop:2}}>{t("estimate.pick_from_package_sub")}</div>
+                  </div>
+
                   {!libReady && (
                     <div style={{padding:"8px 12px",fontSize:10.5,color:"#92400E",background:"#FFFBEB",borderBottom:"1px solid #FDE68A"}}>
                      {t("estimate.project_missing_city_type_crm_path")}
@@ -2777,6 +2790,25 @@ function TabEstimate({ project }) {
             setEstBuilderOpen(false);
             // Refresh the estimates list — reuse the existing fetch.
             loadEstimates();
+          }}
+        />
+      )}
+
+      {/* ── 📦 Pick from Package (16 Nov 2026) ── */}
+      {pkgEstOpen && (
+        <PackageEstimateModal
+          project={project}
+          projectId={projectId}
+          customers={customers}
+          onClose={() => setPkgEstOpen(false)}
+          onSaved={async (estId) => {
+            setPkgEstOpen(false);
+            const r = await api.get("/customer-estimates?project_id="+projectId).catch(()=>({success:false}));
+            if (r.success) {
+              setEstimates(r.data||[]);
+              const e = (r.data||[]).find(x => Number(x.id) === Number(estId));
+              if (e) selectEst(e);
+            }
           }}
         />
       )}
