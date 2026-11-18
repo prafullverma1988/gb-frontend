@@ -643,13 +643,27 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab,
   // ── M2: Convert-to-project panel state ─────────────────────────
   const [convertOpen,   setConvertOpen]   = useState(false);
   const [convertForm,   setConvertForm]   = useState({});
-  const [finalQuotes,   setFinalQuotes]   = useState({ busy: true, quotes: [], canAccept: false });
+  const [finalQuotes,   setFinalQuotes]   = useState({ busy: true, failed: false, quotes: [], canAccept: false, canEstimate: false });
+  const finalReq = useRef(0);
   const [finalQuote,    setFinalQuote]    = useState(null);   // chuna hua quote; null = abhi final quote nahi
   const [finalAccept,   setFinalAccept]   = useState(false);  // Draft / Sent quote: "client ne maan liya" tick
   const [convertStep,   setConvertStep]   = useState("quote"); // quote → details
   const [convertSaving, setConvertSaving] = useState(false);
   const [convertErr,    setConvertErr]    = useState("");
   const [convertProjects, setConvertProjects] = useState([]);
+  const loadFinalQuotes = async () => {
+    const req = ++finalReq.current;
+    setFinalQuote(null); setFinalAccept(false); setConvertStep("quote");
+    setFinalQuotes({ busy: true, failed: false, quotes: [], canAccept: false, canEstimate: false });
+    let r = null;
+    try { r = await api.get("/crm/leads/" + lead.id + "/final-quotes"); } catch (_) {}
+    if (req !== finalReq.current) return;   // form dobara khul chuka — purana jawab chhodo
+    if (!r?.success) { setFinalQuotes({ busy: false, failed: true, quotes: [], canAccept: false, canEstimate: false }); return; }
+    const quotes = r.data?.quotes || [];
+    setFinalQuotes({ busy: false, failed: false, quotes, canAccept: !!r.data?.can_accept, canEstimate: !!r.data?.can_estimate });
+    setFinalQuote(quotes[0] || null);
+    if (!quotes.length) setConvertStep("details");
+  };
   useEffect(() => {
     if (!convertOpen) return;
     setConvertErr("");
@@ -665,18 +679,7 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab,
       boq_value:    "",       // sirf jab final quote na ho; lead ka budget yahan nahi aata
     });
     // Final quote: Accepted sabse upar, wahi pehle se chuna. Quote hi na ho to seedha project ki jaankari.
-    setFinalQuote(null); setFinalAccept(false); setConvertStep("quote");
-    setFinalQuotes({ busy: true, quotes: [], canAccept: false });
-    (async () => {
-      let quotes = [], canAccept = false;
-      try {
-        const r = await api.get("/crm/leads/" + lead.id + "/final-quotes");
-        if (r?.success) { quotes = r.data?.quotes || []; canAccept = !!r.data?.can_accept; }
-      } catch (_) {}
-      setFinalQuotes({ busy: false, quotes, canAccept });
-      setFinalQuote(quotes[0] || null);
-      if (!quotes.length) setConvertStep("details");
-    })();
+    loadFinalQuotes();
     (async () => {
       try {
         const r = await api.get("/projects");
@@ -686,6 +689,8 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab,
     // eslint-disable-next-line
   }, [convertOpen]);
   const cancelConvert = () => { if (!convertSaving) setConvertOpen(false); };
+  // Client ke saath final hua estimate + payment schedule hi project me jaata hai (Package Quote)
+  const canMakeEstimate = finalQuote?.source === "package" && !finalQuote.used && finalQuotes.canEstimate;
   const confirmConvertWithProject = async () => {
     const existing = convertForm.mode === "existing";
     if (existing ? !convertForm.existing_project_id : !convertForm.project_name?.trim()) return;
@@ -701,6 +706,7 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab,
       };
       if (!existing && finalQuote) body.final_quote = { source: finalQuote.source, id: finalQuote.id, total: finalQuote.total, ...(finalQuote.status !== "accepted" ? { accept: finalAccept } : {}) };
       else if (!existing) body.boq_value = Number(convertForm.boq_value) || 0;
+      if (!existing && canMakeEstimate) body.make_estimate = true;
       const r = await api.post("/crm/leads/" + lead.id + "/convert-to-project", body);
       if (!r?.success) { setConvertErr(r?.message || t("crm.cv_failed")); setConvertSaving(false); return; }
       window.toast?.success?.(r.message || t("crm.cv_done"));
@@ -709,7 +715,9 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab,
       setConvertOpen(false);
       onClose();
       const pid = r.data?.project?.id;
-      if (pid && typeof onOpenProject === "function") onOpenProject(pid);
+      if (pid && typeof onOpenProject === "function") {
+        if (r.data?.estimate) onOpenProject(pid, "estimate"); else onOpenProject(pid);
+      }
     } catch (e) {
       setConvertErr(t("crm.cv_failed") + (e?.message ? " (" + e.message + ")" : ""));
     } finally { setConvertSaving(false); }
@@ -1488,6 +1496,11 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab,
                   </div>
                 ):finalQuotes.busy?(
                   <div style={{fontSize:12,color:T.t3,padding:"10px 0"}}>{t("crm.fq_loading")}</div>
+                ):finalQuotes.failed?(
+                  <div role="alert" data-testid="cv-fq-failed" style={{padding:"9px 11px",borderRadius:8,background:"#FEF2F2",border:"1px solid #FECACA",fontSize:12,color:"#B91C1C",marginBottom:10,lineHeight:1.45}}>
+                    {t("crm.fq_load_failed")}{" "}
+                    <button type="button" data-testid="cv-fq-retry" onClick={loadFinalQuotes} style={{border:"none",background:"none",padding:0,color:"#B91C1C",fontWeight:800,textDecoration:"underline",cursor:"pointer",fontFamily:"inherit",fontSize:12}}>{t("common.retry")}</button>
+                  </div>
                 ):convertStep==="quote"?(
                   <ConvertFinalQuote quotes={finalQuotes.quotes} canAccept={finalQuotes.canAccept} selected={finalQuote} accept={finalAccept} budget={lead.budget}
                     onSelect={q=>{setFinalQuote(q);setFinalAccept(false);}} onAccept={setFinalAccept}/>
@@ -1533,12 +1546,19 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab,
                 </div>
                 <div style={{marginBottom:10}}>
                   <label style={{fontSize:10,fontWeight:700,color:T.t4,display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".4px"}}>{t("crm.cv_boq_value")}</label>
-                  {finalQuote?(
+                  {finalQuote?(<>
                     <div data-testid="cv-boq-locked" style={{padding:"8px 10px",borderRadius:6,border:"1.5px solid #A7F3D0",background:"#ECFDF5",display:"flex",justifyContent:"space-between",alignItems:"baseline",gap:10}}>
                       <span style={{fontSize:14,fontWeight:800,color:"#065F46"}}>₹{Math.round(Number(finalQuote.total)||0).toLocaleString("en-IN")}</span>
                       <span style={{fontSize:11,color:"#047857",textAlign:"right"}}>{t("crm.fq_boq_from",{no:finalQuote.no})}</span>
                     </div>
-                  ):(<>
+                    {canMakeEstimate?(
+                      <div data-testid="cv-est-goes" style={{marginTop:8,padding:"9px 11px",borderRadius:8,background:"#EFF6FF",border:"1px solid #BFDBFE",fontSize:12,color:"#1E40AF",lineHeight:1.4}}>
+                        <strong>{t("crm.fq_make_est")}</strong><br/>{t("crm.fq_make_est_hint",{no:finalQuote.no})}
+                      </div>
+                    ):finalQuote.source==="package"?(
+                      <div data-testid="cv-est-note" style={{fontSize:10.5,color:"#64748B",marginTop:6}}>{finalQuote.used?t("crm.fq_est_used"):t("crm.fq_est_no_perm")}</div>
+                    ):null}
+                  </>):(<>
                     <input value={convertForm.boq_value ?? ""} inputMode="decimal" data-cv="boq_value" placeholder="0" onChange={e => setConvertForm(p => ({ ...p, boq_value: e.target.value }))}
                       style={{width:"100%",padding:"7px 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
                     <div style={{fontSize:10.5,color:"#64748B",marginTop:4}}>{Number(lead.budget)>0?t("crm.cv_boq_hint",{budget:"₹"+Math.round(Number(lead.budget)).toLocaleString("en-IN")}):t("crm.cv_boq_hint_nobudget")}</div>
@@ -1561,7 +1581,7 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab,
                    {t("crm.skip_just_convert")}
                   </button>
                   {convertForm.mode==="new"&&convertStep==="quote"?(()=>{
-                    const blocked=finalQuotes.busy||(!!finalQuote&&finalQuote.status!=="accepted"&&!finalAccept);
+                    const blocked=finalQuotes.busy||finalQuotes.failed||(!!finalQuote&&finalQuote.status!=="accepted"&&!finalAccept);
                     return <button onClick={()=>setConvertStep("details")} disabled={blocked} data-testid="cv-next"
                       style={{flex:2,padding:"9px",borderRadius:7,background:blocked?"#9CA3AF":"#10B981",color:"white",border:"none",fontSize:12.5,fontWeight:700,cursor:blocked?"not-allowed":"pointer"}}>
                       {t("crm.fq_next")}

@@ -102,8 +102,8 @@ function ConvertSheet({ lead, quote, onClose, onDone }) {
   const go = async () => {
     if (!name.trim()) { setErr(t("sales_quote_ui.err_project_name")); return; }
     setBusy(true); setErr("");
-    const r = await api.post(`/crm/leads/${lead.id}/convert-to-project`, { project_name: name.trim(), final_quote: { source: "package", id: quote.id, total: quote.total } });
-    if (r && r.success && r.data && r.data.project && r.data.project.id) { await onDone(r.data.project.id); setBusy(false); return; }
+    const r = await api.post(`/crm/leads/${lead.id}/convert-to-project`, { project_name: name.trim(), make_estimate: true, final_quote: { source: "package", id: quote.id, total: quote.total } });
+    if (r && r.success && r.data && r.data.project && r.data.project.id) { await onDone(r.data.project.id, r.data.estimate); setBusy(false); return; }
     setBusy(false);
     setErr((r && r.message) || t("sales_quote_ui.convert_failed"));
   };
@@ -282,10 +282,16 @@ export default function QuoteEditor({ quoteId, lead: leadProp, onClose, onChange
       await makeEstimate(pid);
     } else setPanel("convert");
   };
-  const afterConvert = async (pid) => {
+  const afterConvert = async (pid, madeEstimate) => {
     setQ((p) => ({ ...p, lead: { ...(p.lead || {}), converted_project_id: pid } }));
     onLeadConverted && onLeadConverted(pid);
     setPanel(null);
+    if (madeEstimate) {   // project ke saath hi ban gaya
+      setQ((p) => ({ ...p, estimate_id: madeEstimate.id, project_id: pid }));
+      window.toast?.success?.(t("sales_quote_ui.est_made_toast"));
+      onChanged && onChanged();
+      return;
+    }
     await makeEstimate(pid);
   };
 

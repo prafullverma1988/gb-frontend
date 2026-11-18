@@ -37,7 +37,7 @@ beforeEach(async () => {
   localStorage.setItem("gb_user", JSON.stringify({ id: 7, role: "admin", company_id: 1, name: "prafull verma" }));
   window.confirmAsync = jest.fn(() => Promise.resolve(true));
   onOpenProject = jest.fn();
-  finalQuotes = { quotes: [], can_accept: true };
+  finalQuotes = { quotes: [], can_accept: true, can_estimate: true };
   api.get.mockImplementation(async (url) => {
     if (url === "/crm/leads") return { success: true, data: [{ ...LEAD }] };
     if (url === "/crm/leads/139") return { success: true, data: { ...LEAD } };
@@ -46,8 +46,8 @@ beforeEach(async () => {
     if (/^\/sales-quotes\/\d+$/.test(url)) return { success: true, data: QUOTE_DOC };
     return { success: true, data: [] };
   });
-  api.post.mockImplementation(async (url) => (url === "/crm/leads/139/convert-to-project"
-    ? { success: true, data: { project: { id: 727, name: "ZZ Test Lead — Project" } }, message: "ok" } : { success: true, data: {} }));
+  api.post.mockImplementation(async (url, body) => (url === "/crm/leads/139/convert-to-project"
+    ? { success: true, data: { project: { id: 727, name: "ZZ Test Lead — Project" }, estimate: body.make_estimate ? { id: 51, no: "EST-1", total: 2651750 } : null }, message: "ok" } : { success: true, data: {} }));
   api.patch.mockImplementation(async () => ({ success: false, message: "Server me problem hai — thodi der baad try karo" }));
   box = document.createElement("div"); document.body.appendChild(box); root = createRoot(box);
   await act(async () => { root.render(<CRMModule onOpenProject={onOpenProject} />); });
@@ -98,7 +98,7 @@ test("Quote nahi: lead ka budget BOQ me nahi aata, project bina value ke banta h
 });
 
 test("Draft quote: preview dikhe, tick bina aage nahi, BOQ = quote total (budget nahi)", async () => {
-  finalQuotes = { quotes: [DRAFT], can_accept: true };
+  finalQuotes = { quotes: [DRAFT], can_accept: true, can_estimate: true };
   await click(btnText(/Project banao/));
   expect(testid("cv-fq-preview").textContent).toMatch(/Ground Floor/);
   expect(testid("cv-fq-preview").textContent).toMatch(/Payment schedule \(2 hisse\)/);
@@ -115,7 +115,7 @@ test("Draft quote: preview dikhe, tick bina aage nahi, BOQ = quote total (budget
 });
 
 test("Accepted quote pehle se chuna, tick nahi maangta", async () => {
-  finalQuotes = { quotes: [ACCEPTED, DRAFT], can_accept: true };
+  finalQuotes = { quotes: [ACCEPTED, DRAFT], can_accept: true, can_estimate: true };
   await click(btnText(/Project banao/));
   expect(testid("cv-fq-accept")).toBeNull();
   await click(testid("cv-next"));
@@ -123,8 +123,47 @@ test("Accepted quote pehle se chuna, tick nahi maangta", async () => {
   expect(convertBody().final_quote).toEqual({ source: "package", id: 7, total: 2800000 });
 });
 
+test("Final Package Quote: estimate + schedule hamesha jaata hai (tick nahi), project Estimate tab par khulta hai", async () => {
+  finalQuotes = { quotes: [ACCEPTED], can_accept: true, can_estimate: true };
+  await click(btnText(/Project banao/));
+  await click(testid("cv-next"));
+  expect(testid("cv-est-goes").textContent).toMatch(/QT\/26-27\/006/);
+  expect(document.querySelector('input[type="checkbox"][data-testid="cv-make-est"]')).toBeNull();
+  await click(testid("cv-go"));
+  expect(convertBody().make_estimate).toBe(true);
+  expect(onOpenProject).toHaveBeenCalledWith(727, "estimate");
+});
+
+test.each([
+  ["estimate pehle se bana", { ...ACCEPTED, used: true }, true, true],
+  ["Estimate Create permission nahi", ACCEPTED, false, true],
+  ["PDF quote", { ...ACCEPTED, source: "pdf", id: 9 }, true, false],
+])("Estimate nahi jaata: %s", async (_name, quote, canEstimate, note) => {
+  finalQuotes = { quotes: [quote], can_accept: true, can_estimate: canEstimate };
+  await click(btnText(/Project banao/));
+  await click(testid("cv-next"));
+  expect(testid("cv-est-goes")).toBeNull();
+  expect(!!testid("cv-est-note")).toBe(note);
+  await click(testid("cv-go"));
+  expect(convertBody().make_estimate).toBeUndefined();
+});
+
+test("Quote list na aaye: 'quote nahi' nahi maanta, project nahi ban sakta; Retry se list aati hai", async () => {
+  const ok = api.get.getMockImplementation();
+  api.get.mockImplementation(async (url) => (url === "/crm/leads/139/final-quotes" ? { success: false, message: "x" } : ok(url)));
+  await click(btnText(/Project banao/));
+  expect(testid("cv-fq-failed")).not.toBeNull();
+  expect(testid("cv-go")).toBeNull();
+  expect(testid("cv-next").disabled).toBe(true);
+  finalQuotes = { quotes: [ACCEPTED], can_accept: true, can_estimate: true };
+  api.get.mockImplementation(ok);
+  await click(testid("cv-fq-retry"));
+  expect(testid("cv-fq-failed")).toBeNull();
+  expect(testid("cv-next").disabled).toBe(false);
+});
+
 test("Accept ki permission nahi: Draft par aage nahi; 'Abhi final quote nahi' se aage", async () => {
-  finalQuotes = { quotes: [DRAFT], can_accept: false };
+  finalQuotes = { quotes: [DRAFT], can_accept: false, can_estimate: true };
   await click(btnText(/Project banao/));
   expect(testid("cv-fq-accept")).toBeNull();
   expect(testid("cv-next").disabled).toBe(true);

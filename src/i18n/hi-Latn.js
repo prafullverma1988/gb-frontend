@@ -17180,6 +17180,11 @@ const dict = {
   "crm.fq_boq_from": "{no} se",
   "crm.fq_intro_nobudget": "Project ki BOQ value isi quote se aayegi.",
   "crm.cv_boq_hint_nobudget": "Final quote abhi nahi hai. Final value pata ho to likho, warna baad me Project → Edit me.",
+  "crm.fq_make_est": "EST-1 aur payment schedule project me jaayega",
+  "crm.fq_make_est_hint": "Client ke saath final hua {no}: wahi lines, qty, rate aur payment schedule. Project seedha Estimate tab par khulega.",
+  "crm.fq_est_used": "Is quote se estimate pehle ban chuka hai, isliye naya estimate nahi banega.",
+  "crm.fq_est_no_perm": "Estimate banane ki permission nahi hai (Estimate → Create). Project banne ke baad jiske paas permission ho wo Estimate tab me banaye.",
+  "crm.fq_load_failed": "Quote ki list nahi khuli. Bina dekhe project nahi banega.",
 };
 
 export default dict;

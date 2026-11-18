@@ -17178,6 +17178,11 @@ const dict = {
   "crm.fq_boq_from": "from {no}",
   "crm.fq_intro_nobudget": "The project's BOQ value will come from this quote.",
   "crm.cv_boq_hint_nobudget": "No final quote yet. Enter the final value if you know it, or add it later in Project → Edit.",
+  "crm.fq_make_est": "EST-1 and the payment schedule will go to the project",
+  "crm.fq_make_est_hint": "{no} as finalised with the client: the same lines, quantities, rates and payment schedule. The project will open on the Estimate tab.",
+  "crm.fq_est_used": "An estimate has already been created from this quote, so a new one will not be created.",
+  "crm.fq_est_no_perm": "You do not have permission to create estimates (Estimate → Create). After the project is created, someone with permission can create it in the Estimate tab.",
+  "crm.fq_load_failed": "The quote list could not load. The project cannot be created without checking it.",
 };
 
 export default dict;
