@@ -159,8 +159,9 @@ export default function CompanyExpenseReport() {
   const colTotal = (ym) => pivot.reduce((s, g) => s + (g.by[ym] || 0), 0);
   const grand = pivot.reduce((s, g) => s + g.total, 0);
   const src = useMemo(() => {
-    const o = { cexp: 0, wallet: 0, other: 0 };
-    for (const r of (data && data.rows) || []) o[r.is_cexp ? "cexp" : r.is_wallet ? "wallet" : "other"] += r.amount;
+    // staff = salary / petrol / head (jis mahine ki salary, usi mahine me — 18 Nov 2026)
+    const o = { cexp: 0, wallet: 0, other: 0, staff: 0 };
+    for (const r of (data && data.rows) || []) o[r.is_staff_pay ? "staff" : r.is_cexp ? "cexp" : r.is_wallet ? "wallet" : "other"] += r.amount;
     return o;
   }, [data]);
   const dues = (data && data.dues) || [];
@@ -222,7 +223,7 @@ export default function CompanyExpenseReport() {
           <div style={{ ...card, borderTop: `3px solid ${T.red}` }}>
             <div style={{ fontSize: 10.5, fontWeight: 700, color: T.t4, textTransform: "uppercase" }}>{t("cxr.c_total")}</div>
             <div style={{ fontSize: 20, fontWeight: 700, color: T.t1, marginTop: 3 }}>{inr(grand)}</div>
-            <div style={{ fontSize: 11, color: T.t3, marginTop: 2 }}>{t("cxr.c_total_sub", { a: inr(src.cexp), b: inr(src.wallet), c: inr(src.other) })}</div>
+            <div style={{ fontSize: 11, color: T.t3, marginTop: 2 }}>{t("cxr.c_total_sub", { a: inr(src.cexp), b: inr(src.wallet), c: inr(src.other) })}{src.staff > 0 ? " · " + t("cxr.c_staff", { amt: inr(src.staff) }) : ""}</div>
           </div>
           <div style={{ ...card, borderTop: `3px solid ${T.amb}` }}>
             <div style={{ fontSize: 10.5, fontWeight: 700, color: T.t4, textTransform: "uppercase" }}>{t("cxr.c_month")}</div>
@@ -299,7 +300,8 @@ export default function CompanyExpenseReport() {
                 <div style={{ fontSize: 13, fontWeight: 700, color: T.t1, marginBottom: 8 }}>{t("cxr.p_title")}</div>
                 {[[t("cxr.p_rev"), pnl.project_revenue, T.t2], [t("cxr.p_cost"), -pnl.project_cost, T.t2], [t("cxr.p_proj"), pnl.project_pnl, pnl.project_pnl < 0 ? T.red : T.grn],
                   ...(pnl.other_income != null ? [[t("cxr.p_oi"), pnl.other_income, T.grn]] : []),
-                  [t("cxr.p_oh"), -pnl.overhead, T.red]].map(([l, v, c]) => (
+                  [t("cxr.p_oh"), -pnl.overhead, T.red],
+                  ...(pnl.staff_pay ? [[t("cxr.p_staff"), -pnl.staff_pay, T.red]] : [])].map(([l, v, c]) => (
                   <div key={l} style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, padding: "3px 0", color: T.t3 }}>
                     <span>{l}</span><b style={{ color: c, fontVariantNumeric: "tabular-nums" }}>{v < 0 ? "−" : ""}{inr(Math.abs(v))}</b>
                   </div>

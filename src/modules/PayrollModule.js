@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import PickSelect from "../components/PickSelect";
 import api from "../config/api";
 import SearchSelect from "../components/SearchSelect";
@@ -2587,6 +2587,51 @@ const ModalField=({label,children,full})=>(
 // ── EDIT STAFF MASTER MODAL (Payroll v2 — Phase 2) ──────────────
 // Admin can edit personal, salary structure, PF/ESIC config from here.
 // All fields map to columns on payroll_staff. Saves via PATCH /payroll/staff/:id.
+// ── Staff par tay: City + har mahine ke alag head (18 Nov 2026) ──────────
+// Petrol / Allowance / Bonus / Other / company ke apne head ki har mahine ki
+// rakam — salary bante waqt apne aap aati hai (us mahine ki sheet me badal bhi
+// sakte ho). City = is staff ki salary kis city ke kharche me gine (na ho to
+// Central). Edit Staff ke "Save Changes" ke saath hi save hota hai (saveRef).
+function StaffPaySetup({staffId,saveRef,Sect,F,inp}){
+  const [heads,setHeads]=useState([]);
+  const [cities,setCities]=useState([]);
+  const [city,setCity]=useState("");
+  const [vals,setVals]=useState({});
+  const [ready,setReady]=useState(false);
+  useEffect(()=>{
+    let live=true;
+    Promise.all([api.get("/staff-pay/heads"),api.get("/staff-pay/staff-setup"),api.get("/library/cities").catch(()=>null)]).then(([h,s,c])=>{
+      if(!live) return;
+      setHeads(h&&h.success?(h.data||[]):[]);
+      setCities(c&&c.success?(c.data||[]):[]);
+      const me=((s&&s.success&&s.data)||[]).find(x=>Number(x.id)===Number(staffId));
+      if(me){ setCity(me.city_id?String(me.city_id):""); const v={}; for(const x of me.heads||[]) v[x.head_id]=String(x.amount); setVals(v); }
+      setReady(!!(h&&h.success));
+    }).catch(()=>{});
+    return()=>{ live=false; };
+  },[staffId]);
+  useEffect(()=>{
+    if(!saveRef) return undefined;
+    saveRef.current=ready?()=>api.put(`/staff-pay/staff/${staffId}/setup`,{city_id:city?Number(city):null,heads:heads.map(h=>({head_id:h.id,amount:Number(vals[h.id])||0}))}):null;
+    return()=>{ saveRef.current=null; };
+  },[saveRef,ready,staffId,city,heads,vals]);
+  if(!ready) return null;
+  return(
+    <Sect title={t("payroll.sp_title")}>
+      <F label={t("payroll.sp_city")} full>
+        <PickSelect style={inp} value={city} onChange={e=>setCity(e.target.value)}>
+          <option value="">{t("payroll.sp_central")}</option>
+          {cities.map(c=><option key={c.id} value={String(c.id)}>{c.name}</option>)}
+        </PickSelect>
+      </F>
+      {heads.map(h=>(
+        <F key={h.id} label={h.name}><input style={inp} type="number" min="0" value={vals[h.id]||""} placeholder="0" onChange={e=>setVals(p=>({...p,[h.id]:e.target.value}))}/></F>
+      ))}
+      <div style={{gridColumn:"1 / -1",fontSize:11,color:T.t4,lineHeight:1.5}}>{t("payroll.sp_note")}</div>
+    </Sect>
+  );
+}
+
 function EditStaffModal({emp,onClose,onSaved}){
   const [form,setForm]=useState({
     name:        emp.name||"",
@@ -2620,9 +2665,14 @@ function EditStaffModal({emp,onClose,onSaved}){
   const [saving,setSaving]=useState(false);
   const [err,setErr]=useState("");
   const set=(k,v)=>setForm(p=>({...p,[k]:v}));
+  const paySetup=useRef(null);   // StaffPaySetup ka save — city + har mahine ke head
   const save=async()=>{
     setSaving(true); setErr("");
     try{
+      if(form.salary_enabled&&paySetup.current){
+        const x=await paySetup.current();
+        if(x&&x.success===false){ setErr(x.message||"Save failed"); setSaving(false); return; }
+      }
       const r=await api.patch(`/payroll/staff/${emp.id}`,form);
       if(r.success){ onSaved&&onSaved(r.data); onClose(); }
       else setErr(r.message||"Save failed");
@@ -2682,6 +2732,7 @@ function EditStaffModal({emp,onClose,onSaved}){
             <F label={t("payroll.petrol_allowance")}><input style={inp} type="number" value={form.petrol_allowance} onChange={e=>set("petrol_allowance",Number(e.target.value)||0)}/></F>
             <F label={t("payroll.special_allowance")} full><input style={inp} type="number" value={form.special_allowance} onChange={e=>set("special_allowance",Number(e.target.value)||0)}/></F>
           </Sect>
+          {!!form.salary_enabled&&<StaffPaySetup staffId={emp.id} saveRef={paySetup} Sect={Sect} F={F} inp={inp}/>}
           <Sect title={t("payroll.pf_configuration")}>
             <F label={t("payroll.pf_applicable")}>
               <PickSelect style={inp} value={form.pf_applicable?"yes":"no"} onChange={e=>set("pf_applicable",e.target.value==="yes")}>
@@ -4237,11 +4288,15 @@ function PayrollSettingsTab({defaultDueDays,setDefaultDueDays,workingDays,setWor
   const [saved,setSaved]=useState(false);
   const [localDays,setLocalDays]=useState(defaultDueDays);
   const [localWorkDays,setLocalWorkDays]=useState(workingDays);
+  // Salary banane ki tareekh — agle mahine ki kis tareekh ko pichhle mahine ki salary
+  // banani hai (1–28). Khaali = yaad ka popup band. (payroll_settings.salary_day)
+  const [salaryDay,setSalaryDay]=useState("");
+  useEffect(()=>{ api.get("/payroll/settings").then(r=>{ if(r&&r.success&&r.data&&r.data.salary_day) setSalaryDay(String(r.data.salary_day)); }).catch(()=>{}); },[]);
 
   const save=async()=>{
     setDefaultDueDays(Number(localDays));
     if(setWorkingDays) setWorkingDays(Number(localWorkDays));
-    try{await api.put("/payroll/settings",{default_due_days:Number(localDays),working_days:Number(localWorkDays)});}catch(err){console.error("Save settings:",err);}
+    try{await api.put("/payroll/settings",{default_due_days:Number(localDays),working_days:Number(localWorkDays),salary_day:salaryDay===""?null:Number(salaryDay)});}catch(err){console.error("Save settings:",err);}
     setSaved(true);
     setTimeout(()=>setSaved(false),2000);
   };
@@ -4300,6 +4355,18 @@ function PayrollSettingsTab({defaultDueDays,setDefaultDueDays,workingDays,setWor
              {t("payroll.salary_payments_appear_in_finance_pending")}
               <strong style={{color:T.amb,margin:"0 4px"}}>{t("payroll.7_days")}</strong>
              {t("payroll.fixed_overdue_payments_are_highlighted_in")}
+            </div>
+          </div>
+
+          {/* Salary banane ki tareekh — yaad ka popup */}
+          <div style={{marginBottom:16}}>
+            <label style={{fontSize:11,fontWeight:700,color:T.t1,display:"block",marginBottom:4}}>{t("payroll.salary_day_label")}</label>
+            <div style={{fontSize:12,color:T.t3,marginBottom:6,lineHeight:1.6}}>{t("payroll.salary_day_help")}</div>
+            <div style={{display:"flex",alignItems:"center",gap:8}}>
+              <input type="number" min={1} max={28} value={salaryDay} placeholder="—" onChange={e=>{ const v=e.target.value; setSalaryDay(v===""?"":String(Math.min(28,Math.max(1,parseInt(v,10)||1)))); }}
+                style={{width:70,padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:14,fontWeight:600,color:T.t1,outline:"none",textAlign:"center",fontFamily:"inherit"}}/>
+              <span style={{fontSize:12,color:T.t3}}>{salaryDay===""?t("payroll.salary_day_off"):t("payroll.salary_day_on",{day:salaryDay})}</span>
+              {salaryDay!==""&&<button type="button" onClick={()=>setSalaryDay("")} style={{border:"none",background:"none",padding:0,fontSize:12,color:T.blu,cursor:"pointer",fontFamily:"inherit"}}>{t("payroll.salary_day_clear")}</button>}
             </div>
           </div>
 

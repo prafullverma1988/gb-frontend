@@ -14,6 +14,7 @@ import { startPush, stopPush, dropStalePush, listenPush } from "./utils/push";
 import AppErrorBoundary from "./components/AppErrorBoundary";
 import SahayakFab from "./components/SahayakFab";
 import ExpenseNudge from "./modules/tabs/ExpenseNudge";
+import SalaryNudge from "./modules/tabs/SalaryNudge";
 import { t, loadFullPack } from "./i18n";
 import { visiblePoll } from "./utils/poll";
 
@@ -2455,6 +2456,7 @@ function App(){
       <UploadToast/>
       {/* Mahine ke kharche — zimmedaar ko checklist tareekh / nikli tareekh par popup */}
       <ExpenseNudge/>
+      <SalaryNudge/>
     </div>
     </PromptProvider>
     </ConfirmProvider>
