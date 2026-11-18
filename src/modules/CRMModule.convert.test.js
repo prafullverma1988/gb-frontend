@@ -16,12 +16,18 @@ jest.mock("../config/api", () => {
 });
 global.IS_REACT_ACT_ENVIRONMENT = true;
 
-const LEAD = { id: 139, name: "ZZ Test Lead", phone: "9000000139", email: null, city: "Bhilai", proj_type: "Residential house", budget: "0.00", source: "Direct Call",
+const LEAD = { id: 139, name: "ZZ Test Lead", phone: "9000000139", email: null, city: "Bhilai", proj_type: "Residential house", budget: "4000000.00", source: "Direct Call",
   assigned_to: 7, stage: "converted", priority: "Medium", contact_date: null, notes: null, tags: [], converted_value: null, converted_date: null, created_at: "2026-11-16T11:29:16.000Z",
   city_id: 84, construction_type_id: 75, converted_project_id: null, budget_label: null, assigned_to_name: "prafull verma", city_name: "Bhilai",
   construction_type_name: "Residential house", attachments: [], followupHistory: [] };
 
-let root, box, onOpenProject;
+let root, box, onOpenProject, finalQuotes;
+const DRAFT = { source: "package", id: 6, no: "QT/26-27/005", status: "draft", total: 2651750, label: "Signature", file_url: null };
+const ACCEPTED = { ...DRAFT, id: 7, no: "QT/26-27/006", status: "accepted", total: 2800000 };
+const QUOTE_DOC = { id: 6, computed: { rows: [{ key: "main.gf", kind: "package", description: "Ground Floor", unit: "per sqft", qty: 1000, rate: 1800, amount: 1800000,
+  schedule: [{ name: "Plinth", pct: 40, amount: 720000 }, { name: "Slab", pct: 60, amount: 1080000 }] }] } };
+const testid = (id) => document.querySelector('[data-testid="' + id + '"]');
+const convertBody = () => api.post.mock.calls.find((c) => c[0] === "/crm/leads/139/convert-to-project")[1];
 const flush = async () => { for (let i = 0; i < 6; i++) await act(async () => {}); };
 const click = async (el) => { await act(async () => { el.click(); }); await flush(); };
 const drawerOpen = () => document.body.textContent.includes("Follow Ups (");
@@ -31,10 +37,13 @@ beforeEach(async () => {
   localStorage.setItem("gb_user", JSON.stringify({ id: 7, role: "admin", company_id: 1, name: "prafull verma" }));
   window.confirmAsync = jest.fn(() => Promise.resolve(true));
   onOpenProject = jest.fn();
+  finalQuotes = { quotes: [], can_accept: true };
   api.get.mockImplementation(async (url) => {
     if (url === "/crm/leads") return { success: true, data: [{ ...LEAD }] };
     if (url === "/crm/leads/139") return { success: true, data: { ...LEAD } };
     if (url === "/projects") return { success: true, data: [{ id: 716, name: "Naveen & Prakash" }] };
+    if (url === "/crm/leads/139/final-quotes") return { success: true, data: finalQuotes };
+    if (/^\/sales-quotes\/\d+$/.test(url)) return { success: true, data: QUOTE_DOC };
     return { success: true, data: [] };
   });
   api.post.mockImplementation(async (url) => (url === "/crm/leads/139/convert-to-project"
@@ -77,4 +86,52 @@ test("Project banao → convert (client / site address ke saath) → seedha proj
   const call = api.post.mock.calls.find((c) => c[0] === "/crm/leads/139/convert-to-project");
   expect(call[1]).toMatchObject({ project_name: "ZZ Test Lead — Project", client_name: "ZZ Test Lead", client_phone: "9000000139", site_address: "Plot 7, Smriti Nagar" });
   expect(onOpenProject).toHaveBeenCalledWith(727);
+});
+
+test("Quote nahi: lead ka budget BOQ me nahi aata, project bina value ke banta hai", async () => {
+  await click(btnText(/Project banao/));
+  expect(testid("cv-next")).toBeNull();
+  expect(document.querySelector('[data-cv="boq_value"]').value).toBe("");
+  await click(testid("cv-go"));
+  expect(convertBody().boq_value).toBe(0);
+  expect(convertBody().final_quote).toBeUndefined();
+});
+
+test("Draft quote: preview dikhe, tick bina aage nahi, BOQ = quote total (budget nahi)", async () => {
+  finalQuotes = { quotes: [DRAFT], can_accept: true };
+  await click(btnText(/Project banao/));
+  expect(testid("cv-fq-preview").textContent).toMatch(/Ground Floor/);
+  expect(testid("cv-fq-preview").textContent).toMatch(/Payment schedule \(2 hisse\)/);
+  expect(testid("cv-fq-total").textContent).toBe("₹26,51,750");
+  expect(testid("cv-next").disabled).toBe(true);
+  await click(testid("cv-fq-accept"));
+  expect(testid("cv-next").disabled).toBe(false);
+  await click(testid("cv-next"));
+  expect(testid("cv-boq-locked").textContent).toMatch(/₹26,51,750/);
+  expect(document.querySelector('[data-cv="boq_value"]')).toBeNull();
+  await click(testid("cv-go"));
+  expect(convertBody().final_quote).toEqual({ source: "package", id: 6, total: 2651750, accept: true });
+  expect(convertBody().boq_value).toBeUndefined();
+});
+
+test("Accepted quote pehle se chuna, tick nahi maangta", async () => {
+  finalQuotes = { quotes: [ACCEPTED, DRAFT], can_accept: true };
+  await click(btnText(/Project banao/));
+  expect(testid("cv-fq-accept")).toBeNull();
+  await click(testid("cv-next"));
+  await click(testid("cv-go"));
+  expect(convertBody().final_quote).toEqual({ source: "package", id: 7, total: 2800000 });
+});
+
+test("Accept ki permission nahi: Draft par aage nahi; 'Abhi final quote nahi' se aage", async () => {
+  finalQuotes = { quotes: [DRAFT], can_accept: false };
+  await click(btnText(/Project banao/));
+  expect(testid("cv-fq-accept")).toBeNull();
+  expect(testid("cv-next").disabled).toBe(true);
+  await click(testid("cv-fq-none"));
+  expect(testid("cv-next").disabled).toBe(false);
+  await click(testid("cv-next"));
+  expect(document.querySelector('[data-cv="boq_value"]').value).toBe("");
+  await click(testid("cv-back"));
+  expect(testid("cv-fq-none")).not.toBeNull();
 });

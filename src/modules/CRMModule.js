@@ -13,6 +13,7 @@ import { companyName } from "../utils/companyName";
 import { todayISO, isoDate } from "../utils/today";
 import { can, currentUser } from "../utils/perms";
 import uploadManager from "../utils/uploadManager";
+import ConvertFinalQuote from "./crm/ConvertFinalQuote";
 import { cld } from "../utils/cloudinary";
 // CRM → Packages (14 Nov 2026) — alag chunk, sirf tab khulne par aata hai
 const PackagesTab = lazy(() => import("./crm/PackagesTab"));
@@ -642,7 +643,10 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab,
   // ── M2: Convert-to-project panel state ─────────────────────────
   const [convertOpen,   setConvertOpen]   = useState(false);
   const [convertForm,   setConvertForm]   = useState({});
-  const [convertQuotes, setConvertQuotes] = useState([]);
+  const [finalQuotes,   setFinalQuotes]   = useState({ busy: true, quotes: [], canAccept: false });
+  const [finalQuote,    setFinalQuote]    = useState(null);   // chuna hua quote; null = abhi final quote nahi
+  const [finalAccept,   setFinalAccept]   = useState(false);  // Draft / Sent quote: "client ne maan liya" tick
+  const [convertStep,   setConvertStep]   = useState("quote"); // quote → details
   const [convertSaving, setConvertSaving] = useState(false);
   const [convertErr,    setConvertErr]    = useState("");
   const [convertProjects, setConvertProjects] = useState([]);
@@ -658,29 +662,25 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab,
       site_address: "",
       start_date:   todayISO(),
       end_date:     "",
-      quote_id:     "",       // empty = no final quote selected
-      boq_value:    lead.budget || 0,
+      boq_value:    "",       // sirf jab final quote na ho; lead ka budget yahan nahi aata
     });
-    // Package Quote ka total (Accepted pehle) — BOQ value me
+    // Final quote: Accepted sabse upar, wahi pehle se chuna. Quote hi na ho to seedha project ki jaankari.
+    setFinalQuote(null); setFinalAccept(false); setConvertStep("quote");
+    setFinalQuotes({ busy: true, quotes: [], canAccept: false });
     (async () => {
+      let quotes = [], canAccept = false;
       try {
-        const r = await api.get("/sales-quotes?lead_id=" + lead.id);
-        const qs = (r?.success ? r.data : []) || [];
-        const best = qs.find(q => q.status === "accepted") || qs.find(q => q.status === "sent");
-        if (best && Number(best.total) > 0) setConvertForm(p => (Number(p.boq_value) > 0 ? p : { ...p, boq_value: Math.round(Number(best.total)) }));
+        const r = await api.get("/crm/leads/" + lead.id + "/final-quotes");
+        if (r?.success) { quotes = r.data?.quotes || []; canAccept = !!r.data?.can_accept; }
       } catch (_) {}
+      setFinalQuotes({ busy: false, quotes, canAccept });
+      setFinalQuote(quotes[0] || null);
+      if (!quotes.length) setConvertStep("details");
     })();
     (async () => {
       try {
         const r = await api.get("/projects");
         if (r?.success) setConvertProjects((r.data || []).map(p => ({ id: p.id, name: p.name })));
-      } catch (_) {}
-    })();
-    // Lazy-load quotes (any status; user picks which is "final" — usually Accepted)
-    (async () => {
-      try {
-        const r = await api.get("/library/leads/" + lead.id + "/quotations");
-        if (r?.success) setConvertQuotes(r.data || []);
       } catch (_) {}
     })();
     // eslint-disable-next-line
@@ -698,9 +698,9 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab,
         site_address: (convertForm.site_address || "").trim(),
         start_date:   convertForm.start_date || null,
         end_date:     convertForm.end_date || null,
-        boq_value:    Number(convertForm.boq_value) || 0,
       };
-      if (!existing && convertForm.quote_id) body.quote_id = Number(convertForm.quote_id);
+      if (!existing && finalQuote) body.final_quote = { source: finalQuote.source, id: finalQuote.id, total: finalQuote.total, ...(finalQuote.status !== "accepted" ? { accept: finalAccept } : {}) };
+      else if (!existing) body.boq_value = Number(convertForm.boq_value) || 0;
       const r = await api.post("/crm/leads/" + lead.id + "/convert-to-project", body);
       if (!r?.success) { setConvertErr(r?.message || t("crm.cv_failed")); setConvertSaving(false); return; }
       window.toast?.success?.(r.message || t("crm.cv_done"));
@@ -1486,6 +1486,11 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab,
                     </PickSelect>
                     <div style={{fontSize:10.5,color:"#64748B",marginTop:4}}>{t("crm.cv_existing_hint")}</div>
                   </div>
+                ):finalQuotes.busy?(
+                  <div style={{fontSize:12,color:T.t3,padding:"10px 0"}}>{t("crm.fq_loading")}</div>
+                ):convertStep==="quote"?(
+                  <ConvertFinalQuote quotes={finalQuotes.quotes} canAccept={finalQuotes.canAccept} selected={finalQuote} accept={finalAccept} budget={lead.budget}
+                    onSelect={q=>{setFinalQuote(q);setFinalAccept(false);}} onAccept={setFinalAccept}/>
                 ):(<>
                 <div style={{marginBottom:10}}>
                   <label style={{fontSize:10,fontWeight:700,color:T.t4,display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".4px"}}>{t("common.project_name")}</label>
@@ -1528,31 +1533,17 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab,
                 </div>
                 <div style={{marginBottom:10}}>
                   <label style={{fontSize:10,fontWeight:700,color:T.t4,display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".4px"}}>{t("crm.cv_boq_value")}</label>
-                  <input value={convertForm.boq_value ?? ""} inputMode="decimal" data-cv="boq_value" onChange={e => setConvertForm(p => ({ ...p, boq_value: e.target.value }))}
-                    style={{width:"100%",padding:"7px 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
-                  <div style={{fontSize:10.5,color:"#64748B",marginTop:4}}>{t("crm.cv_boq_hint")}</div>
-                </div>
-
-                {convertQuotes.length > 0 && (
-                  <div style={{marginBottom:14}}>
-                    <label style={{fontSize:10,fontWeight:700,color:T.t4,display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".4px"}}>
-                     {t("crm.final_quote_optional")}
-                    </label>
-                    <PickSelect value={convertForm.quote_id || ""}
-                      onChange={e => setConvertForm(p => ({ ...p, quote_id: e.target.value }))}
-                      style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,background:T.surface,fontSize:12.5,color:T.t1,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}>
-                      <option value="">{t("crm.none_decide_later")}</option>
-                      {convertQuotes.map(q => (
-                        <option key={q.id} value={q.id}>
-                          {q.quote_no} · {q.status} · ₹{Math.round(Number(q.grand_total)||0).toLocaleString("en-IN")}
-                        </option>
-                      ))}
-                    </PickSelect>
-                    <div style={{fontSize:10.5,color:"#64748B",marginTop:4}}>
-                     {t("crm.pick_the_quote_you_settled_on")}
+                  {finalQuote?(
+                    <div data-testid="cv-boq-locked" style={{padding:"8px 10px",borderRadius:6,border:"1.5px solid #A7F3D0",background:"#ECFDF5",display:"flex",justifyContent:"space-between",alignItems:"baseline",gap:10}}>
+                      <span style={{fontSize:14,fontWeight:800,color:"#065F46"}}>₹{Math.round(Number(finalQuote.total)||0).toLocaleString("en-IN")}</span>
+                      <span style={{fontSize:11,color:"#047857",textAlign:"right"}}>{t("crm.fq_boq_from",{no:finalQuote.no})}</span>
                     </div>
-                  </div>
-                )}
+                  ):(<>
+                    <input value={convertForm.boq_value ?? ""} inputMode="decimal" data-cv="boq_value" placeholder="0" onChange={e => setConvertForm(p => ({ ...p, boq_value: e.target.value }))}
+                      style={{width:"100%",padding:"7px 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
+                    <div style={{fontSize:10.5,color:"#64748B",marginTop:4}}>{Number(lead.budget)>0?t("crm.cv_boq_hint",{budget:"₹"+Math.round(Number(lead.budget)).toLocaleString("en-IN")}):t("crm.cv_boq_hint_nobudget")}</div>
+                  </>)}
+                </div>
                 </>)}
 
                 {convertErr && (
@@ -1560,7 +1551,7 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab,
                 )}
 
                 <div style={{display:"flex",gap:6}}>
-                  <button onClick={cancelConvert} disabled={convertSaving}
+                  <button onClick={()=>{ if(convertForm.mode==="new"&&convertStep==="details"&&finalQuotes.quotes.length) setConvertStep("quote"); else cancelConvert(); }} disabled={convertSaving} data-testid="cv-back"
                     style={{flex:1,padding:"9px",borderRadius:7,background:T.surface,border:`1px solid ${T.b1}`,fontSize:12,fontWeight:600,color:T.t3,cursor:convertSaving?"not-allowed":"pointer"}}>
                    {t("common.back")}
                   </button>
@@ -1569,6 +1560,13 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab,
                     style={{flex:1,padding:"9px",borderRadius:7,background:"white",border:`1px dashed ${T.b1}`,fontSize:12,fontWeight:600,color:T.t3,cursor:convertSaving?"not-allowed":"pointer"}}>
                    {t("crm.skip_just_convert")}
                   </button>
+                  {convertForm.mode==="new"&&convertStep==="quote"?(()=>{
+                    const blocked=finalQuotes.busy||(!!finalQuote&&finalQuote.status!=="accepted"&&!finalAccept);
+                    return <button onClick={()=>setConvertStep("details")} disabled={blocked} data-testid="cv-next"
+                      style={{flex:2,padding:"9px",borderRadius:7,background:blocked?"#9CA3AF":"#10B981",color:"white",border:"none",fontSize:12.5,fontWeight:700,cursor:blocked?"not-allowed":"pointer"}}>
+                      {t("crm.fq_next")}
+                    </button>;
+                  })():(
                   <button onClick={confirmConvertWithProject} data-testid="cv-go"
                     disabled={convertSaving || (convertForm.mode==="existing" ? !convertForm.existing_project_id : !convertForm.project_name?.trim())}
                     style={{flex:2,padding:"9px",borderRadius:7,
@@ -1577,6 +1575,7 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab,
                             cursor:(convertSaving||(convertForm.mode==="existing"?!convertForm.existing_project_id:!convertForm.project_name?.trim()))?"not-allowed":"pointer"}}>
                     {convertSaving ? t("common.creating") : convertForm.mode==="existing" ? t("crm.cv_link_btn") : t("crm.create_project_convert")}
                   </button>
+                  )}
                 </div>
               </div>
             )}

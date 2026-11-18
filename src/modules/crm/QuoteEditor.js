@@ -95,14 +95,14 @@ function ScopeCard({ scopes, scope, editable, onScope }) {
 }
 
 // Lead abhi project nahi bana — "Estimate banao" se pehle project
-function ConvertSheet({ lead, total, onClose, onDone }) {
+function ConvertSheet({ lead, quote, onClose, onDone }) {
   const [name, setName] = useState(((lead && lead.name) || "") + " — Project");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const go = async () => {
     if (!name.trim()) { setErr(t("sales_quote_ui.err_project_name")); return; }
     setBusy(true); setErr("");
-    const r = await api.post(`/crm/leads/${lead.id}/convert-to-project`, { project_name: name.trim(), boq_value: Number(total) || 0 });
+    const r = await api.post(`/crm/leads/${lead.id}/convert-to-project`, { project_name: name.trim(), final_quote: { source: "package", id: quote.id, total: quote.total } });
     if (r && r.success && r.data && r.data.project && r.data.project.id) { await onDone(r.data.project.id); setBusy(false); return; }
     setBusy(false);
     setErr((r && r.message) || t("sales_quote_ui.convert_failed"));
@@ -371,7 +371,7 @@ export default function QuoteEditor({ quoteId, lead: leadProp, onClose, onChange
       </div>
 
       {panel === "share" ? <QuoteShare quote={q} phone={phone} onClose={() => setPanel(null)} /> : null}
-      {panel === "convert" ? <ConvertSheet lead={lead} total={q.total} onClose={() => setPanel(null)} onDone={afterConvert} /> : null}
+      {panel === "convert" ? <ConvertSheet lead={lead} quote={q} onClose={() => setPanel(null)} onDone={afterConvert} /> : null}
     </Shell>
   );
 }
