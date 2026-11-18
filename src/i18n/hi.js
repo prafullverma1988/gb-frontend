@@ -2947,7 +2947,7 @@ const dict = {
   "estimate.amount_required":                                  "अमाउंट ज़रूरी है",
   "estimate.apply_library_stages":                             "लाइब्रेरी स्टेजेस अप्लाई करो",
   "estimate.applying":                                         "अप्लाई हो रहा है…",
-  "estimate.approve_this_amendment_sections_items_will":       "यह अमेंडमेंट अप्रूव करना है? सेक्शन्स और आइटम्स रिप्लेस हो जाएँगे और टोटल रीकंप्यूट हो जाएगा।",
+  "estimate.approve_this_amendment_sections_items_will":       "यह अमेंडमेंट अप्रूव करना है? सेक्शन और आइटम बदल जाएँगे, टोटल दोबारा निकलेगा और प्रोजेक्ट की BOQ वैल्यू भी उतनी ही बदलेगी।",
   "estimate.auto":                                             "🤖 ऑटो",
   "estimate.auto_balances_to_remaining_value":                 "रीमेनिंग वैल्यू तक ऑटो-बैलेंस हो जाएगा",
   "estimate.auto_bill_selest":                                 "🤖 ऑटो-बिल {selEst}",
@@ -17322,6 +17322,16 @@ const dict = {
   "payroll.salary_day_clear": "बंद करो",
   "cxr.c_staff": "स्टाफ़ का पैसा {amt}",
   "cxr.p_staff": "स्टाफ़ का पैसा (सैलरी / पेट्रोल)",
+  "pkg_est.new_title": "इस एस्टिमेट में नया आइटम",
+  "pkg_est.new_hint": "सिर्फ़ इस एस्टिमेट में जुड़ेगा। मास्टर पैकेज, CRM कोटेशन और लाइब्रेरी नहीं बदलेंगे।",
+  "pkg_est.new_add": "नया आइटम",
+  "pkg_est.new_desc": "आइटम का नाम",
+  "pkg_est.new_unit": "यूनिट",
+  "pkg_est.new_qty": "मात्रा",
+  "pkg_est.new_rate": "रेट ₹",
+  "pkg_est.new_remove": "आइटम हटाएँ",
+  "pkg_est.new_total": "नए आइटम: {total}",
+  "pkg_est.new_fix": "नए आइटम में नाम, मात्रा और रेट पूरा भरें, या वह लाइन हटाएँ।",
 };
 
 export default dict;

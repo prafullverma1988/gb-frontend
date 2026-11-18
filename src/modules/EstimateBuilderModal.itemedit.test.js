@@ -115,3 +115,23 @@ test("Library me bhi: naam boq_items me, rate package me (baaki line jaisi thi)"
   ]);
   expect(dialog()).toBeNull();
 });
+
+test("Naya item: sirf is estimate me — save me alag section, package / Library API nahi; adhoora item save rokta hai", async () => {
+  await openBuilder();
+  await act(async () => { document.querySelector('[data-testid="est-new-add"]').click(); });
+  const f = (k) => document.querySelector('[data-new-item="n1"] [data-new-field="' + k + '"]');
+  await type(f("description"), "Porch grill (MS)");
+  const save = () => btn(/Estimate save|Save Estimate|Save estimate/i);
+  await act(async () => { save().click(); });
+  expect(window.alert).toHaveBeenCalled();
+  expect(api.post.mock.calls.find((c) => c[0] === "/customer-estimates")).toBeUndefined();
+  await type(f("qty"), "120");
+  await type(f("rate"), "450");
+  await act(async () => { save().click(); });
+  await act(async () => {});
+  const body = api.post.mock.calls.find((c) => c[0] === "/customer-estimates")[1];
+  const sec = body.sections[body.sections.length - 1];
+  expect(sec.items).toEqual([{ description: "[PORCH GRILL] Porch grill (MS)", unit: "Sq.Ft", qty: 120, rate: 450 }]);
+  expect(sec.per_item_qty).toBe(1);
+  expect(api.post.mock.calls.filter((c) => /rate-matrix|boq-items/.test(c[0]))).toEqual([]);
+});

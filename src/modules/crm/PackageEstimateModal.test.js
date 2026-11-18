@@ -77,6 +77,49 @@ const typeIn = async (el, value) => {
 const PROJECT = { id: 716, name: "Naveen & Prakash", client_name: "" };
 const modal = () => mount(<PackageEstimateModal project={PROJECT} projectId={716} customers={[]} onClose={() => {}} onSaved={onSaved} />);
 
+test("Naya item: total me judta hai, schedule me dikhta hai, new_items me jaata hai; adhoora item Check rokta hai", async () => {
+  await modal();
+  await click($('[data-pkg="5"]'));
+  await typeIn($('[data-qty="main.gf"]'), "100");
+  await flush();
+  await click($('[data-testid="est-new-add"]'));
+  const row = '[data-new-item="n1"] ';
+  await typeIn($(row + '[data-new-field="description"]'), "Porch grill");
+  await flush();
+  await click($('[data-testid="pe-check"]'));
+  expect(api.post).not.toHaveBeenCalled();
+  await typeIn($(row + '[data-new-field="qty"]'), "120");
+  await typeIn($(row + '[data-new-field="rate"]'), "450");
+  await flush();
+  expect($('[data-new-amount="n1"]').textContent).toBe("₹54,000");
+  expect($('[data-testid="pe-total"]').textContent).toContain("2,34,000");
+  expect($('[data-sched="__new.n1"]')).not.toBeNull();
+  expect($('[data-testid="qt-lines"]').textContent).not.toContain("Porch grill");
+  await click($('[data-testid="pe-check"]'));
+  const dry = api.post.mock.calls.find((c) => c[0] === "/sales-quotes/project-estimate")[1];
+  expect(dry.new_items).toEqual([{ key: "n1", description: "Porch grill", unit: "Sq.Ft", qty: 120, rate: 450 }]);
+  expect(dry.lines["__new.n1"]).toBeUndefined();
+  noKeys();
+});
+
+test("Naya item source badalne par bhi rehta hai; ✕ se hat jaata hai", async () => {
+  await modal();
+  await click($('[data-pkg="5"]'));
+  await click($('[data-testid="est-new-add"]'));
+  const row = '[data-new-item="n1"] ';
+  await typeIn($(row + '[data-new-field="description"]'), "Solar point");
+  await typeIn($(row + '[data-new-field="qty"]'), "2");
+  await typeIn($(row + '[data-new-field="rate"]'), "3500");
+  await flush();
+  await click($('[data-src="quote"]'));
+  await click($('[data-quote="12"]'));
+  expect($('[data-new-item="n1"]')).not.toBeNull();
+  expect($('[data-sched="__new.n1"]')).not.toBeNull();
+  await click($('[data-new-remove="n1"]'));
+  expect($('[data-new-item="n1"]')).toBeNull();
+  expect($('[data-sched="__new.n1"]')).toBeNull();
+});
+
 test("Package: chuno → structure par yaad wala GF schedule → area → Check (dry_run) → EST-2 banao (lines + schedule ek POST)", async () => {
   await modal();
   let txt = noKeys();

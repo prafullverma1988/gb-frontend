@@ -2950,7 +2950,7 @@ const dict = {
   "estimate.amount_required":                                  "Amount required",
   "estimate.apply_library_stages":                             "Apply Library Stages",
   "estimate.applying":                                         "Apply ho raha hai…",
-  "estimate.approve_this_amendment_sections_items_will":       "Ye amendment approve karna hai? Sections aur items replace ho jayenge aur total recompute ho jayega.",
+  "estimate.approve_this_amendment_sections_items_will":       "Ye amendment approve karna hai? Sections aur items replace ho jayenge, total recompute hoga aur project ki BOQ value bhi utni hi badlegi.",
   "estimate.auto":                                             "🤖 AUTO",
   "estimate.auto_balances_to_remaining_value":                 "Remaining value tak auto-balance ho jayega",
   "estimate.auto_bill_selest":                                 "🤖 Auto-bill {selEst}",
@@ -17325,6 +17325,16 @@ const dict = {
   "payroll.salary_day_clear": "Band karo",
   "cxr.c_staff": "staff ka paisa {amt}",
   "cxr.p_staff": "Staff ka paisa (salary / petrol)",
+  "pkg_est.new_title": "Is estimate me naya item",
+  "pkg_est.new_hint": "Sirf is estimate me judega. Master package, CRM quote aur Library nahi badlenge.",
+  "pkg_est.new_add": "Naya item",
+  "pkg_est.new_desc": "Item ka naam",
+  "pkg_est.new_unit": "Unit",
+  "pkg_est.new_qty": "Qty",
+  "pkg_est.new_rate": "Rate ₹",
+  "pkg_est.new_remove": "Item hatao",
+  "pkg_est.new_total": "Naye item: {total}",
+  "pkg_est.new_fix": "Naye item me naam, qty aur rate poora bharo, ya wo row hatao.",
 };
 
 export default dict;

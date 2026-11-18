@@ -2948,7 +2948,7 @@ const dict = {
   "estimate.amount_required":                                  "Amount required",
   "estimate.apply_library_stages":                             "Apply Library Stages",
   "estimate.applying":                                         "Applying…",
-  "estimate.approve_this_amendment_sections_items_will":       "Approve this amendment? Sections and items will be replaced, and the total will be recomputed.",
+  "estimate.approve_this_amendment_sections_items_will":       "Approve this amendment? Sections and items will be replaced, the total will be recomputed, and the project's BOQ value will change by the same amount.",
   "estimate.auto":                                             "🤖 AUTO",
   "estimate.auto_balances_to_remaining_value":                 "Will auto-balance to remaining value",
   "estimate.auto_bill_selest":                                 "🤖 Auto-bill {selEst}",
@@ -17323,6 +17323,16 @@ const dict = {
   "payroll.salary_day_clear": "Turn off",
   "cxr.c_staff": "staff pay {amt}",
   "cxr.p_staff": "Staff pay (salary / petrol)",
+  "pkg_est.new_title": "New item in this estimate",
+  "pkg_est.new_hint": "Added to this estimate only. The master package, CRM quote and Library will not change.",
+  "pkg_est.new_add": "New item",
+  "pkg_est.new_desc": "Item name",
+  "pkg_est.new_unit": "Unit",
+  "pkg_est.new_qty": "Qty",
+  "pkg_est.new_rate": "Rate ₹",
+  "pkg_est.new_remove": "Remove item",
+  "pkg_est.new_total": "New items: {total}",
+  "pkg_est.new_fix": "Fill in the name, qty and rate for the new item, or remove that row.",
 };
 
 export default dict;

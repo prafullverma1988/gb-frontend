@@ -23,6 +23,7 @@ import api from "../config/api";
 import SearchSelect from "../components/SearchSelect";
 import { t, Rich } from "../i18n";
 import { partsFromTemplate, splitLineByParts } from "./tabs/StageBilling";
+import EstimateNewItems, { hasBadItem, itemsTotal, newItemLine, validItems } from "./crm/EstimateNewItems";
 
 const inrIN = (n) => Math.round(Number(n) || 0).toLocaleString("en-IN");
 const isSet = (v) => v !== null && v !== undefined && v !== "";
@@ -846,6 +847,10 @@ export default function EstimateBuilderModal({
     // eslint-disable-next-line
   }, [measurements, pkgStructures, pkgCategories, pkgItems, step]);
 
+  // Sirf is estimate ke naye item (18 Nov 2026) — package / Library nahi badalti
+  const [newItems, setNewItems] = useState([]);
+  const estimateTotal = breakdown.grandTotal + itemsTotal(newItems);
+
   // ── Save flow — flatten builder breakdown → customer_estimates payload ──
   // Maps 3-level tree (section › category › item) to the 2-level estimate
   // schema by embedding [category] prefix in item description. Preserves
@@ -857,6 +862,7 @@ export default function EstimateBuilderModal({
       return alert(t("estimate_builder.customer_name_is_required"));
     }
     if (!hasMeasurements) return alert(t("estimate_builder.add_at_least_one_section_before"));
+    if (hasBadItem(newItems)) return alert(t("pkg_est.new_fix"));
     setSaving(true);
     try {
       // Fix hisse (stage billing, 30 Oct 2026): library item par hisse tay hon
@@ -904,6 +910,9 @@ export default function EstimateBuilderModal({
           items: itemsPayload,
         };
       }).filter(s => s.items.length > 0);
+      if (validItems(newItems).length) {
+        sectionsPayload.push({ title: t("pkg_est.new_title"), per_item_qty: 1, items: validItems(newItems).map(newItemLine) });
+      }
 
       if (sectionsPayload.length === 0) {
         alert(t("estimate_builder.no_items_to_save_add_at"));
@@ -945,7 +954,7 @@ export default function EstimateBuilderModal({
   // editing of saved estimate (Phase polish) can re-add readOnly logic.
   const readOnly = false;
   const canEdit  = editMode && !readOnly;
-  const hasMeasurements = pkgStructures.length > 0;
+  const hasMeasurements = pkgStructures.length > 0 || validItems(newItems).length > 0;
   const canSave = hasMeasurements && !readOnly && !saving;
 
   // ── Filtered packages for picker ───────────────────────────────
@@ -1582,14 +1591,16 @@ export default function EstimateBuilderModal({
               );
             })}
 
+            <EstimateNewItems items={newItems} onChange={setNewItems} />
+
             {/* Grand Total bar */}
-            {breakdown.sections.length > 0 && (
+            {(breakdown.sections.length > 0 || estimateTotal > 0) && (
               <div style={{ marginTop:10, padding:"14px 20px", background:COL_DARK, color:"white",
                             borderRadius:10, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
                 <span style={{ fontSize:13, fontWeight:700, textTransform:"uppercase", letterSpacing:".4px", color:"rgba(255,255,255,0.7)" }}>
                  {t("common.grand_total")}
                 </span>
-                <span style={{ fontSize:20, fontWeight:700, color:COL_TEAL_BG }}>{t("estimate_builder.rs_inrin", { inrIN: inrIN(breakdown.grandTotal) })}</span>
+                <span style={{ fontSize:20, fontWeight:700, color:COL_TEAL_BG }}>{t("estimate_builder.rs_inrin", { inrIN: inrIN(estimateTotal) })}</span>
               </div>
             )}
           </div>
@@ -1608,8 +1619,8 @@ export default function EstimateBuilderModal({
             </button>
           )}
           <div style={{ marginLeft:"auto", display:"flex", gap:8, alignItems:"center" }}>
-            <span style={{ fontSize:12, color:"#64748B", fontWeight:500 }}><Rich k="estimate_builder.subtotal_inrin" params={{ inrIN: inrIN(breakdown.grandTotal) }} />{Number(taxPct) > 0 && <>{t("estimate_builder.gst_taxpct_inrin", { taxPct, inrIN: inrIN(breakdown.grandTotal * (Number(taxPct)/100)) })}</>}
-              {Number(taxPct) > 0 && <> · <span style={{color:"#059669",fontWeight:700}}>{t("estimate_builder.total_inrin", { inrIN: inrIN(breakdown.grandTotal * (1 + Number(taxPct)/100)) })}</span></>}
+            <span style={{ fontSize:12, color:"#64748B", fontWeight:500 }}><Rich k="estimate_builder.subtotal_inrin" params={{ inrIN: inrIN(estimateTotal) }} />{Number(taxPct) > 0 && <>{t("estimate_builder.gst_taxpct_inrin", { taxPct, inrIN: inrIN(estimateTotal * (Number(taxPct)/100)) })}</>}
+              {Number(taxPct) > 0 && <> · <span style={{color:"#059669",fontWeight:700}}>{t("estimate_builder.total_inrin", { inrIN: inrIN(estimateTotal * (1 + Number(taxPct)/100)) })}</span></>}
             </span>
             <button onClick={onClose} disabled={saving}
               style={{ padding:"9px 18px", borderRadius:7, background:"#F8FAFC", border:"1px solid #D1D5DB",

@@ -23,6 +23,7 @@ import { inr } from "./pkgUtil";
 import { QBASE, QStatusChip, normLines, normSchedule, previewCompute, rupee, scopeLabel } from "./quoteUtil";
 import { QuoteLinesTable } from "./QuoteLines";
 import QuoteSchedule from "./QuoteSchedule";
+import EstimateNewItems, { cleanItem, hasBadItem, validItems } from "./EstimateNewItems";
 
 // Lead ka naam project ke naam se milta hai? ("Naveen & Prakash" ↔ lead "naveen")
 const STOP = new Set(["sir", "shri", "ji", "new", "project", "the", "and", "ghar"]);
@@ -32,6 +33,7 @@ export const nameHit = (a, b) => { const B = new Set(words(b)); return words(a).
 const pctNum = (v) => (v == null || String(v).trim() === "" ? 0 : Number(String(v).replace(/[%\s]/g, "")));
 const pctBad = (v) => { const n = pctNum(v); return !Number.isFinite(n) || n < 0 || n > 100; };
 const clone = (x) => JSON.parse(JSON.stringify(x == null ? {} : x));
+const NEW_GROUP = "__new";
 
 function Tabs({ value, onChange, items }) {
   return (
@@ -79,9 +81,25 @@ export default function PackageEstimateModal({ project, projectId, customers, on
   const [schedTouched, setSchedTouched] = useState(false);
   const [remember, setRemember] = useState(false);
   const [check, setCheck] = useState(null);   // dry_run ka jawab
+  const [newItems, setNewItems] = useState([]);   // sirf is estimate ke naye item
 
   const active = src === "package" ? P : Q;
-  const content = active ? active.content : null;
+  const added = useMemo(() => validItems(newItems).map(cleanItem), [newItems]);
+  // Naye item preview aur payment schedule me aam line jaise; server par new_items se judte hain
+  const content = useMemo(() => {
+    if (!active) return null;
+    if (!added.length) return active.content;
+    const rs = active.content.rate_schedule;
+    return { ...active.content, rate_schedule: { ...rs, groups: [...rs.groups, { key: NEW_GROUP, title: t("pkg_est.new_title"),
+      rows: added.map((it) => ({ key: it.key, description: it.description, unit: it.unit, rate: it.rate, kind: "rate" })) }] } };
+  }, [active, added]);
+  const allLines = useMemo(() => {
+    const o = { ...lines };
+    for (const it of added) o[NEW_GROUP + "." + it.key] = { qty: it.qty, rate: null, description: null };
+    return o;
+  }, [lines, added]);
+  // Source / scope badalne par naye item ke hisse bane rahen
+  const keepNew = (s) => { const o = { ...s }; for (const k of Object.keys(schedule)) if (k.startsWith(NEW_GROUP + ".")) o[k] = schedule[k]; return o; };
   const qRow = useMemo(() => (quotes || []).find((x) => String(x.id) === String(qid)) || null, [quotes, qid]);
   const canLink = !!(Q && qRow && !qRow.used && ["sent", "accepted"].includes(Q.status));
   // Source ka schedule (copy): package → us scope ki yaad; quote → quote ka apna
@@ -113,7 +131,7 @@ export default function PackageEstimateModal({ project, projectId, customers, on
     const scopes = d.content.scopes || [];
     const sc = keep && scopes.some((s) => s.key === scope) ? scope : ((scopes.find((s) => s.key === "full") || scopes[0] || { key: "full" }).key);
     setP(d); setScope(sc);
-    if (!keep || !schedTouched) setSchedule(copySched ? clone(d.schedules[sc] || {}) : {});
+    if (!keep || !schedTouched) setSchedule(keepNew(copySched ? clone(d.schedules[sc] || {}) : {}));
   };
   // Area package badalne par bhi bana rehta hai (do package ki tulna aasaan)
   const pickPkg = (id) => { setPkgId(id); setSchedTouched(false); if (id) loadPkg(id, false); else setP(null); };
@@ -129,23 +147,23 @@ export default function PackageEstimateModal({ project, projectId, customers, on
     setQ(d);
     setScope(d.scope);
     setLines(clone(d.lines));
-    setSchedule(copySched ? clone(d.schedule) : {});
+    setSchedule(keepNew(copySched ? clone(d.schedule) : {}));
     setSchedTouched(false);
     setLink(!!(row && !row.used && ["sent", "accepted"].includes(d.status)));
   };
-  const pickScope = (k) => { setScope(k); if (src === "package" && copySched && !schedTouched) setSchedule(clone(srcSched(k))); };
+  const pickScope = (k) => { setScope(k); if (src === "package" && copySched && !schedTouched) setSchedule(keepNew(clone(srcSched(k)))); };
   const switchSrc = (k) => {
     setSrc(k); setErr("");
     // Us tab ka chuna hua source form me wapas
-    if (k === "package" && P) { setSchedTouched(false); setSchedule(copySched ? clone(P.schedules[scope] || {}) : {}); }
-    if (k === "quote" && Q) { setScope(Q.scope); setLines(clone(Q.lines)); setSchedTouched(false); setSchedule(copySched ? clone(Q.schedule) : {}); }
+    if (k === "package" && P) { setSchedTouched(false); setSchedule(keepNew(copySched ? clone(P.schedules[scope] || {}) : {})); }
+    if (k === "quote" && Q) { setScope(Q.scope); setLines(clone(Q.lines)); setSchedTouched(false); setSchedule(keepNew(copySched ? clone(Q.schedule) : {})); }
   };
   const toggleCopy = (on) => {
     setCopySched(on);
-    setSchedule(on ? clone(srcSched(scope)) : {});
+    setSchedule(keepNew(on ? clone(srcSched(scope)) : {}));
     setSchedTouched(!on);
   };
-  const resetSched = () => { setCopySched(true); setSchedule(clone(srcSched(scope))); setSchedTouched(false); };
+  const resetSched = () => { setCopySched(true); setSchedule(keepNew(clone(srcSched(scope)))); setSchedTouched(false); };
   const clearSched = () => { setSchedule({}); setSchedTouched(true); };
 
   const qList = useMemo(() => {
@@ -158,11 +176,14 @@ export default function PackageEstimateModal({ project, projectId, customers, on
   }, [quotes, project, qSearch]);
 
   // Kuch bhi badla → purana "Check" bekaar
-  useEffect(() => { setCheck(null); }, [lines, schedule, scope, pkgId, qid, link, cust, pct, desc, remember, src]);
+  useEffect(() => { setCheck(null); }, [lines, schedule, scope, pkgId, qid, link, cust, pct, desc, remember, src, newItems]);
 
-  const C = useMemo(() => (content ? previewCompute(content, scope, lines, schedule) : null), [content, scope, lines, schedule]);
+  const C = useMemo(() => (content ? previewCompute(content, scope, allLines, schedule) : null), [content, scope, allLines, schedule]);
+  const baseRows = useMemo(() => (C ? C.rows.filter((r) => r.group_key !== NEW_GROUP) : []), [C]);
+  const baseTotal = useMemo(() => baseRows.reduce((a, r) => a + (Number(r.amount) || 0), 0), [baseRows]);
   const nl = useMemo(() => normLines(lines), [lines]);
-  const ns = useMemo(() => normSchedule(schedule), [schedule]);
+  // Hata hua / adhoora naya item ka bacha schedule Check ko na roke
+  const ns = useMemo(() => normSchedule(Object.fromEntries(Object.entries(schedule).filter(([k]) => !k.startsWith(NEW_GROUP + ".") || added.some((it) => NEW_GROUP + "." + it.key === k)))), [schedule, added]);
   const badKeys = useMemo(() => new Set([...nl.bad, ...ns.bad]), [nl, ns]);
   const baseDesc = useMemo(() => {
     const o = {};
@@ -173,7 +194,7 @@ export default function PackageEstimateModal({ project, projectId, customers, on
   const body = () => ({
     project_id: projectId, customer_id: cust.id || "", customer_name: cust.name || "", description: desc,
     retention_pct: pctNum(pct.retention_pct), tds_pct: pctNum(pct.tds_pct), tax_pct: pctNum(pct.tax_pct),
-    scope, lines: nl.lines, schedule: ns.schedule, remember,
+    scope, lines: nl.lines, schedule: ns.schedule, remember, new_items: added,
     ...(src === "package" ? { package_id: P.package.id, version_id: P.package.version_id }
                           : { quote_id: Q.id, quote_seq: Q.edit_seq, link_quote: canLink && link }),
   });
@@ -183,7 +204,7 @@ export default function PackageEstimateModal({ project, projectId, customers, on
     if (r && r.code === "PACKAGE_CHANGED" && pkgId) loadPkg(pkgId, true);
   };
   const doCheck = async () => {
-    if (badKeys.size) { setErr(t("pkg_est.fix_red")); return; }
+    if (badKeys.size || hasBadItem(newItems)) { setErr(t("pkg_est.fix_red")); return; }
     if (badPct.length) { setErr(t("pkg_est.pct_bad")); return; }
     setBusy("check"); setErr("");
     const r = await api.post(`${QBASE}/project-estimate`, { ...body(), dry_run: true }, { timeoutMs: 30000 });
@@ -301,7 +322,8 @@ export default function PackageEstimateModal({ project, projectId, customers, on
       <div style={{ ...card, marginBottom: 12 }}>
         {h2(t("pkg_est.step_area"))}
         {sub(t("pkg_est.area_hint"))}
-        <QuoteLinesTable rows={C.rows} lines={lines} editable onLines={setLines} badKeys={badKeys} total={C.total} preview baseDesc={baseDesc} />
+        <QuoteLinesTable rows={baseRows} lines={lines} editable onLines={setLines} badKeys={badKeys} total={baseTotal} preview baseDesc={baseDesc} />
+        <EstimateNewItems items={newItems} onChange={setNewItems} />
       </div>
       <div style={{ ...card, marginBottom: 8, background: T.surfaceB }} data-testid="pe-sched-tools">
         <label style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 13, color: T.t1, cursor: "pointer" }}>
