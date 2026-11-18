@@ -15657,7 +15657,7 @@ const dict = {
   "cxr.b_stop": "बंद",
   "cxr.b_stop_confirm": "यह बजट बंद करें?",
   "cxr.b_note": "असल = कंपनी खर्च जो किसी प्रोजेक्ट का नहीं (ऊपर वाला ही)। महीने का खर्च बजट पार करे तो एडमिन को घंटी।",
-  "settings.mlay_i_expense_list": "महीने के खर्च",
+  "settings.mlay_i_expense_list": "कंपनी के ख़र्चे",
   "settings.mlay_q_machinery":                                 "मशीनरी",
   "stb.bm_tip": "स्टेटमेंट मिलाते समय पासबुक का आखिरी बैलेंस, और किताब का उसी दिन का बैलेंस अभी",
   "stb.bm_on": "स्टेटमेंट {date} तक",
