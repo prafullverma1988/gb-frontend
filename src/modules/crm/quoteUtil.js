@@ -9,6 +9,7 @@
 // ════════════════════════════════════════════════════════════════
 import { t } from "../../i18n";
 import { T, chip } from "./pkgUi";
+import { isLumpUnit } from "./EstimateUnit";
 
 export const QBASE = "/sales-quotes";
 const MAX_QTY = 10000000;
@@ -57,8 +58,9 @@ export function normLines(raw) {
     if (Number.isNaN(qty) || (qty != null && (qty < 0 || qty > MAX_QTY))) { bad.push(k); continue; }
     if (Number.isNaN(rate) || (rate != null && (rate < 0 || rate > MAX_RATE))) { bad.push(k); continue; }
     if (qty === 0) qty = null;
-    if (qty == null && rate == null && !description) continue;
-    out[k] = { qty: qty == null ? null : r2(qty), rate: rate == null ? null : r2(rate), description };
+    const unit = v.unit != null && String(v.unit).trim() ? String(v.unit).trim().slice(0, 40) : null;
+    if (qty == null && rate == null && !description && !unit) continue;
+    out[k] = { qty: qty == null ? null : r2(qty), rate: rate == null ? null : r2(rate), description, ...(unit ? { unit } : {}) };
   }
   return { lines: out, bad };
 }
@@ -122,7 +124,7 @@ export function previewCompute(content, scope, lines, schedule) {
       const rate = f.rate != null ? f.rate : baseRate;
       const qty = f.qty != null ? f.qty : null;
       let amount = null;
-      if (r.kind === "lump_sum") amount = qty && rate != null ? Math.round(rate) : null;
+      if (r.kind === "lump_sum" || isLumpUnit(f.unit)) amount = qty && rate != null ? Math.round(rate) : null;
       else if (qty != null && rate != null) amount = Math.round(qty * rate);
       if (amount != null) total += amount;
       const parts = Array.isArray(S[k]) && S[k].length && !partsProblem(S[k]) ? normParts(S[k]) : null;
@@ -132,8 +134,8 @@ export function previewCompute(content, scope, lines, schedule) {
         used += amt;
         return { ...p, amount: amt };
       }) : null;
-      rows.push({ key: k, group_key: g.key, group_title: g.title, row_key: r.key, kind: r.kind, description: f.description || r.description, unit: r.unit,
-        base_rate: baseRate, rate, rate_overridden: f.rate != null, qty, amount, schedule: sched, parts });
+      rows.push({ key: k, group_key: g.key, group_title: g.title, row_key: r.key, kind: r.kind, description: f.description || r.description, unit: f.unit || r.unit, base_unit: r.unit,
+        base_rate: baseRate, rate, rate_overridden: f.rate != null, qty: isLumpUnit(f.unit) && qty ? 1 : qty, amount, schedule: sched, parts });
     }
   }
   return { scope_rate: pkgRate, rows, total: Math.round(total), preview: true };

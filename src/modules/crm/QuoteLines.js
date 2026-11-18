@@ -17,6 +17,7 @@ import { t } from "../../i18n";
 import { T, btn, inp, chip, card, Spinner, ErrBox } from "./pkgUi";
 import { AI_TIMEOUT, inr } from "./pkgUtil";
 import { QBASE, rupee } from "./quoteUtil";
+import UnitSelect, { baseUnit, isLumpUnit, withUnit } from "./EstimateUnit";
 
 const cell = { padding: "7px 8px", borderBottom: "1px solid " + T.b1, verticalAlign: "middle", fontSize: 13, color: T.t1 };
 const num = { ...cell, textAlign: "right", whiteSpace: "nowrap" };
@@ -61,11 +62,23 @@ function DescCell({ row, line, editable, onSet }) {
   );
 }
 
-export function QuoteLinesTable({ rows, lines, editable, onLines, badKeys, total, preview, baseDesc }) {
+export function QuoteLinesTable({ rows, lines, editable, onLines, badKeys, total, preview, baseDesc, unitEdit }) {
   const bad = badKeys || new Set();
   const setLine = (k, patch) => {
     const cur = (lines && lines[k]) || { qty: null, rate: null, description: null };
     onLines({ ...(lines || {}), [k]: { ...cur, ...patch } });
+  };
+  // Sirf is estimate ke liye unit (Lump Sum par rakam wahi rehti hai)
+  const changeUnit = (r, line, unit) => {
+    const base = baseUnit(r.base_unit != null ? r.base_unit : r.unit), cur = line.unit || base;
+    const typed = line.rate != null && String(line.rate).trim() !== "";
+    const nx = withUnit({ unit: cur, qty: line.qty, rate: typed ? line.rate : r.base_rate }, unit);
+    const patch = { unit: unit === base ? null : unit };
+    if (isLumpUnit(unit) && !isLumpUnit(cur)) {
+      const has = Number(line.qty) > 0 && Number(nx.rate) > 0;
+      patch.qty = has ? 1 : null; patch.rate = has ? nx.rate : "";
+    } else if (!isLumpUnit(unit) && isLumpUnit(cur)) { patch.qty = null; patch.rate = null; }
+    setLine(r.key, patch);
   };
   let lastG = null, sn = 0;
   const body = [];
@@ -77,17 +90,20 @@ export function QuoteLinesTable({ rows, lines, editable, onLines, badKeys, total
     sn++;
     const line = (lines && lines[r.key]) || {};
     const lump = r.kind === "lump_sum";
+    const canUnit = !!(unitEdit && editable && !lump);
+    const curUnit = line.unit || baseUnit(r.base_unit != null ? r.base_unit : r.unit);
+    const lumpOver = canUnit && isLumpUnit(curUnit);
     const over = line.rate != null && String(line.rate).trim() !== "";
     const isBad = bad.has(r.key);
     const bg = isBad ? T.redL : T.surface;
     body.push(
       <tr key={r.key} data-row={r.key} style={{ background: bg }}>
-        <td style={{ ...cell, ...stick(bg) }}><DescCell row={{ ...r, sn, base_desc: (baseDesc || {})[r.key] }} line={line} editable={editable} onSet={(p) => setLine(r.key, p)} /></td>
+        <td style={{ ...cell, ...stick(bg) }}><DescCell row={{ ...r, sn, base_desc: (baseDesc || {})[r.key], unit: canUnit ? null : r.unit }} line={line} editable={editable} onSet={(p) => setLine(r.key, p)} /></td>
         <td style={num}>
           {editable ? (
             <div>
-              <input className="qt-num" data-rate={r.key} inputMode="decimal" value={sv(line.rate)} placeholder={r.base_rate != null ? inr(r.base_rate) : "—"}
-                onChange={(e) => setLine(r.key, { rate: e.target.value })} aria-label={t("sales_quote_ui.col_rate")}
+              <input className="qt-num" data-rate={r.key} inputMode="decimal" value={sv(line.rate)} placeholder={lumpOver ? t("pkg_est.new_amount") : r.base_rate != null ? inr(r.base_rate) : "—"}
+                onChange={(e) => setLine(r.key, lumpOver ? { rate: e.target.value, qty: e.target.value.trim() ? 1 : null } : { rate: e.target.value })} aria-label={t("sales_quote_ui.col_rate")}
                 style={{ ...smallInp, ...(over ? { background: T.ambL, borderColor: T.ambM, fontWeight: 700 } : {}) }} />
               {over ? (
                 <div style={{ fontSize: 10.5, color: T.t3, marginTop: 2 }}>
@@ -109,8 +125,11 @@ export function QuoteLinesTable({ rows, lines, editable, onLines, badKeys, total
               {t("sales_quote_ui.include")}
             </label>
           ) : editable ? (
-            <input className="qt-num" data-qty={r.key} inputMode="decimal" value={sv(line.qty)} placeholder="0"
-              onChange={(e) => setLine(r.key, { qty: e.target.value })} aria-label={t("sales_quote_ui.col_qty")} style={smallInp} />
+            <div style={{ display: "flex", gap: 4, justifyContent: "flex-end", alignItems: "center" }}>
+              <input className="qt-num" data-qty={r.key} inputMode="decimal" value={lumpOver ? "1" : sv(line.qty)} placeholder="0" disabled={lumpOver}
+                onChange={(e) => setLine(r.key, { qty: e.target.value })} aria-label={t("sales_quote_ui.col_qty")} style={smallInp} />
+              {canUnit ? <UnitSelect value={curUnit} onChange={(u) => changeUnit(r, line, u)} dataKey={r.key} style={{ width: 104, textAlign: "left" }} /> : null}
+            </div>
           ) : (r.qty != null ? inr(r.qty) : "")}
         </td>
         <td style={{ ...num, fontWeight: r.amount ? 700 : 400, color: preview ? T.t2 : T.t1 }} data-amount={r.key}>
@@ -122,7 +141,7 @@ export function QuoteLinesTable({ rows, lines, editable, onLines, badKeys, total
   return (
     <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch", maxWidth: "100%", border: "1px solid " + T.b1, borderRadius: 10 }} data-testid="qt-lines">
       <style>{".qt-num::placeholder{color:#475569;opacity:.85}"}</style>
-      <table style={{ borderCollapse: "separate", borderSpacing: 0, width: "100%", minWidth: 470 }}>
+      <table style={{ borderCollapse: "separate", borderSpacing: 0, width: "100%", minWidth: unitEdit ? 590 : 470 }}>
         <thead>
           <tr>
             <th style={{ ...th, textAlign: "left", ...stick(T.surfaceB) }}>{t("sales_quote_ui.col_desc")}</th>

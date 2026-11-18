@@ -17333,6 +17333,8 @@ const dict = {
   "pkg_est.new_remove": "Remove item",
   "pkg_est.new_total": "New items: {total}",
   "pkg_est.new_fix": "Fill in the name, qty and rate for the new item, or remove that row.",
+  "pkg_est.unit_lump": "Lump Sum",
+  "pkg_est.new_amount": "Amount ₹",
 };
 
 export default dict;

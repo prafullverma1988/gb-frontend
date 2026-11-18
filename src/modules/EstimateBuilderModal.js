@@ -23,6 +23,7 @@ import api from "../config/api";
 import SearchSelect from "../components/SearchSelect";
 import { t, Rich } from "../i18n";
 import { partsFromTemplate, splitLineByParts } from "./tabs/StageBilling";
+import UnitSelect, { LUMP_UNIT, isLumpUnit } from "./crm/EstimateUnit";
 import EstimateNewItems, { hasBadItem, itemsTotal, newItemLine, validItems } from "./crm/EstimateNewItems";
 
 const inrIN = (n) => Math.round(Number(n) || 0).toLocaleString("en-IN");
@@ -694,6 +695,17 @@ export default function EstimateBuilderModal({
   const resetItemRow = (sid, cid, itemId) =>
     patchItem(sid, cid, itemId, Object.fromEntries(OV_KEYS.map(k => [k, null])));
 
+  // Line ka unit sirf is estimate me. Lump Sum: qty 1, rate me poori rakam (18 Nov 2026)
+  const changeItemUnit = (sec, cat, it, unit) => {
+    const toLump = isLumpUnit(unit);
+    const patch = { unit_override: unit === it.masterUnit ? null : unit };
+    if (toLump && !it.lump) {
+      const amount = Math.round((Number(it.base) + Number(it.addOn)) * (Number(it.qty) || 0) * 100) / 100;
+      if (amount > 0) { patch.base_rate_override = String(amount); patch.add_on_override = "0"; }
+    } else if (!toLump && it.lump) { patch.base_rate_override = null; patch.add_on_override = null; }
+    patchItem(sec.id, cat.id, it.item_id, patch);
+  };
+
   // ── ITEM EDIT (14 Nov 2026) — Library jaisa poora edit, builder ke andar ──
   // Default: sirf is estimate me (override). "Library me bhi" tick ho to naam /
   // unit library ke item (boq_items) me, rate / add-on / description is package
@@ -787,7 +799,7 @@ export default function EstimateBuilderModal({
                     : sArea;
         const items = (pkgItems[s.id] || []).filter(it => Number(it.category_id) === Number(c.id));
         const itemOverrides = cm.items || {};
-        let cBase = 0, cAddOn = 0, cItemTotalSum = 0;
+        let cBase = 0, cAddOn = 0, cItemTotalSum = 0, cLump = 0;
         const itemRows = items.map(it => {
           const ov = itemOverrides[it.item_id] || {};
           const masterBase  = (Number(it.rate) || 0) - (Number(it.add_on_rate) || 0);
@@ -805,15 +817,17 @@ export default function EstimateBuilderModal({
           const desc  = isSet(ov.description_override) ? ov.description_override            : masterDesc;
           // Per-item mode: each item carries its own qty (override > pcr master).
           // Uniform mode: every item shares cArea.
-          const effQty = perItem
+          // Lump Sum: area / qty se guna nahi — rate hi poori rakam
+          const lump = isLumpUnit(unit);
+          const effQty = lump ? 1 : perItem
             ? (isSet(ov.qty_override) ? Number(ov.qty_override) || 0 : masterQty)
             : cArea;
           const total = removed ? 0 : (base + addOn) * effQty;
-          if (!removed) { cBase += base; cAddOn += addOn; cItemTotalSum += total; }
+          if (!removed) { if (lump) cLump += total; else { cBase += base; cAddOn += addOn; } cItemTotalSum += total; }
           return {
             item_id: it.item_id, base, addOn, desc, qty: effQty, total,
             masterBase, masterAddOn, masterDesc, masterQty,
-            name, unit, masterName, masterUnit, removed,
+            name, unit, masterName, masterUnit, removed, lump,
             nameEdited: name !== masterName, unitEdited: unit !== masterUnit,
             hasOverride: base !== masterBase || addOn !== masterAddOn || desc !== masterDesc
                        || name !== masterName || unit !== masterUnit || removed
@@ -822,7 +836,7 @@ export default function EstimateBuilderModal({
         });
         // Category total: per-item mode → Σ item totals (each qty-weighted)
         //                 uniform mode → (Σ base + Σ addOn) × cArea
-        const cTotal = perItem ? cItemTotalSum : (cBase + cAddOn) * cArea;
+        const cTotal = perItem ? cItemTotalSum : (cBase + cAddOn) * cArea + cLump;
         sTotal += cTotal;
         sBase  += cBase;
         sAddOn += cAddOn;
@@ -1461,7 +1475,13 @@ export default function EstimateBuilderModal({
                                           ) : it.hasOverride && (
                                             <span style={{ marginLeft:6, padding:"1px 6px", fontSize:9.5, fontWeight:700, background:COL_AMBER, color:"white", borderRadius:3 }}>EDITED</span>
                                           )}
-                                          <div style={{ fontSize:10, color: it.unitEdited ? COL_AMBER : "#94A3B8", marginTop:1 }}>{itemUnit}</div>
+                                          {!it.removed && !readOnly ? (
+                                            <div style={{ marginTop:3, maxWidth:120 }}>
+                                              <UnitSelect value={it.unit} onChange={u => changeItemUnit(sec, cat, it, u)} dataKey={it.item_id} style={{ width:"100%", minHeight:28, fontSize:11, fontWeight:500 }}/>
+                                            </div>
+                                          ) : (
+                                            <div style={{ fontSize:10, color: it.unitEdited ? COL_AMBER : "#94A3B8", marginTop:1 }}>{itemUnit}</div>
+                                          )}
                                         </td>
                                         <td style={{ padding:"8px 12px", textAlign:"right" }}>
                                           {rowEdit ? (
@@ -1505,7 +1525,7 @@ export default function EstimateBuilderModal({
                                             for THIS quote (stored as qty_override in measurements).
                                             Uniform mode: shows category/section area. */}
                                         <td style={{ padding:"8px 12px", textAlign:"right", fontSize:12, color:COL_TEAL, fontWeight:600 }}>
-                                          {secPerItem && !readOnly && !it.removed ? (
+                                          {it.lump ? 1 : secPerItem && !readOnly && !it.removed ? (
                                             (() => {
                                               const itOv = measurements.sections[sec.id]?.categories?.[cat.id]?.items?.[it.item_id] || {};
                                               const qVal = isSet(itOv.qty_override) ? String(itOv.qty_override) : "";
@@ -1715,7 +1735,7 @@ export default function EstimateBuilderModal({
         const was = (cur, lib) => String(cur ?? "").trim() !== String(lib ?? "").trim() && String(cur ?? "").trim() !== ""
           ? <div style={{ fontSize:10, color:"#94A3B8", marginTop:2 }}>{t("estimate_builder.item_lib_value", { v: String(lib ?? "") || "—" })}</div> : null;
         const units = [...new Set([...(allUoms.length > 0 ? allUoms.map(u => u.name) : ["Sq.Ft","Nos","Lump Sum","Running Ft","Kg","Point","Unit"]),
-                                   r.masterUnit, f.unit].filter(Boolean))];
+                                   r.masterUnit, f.unit, LUMP_UNIT].filter(Boolean))];
         const nb = f.base  === "" ? r.masterBase  : (Number(f.base)  || 0);
         const na = f.addOn === "" ? r.masterAddOn : (Number(f.addOn) || 0);
         const nq = e.perItem ? (f.qty === "" ? r.masterQty : (Number(f.qty) || 0)) : (Number(r.qty) || 0);

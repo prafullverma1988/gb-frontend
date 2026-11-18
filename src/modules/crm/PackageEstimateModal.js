@@ -322,7 +322,7 @@ export default function PackageEstimateModal({ project, projectId, customers, on
       <div style={{ ...card, marginBottom: 12 }}>
         {h2(t("pkg_est.step_area"))}
         {sub(t("pkg_est.area_hint"))}
-        <QuoteLinesTable rows={baseRows} lines={lines} editable onLines={setLines} badKeys={badKeys} total={baseTotal} preview baseDesc={baseDesc} />
+        <QuoteLinesTable rows={baseRows} lines={lines} editable onLines={setLines} badKeys={badKeys} total={baseTotal} preview baseDesc={baseDesc} unitEdit />
         <EstimateNewItems items={newItems} onChange={setNewItems} />
       </div>
       <div style={{ ...card, marginBottom: 8, background: T.surfaceB }} data-testid="pe-sched-tools">

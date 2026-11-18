@@ -17335,6 +17335,8 @@ const dict = {
   "pkg_est.new_remove": "Item hatao",
   "pkg_est.new_total": "Naye item: {total}",
   "pkg_est.new_fix": "Naye item me naam, qty aur rate poora bharo, ya wo row hatao.",
+  "pkg_est.unit_lump": "Lump Sum",
+  "pkg_est.new_amount": "Rakam ₹",
 };
 
 export default dict;

@@ -17332,6 +17332,8 @@ const dict = {
   "pkg_est.new_remove": "आइटम हटाएँ",
   "pkg_est.new_total": "नए आइटम: {total}",
   "pkg_est.new_fix": "नए आइटम में नाम, मात्रा और रेट पूरा भरें, या वह लाइन हटाएँ।",
+  "pkg_est.unit_lump": "लम्प सम",
+  "pkg_est.new_amount": "रकम ₹",
 };
 
 export default dict;

@@ -14,6 +14,7 @@ import { StageBillGrid, StageLinesPanel } from "./StageBilling";
 import { StatementView, ProjectStatementView, DraftLinesModal } from "./BillingV2";
 import { ChaluBillView, ProjectChaluView } from "./ChaluBill";
 import PackageEstimateModal from "../crm/PackageEstimateModal";
+import UnitSelect, { DEFAULT_UNIT, isLumpUnit, withUnit } from "../crm/EstimateUnit";
 
 function TabEstimate({ project }) {
   // Roles & Access (5 Oct 2026) — har button usi Estimate tick se jo server
@@ -94,7 +95,7 @@ function TabEstimate({ project }) {
   const [estForm, setEstForm] = useState({
     customer_id: "", customer_name: "", retention_pct: 5, tds_pct: 1, tax_pct: 0,
     description: "",
-    sections: [{ title: t("estimate.section_1"), items: [{ description:"", unit:"", qty:"", rate:"" }] }],
+    sections: [{ title: t("estimate.section_1"), items: [{ description:"", unit:DEFAULT_UNIT, qty:"", rate:"" }] }],
   });
   // Form state — New Invoice (milestone OR manual)
   const [invForm, setInvForm] = useState({
@@ -721,7 +722,8 @@ function TabEstimate({ project }) {
       s[si] = { ...s[si], items: s[si].items.map((it, i) => i === ii ? {
         ...it,
         description: libItem.name + (libItem.description ? " — " + libItem.description : ""),
-        unit: libItem.unit || it.unit,
+        unit: libItem.unit || it.unit || DEFAULT_UNIT,
+        qty: isLumpUnit(libItem.unit) ? 1 : it.qty,
         rate: String(rate),
         library_item_id: libItem.id,
         library_city: libFilterCity?.name,
@@ -819,7 +821,7 @@ function TabEstimate({ project }) {
     if (r.success) {
       setShowNewEst(false);
       setEstForm({ customer_id:"", customer_name:"", retention_pct:5, tds_pct:1, tax_pct:0, description:"",
-        sections:[{title:t("estimate.section_1"),items:[{description:"",unit:"",qty:"",rate:""}]}] });
+        sections:[{title:t("estimate.section_1"),items:[{description:"",unit:DEFAULT_UNIT,qty:"",rate:""}]}] });
       await loadEstimates();
       await selectEst(r.data);
     } else alert(r.message || "Failed");
@@ -1336,12 +1338,12 @@ function TabEstimate({ project }) {
 
   // ── Form helpers (sections/items in New Estimate) ─────────────
   const addSection = () => setEstForm(p => ({
-    ...p, sections: [...p.sections, { title: "Section " + (p.sections.length+1), items: [{description:"",unit:"",qty:"",rate:""}] }]
+    ...p, sections: [...p.sections, { title: "Section " + (p.sections.length+1), items: [{description:"",unit:DEFAULT_UNIT,qty:"",rate:""}] }]
   }));
   const removeSection = (si) => setEstForm(p => ({ ...p, sections: p.sections.filter((_,i) => i !== si) }));
   const addItem = (si) => setEstForm(p => {
     const s = [...p.sections];
-    s[si] = { ...s[si], items: [...s[si].items, {description:"",unit:"",qty:"",rate:""}] };
+    s[si] = { ...s[si], items: [...s[si].items, {description:"",unit:DEFAULT_UNIT,qty:"",rate:""}] };
     return { ...p, sections: s };
   });
   const removeItem = (si, ii) => setEstForm(p => {
@@ -1352,6 +1354,12 @@ function TabEstimate({ project }) {
   const setItemField = (si, ii, field, val) => setEstForm(p => {
     const s = [...p.sections];
     s[si] = { ...s[si], items: s[si].items.map((it,i) => i === ii ? { ...it, [field]: val } : it) };
+    return { ...p, sections: s };
+  });
+
+  const setItemUnit = (si, ii, unit) => setEstForm(p => {
+    const s = [...p.sections];
+    s[si] = { ...s[si], items: s[si].items.map((it,i) => i === ii ? withUnit(it, unit) : it) };
     return { ...p, sections: s };
   });
 
@@ -2542,7 +2550,7 @@ function TabEstimate({ project }) {
               const secItems = sec.items || [];
               const secTotal = secItems.reduce((s,it) => s + (parseFloat(it.qty)||0)*(parseFloat(it.rate)||0), 0);
               const secPerItem = !!Number(sec.per_item_qty);
-              const EG = "1fr 70px 70px 95px 90px 30px";
+              const EG = "1fr 104px 70px 95px 90px 30px";
               // Group rows by the [Category] prefix stuffed into the description
               // (the 2-level estimate schema has no category column — the prefix
               // IS the carrier). Same regex the read-only BOQ view uses, so both
@@ -2621,15 +2629,22 @@ function TabEstimate({ project }) {
                     // Category Qty box shows the shared number when every row
                     // agrees; blank when they don't, so a per-item tweak below
                     // is never silently hidden behind one value.
-                    const qtys     = rows.map(r => String(r.it.qty ?? ""));
+                    const qtys     = rows.filter(r => !isLumpUnit(r.it.unit)).map(r => String(r.it.qty ?? ""));
                     const uniform  = qtys.every(q => q === qtys[0]);
-                    const catQty   = uniform ? qtys[0] : "";
+                    const catQty   = uniform ? (qtys[0] ?? "") : "";
                     // Writing here sets qty on EVERY row of the category; each
                     // row's own box below still overrides just that row.
                     const setCatQty = (v) => setAmendForm(p => {
                       const next  = [...p.sections];
                       const items = [...next[si].items];
-                      rows.forEach(r => { items[r.ii] = { ...items[r.ii], qty: v }; });
+                      rows.forEach(r => { if (!isLumpUnit(r.it.unit)) items[r.ii] = { ...items[r.ii], qty: v }; });
+                      next[si] = { ...next[si], items };
+                      return { ...p, sections: next };
+                    });
+                    const patchUnit = (ii, unit) => setAmendForm(p => {
+                      const next  = [...p.sections];
+                      const items = [...next[si].items];
+                      items[ii] = withUnit(items[ii], unit);
                       next[si] = { ...next[si], items };
                       return { ...p, sections: next };
                     });
@@ -2675,10 +2690,8 @@ function TabEstimate({ project }) {
                                 onChange={e=>patch(ii, "description", catName ? `[${catName}] ${e.target.value}` : e.target.value)}
                                 placeholder={t("estimate.item_description")}
                                 style={{padding:"5px 8px",border:"1px solid "+T.b1,borderRadius:4,fontSize:12,outline:"none",marginLeft:catName?10:0}}/>
-                              <input value={it.unit} onChange={e=>patch(ii, "unit", e.target.value)}
-                                placeholder={t("estimate.sq_ft")}
-                                style={{padding:"5px 8px",border:"1px solid "+T.b1,borderRadius:4,fontSize:11.5,outline:"none"}}/>
-                              <input type="number" value={it.qty} onChange={e=>patch(ii, "qty", e.target.value)}
+                              <UnitSelect value={it.unit} onChange={u=>patchUnit(ii, u)} style={{width:"100%"}}/>
+                              <input type="number" value={isLumpUnit(it.unit) ? 1 : it.qty} disabled={isLumpUnit(it.unit)} onChange={e=>patch(ii, "qty", e.target.value)}
                                 style={{padding:"5px 8px",border:"1px solid "+T.b1,borderRadius:4,fontSize:11.5,outline:"none",textAlign:"right"}}/>
                               <input type="number" value={it.rate} onChange={e=>patch(ii, "rate", e.target.value)}
                                 style={{padding:"5px 8px",border:"1px solid "+T.b1,borderRadius:4,fontSize:11.5,outline:"none",textAlign:"right"}}/>
@@ -2702,7 +2715,7 @@ function TabEstimate({ project }) {
                               const next  = [...p.sections];
                               const items = [...next[si].items];
                               items.splice(rows[rows.length-1].ii + 1, 0,
-                                { description:`[${catName}] `, unit:rows[0]?.it.unit||"", qty: uniform ? catQty : "", rate:"" });
+                                { description:`[${catName}] `, unit:(!isLumpUnit(rows[0]?.it.unit) && rows[0]?.it.unit)||DEFAULT_UNIT, qty: uniform ? catQty : "", rate:"" });
                               next[si] = { ...next[si], items };
                               return { ...p, sections: next };
                             })}
@@ -2722,7 +2735,7 @@ function TabEstimate({ project }) {
                       if (!name) return;
                       setAmendForm(p=>{
                         const next = [...p.sections];
-                        next[si] = { ...next[si], items: [...next[si].items, { description:`[${name}] `, unit:"", qty:"", rate:"" }] };
+                        next[si] = { ...next[si], items: [...next[si].items, { description:`[${name}] `, unit:DEFAULT_UNIT, qty:"", rate:"" }] };
                         return { ...p, sections: next };
                       });
                     }}
@@ -2731,7 +2744,7 @@ function TabEstimate({ project }) {
                     </button>
                     <button onClick={()=>setAmendForm(p=>{
                       const next = [...p.sections];
-                      next[si] = { ...next[si], items: [...next[si].items, { description:"", unit:"", qty:"", rate:"" }] };
+                      next[si] = { ...next[si], items: [...next[si].items, { description:"", unit:DEFAULT_UNIT, qty:"", rate:"" }] };
                       return { ...p, sections: next };
                     })}
                       style={{background:"transparent",border:"1px dashed "+T.bluM,color:T.blu,borderRadius:4,padding:"4px 10px",fontSize:11,fontWeight:600,cursor:"pointer"}}>
@@ -2742,7 +2755,7 @@ function TabEstimate({ project }) {
               );
             })}
 
-            <button onClick={()=>setAmendForm(p=>({ ...p, sections: [...p.sections, { title:t("estimate.new_section"), items:[{description:"",unit:"",qty:"",rate:""}] }] }))}
+            <button onClick={()=>setAmendForm(p=>({ ...p, sections: [...p.sections, { title:t("estimate.new_section"), items:[{description:"",unit:DEFAULT_UNIT,qty:"",rate:""}] }] }))}
               style={{background:"white",border:"1.5px dashed "+T.b1,color:T.t2,borderRadius:6,padding:"7px 14px",fontSize:11.5,fontWeight:700,cursor:"pointer",marginBottom:14}}>
              {t("common.add_section")}
             </button>
@@ -2859,19 +2872,19 @@ function TabEstimate({ project }) {
                     <button onClick={()=>removeSection(si)} style={{background:T.redL,color:T.red,border:"none",borderRadius:5,padding:"4px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>{t("estimate.remove_section")}</button>
                   )}
                 </div>
-                <div style={{display:"grid",gridTemplateColumns:"1fr 70px 80px 100px 32px",gap:6,marginBottom:6}}>
-                  {["Description","Unit","Qty","Rate",""].map(h => <span key={h} style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase"}}>{h}</span>)}
+                <div style={{display:"grid",gridTemplateColumns:"24px 1fr 104px 80px 100px 32px",gap:6,marginBottom:6}}>
+                  {["","Description","Unit","Qty","Rate",""].map((h,hi) => <span key={hi} style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase"}}>{h}</span>)}
                 </div>
                 {sec.items.map((it, ii) => (
                   <div key={ii} style={{marginBottom:4}}>
-                    <div style={{display:"grid",gridTemplateColumns:"24px 1fr 70px 80px 100px 32px",gap:6}}>
+                    <div style={{display:"grid",gridTemplateColumns:"24px 1fr 104px 80px 100px 32px",gap:6}}>
                       <button onClick={()=>setLibPicker({si,ii})} title={t("estimate.pick_from_library_2")}
                         style={{background:T.bluL,color:T.blu,border:"1px solid "+T.bluM,borderRadius:5,fontSize:13,cursor:"pointer"}}>
                         📚
                       </button>
                       <input value={it.description} onChange={e=>setItemField(si,ii,"description",e.target.value)} placeholder={t("estimate.item_description_or_pick")} style={inpS}/>
-                      <input value={it.unit} onChange={e=>setItemField(si,ii,"unit",e.target.value)} placeholder="sqft" style={inpS}/>
-                      <input type="number" value={it.qty} onChange={e=>setItemField(si,ii,"qty",e.target.value)} placeholder="area" style={inpS}/>
+                      <UnitSelect value={it.unit} onChange={u=>setItemUnit(si,ii,u)} style={{width:"100%"}}/>
+                      <input type="number" value={isLumpUnit(it.unit) ? 1 : it.qty} disabled={isLumpUnit(it.unit)} onChange={e=>setItemField(si,ii,"qty",e.target.value)} placeholder="area" style={inpS}/>
                       <input type="number" value={it.rate} onChange={e=>setItemField(si,ii,"rate",e.target.value)} placeholder="rate" style={inpS}/>
                       <button onClick={()=>removeItem(si,ii)} disabled={sec.items.length<=1} style={{background:sec.items.length<=1?T.b1:T.redL,color:sec.items.length<=1?T.t4:T.red,border:"none",borderRadius:5,fontSize:14,cursor:sec.items.length<=1?"default":"pointer"}}>×</button>
                     </div>
