@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, Fragment } from "react";
 import PickSelect from "../components/PickSelect";
-import api from "../config/api";
+import api, { getUser } from "../config/api";
 import { clearPhotoPolicyCache } from "../utils/photoPolicy";
 import MapPicker from "../components/MapPicker";
 import RecycleBin from "./shared/RecycleBin";
@@ -3166,49 +3166,117 @@ function ApprovalSettings() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// BACK DATE CONTROL (unchanged)
+// BACK DATE CONTROL — asli (19 Nov 2026). Pehle ye sirf dikhawa tha: toggles
+// screen par badalte the, Save kuch save nahi karta tha, server par koi niyam
+// nahi. Ab settings /settings/backdate me save hoti hain aur niyam server par
+// lagta hai (gb-backend utils/backDate.js) — web, mobile, sab par ek jaisa.
 // ═══════════════════════════════════════════════════════════════════════
 function BackDateControl() {
-  const [settings, setSettings] = useState({
-    globalRestrict: true, lockAfterApproval: true, requireReason: true, adminOverride: true, monthEndLock: true, lockDay: 5,
-    modules: { expenses: { restrict: true, days: 7 }, materialIssue: { restrict: true, days: 3 }, attendance: { restrict: true, days: 2 }, purchaseOrder: { restrict: false, days: 15 }, invoice: { restrict: true, days: 7 }, cashbook: { restrict: true, days: 5 } }
-  });
-  const upd = (k, v) => setSettings(p => ({ ...p, [k]: v }));
-  const updMod = (mod, k, v) => setSettings(p => ({ ...p, modules: { ...p.modules, [mod]: { ...p.modules[mod], [k]: v } } }));
-  const moduleLabels = { expenses: "Expense Entry", materialIssue: "Material Issue / Transfer", attendance: "Attendance Marking", purchaseOrder: "Purchase Orders", invoice: "Invoice / Challan", cashbook: "Cash Book Entry" };
+  const [cfg, setCfg] = useState(null);
+  const [meta, setMeta] = useState({ modules: [], day_choices: [], lock_day_choices: [], roles: [] });
+  const [err, setErr] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [savedTick, setSavedTick] = useState(false);
+  const [rolesOpen, setRolesOpen] = useState(false);
+  const isAdmin = ["admin", "super_admin"].includes(getUser()?.role);
+
+  useEffect(() => {
+    api.get("/settings/backdate").then(r => {
+      if (r?.success && r.data?.config) { setCfg(r.data.config); setMeta(r.data); }
+      else setErr(r?.message || t("backdate.load_failed"));
+    });
+  }, []);
+
+  if (err && !cfg) return <div style={{ padding: 20, color: T.red, fontSize: 13 }}>{err}</div>;
+  if (!cfg) return <div style={{ padding: 20, color: T.textLight, fontSize: 13 }}>{t("backdate.loading")}</div>;
+
+  const upd = (k, v) => { setCfg(p => ({ ...p, [k]: v })); setSavedTick(false); };
+  const updMod = (key, k, v) => { setCfg(p => ({ ...p, modules: { ...p.modules, [key]: { ...p.modules[key], [k]: v } } })); setSavedTick(false); };
+  const updLock = (k, v) => { setCfg(p => ({ ...p, month_lock: { ...p.month_lock, [k]: v } })); setSavedTick(false); };
+  const toggleRole = (slug) => upd("override_roles", cfg.override_roles.includes(slug) ? cfg.override_roles.filter(x => x !== slug) : [...cfg.override_roles, slug]);
+  const save = async () => {
+    setSaving(true); setErr("");
+    const r = await api.put("/settings/backdate", cfg);
+    setSaving(false);
+    if (r?.success) { setCfg(r.data.config); setSavedTick(true); }
+    else setErr(r?.message || t("backdate.save_failed"));
+  };
+  const off = !cfg.enabled;
+  const dim = { opacity: off ? 0.5 : 1, pointerEvents: off ? "none" : "auto" };
+  const chosen = meta.roles.filter(r => cfg.override_roles.includes(r.slug)).map(r => r.name);
+  const selStyle = { padding: "6px 10px", borderRadius: 6, border: `1.5px solid ${T.border}`, fontSize: 12.5, color: T.text, background: "white", cursor: "pointer", fontFamily: T.font };
 
   return (
     <div>
-      <SectionCard title="Global Back-Date Controls" desc="Prevent users from entering data for past dates beyond allowed window" action={<SaveBtn />}>
-        <ToggleRow icon={<IcCalendar size={17} color={T.blue} />} label="Restrict Back-Date Entry" desc="Limit how far back users can enter transactions" value={settings.globalRestrict} onChange={v => upd("globalRestrict", v)} />
-        <ToggleRow icon={<IcLock size={17} color={T.blue} />} label="Lock After Approval" desc="Approved transactions cannot have date modified" value={settings.lockAfterApproval} onChange={v => upd("lockAfterApproval", v)} />
-        <ToggleRow icon={<IcClipboard size={17} color={T.blue} />} label="Require Reason for Back-Dated Entry" desc="Force reason when entering back-dated transactions" value={settings.requireReason} onChange={v => upd("requireReason", v)} />
-        <ToggleRow icon={<IcShield size={17} color={T.blue} />} label="Admin Override" desc="Allow Admin to bypass restrictions" value={settings.adminOverride} onChange={v => upd("adminOverride", v)} />
-      </SectionCard>
-      <SectionCard title="Module-wise Back-Date Limits" desc="Different back-date windows for each module">
-        <div style={{ marginTop: 8 }}>
-          {Object.entries(settings.modules).map(([key, mod], i) => (
-            <div key={key} style={{ display: "flex", alignItems: "center", gap: 14, padding: "14px 0", borderBottom: i < Object.keys(settings.modules).length - 1 ? `1px solid ${T.borderLight}` : "none" }}>
-              <div style={{ flex: 1 }}><div style={{ fontSize: 13.5, fontWeight: 600, color: T.text }}>{moduleLabels[key]}</div></div>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <PickSelect value={mod.days} onChange={e => updMod(key, "days", parseInt(e.target.value))} disabled={!mod.restrict}
-                  style={{ padding: "6px 10px", borderRadius: 6, border: `1.5px solid ${T.border}`, fontSize: 12.5, color: T.text, background: "white", cursor: "pointer", fontFamily: T.font, opacity: mod.restrict ? 1 : 0.4 }}>
-                  {[1,2,3,5,7,10,15,30].map(d => <option key={d} value={d}>{d} days</option>)}
-                </PickSelect>
-                <Toggle value={mod.restrict} onChange={v => updMod(key, "restrict", v)} />
-              </div>
+      {!isAdmin && <div style={{ marginBottom: 14, padding: "10px 14px", borderRadius: 8, background: T.blueSoft, color: T.text, fontSize: 12.5 }}>{t("backdate.admin_only")}</div>}
+      <SectionCard title={t("backdate.sec_main")} desc={t("backdate.sec_main_desc")}
+        action={isAdmin ? <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          {savedTick && <span style={{ fontSize: 12.5, color: T.green, fontWeight: 600 }}>{t("backdate.saved")}</span>}
+          <SaveBtn onClick={saving ? undefined : save} label={saving ? t("backdate.saving") : t("backdate.save")} />
+        </div> : null}>
+        {err && <div style={{ margin: "8px 0", color: T.red, fontSize: 12.5 }}>{err}</div>}
+        <ToggleRow icon={<IcCalendar size={17} color={T.blue} />} label={t("backdate.enabled")} desc={t("backdate.enabled_desc")} value={cfg.enabled} onChange={v => upd("enabled", v)} />
+        <div style={dim}>
+          <ToggleRow icon={<IcClipboard size={17} color={T.blue} />} label={t("backdate.require_reason")} desc={t("backdate.require_reason_desc")} value={cfg.require_reason} onChange={v => upd("require_reason", v)} />
+          <ToggleRow icon={<IcLock size={17} color={T.blue} />} label={t("backdate.lock_approved")} desc={t("backdate.lock_approved_desc")} value={cfg.lock_after_approval} onChange={v => upd("lock_after_approval", v)} />
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 14, padding: "16px 0" }}>
+            <div style={{ width: 36, height: 36, borderRadius: 8, background: T.blueSoft, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><IcShield size={17} color={T.blue} /></div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 13.5, fontWeight: 600, color: T.text }}>{t("backdate.override_roles")}</div>
+              <div style={{ fontSize: 12, color: T.textLight, marginTop: 2 }}>{t("backdate.override_roles_desc")}</div>
             </div>
-          ))}
+            <div style={{ position: "relative", width: 260, flexShrink: 0 }}>
+              <button type="button" onClick={() => setRolesOpen(o => !o)}
+                style={{ ...selStyle, width: "100%", textAlign: "left", padding: "8px 12px", display: "flex", justifyContent: "space-between", gap: 8 }}>
+                <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: chosen.length ? T.text : T.textLight }}>
+                  {chosen.length ? chosen.join(", ") : t("backdate.override_none")}
+                </span>
+                <span style={{ color: T.textLight }}>▾</span>
+              </button>
+              {rolesOpen && (
+                <div style={{ position: "absolute", top: "100%", left: 0, right: 0, marginTop: 4, background: "white", border: `1px solid ${T.border}`, borderRadius: 8, boxShadow: T.shadow, zIndex: 20, maxHeight: 240, overflowY: "auto", padding: 6 }}>
+                  {meta.roles.map(r => (
+                    <label key={r.slug} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 8px", fontSize: 13, color: T.text, cursor: "pointer", borderRadius: 6 }}>
+                      <input type="checkbox" checked={cfg.override_roles.includes(r.slug)} onChange={() => toggleRole(r.slug)} />
+                      {r.name}
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       </SectionCard>
-      <SectionCard title="Month-End Lock" desc="Auto-lock entries after month-end closing period">
-        <ToggleRow icon={<IcLock size={17} color={T.blue} />} label="Auto-Lock Previous Month" desc={`Lock all entries after the ${settings.lockDay}th of current month`} value={settings.monthEndLock} onChange={v => upd("monthEndLock", v)} />
-        {settings.monthEndLock && (
-          <div style={{ marginTop: 8, marginLeft: 50 }}>
-            <FormSelect label="Lock entries after day" value={String(settings.lockDay)} onChange={v => upd("lockDay", parseInt(v))} options={[{ value: "3", label: "3rd of next month" }, { value: "5", label: "5th of next month" }, { value: "7", label: "7th of next month" }, { value: "10", label: "10th of next month" }]} half />
+      <div style={dim}>
+        <SectionCard title={t("backdate.sec_modules")} desc={t("backdate.sec_modules_desc")}>
+          <div style={{ marginTop: 8 }}>
+            {meta.modules.map((m, i) => {
+              const mod = cfg.modules[m.key] || { on: false, days: meta.day_choices[0] };
+              return (
+                <div key={m.key} style={{ display: "flex", alignItems: "center", gap: 14, padding: "14px 0", borderBottom: i < meta.modules.length - 1 ? `1px solid ${T.borderLight}` : "none" }}>
+                  <div style={{ flex: 1 }}><div style={{ fontSize: 13.5, fontWeight: 600, color: T.text }}>{m.label}</div></div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <PickSelect value={mod.days} onChange={e => updMod(m.key, "days", parseInt(e.target.value, 10))} disabled={!mod.on}
+                      style={{ ...selStyle, opacity: mod.on ? 1 : 0.4 }}>
+                      {meta.day_choices.map(d => <option key={d} value={d}>{t("backdate.n_days", { n: d })}</option>)}
+                    </PickSelect>
+                    <Toggle value={mod.on} onChange={v => updMod(m.key, "on", v)} />
+                  </div>
+                </div>
+              );
+            })}
           </div>
-        )}
-      </SectionCard>
+        </SectionCard>
+        <SectionCard title={t("backdate.sec_month")} desc={t("backdate.sec_month_desc")}>
+          <ToggleRow icon={<IcLock size={17} color={T.blue} />} label={t("backdate.month_lock")} desc={t("backdate.month_lock_desc", { day: cfg.month_lock.day })} value={cfg.month_lock.on} onChange={v => updLock("on", v)} />
+          {cfg.month_lock.on && (
+            <div style={{ marginTop: 8, marginLeft: 50 }}>
+              <FormSelect label={t("backdate.lock_day")} value={String(cfg.month_lock.day)} onChange={v => updLock("day", parseInt(v, 10))}
+                options={meta.lock_day_choices.map(d => ({ value: String(d), label: t("backdate.lock_day_opt", { day: d }) }))} half />
+            </div>
+          )}
+        </SectionCard>
+      </div>
     </div>
   );
 }
@@ -6060,7 +6128,7 @@ const settingsSections = [
   { id: "approval",      label: "Multi-Level Approval", Icon: IcLayers,    Comp: ApprovalSettings,       section: null },
   { id: "practices",     label: "Company Practices",    Icon: IcClipboard, Comp: CompanyPractices,       section: null },
   { id: "other",         label: "Task Screen",          Icon: IcLayers,    Comp: OtherSettings,          section: null },
-  { id: "backdate",      label: "Back-Date Control",    Icon: IcCalendar,  Comp: BackDateControl,        section: null },
+  { id: "backdate",      labelKey: "backdate.tab",      Icon: IcCalendar,  Comp: BackDateControl,        section: null },
   { id: "photo",         label: "Photo Settings",       Icon: IcCamera,    Comp: PhotoSettings,          section: null },
   { id: "attendance",    label: "Attendance Settings",  Icon: IcCalendar,  Comp: AttendanceSettings,     section: null },
   { id: "locations",     label: "Office & Store",   Icon: IcBuilding,  Comp: LocationsSettings,      section: null },
@@ -6092,7 +6160,7 @@ export default function SettingsModule({ initialSection = "company" } = {}) {
     recyclebin: "Permanently hataye gaye project/tender — 30 din tak wapas laye ja sakte hain",
     profile: "Manage your personal account and password",
     company: "Manage your company profile and regional settings", roles: "Configure user roles, permissions and project access",
-    approval: "Set up multi-level approval workflows", backdate: "Control back-dated entry permissions",
+    approval: "Set up multi-level approval workflows", backdate: t("backdate.tab_desc"),
     practices: "Aapki company ka apna tareeka — Sahayak inhi jawabon se madad karta hai",
     other: "Task kholne par kya dikhe — % bar, note, mic, Mark Used / MR / GRN ke button; aur progress qty me ya % me",
     attendance: "Configure attendance mode and payment cycle for each labour type",

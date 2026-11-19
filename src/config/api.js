@@ -1,5 +1,6 @@
 import { recordFailedCall } from "../utils/diag";
 import { t, getLang } from "../i18n";
+import { askBackdateReason, reasonHeader } from "../utils/backdateReason";
 
 // ── GB Buildcon API Configuration ──────────────────────────────
 // Local dev → localhost:5000, else production.
@@ -85,7 +86,7 @@ function withWarehouse(endpoint, config) {
   } catch (_) { return endpoint; }
 }
 
-const api = async (endpoint, options={}) => {
+const request = async (endpoint, options={}) => {
   const token = getToken();
   const timeoutMs = options.timeoutMs || DEFAULT_TIMEOUT_MS;
   const ctrl = new AbortController();
@@ -168,6 +169,19 @@ const api = async (endpoint, options={}) => {
   // If server returned a non-2xx but no explicit success flag, normalize.
   if (!res.ok && data && data.success !== false) {
     return { ...data, success: false, _status: res.status };
+  }
+  return data;
+};
+
+// Back-Date Control: server purani tareekh ki entry par wajah maange
+// (BACKDATE_REASON_REQUIRED) to yahin box khol kar wahi request wajah ke
+// saath dobara bhejo. Ek hi jagah — har module ka form alag se nahi badalna
+// pada. User "Rehne do" dabaye to server ka message jaisa hai waisa lautta hai.
+const api = async (endpoint, options={}) => {
+  const data = await request(endpoint, options);
+  if (data && data.code === "BACKDATE_REASON_REQUIRED" && !(options.headers && options.headers["X-Backdate-Reason"])) {
+    const reason = await askBackdateReason(data.backdate);
+    if (reason) return request(endpoint, { ...options, headers: { ...(options.headers || {}), ...reasonHeader(reason) } });
   }
   return data;
 };
