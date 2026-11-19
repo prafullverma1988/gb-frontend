@@ -63,10 +63,11 @@ export default function ProjectPnlView(){
       ["Company — Project-wise P&L (accrual, invoice-basis)"],
       [`Generated: ${new Date().toLocaleDateString("en-IN")}`],[],
       ["Project","Status","Revenue (Invoiced)","Cost","P&L",
-       "Material Purchase","Sub-Con","Site Expense","Equipment",t("finance.pnl_machine_oil_store"),"Material Return","Transfer In","Transfer Out"],
+       "Material Purchase","Sub-Con","Site Expense","Equipment",t("finance.pnl_machine_oil_store"),"Material Return","Transfer In","Transfer Out",t("finance.pnl_store_in"),t("finance.pnl_store_back"),t("finance.pnl_store_transit")],
       ...items.map(i=>[i.project,i.status||"",i.revenue,i.cost,i.pnl,
         i.cost_breakup.material_purchase,i.cost_breakup.subcon_expense,i.cost_breakup.site_expense,
-        i.cost_breakup.equipment,i.cost_breakup.machine_oil_store||0,i.cost_breakup.material_return,i.cost_breakup.transfer_in,i.cost_breakup.transfer_out]),
+        i.cost_breakup.equipment,i.cost_breakup.machine_oil_store||0,i.cost_breakup.material_return,i.cost_breakup.transfer_in,i.cost_breakup.transfer_out,
+        i.cost_breakup.store_in||0,i.cost_breakup.store_back||0,i.store_in_transit||0]),
       [],["TOTAL","",totals.revenue,totals.cost,totals.pnl],
     ]);
   };
@@ -101,6 +102,8 @@ export default function ProjectPnlView(){
     // Store se machine me daala oil (backend utils/projectPnl) — machine kharcha ka hissa
     [t("finance.pnl_machine_oil_store"),"machine_oil_store",false],
     ["Material Return","material_return",true],["Transfer In","transfer_in",false],["Transfer Out","transfer_out",true],
+    // Store se site par maal (site ke receive par, issue ke waqt ka batch / FIFO rate) aur store wapasi
+    [t("finance.pnl_store_in"),"store_in",false],[t("finance.pnl_store_back"),"store_back",true],
   ];
 
   return (
@@ -163,6 +166,7 @@ export default function ProjectPnlView(){
                             );
                           })}
                         </div>
+                        {Number(i.store_in_transit)>0&&<div style={{marginTop:7,fontSize:11,color:T.amb}}>{t("finance.pnl_store_transit_note",{amt:fmtN(i.store_in_transit)})}</div>}
                       </td>
                     </tr>
                   )}
