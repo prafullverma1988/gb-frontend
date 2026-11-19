@@ -115,6 +115,33 @@ const PT_COUNT_UNITS=["no","nos","number","numbers","each","pc","pcs","ls","lump
 function ptIsQtyTask(t){if(!t) return false; if(t.qty_mode!==undefined&&t.qty_mode!==null) return Number(t.qty_mode)===1;
   if(!(Number(t.scope_qty)>0)) return false; if(t.progress_mode==="qty") return true; if(t.progress_mode==="percent") return false;
   return !(Number(t.scope_qty)===1&&PT_COUNT_UNITS.includes(String(t.unit||"").toLowerCase().replace(/[^a-z]/g,"")));}
+// ── Weightage (19 Nov 2026) ──────────────────────────────────────────────
+// Parent ka % uske seedhe sub-tasks se banta hai; wazan Din / Amount / Khud
+// bharo me se ek. Hisaab server ka hai (gb-backend utils/taskRollup.js) —
+// yahan sirf wahi ganit dobara, taaki save se pehle "kiska kitna hissa" dikhe.
+const PT_WEIGHT_MODES=["days","amount","manual"];
+const ptWeightKey=(m)=>"tasks.weight_"+(PT_WEIGHT_MODES.includes(m)?m:"days");
+// Parent par kya chuna hai aur sach me kya chala (adhoora ho to server din par aata hai)
+function ptWeightInfo(task,projMode){
+  const set=PT_WEIGHT_MODES.includes(task?.weight_mode)?task.weight_mode:(projMode||"days");
+  const used=PT_WEIGHT_MODES.includes(task?.weight_used)?task.weight_used:"days";
+  return {set,used,incomplete:set!==used};
+}
+function ptWeightTitle(task,projMode){
+  const w=ptWeightInfo(task,projMode);
+  return w.incomplete
+    ? t("tasks.weight_auto_incomplete",{set:t(ptWeightKey(w.set))})
+    : t("tasks.weight_auto_from",{basis:t(ptWeightKey(w.used))});
+}
+const ptPos=(v)=>{const n=Number(v);return Number.isFinite(n)&&n>0?n:0;};
+function ptSubtreeDays(n){ return n.children?.length ? n.children.reduce((a,c)=>a+ptSubtreeDays(c),0) : (ptPos(n.duration)||1); }
+function ptSubtreeAmt(n){
+  if(!n.children?.length) return ptPos(n.scope_amt);
+  const own=ptPos(n.scope_amt); if(own) return own;
+  const parts=n.children.map(ptSubtreeAmt);
+  return parts.every(x=>x>0)?parts.reduce((a,x)=>a+x,0):0;
+}
+
 // How far the pinned value has drifted from what the children now say. Past
 // 10 points the badge turns amber — the override has gone stale.
 function ptOverrideDrift(t){
@@ -493,6 +520,14 @@ function TabTasks({ projectId, isAdmin }) {
   const [openTask,setOpenTask]       = useState(null);
   const [editTask,setEditTask]       = useState(null);
   const [overrideTask,setOverrideTask] = useState(null); // parent whose rollup is being pinned
+  // Weightage: project ka default tareeka + khula hua dialog ({task} — task null = project)
+  const [projWeight,setProjWeight] = useState({project_mode:"days",project_used:null});
+  const [weightFor,setWeightFor]   = useState(null);
+  const loadProjWeight = useCallback(()=>{
+    if(!projectId) return;
+    api.get("/tasks/weights?project_id="+projectId).then(r=>{ if(r?.success&&r.data) setProjWeight(r.data); }).catch(()=>{});
+  },[projectId]);
+  useEffect(()=>{ loadProjWeight(); },[loadProjWeight]);
   const [addParent,setAddParent]     = useState(null);
   const [showAdd,setShowAdd]         = useState(false);
   const [depSearch,setDepSearch]     = useState("");
@@ -849,7 +884,7 @@ function TabTasks({ projectId, isAdmin }) {
 
           {/* Progress — parents show a rolled-up value; "M" marks a pinned override */}
           <div style={{padding:"0 8px",...SEP,display:"flex",flexDirection:"column",justifyContent:"center",height:"100%"}}
-            title={hasKids?(ptIsOverridden(item)?ptOverrideTitle(item):t("tasks.children_se_auto_calculated_duration_weighted")):""}>
+            title={hasKids?(ptIsOverridden(item)?ptOverrideTitle(item):ptWeightTitle(item,projWeight.project_mode)):""}>
             <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:3}}>
               <div style={{flex:1,height:4,background:"#E2E8F0",borderRadius:2,overflow:"hidden"}}>
                 <div style={{height:"100%",width:item.progress+"%",background:item.progress===100?"#10B981":item.progress>0?"#3B82F6":"#E2E8F0",borderRadius:2,transition:"width .3s"}}/>
@@ -1246,6 +1281,11 @@ function TabTasks({ projectId, isAdmin }) {
           style={{display:"flex",alignItems:"center",gap:5,padding:"5px 12px",borderRadius:6,background:"linear-gradient(135deg,#EC4899,#BE185D)",color:"white",fontSize:11.5,fontWeight:700,border:"none",cursor:"pointer"}}>
          {t("tasks.load_template")}
         </button>}
+        {canOverride&&tasks.length>0&&<button onClick={()=>setWeightFor({task:null})}
+          title={ptWeightTitle({weight_mode:projWeight.project_mode,weight_used:projWeight.project_used||"days"},projWeight.project_mode)}
+          style={{height:32,padding:"0 12px",borderRadius:6,border:`1.5px solid ${T.b1}`,background:"white",fontSize:12,fontWeight:700,color:T.t2,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
+          {t("tasks.weight_btn",{basis:t(ptWeightKey(projWeight.project_mode))})}
+        </button>}
         {canAddTask&&<button onClick={()=>{setAddParent(null);setShowAdd(true);}}
           style={{display:"flex",alignItems:"center",gap:5,padding:"5px 12px",borderRadius:6,background:T.blu,color:"white",fontSize:11.5,fontWeight:700,border:"none",cursor:"pointer"}}>
           <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2.5}><path d="M12 5v14M5 12h14"/></svg> {t("tasks.add_task")}
@@ -1614,6 +1654,9 @@ function TabTasks({ projectId, isAdmin }) {
               {icon:"M12 20h9M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z",label:t("tasks.override_progress"),
                 hide:!(contextMenu.task.children?.length>0),ok:canOverride,color:"#4B45C4",
                 action:()=>{setOverrideTask(contextMenu.task);setContextMenu(null);}},
+              {icon:"M12 3v18M5 7h14M5 7l-3 7a4 4 0 006 0L5 7zM19 7l-3 7a4 4 0 006 0l-3-7z",label:t("tasks.weight_menu"),
+                hide:!(contextMenu.task.children?.length>0),ok:canOverride,
+                action:()=>{setWeightFor({task:contextMenu.task});setContextMenu(null);}},
               {icon:"M3 12a9 9 0 019-9 9 9 0 016.36 2.64L21 8M21 3v5h-5",label:t("tasks.reset_to_auto"),
                 hide:!(contextMenu.task.children?.length>0&&ptIsOverridden(contextMenu.task)),ok:canOverride,
                 action:async()=>{const r=await api.del("/tasks/"+contextMenu.task.id+"/progress-override");setContextMenu(null);if(r.success)await refetchTasks();else alert(r.message||"Reset failed");}},
@@ -1654,6 +1697,9 @@ function TabTasks({ projectId, isAdmin }) {
       {/* Parent progress override */}
       {overrideTask&&<PTOverrideModal task={overrideTask} onClose={()=>setOverrideTask(null)}
         onSaved={async()=>{setOverrideTask(null);await refetchTasks();}}/>}
+      {weightFor&&<PTWeightModal projectId={projectId} task={weightFor.task} roots={tasks} projMode={projWeight.project_mode}
+        onClose={()=>setWeightFor(null)}
+        onSaved={async()=>{setWeightFor(null);loadProjWeight();await refetchTasks();}}/>}
 
       {/* Tasks CSV/Excel import — jaanch aur sudhaar ke saath */}
       <ImportFileModal open={showTaskImport} onClose={()=>setShowTaskImport(false)}
@@ -4930,6 +4976,112 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile,canDele
   </>);
 }
 
+// ── Weightage: parent (ya project) ke sub-tasks ka wazan kis se ──────────
+// task = null → project ka default tareeka (bachche = upar ke main tasks).
+// Tareeka parent par hai, har sub-task par nahi: din aur rupaye aapas me jud
+// nahi sakte. Amount / Khud bharo adhoora ho to server din par wapas aata hai
+// — wahi yahan save se pehle peeli patti me dikhta hai.
+function PTWeightModal({projectId,task,roots,projMode,onClose,onSaved}){
+  const kids = task ? (task.children||[]) : (roots||[]);
+  const own  = task && PT_WEIGHT_MODES.includes(task.weight_mode) ? task.weight_mode : "";
+  const [mode,setMode] = useState(task ? own : (projMode||"days"));   // "" = project ka default
+  const [wts,setWts]   = useState(()=>Object.fromEntries(kids.map(k=>[k.id,k.weightage!=null&&Number(k.weightage)>0?String(Number(k.weightage)):""])));
+  const [busy,setBusy] = useState(false);
+  const [error,setError]=useState("");
+
+  const eff = mode||projMode||"days";
+  const wOf = (k,m)=> m==="amount" ? ptSubtreeAmt(k) : m==="manual" ? ptPos(wts[k.id]) : ptSubtreeDays(k);
+  const incomplete = eff!=="days" && kids.some(k=>!(wOf(k,eff)>0));
+  const used = incomplete ? "days" : eff;
+  const total = kids.reduce((a,k)=>a+wOf(k,used),0);
+  const share = (k)=> total>0 ? Math.round((wOf(k,used)/total)*1000)/10 : 0;
+  const badWt = eff==="manual" && kids.some(k=>{const v=String(wts[k.id]??"").trim(); return v!==""&&!(Number(v)>=0);});
+
+  const save = async()=>{
+    setBusy(true); setError("");
+    let r = await api.put("/tasks/weight-mode",{project_id:projectId,task_id:task?task.id:null,mode:mode||null});
+    if(r.success && eff==="manual"){
+      r = await api.put("/tasks/weightages",{project_id:projectId,items:kids.map(k=>({id:k.id,weightage:String(wts[k.id]??"").trim()===""?null:Number(wts[k.id])}))});
+    }
+    setBusy(false);
+    if(r.success) onSaved(); else setError(r.message||t("tasks.weight_save_failed"));
+  };
+
+  const L={fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:5};
+  const TH={fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",padding:"6px 8px",textAlign:"right",whiteSpace:"nowrap"};
+  const TD={fontSize:12,color:T.t1,padding:"7px 8px",textAlign:"right",borderTop:`1px solid ${T.b1}`,whiteSpace:"nowrap"};
+  const inr=(n)=> n>0 ? "₹"+Math.round(n).toLocaleString("en-IN") : "—";
+  return(<>
+    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:400,backdropFilter:"blur(1px)"}}/>
+    <div style={{position:"fixed",left:"50%",top:"50%",transform:"translate(-50%,-50%)",width:"min(620px,96vw)",maxHeight:"90vh",overflowY:"auto",background:T.bg,borderRadius:12,zIndex:401,boxShadow:"0 20px 60px rgba(0,0,0,0.3)"}}>
+      <div style={{background:"#0D1B2A",padding:"12px 16px",borderRadius:"12px 12px 0 0",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+        <div>
+          <div style={{fontSize:13,fontWeight:700,color:"white"}}>{t("tasks.weight_title")}</div>
+          <div style={{fontSize:10,color:"rgba(255,255,255,0.45)",fontFamily:task?"monospace":"inherit",marginTop:1}}>
+            {task ? `${task.no} — ${String(task.name||"").slice(0,40)}` : t("tasks.weight_project_level")}
+          </div>
+        </div>
+        <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)",display:"flex"}}>
+          <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+
+      <div style={{padding:"14px 16px"}}>
+        <label style={L}>{t(task?"tasks.weight_q_task":"tasks.weight_q_project")}</label>
+        <PickSelect value={mode} onChange={e=>setMode(e.target.value)}
+          style={{width:"100%",padding:"8px 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:"white",cursor:"pointer"}}>
+          {task&&<option value="">{t("tasks.weight_opt_default",{basis:t(ptWeightKey(projMode))})}</option>}
+          <option value="days">{t("tasks.weight_opt_days")}</option>
+          <option value="amount">{t("tasks.weight_opt_amount")}</option>
+          <option value="manual">{t("tasks.weight_opt_manual")}</option>
+        </PickSelect>
+        <div style={{fontSize:10.5,color:T.t4,margin:"6px 0 12px",lineHeight:1.5}}>{t("tasks.weight_help_"+eff)}</div>
+
+        {incomplete&&<div style={{padding:"8px 11px",borderRadius:6,background:"#FFFBEB",border:"1px solid #FCD34D",color:"#92400E",fontSize:11.5,marginBottom:10,lineHeight:1.5}}>
+          {t(eff==="amount"?"tasks.weight_warn_amount":"tasks.weight_warn_manual")}
+        </div>}
+
+        <div style={{border:`1px solid ${T.b1}`,borderRadius:8,overflow:"hidden"}}>
+          <table style={{width:"100%",borderCollapse:"collapse"}}>
+            <thead><tr style={{background:T.surface}}>
+              <th style={{...TH,textAlign:"left"}}>{t("tasks.weight_col_task")}</th>
+              <th style={TH}>{t("tasks.weight_col_days")}</th>
+              <th style={TH}>{t("tasks.weight_col_amount")}</th>
+              {eff==="manual"&&<th style={TH}>{t("tasks.weight_col_weightage")}</th>}
+              <th style={TH}>{t("tasks.weight_col_share")}</th>
+            </tr></thead>
+            <tbody>
+              {kids.map(k=>{
+                const missing = eff!=="days" && !(wOf(k,eff)>0);
+                return(<tr key={k.id}>
+                  <td style={{...TD,textAlign:"left",whiteSpace:"normal"}}><span style={{fontFamily:"monospace",fontSize:10.5,color:T.t4,marginRight:6}}>{k.no}</span>{k.name}</td>
+                  <td style={TD}>{ptSubtreeDays(k)}</td>
+                  <td style={{...TD,color:eff==="amount"&&missing?"#B45309":T.t1,fontWeight:eff==="amount"&&missing?700:400}}>{inr(ptSubtreeAmt(k))}</td>
+                  {eff==="manual"&&<td style={TD}>
+                    <input type="number" min="0" step="any" value={wts[k.id]??""} onChange={e=>setWts(p=>({...p,[k.id]:e.target.value}))}
+                      style={{width:80,padding:"5px 7px",borderRadius:5,border:`1.5px solid ${missing?"#FCD34D":T.b1}`,fontSize:12,textAlign:"right",color:T.t1}}/>
+                  </td>}
+                  <td style={{...TD,fontWeight:700}}>{share(k)}%</td>
+                </tr>);
+              })}
+            </tbody>
+          </table>
+        </div>
+        <div style={{fontSize:10.5,color:T.t4,marginTop:6}}>{t("tasks.weight_share_note",{basis:t(ptWeightKey(used))})}</div>
+
+        {error&&<div style={{marginTop:10,fontSize:11.5,color:"#B91C1C"}}>{error}</div>}
+        <div style={{display:"flex",justifyContent:"flex-end",gap:8,marginTop:14}}>
+          <button onClick={onClose} style={{padding:"7px 14px",borderRadius:6,border:`1.5px solid ${T.b1}`,background:"white",fontSize:12,fontWeight:600,color:T.t2,cursor:"pointer"}}>{t("tasks.weight_cancel")}</button>
+          <button onClick={save} disabled={busy||badWt}
+            style={{padding:"7px 16px",borderRadius:6,border:"none",background:T.blu,color:"white",fontSize:12,fontWeight:700,cursor:busy||badWt?"not-allowed":"pointer",opacity:busy||badWt?0.5:1}}>
+            {busy?t("tasks.weight_saving"):t("tasks.weight_save")}
+          </button>
+        </div>
+      </div>
+    </div>
+  </>);
+}
+
 // ── Pin a manual % on a summary task ─────────────────────────────────────
 // Deliberately heavier than a slider: the auto value is shown next to the
 // manual one, and a reason + note are required, so an override is always
@@ -5233,7 +5385,7 @@ function PTEditTask({task,allTasks,projectId,team,depsMode,phaseCodeMap,onDepsCh
               <div style={{fontSize:10.5,color:T.t4}}>
                 {ptIsOverridden(task)
                   ? `Manually pinned at ${task.progress_override}%${task.progress_auto!=null?` (children ${task.progress_auto}%)`:""}. Right-click the row → Reset to Auto.`
-                  : t("tasks.children_se_auto_calculated_duration_weighted_2")}
+                  : ptWeightTitle(task)+" "+t("tasks.weight_drawer_hint")}
               </div>
             </div>
           ):isQty?(
