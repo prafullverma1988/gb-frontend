@@ -99,7 +99,7 @@ function Bar({ value, mark, max, color }) {
   );
 }
 
-const FLAG_KIND = { loss: "red", over_budget: "red", behind_target: "red", due_60: "amb", no_estimate: "amb", no_area: "amb", stage_no_date: "amb" };
+const FLAG_KIND = { loss: "red", over_budget: "red", behind_target: "red", due_60: "amb", no_estimate: "amb", no_area: "amb", stage_no_date: "amb", store_transit: "amb" };
 const flagLabel = (f) => t(`profit.flag_${f}`);
 const statusLabel = (s) => ({ ongoing: t("profit.st_ongoing"), not_started: t("profit.st_not_started"), completed: t("profit.st_completed"), hold: t("profit.st_hold"), cancelled: t("profit.st_cancelled") }[s] || s || "—");
 
@@ -726,6 +726,9 @@ function Detail({ id, onClose, onSaved, narrow }) {
                       </div>
                     </div>
                   ))}
+                  {/* Store se aaya maal Material ke andar hi hai — yahan sirf kitna, aur raste me kitna */}
+                  {Number(p.cost_breakup.store) ? <KV k={t("profit.cost_store_in_material")} v={lakh(p.cost_breakup.store)} /> : null}
+                  {Number(p.store_in_transit) > 0 ? <KV k={t("profit.cost_store_transit")} v={lakh(p.store_in_transit)} color={T.amb} /> : null}
                   <KV k={t("profit.col_cost")} v={lakh(p.cost)} strong />
                 </Section>
 

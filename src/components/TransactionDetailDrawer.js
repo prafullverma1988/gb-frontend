@@ -178,12 +178,20 @@ const fmtDate = (d) => {
   } catch { return d; }
 };
 
+// Tareekh "YYYY-MM-DD" — apne (IST) din ki. Pehle toISOString() se banti thi,
+// jo UTC hai: list se dikhane wali string ("16 Nov 26") aati to IST aadhi raat
+// = UTC pichhla din → form me 15 Nov, aur Save par wahi DB me (19 Nov 2026,
+// Greenbox Bhilai TXN-85148). Ab: pehle se "YYYY-MM-DD" ho to waisa hi, warna
+// us pal ka apna (local) din.
 const isoDate = (d) => {
   if (!d) return "";
+  const s = String(d);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
   try {
-    const dt = new Date(d);
+    const dt = d instanceof Date ? d : new Date(s);
     if (isNaN(dt.getTime())) return "";
-    return dt.toISOString().slice(0, 10);
+    const p = (n) => String(n).padStart(2, "0");
+    return dt.getFullYear() + "-" + p(dt.getMonth() + 1) + "-" + p(dt.getDate());
   } catch { return ""; }
 };
 
@@ -396,10 +404,13 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
         // Material bill: lines na badli hon to bill ki apni rakam hi jaaye —
         // note/date badalne par rakam kabhi nahi badalti (FIN-26).
         amount: isMaterialBill ? (itemsChanged ? editItemsTotal : (parseFloat(txn.amount) || 0)) : (parseFloat(form.amount) || 0),
-        date: form.date || undefined,
+        // Tareekh sirf tab bhejo jab user ne sach me badli — warna kisi bhi
+        // edit (rakam / note) par tareekh ka koi bhi galat roop chupchaap DB me
+        // chala jaata tha (19 Nov 2026).
+        date: form.date && form.date !== isoDate(txn.date_iso || txn.dateRaw || txn.date) ? form.date : undefined,
         // due_date only relevant for bills/invoices — clear it for
         // cash-event types so the column doesn't carry stale values.
-        due_date: hasDueDate ? (form.due_date || null) : null,
+        due_date: hasDueDate ? (form.due_date === isoDate(txn.due_date || txn.dueDateRaw) ? undefined : (form.due_date || null)) : null,
         status: form.status,
         note: form.note,
         // party_id pehle — backend isi ko pehle dekhta hai. Isse "ek se zyada

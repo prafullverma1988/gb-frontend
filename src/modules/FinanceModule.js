@@ -4312,6 +4312,9 @@ function FinanceModule(){
     return {
       id:t.id,
       date:d.toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}),
+      // Asli tareekh (YYYY-MM-DD) — drawer isi se form bharta hai; sirf "16 Nov 26"
+      // jaati thi to edit par ek din peeche ho jaati (19 Nov 2026).
+      dateRaw:t.date||null,
       ds,
       party:t.party_display||t.party_name||t.party||"",
       // Drawer ka party dropdown asli id par chalta hai — project jaisa hi.
