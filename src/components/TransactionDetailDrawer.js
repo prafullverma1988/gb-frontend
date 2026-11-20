@@ -24,6 +24,7 @@ import { t } from "../i18n";
 import { BackClose } from "../utils/backNav";
 import { cld } from "../utils/cloudinary";
 import { can, canAny } from "../utils/perms";
+import { billDetailText } from "../utils/billDetailText";
 
 // GRN issue ka type — wire value English hi rehti hai. "Weighbridge" (9 Oct
 // 2026) server khud banata hai: kaante / site ke nishaan (plate nahi dikhi, AI
@@ -760,10 +761,12 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
           )}
 
           {/* Note (read-only mode) */}
-          {!editing && (txn.note || txn.description) && (
+          {/* Purane import ke bill (na note na line items) me item ka naam description me hota hai —
+              list ki row `sub` naam se laati hai, isliye billDetailText (20 Nov 2026). */}
+          {!editing && (txn.note || txn.description || billDetailText(txn)) && (
             <div style={{ padding: "10px 12px", background: T.surfaceB, border: `1px solid ${T.b1}`, borderRadius: 8, marginBottom: 14 }}>
               <div style={{ fontSize: 9.5, fontWeight: 700, color: T.t4, textTransform: "uppercase", letterSpacing: ".4px", marginBottom: 4 }}>{t("transaction_detail.note_description")}</div>
-              <div style={{ fontSize: 12.5, color: T.t1, lineHeight: 1.5 }}>{txn.note || txn.description}</div>
+              <div style={{ fontSize: 12.5, color: T.t1, lineHeight: 1.5 }}>{txn.note || txn.description || billDetailText(txn)}</div>
             </div>
           )}
 
