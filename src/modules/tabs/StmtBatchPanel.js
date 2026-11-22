@@ -251,7 +251,7 @@ function BatchModal({ id, onClose }) {
                 <tbody>
                   {b.impact.map((x) => (
                     <tr key={x.key}>
-                      <td style={{ ...td, fontWeight: 600, color: x.kind === "n" ? T.amb : T.t1 }}>{x.kind === "n" ? t("stmt.pv_noparty") : x.name}{x.kind === "a" ? <span style={{ color: T.t4, fontWeight: 400 }}> · {t("stmt.sub_transfer")}</span> : null}</td>
+                      <td style={{ ...td, fontWeight: 600, color: x.kind === "n" ? T.amb : T.t1 }}>{x.kind === "n" ? t("stmt.pv_noparty") : x.name}{x.kind === "a" ? <span style={{ color: T.t4, fontWeight: 400 }}> · {t("stmt.sub_transfer")}</span> : x.kind === "x" ? <span style={{ color: T.t4, fontWeight: 400 }}> · {t("stmt.exp_sub")}</span> : null}</td>
                       <td style={num}>{x.n}</td>
                       <td style={{ ...num, color: x.in ? T.grn : T.t4 }}>{x.in ? inr(x.in) : "—"}</td>
                       <td style={{ ...num, color: x.out ? T.red : T.t4 }}>{x.out ? inr(x.out) : "—"}</td>

@@ -17408,6 +17408,15 @@ const dict = {
   "tasks.weight_save": "Save",
   "tasks.weight_saving": "Saving…",
   "tasks.weight_save_failed": "Could not save",
+  "stmt.exp_opt": "Expense (site / company)",
+  "stmt.exp_opt_sub": "not paid to any party — choose Head",
+  "stmt.grp_expense": "Expense",
+  "stmt.exp_head_label": "Head",
+  "stmt.exp_head_ph": "Choose expense head",
+  "stmt.exp_head_missing": "Head not chosen",
+  "stmt.exp_head_left": "Choose Head in {n} expense lines",
+  "stmt.pv_expense": "Expense (head-wise)",
+  "stmt.exp_sub": "expense",
 };
 
 export default dict;

@@ -17407,6 +17407,15 @@ const dict = {
   "tasks.weight_save": "सेव करें",
   "tasks.weight_saving": "सेव हो रहा है…",
   "tasks.weight_save_failed": "सेव नहीं हो पाया",
+  "stmt.exp_opt": "खर्चा (साइट / कंपनी)",
+  "stmt.exp_opt_sub": "किसी पार्टी को नहीं — हेड चुनें",
+  "stmt.grp_expense": "खर्चा",
+  "stmt.exp_head_label": "हेड",
+  "stmt.exp_head_ph": "खर्चे का हेड चुनें",
+  "stmt.exp_head_missing": "हेड नहीं चुना",
+  "stmt.exp_head_left": "{n} खर्चे में हेड चुनें",
+  "stmt.pv_expense": "खर्चा (हेड-वार)",
+  "stmt.exp_sub": "खर्चा",
 };
 
 export default dict;

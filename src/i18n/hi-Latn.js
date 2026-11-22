@@ -17410,6 +17410,15 @@ const dict = {
   "tasks.weight_save": "Save karo",
   "tasks.weight_saving": "Save ho raha hai…",
   "tasks.weight_save_failed": "Save nahi ho paya",
+  "stmt.exp_opt": "Kharcha (site / company)",
+  "stmt.exp_opt_sub": "kisi party ko nahi — Head chuno",
+  "stmt.grp_expense": "Kharcha",
+  "stmt.exp_head_label": "Head",
+  "stmt.exp_head_ph": "Kharche ka Head chuno",
+  "stmt.exp_head_missing": "Head nahi chuna",
+  "stmt.exp_head_left": "{n} kharche me Head chuno",
+  "stmt.pv_expense": "Kharcha (Head-wise)",
+  "stmt.exp_sub": "kharcha",
 };
 
 export default dict;
