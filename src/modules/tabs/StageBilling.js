@@ -18,7 +18,7 @@ import React, { useState, useEffect, useCallback, useMemo } from "react";
 import api from "../../config/api";
 import { T } from "../shared/tokens";
 import { t } from "../../i18n";
-import { ScheduleMethods, MilestoneView, WoFromLinesModal, ClientScheduleView } from "./ScheduleTools";
+import { ScheduleMethods, MilestoneView, WoFromLinesModal, ClientScheduleView, ScheduleEditModal } from "./ScheduleTools";
 
 const num = (v) => { const n = parseFloat(v); return Number.isFinite(n) ? n : 0; };
 const r2 = (n) => Math.round(num(n) * 100) / 100;
@@ -222,6 +222,7 @@ export function StageLinesPanel({ kind, id, canEdit, canApprove, projectId }) {
   const [view, setView] = useState("client");        // "client" (saaf schedule) | "line" | "milestone"
   const [unsplit, setUnsplit] = useState(null);      // hisse wali line jiske "Hisse hatao" ka pakka poocha
 
+  const [editWork, setEditWork] = useState(null);   // "Schedule badlo": { work, works }
   const load = useCallback(async () => {
     const [l, s, b] = await Promise.all([
       api.get(base + "/billing-ledger").catch(() => null),
@@ -500,7 +501,11 @@ export function StageLinesPanel({ kind, id, canEdit, canApprove, projectId }) {
       <div style={{ border: "1px solid " + T.b1, borderTop: "none", borderRadius: "0 0 8px 8px", overflow: "hidden", background: T.surface }}>
         {view === "client" && (
           <div style={{ padding: 10 }}>
-            <ClientScheduleView items={ledger.items} />
+            <ClientScheduleView items={ledger.items} canEdit={canEdit && kind === "estimate"} onEdit={(work, works) => setEditWork({ work, works })} />
+            {editWork && (
+              <ScheduleEditModal estimateId={id} work={editWork.work} works={editWork.works} onClose={() => setEditWork(null)}
+                onDone={async (m) => { setEditWork(null); setMsg(m); await load(); }} />
+            )}
           </div>
         )}
         {view === "milestone" && (
