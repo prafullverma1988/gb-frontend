@@ -530,7 +530,8 @@ export default function TabAccounts() {
   // ho jaate hain (warna "16 duplicate" par click karke 0 row dikhti, kyunki
   // pehle se koi type filter laga tha).
   const [pick, setPick] = useState(null);
-  const [importOpen, setImportOpen] = useState(false);
+  // Statement wizard: null = band · khaate ki id = usi khaate ke liye khula (Bank milaan table se)
+  const [importOpen, setImportOpen] = useState(null);
   const ledgerRef = useRef(null);
   const qTimer = useRef(null);
 
@@ -689,12 +690,12 @@ export default function TabAccounts() {
     <>
     {importOpen && (
       <StatementImportWizard
-        accounts={allAcc}
-        onClose={() => { setImportOpen(false); load(); }} />
+        accounts={allAcc} initialAccountId={importOpen}
+        onClose={() => { setImportOpen(null); load(); }} />
     )}
     <div style={{ flex: 1, overflow: "auto", paddingBottom: 20 }}>
-      {/* Statement batch — approval me / draft / reject (approve hone par hi khaate me) */}
-      <StmtBatchPanel key={importOpen ? "o" : "c"} onChanged={load} accountIds={selected} accounts={allAcc} />
+      {/* Bank milaan — har khaate ka statement, farak, baaki kaam aur "Statement milao" ek jagah */}
+      <StmtBatchPanel key={importOpen ? "o" : "c"} onChanged={load} accounts={allAcc} onImport={(id) => setImportOpen(id)} />
       {/* Khaate chuno — ek se zyada chuno to wo ek hi timeline par chalte hain */}
       <Panel style={{ marginBottom: 10 }}>
         <PHead title={t("finance.accounts")} action={
@@ -705,10 +706,6 @@ export default function TabAccounts() {
                 {t("acctledger.select_all")}
               </button>
             )}
-            <button onClick={() => setImportOpen(true)} disabled={!allAcc.length}
-              style={{ border: `1px solid ${T.b2}`, background: T.surface, color: allAcc.length ? T.t2 : T.t4, fontSize: 11.5, fontWeight: 600, padding: "4px 11px", borderRadius: 6, cursor: allAcc.length ? "pointer" : "default" }}>
-              {t("stmt.button")}
-            </button>
           </span>} />
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(212px,1fr))", gap: 8, padding: 12 }}>
           {allAcc.map((a) => {

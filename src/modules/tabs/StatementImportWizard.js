@@ -20,6 +20,7 @@ import api from "../../config/api";
 import SearchSelect from "../../components/SearchSelect";
 import { T } from "../shared/tokens";
 import { t } from "../../i18n";
+import { BatchModal } from "./StmtBatchPanel";
 
 const inr = (n) => {
   const v = Number(n) || 0;
@@ -247,7 +248,7 @@ function guessAccount(accounts, text) {
   return hits.length === 1 ? hits[0] : null;
 }
 
-export default function StatementImportWizard({ accounts, onClose }) {
+export default function StatementImportWizard({ accounts, onClose, initialAccountId }) {
   const [footSlot, setFootSlot] = useState(null);
   const [hideBack, setHideBack] = useState(false);
   const footCtx = useMemo(() => ({ slot: footSlot, setHideBack }), [footSlot]);
@@ -268,7 +269,8 @@ export default function StatementImportWizard({ accounts, onClose }) {
   // Pehle se koi khaata nahi (15 Oct 2026) — pehle Khaata Ledger ka pehla
   // chuna khaata (aksar Cash on Hand) apne aap lag jaata tha aur PNB ka
   // statement galat khaate par chal jaata. File ke baad user khud chunta hai.
-  const [acctId, setAcctId] = useState("");
+  // Bank milaan table ke "Statement milao" se aaye to wahi khaata pehle se chuna
+  const [acctId, setAcctId] = useState(initialAccountId ? String(initialAccountId) : "");
   const [fileName, setFileName] = useState("");
   const [grid, setGrid] = useState(null);
   const [hdr, setHdr] = useState(null);
@@ -635,6 +637,7 @@ function JaanchView({ result, accounts }) {
   const [err, setErr] = useState("");
   const [done, setDone] = useState(null);
   const [preview, setPreview] = useState(false);
+  const [openBatch, setOpenBatch] = useState(null);
 
   useEffect(() => {
     let dead = false;
@@ -790,8 +793,22 @@ function JaanchView({ result, accounts }) {
         made.push({ id: r.data.id, rows: part });
       }
       setDraft((dd) => dd.map((x) => (pick.includes(x) ? { ...x, outcome: "queued", edit: false } : x)));
-      setDone({ batch: made.map((m, k) => (k ? "#" : "") + m.id).join(", "), status: r.data.status, n: pick.length });
+      setDone({ batch: made.map((m, k) => (k ? "#" : "") + m.id).join(", "), status: r.data.status, n: pick.length, id: made[0].id, turn: null });
       setPreview(false);
+      // Ab kiski baari — approvals ki apni list se (meri baari ho to wahin se approve)
+      const rid = r.data.approval_request_id;
+      if (submit && rid) {
+        const find = (x) => ((x && x.success && Array.isArray(x.data)) ? x.data : []).find((it) => Number(it.id) === Number(rid) || Number(it._request_id) === Number(rid));
+        try {
+          let turn = null;
+          if (find(await api.get("/approvals/pending?scope=my"))) turn = { mine: true };
+          else {
+            const it = find(await api.get("/approvals/pending?scope=all"));
+            if (it) turn = { name: it._waitingOnName || it._waitingOn || it.pending_role || "", more: Number(it._waitingOnMore) || 0 };
+          }
+          if (turn) setDone((dn) => (dn ? { ...dn, turn } : dn));
+        } catch (_) { /* naam na mile to bhi batch ka button hai */ }
+      }
     } catch (e) {
       setErr(e.message || t("stmt.failed"));
     } finally { setBusy(false); }
@@ -873,8 +890,20 @@ function JaanchView({ result, accounts }) {
 
       {err && <div style={{ padding: "8px 13px", fontSize: 12, color: T.red, background: T.redL, borderRadius: 7, marginBottom: 8 }}>{err}</div>}
       {done && (
-        <div style={{ padding: "9px 13px", fontSize: 12.5, color: T.t2, background: T.grnL, border: `1px solid ${T.grnM}`, borderRadius: 7, marginBottom: 8 }}>
-          {done.status === "draft" ? t("stmt.batch_drafted", { id: done.batch, n: done.n }) : t("stmt.batch_sent", { id: done.batch, n: done.n })}
+        <div style={{ padding: "9px 13px", fontSize: 12.5, color: T.t2, background: T.grnL, border: `1px solid ${T.grnM}`, borderRadius: 7, marginBottom: 8, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+          <span style={{ flex: 1, minWidth: 220 }}>
+            {done.status === "draft" ? t("bm.sent_draft", { id: done.batch, n: done.n }) : t("bm.sent", { id: done.batch, n: done.n })}
+            {done.status !== "draft" && done.turn && (
+              <b style={{ display: "block", marginTop: 2, color: done.turn.mine ? T.grn : T.t1 }}>
+                {done.turn.mine ? t("bm.turn_mine") : t("bm.turn_other", { name: done.turn.name + (done.turn.more ? " +" + done.turn.more : "") })}
+              </b>
+            )}
+          </span>
+          <button onClick={() => setOpenBatch(done.id)}
+            style={{ fontSize: 12, fontWeight: 700, padding: "6px 13px", borderRadius: 6, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap",
+              border: `1px solid ${T.grn}`, background: done.turn && done.turn.mine ? T.grn : T.surface, color: done.turn && done.turn.mine ? "#fff" : T.grn }}>
+            {done.status === "draft" ? t("bm.open_draft") : done.turn && done.turn.mine ? t("bm.approve_now") : t("bm.open_batch")}
+          </button>
         </div>
       )}
 
@@ -897,6 +926,7 @@ function JaanchView({ result, accounts }) {
       {d.totals.book_rows_outside_window > 0 && (
         <div style={{ marginTop: 10, fontSize: 11.5, color: T.t4 }}>{t("stmt.outside_window", { n: d.totals.book_rows_outside_window })}</div>
       )}
+      {openBatch && <BatchModal id={openBatch} onClose={() => { setOpenBatch(null); setDone((dn) => (dn ? { ...dn, turn: null } : dn)); }} />}
     </div>
   );
 }

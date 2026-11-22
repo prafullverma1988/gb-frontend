@@ -1,5 +1,5 @@
 // ════════════════════════════════════════════════════════════════
-// StmtBatchPanel — Khaata Ledger me "Statement batch" ki patti
+// StmtBatchPanel — Khaata Ledger me "Bank milaan" table + batch ki khidki
 // ════════════════════════════════════════════════════════════════
 // Bank statement ki entry ab seedhe khaate me nahi jaati: wizard ka save ek
 // batch banata hai jo Multi-Level Approval ("Bank Statement Import") se guzarta
@@ -21,41 +21,6 @@ const ST = () => ({
   rejected: [T.red, T.redL, t("stb.st_rejected")], approved: [T.grn, T.grnL, t("stb.st_approved")], failed: [T.red, T.redL, t("stb.st_failed")],
   undone: [T.slt, T.sltL, t("stb.st_undone")],
 });
-
-// Passbook vs Kitaab (23 Oct 2026) — statement milaate waqt passbook ka aakhri
-// balance yaad rehta hai; yahan kitaab ka USI din ka balance ABHI dikhta hai.
-// Farak ≠ 0 = kahin koi payment chhooti / dohri hai — bharose ki pakki jaanch.
-function BalanceMarks({ accountIds, accounts }) {
-  const [marks, setMarks] = useState([]);
-  const key = (accountIds || []).slice(0, 8).join(",");
-  useEffect(() => {
-    if (!key) { setMarks([]); return; }
-    let alive = true;
-    Promise.all(key.split(",").map((id) => api.get(`/finance/accounts/${id}/statement/balance-mark`)
-      .then((r) => (r && r.success && r.data ? { ...r.data, account_id: Number(id) } : null)).catch(() => null)))
-      .then((xs) => { if (alive) setMarks(xs.filter(Boolean)); });
-    return () => { alive = false; };
-  }, [key]);
-  if (!marks.length) return null;
-  const nm = (id) => ((accounts || []).find((a) => Number(a.id) === id) || {}).name || "#" + id;
-  return (
-    <div style={{ marginBottom: 10, display: "flex", flexDirection: "column", gap: 6 }}>
-      {marks.map((m) => {
-        const bad = m.difference != null && Math.abs(m.difference) >= 1;
-        return (
-          <div key={m.account_id} title={t("stb.bm_tip")} style={{ padding: "8px 13px", borderRadius: 8, fontSize: 12.5, display: "flex", gap: 14, flexWrap: "wrap", alignItems: "center",
-            background: bad ? T.redL : T.grnL, border: `1px solid ${bad ? T.red : T.grn}44`, color: T.t2 }}>
-            <b style={{ color: T.t1 }}>{nm(m.account_id)}</b>
-            <span>{t("stb.bm_on", { date: dmy(m.as_on) })}</span>
-            <span>{t("stb.bm_passbook")}: <b>{inr(m.statement_balance)}</b></span>
-            <span>{t("stb.bm_book")}: <b>{m.book_now == null ? "—" : inr(m.book_now)}</b></span>
-            <b style={{ color: bad ? T.red : T.grn, marginLeft: "auto" }}>{bad ? t("stb.bm_diff", { amt: inr(m.difference) }) : t("stb.bm_ok")}</b>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
 
 // Keyboard (23 Oct 2026): khidki ke andar hi Tab ghoome — aakhri se pehle par,
 // Shift+Tab pehle se aakhri par. PickField ka khula panel Tab khud sambhalta hai.
@@ -86,74 +51,135 @@ function useStrayKeys(dlgRef, onEsc) {
   }, [dlgRef]);
 }
 
-export default function StmtBatchPanel({ onChanged, accountIds, accounts }) {
+// ── Bank milaan (22 Nov 2026) ──────────────────────────────────────────
+// Khaata Ledger par statement ka saara kaam EK table me — pehle chaar alag
+// patti thi (har khaate ka passbook-farak, laal "line nahi bani", baingani
+// "Statement approval", aur "Statement milao" button Accounts ke kone me).
+// Har khaate ki ek line: aakhri statement kab tak · Passbook vs Kitaab ·
+// kya kaam baaki (dabao to wahi batch khule) · "Statement milao".
+// "Itihaas" me saare batch (pehle ek dropdown me the).
+export default function StmtBatchPanel({ onChanged, accounts, onImport }) {
   const [list, setList] = useState([]);
+  const [marks, setMarks] = useState([]);
   const [open, setOpen] = useState(null);       // batch id
+  const [hist, setHist] = useState(false);
+  const [all, setAll] = useState(false);
   const load = useCallback(() => {
     api.get("/finance/statement/batches?status=all").then((r) => { if (r && r.success) setList(r.data || []); }).catch(() => {});
+    api.get("/finance/statement/balance-marks").then((r) => { if (r && r.success) setMarks(r.data || []); }).catch(() => {});
   }, []);
   useEffect(() => { load(); }, [load]);
-  // Koi batch na ho to bhi chhota button — "Statement approval (0)" (16 Oct 2026)
-  if (!list.length && !open) {
-    return (
-      <>
-      <BalanceMarks accountIds={accountIds} accounts={accounts} />
-      <div style={{ marginBottom: 10, display: "flex", justifyContent: "flex-end" }}>
-        <span title={t("stb.none_tip")} style={{ fontSize: 11.5, fontWeight: 600, color: T.t3, padding: "4px 10px", borderRadius: 14, border: `1px solid ${T.b1}`, background: T.surface }}>
-          {t("stb.btn_count", { n: 0 })}
-        </span>
-      </div>
-      </>
-    );
-  }
-  // Approve ke baad bhi jo line nahi bani (dohri ka shaq) — faisla hone tak khula
-  const isOpen = (b) => ["draft", "pending", "rejected"].includes(b.status) || Number(b.pending_changes) > 0 || Number(b.skipped_open) > 0;
-  const skipN = list.reduce((a, b) => a + (Number(b.skipped_open) || 0), 0);
-  const openList = list.filter(isOpen), oldList = list.filter((b) => !isOpen(b));
-  const n = (s) => list.filter((b) => b.status === s).length;
-  const nChg = list.filter((b) => Number(b.pending_changes) > 0).length;
   const st = ST();
+  const mk = new Map(marks.map((m) => [Number(m.account_id), m]));
+  const of = (id) => list.filter((b) => Number(b.account_id) === Number(id));
+  // Statement bank ka hota hai — cash khaata tabhi jab uspar pehle kuch hua ho
+  const rows = (accounts || []).filter((a) => a.type !== "cash" || mk.has(Number(a.id)) || of(a.id).length)
+    .map((a) => {
+      const bs = of(a.id);
+      const work = [
+        ["pending", bs.filter((b) => b.status === "pending"), T.pur, T.purL],
+        ["skip", bs.filter((b) => Number(b.skipped_open) > 0), T.red, T.redL],
+        ["change", bs.filter((b) => Number(b.pending_changes) > 0), T.amb, T.ambL],
+        ["rejected", bs.filter((b) => b.status === "rejected"), T.red, T.redL],
+        ["draft", bs.filter((b) => b.status === "draft"), T.slt, T.sltL],
+      ].filter((w) => w[1].length);
+      return { a, m: mk.get(Number(a.id)) || null, work, busy: work.length > 0 };
+    })
+    .sort((x, y) => (y.busy - x.busy) || (!!y.m - !!x.m));
+  const shown = all ? rows : rows.slice(0, 6);
+  const wLabel = (k, bs) => (k === "skip" ? t("bm.w_skip", { n: bs.reduce((s, b) => s + (Number(b.skipped_open) || 0), 0) }) : t("bm.w_" + k, { n: bs.length }));
+  const cell = { padding: "9px 13px", borderTop: `1px solid ${T.b1}`, fontSize: 12.5, color: T.t2, verticalAlign: "middle" };
+  const th = { padding: "7px 13px", fontSize: 10, fontWeight: 700, color: T.t4, textTransform: "uppercase", letterSpacing: ".5px", textAlign: "left", background: T.surfaceB };
+  if (!rows.length) return null;
   return (
     <>
-      <BalanceMarks accountIds={accountIds} accounts={accounts} />
-      {skipN > 0 && (
-        <div style={{ marginBottom: 10, padding: "9px 13px", borderRadius: 8, background: T.redL, border: `1px solid ${T.red}55`, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-          <b style={{ fontSize: 12.5, color: T.red }}>{t("stb.skip_banner", { n: skipN })}</b>
-          <span style={{ fontSize: 12, color: T.t2, flex: 1, minWidth: 200 }}>{t("stb.skip_banner_sub")}</span>
-          {list.filter((b) => Number(b.skipped_open) > 0).slice(0, 6).map((b) => (
-            <button key={b.id} onClick={() => setOpen(b.id)} style={{ fontSize: 11.5, fontWeight: 700, padding: "4px 10px", borderRadius: 6, cursor: "pointer", fontFamily: "inherit", border: `1px solid ${T.red}`, background: T.surface, color: T.red }}>
-              #{b.id} · {t("stb.skip_n", { n: b.skipped_open })}
+      <div style={{ marginBottom: 10, border: `1px solid ${T.b1}`, borderRadius: 10, background: T.surface, overflow: "hidden" }}>
+        <div style={{ padding: "10px 13px", display: "flex", alignItems: "center", gap: 10 }}>
+          <b style={{ fontSize: 13.5, color: T.t1 }}>{t("bm.title")}</b>
+          <span style={{ fontSize: 11.5, color: T.t3, flex: 1, minWidth: 0 }}>{t("bm.sub")}</span>
+          {list.length > 0 && (
+            <button onClick={() => setHist((v) => !v)} aria-expanded={hist}
+              style={{ border: "none", background: "none", color: T.blu, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
+              {hist ? t("bm.hist_hide") : t("bm.hist", { n: list.length })}
             </button>
-          ))}
-        </div>
-      )}
-      <div style={{ marginBottom: 10, padding: "9px 13px", borderRadius: 8, background: T.purL, border: `1px solid ${T.pur}44`, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-        <b style={{ fontSize: 12.5, color: T.pur }}>{t("stb.btn_count", { n: n("pending") + nChg })}</b>
-        {["pending", "draft", "rejected"].filter((s) => n(s)).map((s) => (
-          <span key={s} style={{ fontSize: 11.5, fontWeight: 700, color: st[s][0], background: T.surface, border: `1px solid ${st[s][0]}55`, padding: "2px 9px", borderRadius: 12 }}>{n(s)} {st[s][2]}</span>
-        ))}
-        {nChg > 0 && <span style={{ fontSize: 11.5, fontWeight: 700, color: T.amb, background: T.surface, border: `1px solid ${T.amb}55`, padding: "2px 9px", borderRadius: 12 }}>{t("stb.n_change_pending", { n: nChg })}</span>}
-        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginLeft: "auto", alignItems: "center" }}>
-          {oldList.length > 0 && (
-            <PickSelect value="" onChange={(e) => e.target.value && setOpen(Number(e.target.value))} style={{ fontSize: 11.5, padding: "4px 8px", borderRadius: 6, border: `1px solid ${T.b2}`, background: T.surface, minWidth: 170 }}>
-              <option value="">{t("stb.old_batches", { n: oldList.length })}</option>
-              {oldList.map((b) => <option key={b.id} value={String(b.id)}>#{b.id} · {b.account_name} · {(st[b.status] || [0, 0, b.status])[2]}</option>)}
-            </PickSelect>
           )}
-          {openList.slice(0, 6).map((b) => (
-            <button key={b.id} onClick={() => setOpen(b.id)} style={{ fontSize: 11.5, fontWeight: 600, padding: "4px 10px", borderRadius: 6, cursor: "pointer", fontFamily: "inherit",
-              border: `1px solid ${st[b.status] ? st[b.status][0] : T.b2}`, background: T.surface, color: T.t1 }}>
-              #{b.id} · {b.account_name} · {inr(Number(b.total_in) + Number(b.total_out))}
-            </button>
-          ))}
         </div>
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 640 }}>
+            <thead><tr>
+              <th style={th}>{t("bm.c_acc")}</th><th style={th}>{t("bm.c_bal")}</th><th style={th}>{t("bm.c_work")}</th><th style={{ ...th, width: 1 }} />
+            </tr></thead>
+            <tbody>
+              {shown.map(({ a, m, work }) => {
+                const bad = m && m.difference != null && Math.abs(m.difference) >= 1;
+                return (
+                  <tr key={a.id}>
+                    <td style={cell}>
+                      <b style={{ color: T.t1 }}>{a.name}</b>
+                      <div style={{ fontSize: 11.5, color: T.t3, marginTop: 1 }}>{m ? t("bm.till", { date: dmy(m.as_on) }) : t("bm.never")}</div>
+                    </td>
+                    <td style={cell}>
+                      {m ? (
+                        <>
+                          <div>{t("stb.bm_passbook")} <b>{inr(m.statement_balance)}</b> <span style={{ color: T.t4 }}>· {t("stb.bm_book")} {m.book_now == null ? "—" : inr(m.book_now)}</span></div>
+                          <div title={t("stb.bm_tip")} style={{ fontSize: 12, fontWeight: 700, marginTop: 1, color: bad ? T.red : T.grn }}>
+                            {bad ? t("bm.diff", { amt: inr(Math.abs(m.difference)) }) : t("stb.bm_ok")}
+                          </div>
+                        </>
+                      ) : <span style={{ color: T.t4 }}>—</span>}
+                    </td>
+                    <td style={cell}>
+                      {work.length ? (
+                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                          {work.map(([k, bs, c, bg]) => (
+                            <button key={k} onClick={() => setOpen(bs[0].id)} title={bs.map((b) => "#" + b.id).join(", ")}
+                              style={{ fontSize: 11.5, fontWeight: 700, padding: "3px 10px", borderRadius: 12, cursor: "pointer", fontFamily: "inherit", border: `1px solid ${c}55`, background: bg, color: c, whiteSpace: "nowrap" }}>
+                              {wLabel(k, bs)}
+                            </button>
+                          ))}
+                        </div>
+                      ) : <span style={{ color: T.t4 }}>{t("bm.no_work")}</span>}
+                    </td>
+                    <td style={{ ...cell, textAlign: "right", whiteSpace: "nowrap" }}>
+                      {onImport && (
+                        <button onClick={() => onImport(a.id)}
+                          style={{ fontSize: 12, fontWeight: 700, padding: "6px 12px", borderRadius: 6, cursor: "pointer", fontFamily: "inherit", border: `1px solid ${T.blu}`, background: T.surface, color: T.blu }}>
+                          {t("stmt.button")}
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        {rows.length > 6 && (
+          <button onClick={() => setAll((v) => !v)} style={{ width: "100%", padding: "7px 13px", border: "none", borderTop: `1px solid ${T.b1}`, background: T.surfaceB, color: T.blu, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
+            {all ? t("bm.less") : t("bm.more", { n: rows.length - 6 })}
+          </button>
+        )}
+        {hist && (
+          <div style={{ borderTop: `1px solid ${T.b1}`, maxHeight: 260, overflowY: "auto" }}>
+            {list.map((b) => (
+              <button key={b.id} onClick={() => setOpen(b.id)}
+                style={{ width: "100%", display: "flex", gap: 10, alignItems: "center", padding: "7px 13px", border: "none", borderBottom: `1px solid ${T.b1}`, background: T.surface, cursor: "pointer", fontFamily: "inherit", fontSize: 12, color: T.t2, textAlign: "left" }}>
+                <b style={{ color: T.t1, width: 44 }}>#{b.id}</b>
+                <span style={{ width: 62, color: T.t3 }}>{dmy(b.created_at)}</span>
+                <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{b.account_name} · {b.line_count} {t("stb.lines")}{b.batch_note ? ` · “${b.batch_note}”` : ""}</span>
+                <span style={{ color: T.t3, whiteSpace: "nowrap" }}>{inr(Number(b.total_in) + Number(b.total_out))}</span>
+                {st[b.status] && <span style={{ fontSize: 11, fontWeight: 700, color: st[b.status][0], background: st[b.status][1], padding: "2px 8px", borderRadius: 10, whiteSpace: "nowrap" }}>{st[b.status][2]}</span>}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
       {open && <BatchModal id={open} onClose={(changed) => { setOpen(null); load(); if (changed && onChanged) onChanged(); }} />}
     </>
   );
 }
 
-function BatchModal({ id, onClose }) {
+export function BatchModal({ id, onClose }) {
   const [b, setB] = useState(null);
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
