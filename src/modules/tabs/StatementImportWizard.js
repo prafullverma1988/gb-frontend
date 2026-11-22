@@ -166,7 +166,6 @@ function buildRows(grid, hdr) {
   return { rows, skipped };
 }
 
-const STEPS = ["file", "map", "result"];
 
 // Dono raaste (CSV/Excel aur PDF) ki preview ek jaisi dikhni chahiye — jo
 // screen par aata hai wahi server par jaayega, chahe file kis roop me aayi ho.
@@ -277,7 +276,6 @@ export default function StatementImportWizard({ accounts, onClose }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [result, setResult] = useState(null);
-  const [tab, setTab] = useState("stmt");
   // PDF ka raasta alag hai: usme column mapping nahi hoti (server pehle hi
   // saaf rows bhej deta hai), balki parse ki quality dikhti hai.
   const [pdf, setPdf] = useState(null);        // { rows, num_pages, … }
@@ -361,7 +359,6 @@ export default function StatementImportWizard({ accounts, onClose }) {
         { rows: parsed.rows, tolerance_days: tol });
       if (!r || !r.success) throw new Error((r && r.message) || t("stmt.failed"));
       setResult(r.data); setStep(3);
-      setTab(r.data.elsewhere_count ? "else" : (r.data.only_in_statement.length ? "stmt" : "books"));
     } catch (e2) {
       setErr(e2.message || t("stmt.failed"));
     } finally { setBusy(false); }
@@ -400,13 +397,17 @@ export default function StatementImportWizard({ accounts, onClose }) {
             <div style={{ fontSize: 15, fontWeight: 700, color: T.t1 }}>{t("stmt.title")}</div>
             <div style={{ fontSize: 11.5, color: T.t3, marginTop: 1 }}>{t("stmt.subtitle")}</div>
           </div>
-          {STEPS.map((s, i) => (
-            <span key={s} style={{ fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 20, whiteSpace: "nowrap",
-              color: step === i + 1 ? "#fff" : step > i + 1 ? T.blu : T.t4,
-              background: step === i + 1 ? T.blu : step > i + 1 ? T.bluL : "transparent" }}>
-              {i + 1}. {t(`stmt.step_${s}`)}
-            </span>
-          ))}
+          {(() => {
+            // File (chuno + column) → Jaanch → Bhejo (preview). hideBack = preview khula hai.
+            const ph = step < 3 ? 1 : hideBack ? 3 : 2;
+            return ["file", "jaanch", "bhejo"].map((k, i) => (
+              <span key={k} style={{ fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 20, whiteSpace: "nowrap",
+                color: ph === i + 1 ? "#fff" : ph > i + 1 ? T.blu : T.t4,
+                background: ph === i + 1 ? T.blu : ph > i + 1 ? T.bluL : "transparent" }}>
+                {i + 1}. {t(`jz.step_${k}`)}
+              </span>
+            ));
+          })()}
           <button onClick={onClose} aria-label={t("stmt.close")} style={{ border: "none", background: "none", fontSize: 20, lineHeight: 1, color: T.t4, cursor: "pointer", padding: "0 2px" }}>×</button>
         </div>
 
@@ -547,7 +548,7 @@ export default function StatementImportWizard({ accounts, onClose }) {
           {/* 3 — milaan */}
           {step === 3 && result && (
             <FootCtx.Provider value={footCtx}>
-              <ResultView result={result} tab={tab} setTab={setTab} accounts={accounts} />
+              <JaanchView result={result} accounts={accounts} />
             </FootCtx.Provider>
           )}
         </div>
@@ -568,126 +569,19 @@ export default function StatementImportWizard({ accounts, onClose }) {
   );
 }
 
-// ── Milaan ka nateeja ──────────────────────────────────────────────────
-function ResultView({ result, tab, setTab, accounts }) {
-  const d = result;
-  const bc = d.balance_check;
-  // Doosre khaate me mili line ka faisla: skip (wahi sahi) / moved / create (+ wajah)
-  const [decide, setDecide] = useState({});
-  const elsewhereIdx = useMemo(() => d.only_in_statement.map((l, i) => (l.elsewhere ? i : -1)).filter((i) => i >= 0), [d]);
-  const undecided = elsewhereIdx.filter((i) => !decide[i]).length;
-  const createN = d.only_in_statement.filter((l, i) => !l.elsewhere || (decide[i] && decide[i].kind === "create")).length;
-  const tabs = [
-    ...(elsewhereIdx.length ? [{ id: "else", label: t("stmt.tab_elsewhere", { n: elsewhereIdx.length, u: undecided }), c: T.pur }] : []),
-    { id: "stmt", label: t("stmt.tab_missing", { n: createN }), c: T.red },
-    { id: "books", label: t("stmt.tab_extra", { n: d.only_in_books.length }), c: T.amb },
-    { id: "ok", label: t("stmt.tab_matched", { n: d.matched.length }), c: T.grn },
-  ];
-  return (
-    <div>
-      {/* Sabse pehle wahi sawaal jiske liye ye feature hai */}
-      {bc ? (
-        <div style={{ padding: "12px 15px", borderRadius: 8, marginBottom: 14, background: T.surface,
-          border: `1px solid ${T.b1}`, borderLeft: `4px solid ${bc.matches ? T.grn : T.red}` }}>
-          <div style={{ fontSize: 14, fontWeight: 700, color: bc.matches ? T.grn : T.red, marginBottom: 5 }}>
-            {bc.matches ? t("stmt.bal_ok") : t("stmt.bal_diff", { amt: inr2(Math.abs(bc.difference)) })}
-          </div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 22px", fontSize: 12.5, color: T.t2 }}>
-            <span>{t("stmt.bal_as_on", { date: dmy(bc.as_on) })}</span>
-            <span>{t("stmt.bal_passbook")}: <b>{inr2(bc.statement_balance)}</b></span>
-            <span>{t("stmt.bal_books")}: <b>{inr2(bc.book_balance)}</b></span>
-          </div>
-        </div>
-      ) : (
-        <div style={{ padding: "11px 14px", borderRadius: 8, marginBottom: 14, background: T.ambL, border: `1px solid ${T.ambM}`, fontSize: 12.5, color: T.t2 }}>
-          {t("stmt.no_balance_col")}
-        </div>
-      )}
-
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 8, marginBottom: 14 }}>
-        {[
-          [t("stmt.s_lines"), d.totals.statement_rows, T.slt],
-          [t("stmt.s_matched"), d.totals.matched, T.grn],
-          [t("stmt.s_missing"), d.totals.only_in_statement, T.red],
-          [t("stmt.s_extra"), d.totals.only_in_books, T.amb],
-        ].map(([l, v, c]) => (
-          <div key={l} style={{ padding: "10px 13px", background: T.surfaceB, border: `1px solid ${T.b1}`, borderRadius: 8, borderTop: `3px solid ${c}` }}>
-            <div style={{ fontSize: 9.5, fontWeight: 700, color: T.t3, textTransform: "uppercase", letterSpacing: ".6px" }}>{l}</div>
-            <div style={{ fontSize: 20, fontWeight: 700, color: T.t1, marginTop: 3 }}>{v}</div>
-          </div>
-        ))}
-      </div>
-
-      <div style={{ display: "flex", gap: 4, marginBottom: 10, flexWrap: "wrap", borderBottom: `1px solid ${T.b1}` }}>
-        {tabs.map((x) => (
-          <button key={x.id} onClick={() => setTab(x.id)}
-            style={{ fontSize: 12.5, fontWeight: tab === x.id ? 700 : 500, padding: "8px 12px", marginBottom: -1, cursor: "pointer", fontFamily: "inherit",
-              border: "none", borderBottom: `2px solid ${tab === x.id ? x.c : "transparent"}`,
-              background: "none", color: tab === x.id ? T.t1 : T.t3 }}>
-            {x.label}
-          </button>
-        ))}
-      </div>
-
-      <div style={{ fontSize: 12, color: T.t3, marginBottom: 8, lineHeight: 1.6 }}>
-        {tab === "stmt" && t("stmt.help_missing")}
-        {tab === "books" && t("stmt.help_extra")}
-        {tab === "ok" && t("stmt.help_matched", { tol: d.tolerance_days })}
-      </div>
-
-      <div style={{ border: `1px solid ${T.b1}`, borderRadius: 8, overflow: "hidden" }}>
-        <div style={{ maxHeight: "min(62vh, 600px)", overflowY: "auto" }}>
-          {/* Chhupao, hatao nahi — doosra tab dekh kar lauto to chuni hui
-              party / remark mite nahi (pehle mit jaate the) */}
-          {tab === "else" && <ElsewhereList accountId={d.account.id} accountName={d.account.name} rows={d.only_in_statement} idx={elsewhereIdx} decide={decide} setDecide={setDecide} />}
-          <div style={{ display: tab === "stmt" ? "block" : "none" }}>
-            {undecided > 0 && (
-              <div onClick={() => setTab("else")} style={{ padding: "8px 13px", fontSize: 12, color: T.pur, background: T.purL, borderBottom: `1px solid ${T.b1}`, cursor: "pointer", fontWeight: 600 }}>
-                {t("stmt.elsewhere_pending", { n: undecided })}
-              </div>
-            )}
-            <ReviewCreate active={tab === "stmt"} accountId={d.account.id} rows={d.only_in_statement} matched={d.matched}
-              accounts={accounts} tol={d.tolerance_days} decide={decide}
-              acctName={d.account.name} acctClosing={d.closing} />
-          </div>
-          {tab === "books" && <Rows rows={d.only_in_books} kind="books" />}
-          {tab === "ok" && <Rows rows={d.matched} kind="ok" />}
-        </div>
-      </div>
-
-      {d.totals.book_rows_outside_window > 0 && (
-        <div style={{ marginTop: 10, fontSize: 11.5, color: T.t4 }}>
-          {t("stmt.outside_window", { n: d.totals.book_rows_outside_window })}
-        </div>
-      )}
-      <div style={{ marginTop: 10, fontSize: 11.5, color: T.t4, lineHeight: 1.6 }}>
-        {t("stmt.readonly_note")}
-      </div>
-    </div>
-  );
-}
-
-// ── "Bank me hai, kitaab me nahi" — dekho, party chuno, entry banao ─────
-//
-// Yahi poore feature ka akela LIKHNE wala kadam hai, aur wo in baaton par
-// khada hai:
-//   1. Party ka andaza server lagata hai (utils/partySuggest) — par lagata
-//      hi hai, chunta nahi. Sirf "pakka" pehle se bhara aata hai, badal sakte
-//      ho, aur "shayad" par wo peela dikhta hai taaki bina dekhe na dab jaye.
-//      Andaza isi statement ki MILI hui lines se bhi seekhta hai (`learn`):
-//      jis UPI / khaata number par kitaab me pehle X tha, wahi X yahan.
-//   2. Chunne ki list khoj wali hai: Andaza, company ke khaate, party, staff.
-//      Company ka khaata chuna = paisa apne hi doosre khaate se aaya/gaya —
-//      server party ki jagah transfer ke do leg banata hai.
-//   3. Har line par remark — entry ke note me jaata hai. Bank ki narration
-//      description me hi rehti hai (agle statement ka andaza usi se seekhta hai).
-//   4. Bank ke apne charges/byaaj/ATM par "bank ka apna" ka tag hai. Picker
-//      khaali rehta hai par khula hai — ATM nikaasi ko Cash khaate me transfer
-//      chuna ja sakta hai.
-//   5. Duplicate ke do guard server par hain. Screen unka nateeja dikhati
-//      hai: "pehle se bani hai" par kuch nahi hota; "shaq hai" par ek button
-//      hai "Phir bhi banao", kyunki do baar ₹1,000 ek hi din sach bhi ho
-//      sakta hai — aur wo faisla aadmi ka hai, code ka nahi.
+// ── Jaanch (22 Nov 2026) ───────────────────────────────────────────────
+// Milaan ke baad ki EK hi list (pehle: 4 ginti ke dabbe + 3-4 tab + andar do
+// aur tab, line party chunte hi ek tab se doosre me kood jaati thi).
+//   • Statement ki har line apni jagah rehti hai; sirf uski sthiti badalti hai:
+//     Faisla baaki → Taiyaar / Pehle se hai / Chhodi → Bheji.
+//   • Har line par ek sawaal — "Ye paisa kya tha?" — aur jawab ke hisaab se
+//     sirf wahi dabbe: Party · Kharcha (Head) · Doosra khaata · Kitaab me
+//     pehle se hai (khud jodi) · Abhi chhodo.
+//   • Server ka andaza (utils/partySuggest) pehle se bhara aata hai par
+//     "Sahi hai" dabane tak Taiyaar nahi — ya upar "N pakke andaze maan lo".
+//   • Jo line milaan me khud jud gayi wo "Pehle se mili" me, "Jodi todo" ke saath.
+//   • Doosre khaate me mili line (dohri ka shaq) usi line par peela dabba.
+// Likhne ka raasta wahi: Bhejo (preview) → batch → Multi-Level Approval.
 const pickKey = (s) => (s.kind === "account" ? `a:${s.account_id}` : `p:${s.party_id}`);
 
 // Andaza kyun — server why_codes bhejta hai, yahan har bhasha me. Purana
@@ -710,91 +604,82 @@ function whyText(s) {
   return ex ? `${txt} — "${ex}"` : txt;
 }
 
-function ReviewCreate({ active, accountId, rows, matched, accounts, tol, decide = {}, acctName, acctClosing }) {
-  // Do tab (15 Oct 2026): jinme party / khaata chuna hai, aur jo abhi chhooti hain
-  const [sub, setSub] = useState("picked");
-  // Bina party / khaate wali line default me batch me NAHI jaati (16 Oct 2026) —
-  // wo "Abhi chhooti" me rehti hain. Bank charge / byaaj jaisi line bhejni ho to tick.
-  const [withNoParty, setWithNoParty] = useState(false);
-  // Doosre khaate me mili line: faisla na ho / "wahi sahi" / "khaata badla" = yahan nahi.
-  // "Phir bhi banao" = dikhe, force ke saath, wajah note me.
-  const shown = (r, i) => !r.elsewhere || (decide[i] && decide[i].kind === "create");
+// Line ki sthiti — poori screen (ginti, filter, bhejna) isi ek jagah se.
+//   auto  milaan me khud judi · sent batch me ja chuki · todo faisla baaki
+//   ready bhejne ko taiyaar · have kitaab me pehle se · skip abhi chhodi
+function rowStatus(r) {
+  if (r.auto && !r.unmatched) return "auto";
+  if (r.outcome === "queued" || r.outcome === "created" || r.outcome === "already_imported") return "sent";
+  if (r.elsewhere && !r.els) return "todo";
+  if (r.els && r.els.kind !== "create") return "have";
+  if (r.kind === "skip") return "skip";
+  if (r.kind === "have") return r.haveTxn ? "have" : "todo";
+  const pk = r.pick || "";
+  const valid = (r.kind === "party" && pk.startsWith("p:")) || (r.kind === "xfer" && pk.startsWith("a:"))
+    || (r.kind === "exp" && !!r.head) || r.kind === "bare";
+  return valid && (r.touched || r.ok) ? "ready" : "todo";
+}
+
+function JaanchView({ result, accounts }) {
+  const d = result;
+  const bc = d.balance_check;
+  const accountId = d.account.id;
+  const tol = d.tolerance_days;
+  const [filter, setFilter] = useState("all");
   const [parties, setParties] = useState([]);
+  const [projects, setProjects] = useState([]);
+  const [heads, setHeads] = useState([]);
   const [draft, setDraft] = useState([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [done, setDone] = useState(null);
-  // null = list; { onlyForce } = save se pehle ki preview khuli hai
-  const [preview, setPreview] = useState(null);
-  // Project (23 Oct 2026): har line project ki hai ya company ki — server andaza
-  // deta hai (vivran me naam / client / party ka purana project), user badal sakta hai.
-  const [projects, setProjects] = useState([]);
-  const [heads, setHeads] = useState([]);
+  const [preview, setPreview] = useState(false);
 
   useEffect(() => {
     let dead = false;
     (async () => {
       try {
         // Mili lines ki party server txn_id se khud padhta hai — yahan sirf jodi
-        const learn = (matched || [])
+        const learn = (d.matched || [])
           .filter((m) => m && m.txn_id && m.statement && m.statement.description)
           .map((m) => ({ description: m.statement.description, txn_id: m.txn_id }));
-        // Site / company kharcha ke liye Library → Expense Heads (22 Nov 2026)
         api.get("/library/expense-heads").then((h) => {
           if (!dead && h && h.success) setHeads((h.data || []).filter((x) => Number(x.is_active) !== 0));
         }).catch(() => {});
         const [pr, sg] = await Promise.all([
           api.get("/finance/parties"),
-          api.post(`/finance/accounts/${accountId}/statement/suggest`, { rows, learn, include_accounts: true }),
+          d.only_in_statement.length
+            ? api.post(`/finance/accounts/${accountId}/statement/suggest`, { rows: d.only_in_statement, learn, include_accounts: true })
+            : Promise.resolve({ success: true, data: [] }),
         ]);
         if (dead) return;
-        const plist = (pr && pr.success && Array.isArray(pr.data)) ? pr.data : [];
         const sugg = (sg && sg.success && Array.isArray(sg.data)) ? sg.data : [];
-        setParties(plist);
-        setDraft(rows.map((r, i) => {
+        setParties((pr && pr.success && Array.isArray(pr.data)) ? pr.data : []);
+        const blank = { kind: "", pick: "", head: "", proj: "", proj_why: null, proj_touched: false, note: "",
+          haveTxn: "", ok: false, touched: false, edit: false, els: null, outcome: null };
+        const fresh = d.only_in_statement.map((r, i) => {
           const s = sugg[i] || { suggestions: [], confidence: "none", bank_own: null };
           const top = s.suggestions[0];
-          return {
-            ...r, include: true, force: false, outcome: null, txn_id: null, note: "",
-            proj: "", proj_why: null, proj_touched: false, head: "",
-            bank_own: s.bank_own, confidence: s.confidence, suggestions: s.suggestions,
-            // Sirf "strong" pehle se bharta hai. "maybe" dikhata hai par
-            // chunta nahi — galat party par entry do ledger ek saath bigaadti hai.
-            pick: (!s.bank_own && top && s.confidence === "strong") ? pickKey(top) : "",
-          };
-        }));
+          // Sirf "pakka" andaza pehle se bharta hai — par Taiyaar tabhi jab user
+          // "Sahi hai" dabaye. Galat party par entry do ledger ek saath bigaadti hai.
+          const pre = !r.elsewhere && !s.bank_own && top && s.confidence === "strong";
+          return { ...r, ...blank, bank_own: s.bank_own, confidence: s.confidence, suggestions: s.suggestions,
+            kind: pre ? (top.kind === "account" ? "xfer" : "party") : "", pick: pre ? pickKey(top) : "" };
+        });
+        // Milaan me judi line bhi list me (alag filter) — "Jodi todo" par aam line ban jaati hai
+        const auto = (d.matched || []).map((m) => ({ ...m.statement, ...blank, suggestions: [], confidence: "none", bank_own: null, auto: m }));
+        setDraft([...fresh, ...auto]);
       } catch (e) {
         if (!dead) setErr(e.message || t("stmt.failed"));
       } finally { if (!dead) setLoading(false); }
     })();
     return () => { dead = true; };
-  }, [accountId, rows, matched]);
+  }, [d, accountId]);
 
-  // Sab line ke liye ek hi list (har line apna Andaza upar jodti hai). Khaate
-  // upar — gine-chune hain, aur transfer dhoondhne ke liye neeche scroll na karna pade.
-  const baseOpts = useMemo(() => {
-    const acc = (accounts || []).filter((a) => String(a.id) !== String(accountId)).map((a) => ({
-      key: `a:${a.id}`, label: a.name, sub: t("stmt.sub_transfer"), group: t("stmt.grp_accounts"), search: a.account_number || "",
-    }));
-    const nm = (p) => String(p.name || "").trim().toLowerCase();
-    const cnt = {};
-    parties.forEach((p) => { cnt[nm(p)] = (cnt[nm(p)] || 0) + 1; });
-    const po = (p, group) => ({ key: `p:${p.id}`, label: p.name, group, search: p.phone || "",
-      ...(cnt[nm(p)] > 1 ? { sub: p.phone || "#" + p.id } : {}) });
-    return [
-      // Kisi party ko nahi gaya — site / company ka kharcha (Head + Project neeche)
-      { key: "x:", label: t("stmt.exp_opt"), sub: t("stmt.exp_opt_sub"), group: t("stmt.grp_expense"), search: "kharcha site expense kharch" },
-      ...acc,
-      ...parties.filter((p) => !p.is_staff).map((p) => po(p, t("stmt.grp_parties"))),
-      ...parties.filter((p) => p.is_staff).map((p) => po(p, t("stmt.grp_staff"))),
-    ];
-  }, [accounts, accountId, parties]);
+  const upd = useCallback((i, patch) => setDraft((dd) => dd.map((x, j) => (j === i ? { ...x, ...patch } : x))), []);
 
-  const upd = useCallback((i, patch) => setDraft((d) => d.map((x, j) => (j === i ? { ...x, ...patch } : x))), []);
-
-  // Party badli to project ka andaza dobara — sirf un line ka jinka project user
-  // ne khud nahi chuna. Party ke bina bhi chalta hai (vivran me project ka naam).
+  // Party badli to project ka andaza dobara — sirf un line ka jinka project user ne khud nahi chuna
   const pickSig = draft.map((x) => x.pick || "").join("|");
   useEffect(() => {
     if (!draft.length) return undefined;
@@ -806,242 +691,212 @@ function ReviewCreate({ active, accountId, rows, matched, accounts, tol, decide 
         if (dead || !r || !r.success) return;
         setProjects(r.data.projects || []);
         const sg = r.data.lines || [];
-        setDraft((d) => d.map((x, i) => (x.proj_touched || !sg[i] ? x
+        setDraft((dd) => dd.map((x, i) => (x.proj_touched || !sg[i] ? x
           : { ...x, proj: sg[i].project_id ? String(sg[i].project_id) : "", proj_why: sg[i].why ? sg[i] : null })));
       } catch (_) { /* andaza na aaye to Company — user khud chun sakta hai */ }
     }, 400);
     return () => { dead = true; clearTimeout(tm); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pickSig, accountId]);
-  const projOpts = useMemo(() => [
-    { key: "", label: t("stmt.proj_company") },
-    ...projects.map((p) => ({ key: String(p.id), label: p.name, group: t("stmt.proj_grp") })),
-  ], [projects]);
-  const headOpts = useMemo(() => heads.map((h) => ({ key: String(h.id), label: h.name, sub: h.type || null })), [heads]);
-  const headName = useCallback((k) => ((heads.find((h) => String(h.id) === String(k)) || {}).name || t("stmt.exp_head_missing")), [heads]);
-  const projName = useCallback((k) => (k ? ((projects.find((p) => String(p.id) === String(k)) || {}).name || "#" + k) : t("stmt.proj_company")), [projects]);
-  const pending = draft.filter((x, i) => shown(x, i) && x.include && x.outcome !== "created" && x.outcome !== "already_imported" && x.outcome !== "queued");
 
-  // Kharcha (x:) tabhi jaata hai jab Head chuna ho — bina head ke kis kaam ka kharcha, pata nahi chalta
-  const sendable = (x) => (x.pick === "x:" ? !!x.head : (withNoParty || !!x.pick));
-  const pickFor = (onlyForce) => (onlyForce
-    ? draft.filter((x) => x.outcome === "duplicate_suspect" && x.force)
-    : pending.filter((x) => x.outcome !== "duplicate_suspect" && sendable(x)));
-  // Preview me party / khaate ka NAAM — wahi list jo picker dikhata hai, plus
-  // har line ke apne Andaze (jinka naam baseOpts me na ho).
+  // Dabbon ki list — ek baar banti hai, har line apna Andaza upar jodti hai
+  const partyOpts = useMemo(() => {
+    const nm = (p) => String(p.name || "").trim().toLowerCase();
+    const cnt = {};
+    parties.forEach((p) => { cnt[nm(p)] = (cnt[nm(p)] || 0) + 1; });
+    const po = (p, group) => ({ key: `p:${p.id}`, label: p.name, group, search: p.phone || "",
+      ...(cnt[nm(p)] > 1 ? { sub: p.phone || "#" + p.id } : {}) });
+    return [...parties.filter((p) => !p.is_staff).map((p) => po(p, t("stmt.grp_parties"))),
+      ...parties.filter((p) => p.is_staff).map((p) => po(p, t("stmt.grp_staff")))];
+  }, [parties]);
+  const accOpts = useMemo(() => (accounts || []).filter((a) => String(a.id) !== String(accountId))
+    .map((a) => ({ key: `a:${a.id}`, label: a.name, search: a.account_number || "" })), [accounts, accountId]);
+  const projOpts = useMemo(() => [{ key: "", label: t("stmt.proj_company") },
+    ...projects.map((p) => ({ key: String(p.id), label: p.name, group: t("stmt.proj_grp") }))], [projects]);
+  const headOpts = useMemo(() => heads.map((h) => ({ key: String(h.id), label: h.name, sub: h.type || null })), [heads]);
+  const projName = useCallback((k) => (k ? ((projects.find((p) => String(p.id) === String(k)) || {}).name || "#" + k) : t("stmt.proj_company")), [projects]);
+  const headName = useCallback((k) => ((heads.find((h) => String(h.id) === String(k)) || {}).name || t("stmt.exp_head_missing")), [heads]);
   const nameOf = useCallback((k) => {
     if (!k) return "";
-    const o = baseOpts.find((x) => x.key === k);
+    const o = partyOpts.find((x) => x.key === k) || accOpts.find((x) => x.key === k);
     if (o) return o.label;
     for (const r of draft) {
       const sg = (r.suggestions || []).find((x) => pickKey(x) === k);
       if (sg) return sg.party_name;
     }
     return k;
-  }, [baseOpts, draft]);
+  }, [partyOpts, accOpts, draft]);
 
-  // 15 Oct 2026: save = batch. Seedhe khaate me nahi — Multi-Level Approval
-  // ("Bank Statement Import") se; daalne wala approver ho tab bhi pending.
-  // submit=false = draft (Khaata Ledger ki patti se baad me bhejo).
-  const create = async (onlyForce, batchNote, submit = true) => {
-    const pick = pickFor(onlyForce);
+  // Kitaab ki wo entry jo statement se nahi judi: milaan ki bachi + todi hui jodi − khud jodi
+  const used = useMemo(() => new Set(draft.filter((r) => r.kind === "have" && r.haveTxn).map((r) => String(r.haveTxn))), [draft]);
+  const books = useMemo(() => [
+    ...(d.only_in_books || []),
+    ...draft.filter((r) => r.auto && r.unmatched).map((r) => ({ txn_id: r.auto.txn_id, party: r.auto.txn_party, description: r.description,
+      amount: r.amount, dir: r.dir, date: r.date, type: "" })),
+  ], [d, draft]);
+  const usedKey = [...used].join(",");
+
+  const st = draft.map(rowStatus);
+  const cnt = (k) => st.filter((x) => x === k).length;
+  const total = draft.length - cnt("auto");
+  const nTodo = cnt("todo"), nReady = cnt("ready"), nSkip = cnt("skip"), nSent = cnt("sent");
+  const nHave = cnt("have") + cnt("auto");
+  const extra = books.filter((b) => !used.has(String(b.txn_id)));
+  const readyRows = draft.filter((r, i) => st[i] === "ready");
+  const preOk = draft.map((r, i) => (st[i] === "todo" && !r.touched && !r.ok && !r.elsewhere && r.pick && (r.kind === "party" || r.kind === "xfer") ? i : -1)).filter((i) => i >= 0);
+  const acceptAll = () => setDraft((dd) => dd.map((x, i) => (preOk.includes(i) ? { ...x, ok: true } : x)));
+  // Bhejne ke baad farak: passbook − (kitaab + taiyaar line ka asar)
+  const after = bc ? Math.round((Number(bc.difference) - readyRows.reduce((a, r) => a + (r.dir === "in" ? 1 : -1) * (Number(r.amount) || 0), 0)) * 100) / 100 : null;
+
+  // Save = batch. Seedhe khaate me nahi — Multi-Level Approval ("Bank Statement
+  // Import") se; daalne wala approver ho tab bhi pending. submit=false = draft.
+  const create = async (batchNote, submit = true) => {
+    const pick = readyRows;
     if (!pick.length) return;
     setBusy(true); setErr("");
     try {
-      // Server ek batch me 500 line tak leta hai — zyada ho to 500-500 ke kai batch
-      const CH = 500;
+      const CH = 500;   // server ek batch me 500 line tak leta hai
       const parts = [];
       for (let i = 0; i < pick.length; i += CH) parts.push(pick.slice(i, i + CH));
       const made = [];
       let r = null;
       for (let pi = 0; pi < parts.length; pi++) {
-      const part = parts[pi];
-      r = await api.post(`/finance/accounts/${accountId}/statement/batches`, {
-        submit,
-        entries: part.map((x) => ({
-          date: x.date, amount: x.amount, dir: x.dir, description: x.description, ref: x.ref || null,
-          party_id: x.pick.startsWith("p:") ? Number(x.pick.slice(2)) : null,
-          transfer_account_id: x.pick.startsWith("a:") ? Number(x.pick.slice(2)) : null,
-          project_id: !x.pick.startsWith("a:") && x.proj ? Number(x.proj) : null,
-          ...(x.pick === "x:" ? { expense: true, expense_head_id: Number(x.head) } : {}),
-          note: x.note.trim() || (x.elsewhere && decide[draft.indexOf(x)] ? t("stmt.force_note", { why: decide[draft.indexOf(x)].reason, acc: x.elsewhere.account_name }) : null),
-          force: !!x.force || !!(x.elsewhere && decide[draft.indexOf(x)] && decide[draft.indexOf(x)].kind === "create"),
-        })),
-        // Milaan me judi kitaab ki entry — approve par inhe dohri nahi maana jaata (23 Oct 2026)
-        claimed_txn_ids: (matched || []).map((m) => m.txn_id).filter(Boolean),
-        batch_note: ((batchNote || "").trim() + (parts.length > 1 ? ` (${pi + 1}/${parts.length})` : "")) || null,
-        // FIN-24: server ka duplicate-guard milaan wali hi ±din ki chhoot lagaye
-        ...(Number.isFinite(Number(tol)) ? { tolerance_days: Number(tol) } : {}),
-      });
-      if (!r || !r.success) {
-        if (made.length) setDraft((d) => d.map((x) => (made.some((m) => m.rows.includes(x)) ? { ...x, outcome: "queued" } : x)));
-        throw new Error((r && r.message) || t("stmt.failed"));
+        const part = parts[pi];
+        r = await api.post(`/finance/accounts/${accountId}/statement/batches`, {
+          submit,
+          entries: part.map((x) => {
+            const mk = x.els && x.els.kind === "create";
+            return {
+              date: x.date, amount: x.amount, dir: x.dir, description: x.description, ref: x.ref || null,
+              party_id: x.kind === "party" ? Number(x.pick.slice(2)) : null,
+              transfer_account_id: x.kind === "xfer" ? Number(x.pick.slice(2)) : null,
+              project_id: x.kind !== "xfer" && x.proj ? Number(x.proj) : null,
+              ...(x.kind === "exp" ? { expense: true, expense_head_id: Number(x.head) } : {}),
+              note: x.note.trim() || (mk ? t("stmt.force_note", { why: x.els.reason, acc: x.elsewhere.account_name }) : null),
+              force: mk,
+            };
+          }),
+          // Milaan me judi (aur khud jodi) kitaab ki entry — approve par inhe dohri nahi maana jaata
+          claimed_txn_ids: [...draft.filter((x) => x.auto && !x.unmatched).map((x) => x.auto.txn_id),
+            ...draft.filter((x) => x.kind === "have" && x.haveTxn).map((x) => Number(x.haveTxn))].filter(Boolean),
+          batch_note: ((batchNote || "").trim() + (parts.length > 1 ? ` (${pi + 1}/${parts.length})` : "")) || null,
+          // FIN-24: server ka duplicate-guard milaan wali hi ±din ki chhoot lagaye
+          ...(Number.isFinite(Number(tol)) ? { tolerance_days: Number(tol) } : {}),
+        });
+        if (!r || !r.success) {
+          if (made.length) setDraft((dd) => dd.map((x) => (made.some((m) => m.rows.includes(x)) ? { ...x, outcome: "queued" } : x)));
+          throw new Error((r && r.message) || t("stmt.failed"));
+        }
+        made.push({ id: r.data.id, rows: part });
       }
-      made.push({ id: r.data.id, rows: part });
-      }
-      // Batch me gayi lines yahan se hat jaati hain (dobara na bhej do)
-      setDraft((d) => d.map((x) => (pick.includes(x) ? { ...x, outcome: "queued" } : x)));
-      setDone({ batch: made.map((m) => "#" + m.id).join(", "), status: r.data.status, n: pick.length });
-      setPreview(null);
+      setDraft((dd) => dd.map((x) => (pick.includes(x) ? { ...x, outcome: "queued", edit: false } : x)));
+      setDone({ batch: made.map((m, k) => (k ? "#" : "") + m.id).join(", "), status: r.data.status, n: pick.length });
+      setPreview(false);
     } catch (e) {
       setErr(e.message || t("stmt.failed"));
     } finally { setBusy(false); }
   };
 
-  // Preview khula ho to neeche ka "Peeche" (column step) chhupao — "Wapas" apna hai
+  // Bhejo (preview) khula ho to neeche ka "Peeche" chhupao aur upar ka kadam "3 Bhejo"
   const foot = useContext(FootCtx);
-  const slot = active && foot ? foot.slot : null;
+  const slot = foot ? foot.slot : null;
   const setHideBack = foot && foot.setHideBack;
   useEffect(() => {
     if (!setHideBack) return undefined;
-    setHideBack(!!(active && preview));
+    setHideBack(!!preview);
     return () => setHideBack(false);
-  }, [active, preview, setHideBack]);
+  }, [preview, setHideBack]);
 
   if (loading) return <div style={{ padding: "26px 16px", textAlign: "center", fontSize: 12.5, color: T.t4 }}>{t("stmt.suggest_loading")}</div>;
-  if (!draft.length) return <div style={{ padding: "26px 16px", textAlign: "center", fontSize: 12.5, color: T.t4 }}>{t("stmt.nothing_here")}</div>;
-
-  const toCreate = pending.filter((x) => x.outcome !== "duplicate_suspect" && sendable(x)).length;
-  const noPartyLeft = pending.filter((x) => x.outcome !== "duplicate_suspect" && !x.pick).length;
-  const toForce = draft.filter((x) => x.outcome === "duplicate_suspect" && x.force).length;
 
   if (preview) {
     return (
-      <div>
+      <div style={{ border: `1px solid ${T.b1}`, borderRadius: 8, overflow: "hidden" }}>
         {err && <div style={{ padding: "8px 13px", fontSize: 12, color: T.red, background: T.redL }}>{err}</div>}
-        <PreviewCreate slot={slot} rows={pickFor(preview.onlyForce)} nameOf={nameOf} force={preview.onlyForce} busy={busy}
-          parties={parties} acctName={acctName} acctClosing={acctClosing} projName={projName} headName={headName}
-          onBack={() => { setPreview(null); setErr(""); }}
-          onConfirm={(note) => create(preview.onlyForce, note, true)}
-          onDraft={(note) => create(preview.onlyForce, note, false)} />
+        <PreviewCreate slot={slot} rows={readyRows} nameOf={nameOf} force={false} busy={busy}
+          parties={parties} acctName={d.account.name} acctClosing={d.closing} projName={projName} headName={headName}
+          onBack={() => { setPreview(false); setErr(""); }}
+          onConfirm={(note) => create(note, true)}
+          onDraft={(note) => create(note, false)} />
       </div>
     );
   }
 
+  const F = [
+    ["all", t("jz.f_all", { n: total }), T.t1], ["todo", t("jz.f_todo", { n: nTodo }), T.amb], ["ready", t("jz.f_ready", { n: nReady }), T.grn],
+    ["have", t("jz.f_have", { n: nHave }), T.blu], ["extra", t("jz.f_extra", { n: extra.length }), T.amb],
+    ...(nSkip ? [["skip", t("jz.f_skip", { n: nSkip }), T.slt]] : []), ...(nSent ? [["sent", t("jz.f_sent", { n: nSent }), T.slt]] : []),
+  ];
+  const showIn = { all: ["todo", "ready", "have", "skip", "sent"], todo: ["todo"], ready: ["ready"], have: ["have", "auto"], skip: ["skip"], sent: ["sent"] };
+  const list = filter === "extra" ? [] : draft.map((r, i) => [r, i]).filter(([, i]) => showIn[filter].includes(st[i]));
+  const decided = total - nTodo;
+  const chip = (on, c) => ({ fontSize: 12, fontWeight: on ? 700 : 500, padding: "5px 12px", borderRadius: 14, cursor: "pointer", fontFamily: "inherit",
+    border: `1px solid ${on ? c : T.b1}`, background: on ? T.surfaceB : T.surface, color: on ? c : T.t3, whiteSpace: "nowrap" });
+
   return (
     <div>
-      <div style={{ padding: "9px 13px", fontSize: 12, color: T.t3, lineHeight: 1.55, borderBottom: `1px solid ${T.b1}` }}>{t("stmt.review_help")}</div>
       {slot && createPortal(
         <>
-          {pending.some((x) => x.pick === "x:" && !x.head) && (
-            <span style={{ fontSize: 12, color: T.red, fontWeight: 600, marginRight: "auto" }}>
-              {t("stmt.exp_head_left", { n: pending.filter((x) => x.pick === "x:" && !x.head).length })}
-            </span>
-          )}
-          {noPartyLeft > 0 && (
-            <label title={t("stmt.noparty_tip")} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, color: withNoParty ? T.amb : T.t3, cursor: "pointer", marginRight: "auto" }}>
-              <input type="checkbox" checked={withNoParty} onChange={(e) => setWithNoParty(e.target.checked)} style={{ margin: 0 }} />
-              {t("stmt.noparty_include", { n: noPartyLeft })}
-            </label>
-          )}
-          {toForce > 0 && (
-            <button onClick={() => { setErr(""); setPreview({ onlyForce: true }); }} disabled={busy} style={{ ...footBtn("ghost", busy), color: T.amb, borderColor: T.amb }}>
-              {t("stmt.force_create_n", { n: toForce })}
-            </button>
-          )}
-          <button onClick={() => { setErr(""); setPreview({ onlyForce: false }); }} disabled={busy || !toCreate} style={footBtn("primary", busy || !toCreate)}>
-            {busy ? t("stmt.creating") : t("stmt.preview_btn", { n: toCreate })}
+          <span style={{ fontSize: 12, color: nTodo ? T.amb : T.grn, fontWeight: 600, marginRight: "auto" }}>
+            {nTodo ? t("jz.foot_todo", { n: nTodo }) : t("jz.foot_done")}
+          </span>
+          <button onClick={() => { setErr(""); setPreview(true); }} disabled={busy || !nReady} style={footBtn("primary", busy || !nReady)}>
+            {t("jz.next_send", { n: nReady })}
           </button>
         </>, slot)}
-      {err && <div style={{ padding: "8px 13px", fontSize: 12, color: T.red, background: T.redL }}>{err}</div>}
+
+      {/* Ek patti: passbook vs kitaab + kitna kaam hua */}
+      <div style={{ padding: "11px 14px", borderRadius: 8, marginBottom: 10, background: T.surface, border: `1px solid ${T.b1}` }}>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 20px", fontSize: 12.5, color: T.t2, alignItems: "baseline" }}>
+          <b style={{ fontSize: 13.5, color: T.t1 }}>{t("jz.progress", { a: decided, b: total })}</b>
+          {bc ? (
+            <>
+              <span>{t("stmt.bal_passbook")}: <b>{inr2(bc.statement_balance)}</b></span>
+              <span>{t("stmt.bal_books")}: <b>{inr2(bc.book_balance)}</b></span>
+              <b style={{ color: Math.abs(after) < 1 ? T.grn : T.red, marginLeft: "auto" }}>
+                {Math.abs(after) < 1 ? t("jz.after_ok") : t("jz.after_diff", { amt: inr2(Math.abs(after)) })}
+              </b>
+            </>
+          ) : <span style={{ color: T.t3 }}>{t("stmt.no_balance_col")}</span>}
+        </div>
+        <div style={{ height: 6, background: T.surfaceB, borderRadius: 3, marginTop: 8, overflow: "hidden" }}>
+          <div style={{ width: `${total ? Math.round((decided / total) * 100) : 100}%`, height: 6, background: nTodo ? T.blu : T.grn }} />
+        </div>
+      </div>
+
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginBottom: 10 }}>
+        {F.map(([k, label, c]) => <button key={k} onClick={() => setFilter(k)} style={chip(filter === k, c)}>{label}</button>)}
+        {preOk.length > 0 && (
+          <button onClick={acceptAll} style={{ ...chip(true, T.grn), marginLeft: "auto", background: T.grnL }}>{t("jz.accept_all", { n: preOk.length })}</button>
+        )}
+      </div>
+
+      {err && <div style={{ padding: "8px 13px", fontSize: 12, color: T.red, background: T.redL, borderRadius: 7, marginBottom: 8 }}>{err}</div>}
       {done && (
-        <div style={{ padding: "8px 13px", fontSize: 12, color: T.t2, background: T.grnL, borderBottom: `1px solid ${T.grnM}` }}>
+        <div style={{ padding: "9px 13px", fontSize: 12.5, color: T.t2, background: T.grnL, border: `1px solid ${T.grnM}`, borderRadius: 7, marginBottom: 8 }}>
           {done.status === "draft" ? t("stmt.batch_drafted", { id: done.batch, n: done.n }) : t("stmt.batch_sent", { id: done.batch, n: done.n })}
-          {noPartyLeft > 0 && <div style={{ marginTop: 4, color: T.amb }}>{t("stmt.noparty_stays", { n: noPartyLeft })}</div>}
         </div>
       )}
-      {(() => {
-        const vis = draft.map((r, i) => [r, i]).filter(([r, i]) => shown(r, i) && r.outcome !== "created" && r.outcome !== "already_imported" && r.outcome !== "queued");
-        const picked = vis.filter(([r]) => r.pick);
-        const left = vis.filter(([r]) => !r.pick);
-        const maybe = left.filter(([r]) => !r.bank_own && (r.suggestions || []).length).length;
-        const list = sub === "left" ? left : picked;
-        const sb = (on, c) => ({ fontSize: 12, fontWeight: 700, padding: "5px 12px", borderRadius: 14, cursor: "pointer", fontFamily: "inherit",
-          border: `1px solid ${on ? c : T.b1}`, background: on ? T.surfaceB : T.surface, color: on ? c : T.t3 });
-        return (
-          <>
-            <div style={{ padding: "8px 13px", display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", borderBottom: `1px solid ${T.b1}`, background: T.surface }}>
-              <button onClick={() => setSub("picked")} style={sb(sub === "picked", T.blu)}>{t("stmt.sub_picked", { n: picked.length })}</button>
-              <button onClick={() => setSub("left")} style={sb(sub === "left", T.amb)}>{t("stmt.sub_left", { n: left.length })}</button>
-              <span style={{ fontSize: 11.5, color: T.t3 }}>{sub === "left" ? t("stmt.sub_left_help", { m: maybe }) : t("stmt.sub_picked_help")}</span>
-            </div>
-            {list.length === 0 && <div style={{ padding: "18px 13px", fontSize: 12.5, color: T.t4, textAlign: "center" }}>{sub === "left" ? t("stmt.sub_left_empty") : t("stmt.sub_picked_empty")}</div>}
-            {list.map(([r, i]) => <ReviewRow key={i} r={r} i={i} baseOpts={baseOpts} upd={upd} projOpts={projOpts} headOpts={headOpts} />)}
-            {draft.filter((r, i) => shown(r, i) && (r.outcome === "created" || r.outcome === "already_imported" || r.outcome === "queued")).length > 0 && (
-              <div style={{ padding: "8px 13px", fontSize: 11.5, color: T.t4, borderTop: `1px solid ${T.b1}` }}>
-                {t("stmt.sub_done_hidden", { n: draft.filter((r, i) => shown(r, i) && (r.outcome === "created" || r.outcome === "already_imported" || r.outcome === "queued")).length })}
-              </div>
-            )}
-          </>
-        );
-      })()}
-    </div>
-  );
-}
 
-// ── Doosre khaate me pehle se (15 Oct 2026) ─────────────────────────────
-// Statement ki line is khaate ki kitaab me nahi, par wahi rakam usi disha me
-// ± din me kisi DOOSRE khaate me hai — payment galti se doosre khaate se daali
-// gayi ho sakti hai. Nayi entry = dohri. Har line par faisla:
-//   Wahi sahi hai  — kuch nahi banta
-//   Khaata badlo   — wahi purani entry is khaate par (dono khaate apne hon)
-//   Phir bhi banao — sach me alag payment hai; wajah zaroori, note me jaati hai
-function ElsewhereList({ accountId, accountName, rows, idx, decide, setDecide }) {
-  const [busy, setBusy] = useState(null);
-  const [err, setErr] = useState("");
-  const set = (i, v) => setDecide((p) => ({ ...p, [i]: v }));
-  const move = async (i) => {
-    const l = rows[i];
-    if (!window.confirm(t("stmt.move_confirm", { from: l.elsewhere.account_name, to: accountName, amt: inr2(l.amount) }))) return;
-    setBusy(i); setErr("");
-    const r = await api.post(`/finance/accounts/${accountId}/statement/move-entry`, { txn_id: l.elsewhere.txn_id }).catch((e) => ({ success: false, message: e.message }));
-    setBusy(null);
-    if (r && r.success) set(i, { kind: "moved" }); else setErr((r && r.message) || t("stmt.failed"));
-  };
-  const create = (i) => {
-    const why = (window.prompt(t("stmt.create_reason")) || "").trim();
-    if (why.length < 3) return;
-    set(i, { kind: "create", reason: why });
-  };
-  const bt = (c, on) => ({ fontSize: 11.5, fontWeight: 700, padding: "5px 10px", borderRadius: 6, cursor: "pointer", fontFamily: "inherit",
-    border: `1px solid ${c}`, background: on ? c : T.surface, color: on ? "#fff" : c });
-  const CHIP = { skip: [T.grn, t("stmt.dec_skip")], moved: [T.blu, t("stmt.dec_moved")], create: [T.amb, t("stmt.dec_create")] };
-  return (
-    <div>
-      <div style={{ padding: "9px 13px", fontSize: 12, color: T.t2, background: T.purL, borderBottom: `1px solid ${T.b1}`, lineHeight: 1.5 }}>{t("stmt.help_elsewhere")}</div>
-      {err && <div style={{ padding: "8px 13px", fontSize: 12, color: T.red, background: T.redL }}>{err}</div>}
-      {idx.map((i) => {
-        const l = rows[i], e = l.elsewhere, dcs = decide[i];
-        return (
-          <div key={i} style={{ padding: "10px 13px", borderBottom: `1px solid ${T.b1}`, display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr) auto", gap: 12, alignItems: "center", opacity: dcs && dcs.kind !== "create" ? 0.6 : 1 }}>
-            <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 10.5, color: T.t4, fontWeight: 700, textTransform: "uppercase" }}>{t("stmt.col_statement")}</div>
-              <div style={{ fontSize: 12.5, fontWeight: 700, color: l.dir === "in" ? T.grn : T.red }}>{l.dir === "in" ? "+" : "−"}{inr2(l.amount)} <span style={{ color: T.t3, fontWeight: 500 }}>· {dmy(l.date)}</span></div>
-              <div style={{ fontSize: 11.5, color: T.t3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} title={l.description || ""}>{l.description || "—"}</div>
-            </div>
-            <div style={{ minWidth: 0, borderLeft: `3px solid ${T.pur}`, paddingLeft: 10 }}>
-              <div style={{ fontSize: 10.5, color: T.pur, fontWeight: 700, textTransform: "uppercase" }}>{t("stmt.col_found_in", { acc: e.account_name })}</div>
-              <div style={{ fontSize: 12.5, fontWeight: 600, color: T.t1 }}>{e.party || e.note || e.type} <span style={{ color: T.t3, fontWeight: 500 }}>· {dmy(e.date)}</span></div>
-              <div style={{ fontSize: 11, color: T.t4 }}>#{e.txn_id}{e.created_by_name ? " · " + t("stmt.by_whom", { name: e.created_by_name }) : ""}</div>
-            </div>
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end", minWidth: 220 }}>
-              {dcs ? (
-                <>
-                  <span style={{ fontSize: 11.5, fontWeight: 700, color: CHIP[dcs.kind][0], padding: "5px 9px", borderRadius: 12, background: T.surfaceB, border: `1px solid ${CHIP[dcs.kind][0]}` }}>{CHIP[dcs.kind][1]}</span>
-                  {dcs.kind !== "moved" && <button onClick={() => set(i, undefined)} style={{ ...bt(T.t3, false), border: "none" }}>{t("stmt.dec_undo")}</button>}
-                </>
-              ) : (
-                <>
-                  <button onClick={() => set(i, { kind: "skip" })} style={bt(T.grn, false)}>{t("stmt.dec_skip_btn")}</button>
-                  <button onClick={() => move(i)} disabled={!e.can_move || busy === i} title={e.can_move ? "" : t("stmt.move_no_access")}
-                    style={{ ...bt(T.blu, false), opacity: e.can_move ? 1 : 0.45, cursor: e.can_move ? "pointer" : "not-allowed" }}>{busy === i ? "…" : t("stmt.dec_move_btn")}</button>
-                  <button onClick={() => create(i)} style={bt(T.amb, false)}>{t("stmt.dec_create_btn")}</button>
-                </>
-              )}
-            </div>
-          </div>
-        );
-      })}
+      <div style={{ border: `1px solid ${T.b1}`, borderRadius: 8, overflow: "hidden" }}>
+        <div style={{ maxHeight: "min(62vh, 620px)", overflowY: "auto" }}>
+          {filter === "extra" ? <BookRows rows={extra} /> : (
+            <>
+              {filter === "have" && nHave > 0 && <div style={{ padding: "8px 13px", fontSize: 12, color: T.t3, borderBottom: `1px solid ${T.b1}` }}>{t("jz.have_help", { tol })}</div>}
+              {list.length === 0 && <div style={{ padding: "26px 16px", textAlign: "center", fontSize: 12.5, color: T.t4 }}>{t("jz.empty_" + (filter === "all" ? "all" : "f"))}</div>}
+              {list.map(([r, i]) => (
+                <JaanchRow key={i} r={r} i={i} status={st[i]} upd={upd} partyOpts={partyOpts} accOpts={accOpts} projOpts={projOpts} headOpts={headOpts}
+                  books={books} usedKey={usedKey} nameOf={nameOf} projName={projName} headName={headName}
+                  accountId={accountId} accountName={d.account.name} />
+              ))}
+            </>
+          )}
+        </div>
+      </div>
+
+      {d.totals.book_rows_outside_window > 0 && (
+        <div style={{ marginTop: 10, fontSize: 11.5, color: T.t4 }}>{t("stmt.outside_window", { n: d.totals.book_rows_outside_window })}</div>
+      )}
     </div>
   );
 }
@@ -1214,7 +1069,6 @@ function PreviewCreate({ slot, rows, nameOf, force, busy, onBack, onConfirm, onD
 }
 
 
-// Ek line — memo, taaki ek line ka remark likhte waqt baaki 499 dobara na banein.
 // Project andaze ka "kyun"
 function projWhy(s) {
   if (!s) return "";
@@ -1225,130 +1079,239 @@ function projWhy(s) {
   return "";
 }
 
-const ReviewRow = React.memo(function ReviewRow({ r, i, baseOpts, upd, projOpts, headOpts }) {
-  const opts = useMemo(() => [
-    { key: "", label: t("stmt.party_none") },
-    ...(r.suggestions || []).map((s) => ({
-      key: pickKey(s), label: s.party_name, group: t("stmt.party_suggested"),
-      // Score 1 se upar ja sakta hai (naam + history dono poore milen) —
-      // "120%" dikhana galat hai, 100 par rok do.
-      sub: `${Math.min(100, Math.round(s.score * 100))}%${s.kind === "account" ? ` · ${t("stmt.sub_transfer")}` : ""}`,
-    })),
-    // Aaya paisa kharcha nahi ho sakta
-    ...(r.dir === "in" ? baseOpts.filter((o) => o.key !== "x:") : baseOpts),
-  ], [r.suggestions, baseOpts, r.dir]);
-
-  const locked = r.outcome === "created" || r.outcome === "already_imported";
+// Ek line — memo, taaki ek line ka remark likhte waqt baaki 499 dobara na banein.
+// Band (ek line me saransh + "Badlo") ya khuli (sawaal + jawab ke dabbe).
+const JaanchRow = React.memo(function JaanchRow({ r, i, status, upd, partyOpts, accOpts, projOpts, headOpts, books, usedKey, nameOf, projName, headName, accountId, accountName }) {
+  const [moving, setMoving] = useState(false);
+  const [rowErr, setRowErr] = useState("");
   const top = r.suggestions && r.suggestions[0];
+  const pOpts = useMemo(() => [
+    ...(r.suggestions || []).filter((s) => s.kind !== "account").map((s) => ({ key: pickKey(s), label: s.party_name, group: t("stmt.party_suggested"),
+      sub: `${Math.min(100, Math.round(s.score * 100))}%` })),
+    ...partyOpts,
+  ], [r.suggestions, partyOpts]);
+  // Kitaab ki bachi entry, isi disha ki — rakam aur tareekh me sabse paas wali upar
+  const bOpts = useMemo(() => {
+    if (r.kind !== "have") return [];
+    const usedSet = new Set(usedKey ? usedKey.split(",") : []);
+    const days = (a, b) => Math.abs((new Date(a) - new Date(b)) / 864e5) || 0;
+    return books.filter((b) => b.dir === r.dir && (!usedSet.has(String(b.txn_id)) || String(b.txn_id) === String(r.haveTxn)))
+      .sort((a, b) => (Math.abs(a.amount - r.amount) - Math.abs(b.amount - r.amount)) || (days(a.date, r.date) - days(b.date, r.date)))
+      .slice(0, 200)
+      .map((b) => ({ key: String(b.txn_id), label: `${dmy(b.date)} · ${b.party || b.description || "—"} · ${inr2(b.amount)}`,
+        sub: "#" + b.txn_id + (Math.abs(b.amount - r.amount) < 0.005 ? "" : " · " + t("jz.amt_differs")) }));
+  }, [r.kind, r.dir, r.amount, r.date, r.haveTxn, books, usedKey]);
+
   const BANK_OWN = { bank_charge: t("stmt.bank_own_charge"), bank_interest: t("stmt.bank_own_interest"), cash_withdrawal: t("stmt.bank_own_withdrawal") };
-  const CONF = { strong: [T.grn, T.grnL, t("stmt.sugg_strong")], maybe: [T.amb, T.ambL, t("stmt.sugg_maybe")], weak: [T.slt, T.sltL, t("stmt.sugg_weak")] };
-  const OUT = {
-    created: [T.grn, T.grnL, t("stmt.out_created")], already_imported: [T.slt, T.sltL, t("stmt.out_already")],
-    duplicate_suspect: [T.amb, T.ambL, t("stmt.out_dup")], invalid: [T.red, T.redL, t("stmt.out_invalid")],
+  const ST = { todo: [T.amb, T.ambL, t("jz.st_todo")], ready: [T.grn, T.grnL, t("jz.st_ready")], have: [T.blu, T.bluL, t("jz.st_have")],
+    auto: [T.blu, T.bluL, t("jz.st_auto")], skip: [T.slt, T.sltL, t("jz.st_skip")], sent: [T.slt, T.sltL, t("jz.st_sent")] };
+  const tag = (c, bg) => ({ fontSize: 10.5, fontWeight: 700, padding: "3px 8px", borderRadius: 20, background: bg, color: c, whiteSpace: "nowrap" });
+  const sm = (c, fill) => ({ fontSize: 12, fontWeight: 700, padding: "5px 11px", borderRadius: 6, cursor: "pointer", fontFamily: "inherit",
+    border: `1px solid ${c}`, background: fill ? c : T.surface, color: fill ? "#fff" : c, whiteSpace: "nowrap" });
+  const lbl = { fontSize: 11, fontWeight: 600, color: T.t3 };
+
+  const setKind = (k) => upd(i, { kind: k, edit: k !== "skip", touched: true, ok: false,
+    pick: k === "party" && (r.pick || "").startsWith("p:") ? r.pick : k === "xfer" && (r.pick || "").startsWith("a:") ? r.pick : "",
+    ...(k !== "have" ? { haveTxn: "" } : {}) });
+  const kinds = r.dir === "in" ? ["party", "xfer", "bare", "have", "skip"] : ["party", "exp", "xfer", "have", "skip"];
+  const kLabel = (k) => t(`jz.k_${k}${k === "party" || k === "xfer" ? "_" + r.dir : ""}`);
+
+  // Doosre khaate me mili line — wahi purani entry is khaate par le aao
+  const move = async () => {
+    const e = r.elsewhere;
+    if (!window.confirm(t("stmt.move_confirm", { from: e.account_name, to: accountName, amt: inr2(r.amount) }))) return;
+    setMoving(true); setRowErr("");
+    const x = await api.post(`/finance/accounts/${accountId}/statement/move-entry`, { txn_id: e.txn_id }).catch((er) => ({ success: false, message: er.message }));
+    setMoving(false);
+    if (x && x.success) upd(i, { els: { kind: "moved" } }); else setRowErr((x && x.message) || t("stmt.failed"));
   };
-  const conf = !r.bank_own && top ? CONF[r.confidence] : null;
-  const warn = conf && !r.pick && r.confidence !== "strong";
-  const chip = (c, bg) => ({ fontSize: 10.5, fontWeight: 700, padding: "3px 8px", borderRadius: 20, background: bg, color: c, whiteSpace: "nowrap" });
+  const alag = () => {
+    const why = (window.prompt(t("stmt.create_reason")) || "").trim();
+    if (why.length < 3) return;
+    upd(i, { els: { kind: "create", reason: why }, edit: true });
+  };
+
+  const locked = status === "sent";
+  const pre = status === "todo" && !r.touched && !r.ok && !r.edit && !!r.pick && (r.kind === "party" || r.kind === "xfer");
+  const needElse = !!r.elsewhere && !r.els;
+  const closed = !r.edit && !pre && !needElse && (status === "ready" || status === "have" || status === "skip");
+  const summary = () => {
+    if (r.els && r.els.kind === "skip") return t("jz.sum_else_skip", { acc: r.elsewhere.account_name });
+    if (r.els && r.els.kind === "moved") return t("jz.sum_else_moved");
+    if (r.kind === "skip") return t("jz.sum_skip");
+    if (r.kind === "have") return t("jz.sum_have", { id: r.haveTxn });
+    if (r.kind === "xfer") return t("jz.sum_xfer", { acc: nameOf(r.pick) });
+    const pj = projName(r.proj);
+    if (r.kind === "exp") return t("jz.sum_exp", { head: headName(r.head), proj: pj });
+    if (r.kind === "bare") return t("jz.sum_bare", { proj: pj });
+    return t("jz.sum_party", { party: nameOf(r.pick), proj: pj });
+  };
 
   return (
-    <div style={{ padding: "9px 13px", borderBottom: `1px solid ${T.b1}`, opacity: r.include || locked ? 1 : 0.5, background: locked ? T.surfaceB : T.surface }}>
-      <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-        <input type="checkbox" checked={r.include} disabled={locked} onChange={(e) => upd(i, { include: e.target.checked })} aria-label={t("stmt.include")} />
+    <div style={{ padding: "10px 13px", borderBottom: `1px solid ${T.b1}`, background: locked || status === "auto" ? T.surfaceB : T.surface }}>
+      <div style={{ display: "flex", gap: 10, alignItems: "baseline" }}>
         <span style={{ fontSize: 11.5, color: T.t3, width: 62, flexShrink: 0 }}>{dmy(r.date)}</span>
-        <span style={{ flex: 1, minWidth: 160, fontSize: 12.5, color: T.t1, wordBreak: "break-word" }}>{r.description || "—"}</span>
-        <span style={{ fontSize: 12.5, fontWeight: 600, whiteSpace: "nowrap", color: r.dir === "in" ? T.grn : T.red }}>
-          {r.dir === "in" ? "+" : "−"}{inr(r.amount)}
-        </span>
-        {r.bank_own && <span style={chip(T.slt, T.sltL)}>{BANK_OWN[r.bank_own] || r.bank_own}</span>}
-        <div style={{ width: 250, flexShrink: 0, borderRadius: 7, boxShadow: warn ? `0 0 0 1.5px ${T.amb}` : "none" }}>
-          <SearchSelect compact value={r.pick} options={opts} disabled={locked} theme={T}
-            onChange={(k) => upd(i, { pick: k })} placeholder={t("stmt.party_search_ph")} />
+        <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: T.t1, wordBreak: "break-word" }}>{r.description || "—"}</span>
+        {r.bank_own && <span style={tag(T.slt, T.sltL)}>{BANK_OWN[r.bank_own] || r.bank_own}</span>}
+        <span style={tag(ST[status][0], ST[status][1])}>{ST[status][2]}</span>
+        <b style={{ fontSize: 13, whiteSpace: "nowrap", width: 104, textAlign: "right", color: r.dir === "in" ? T.grn : T.red }}>{r.dir === "in" ? "+" : "−"}{inr2(r.amount)}</b>
+      </div>
+
+      {rowErr && <div style={{ marginTop: 6, fontSize: 12, color: T.red }}>{rowErr}</div>}
+
+      {/* Milaan me khud judi — kitaab ki entry saamne, galat ho to todo */}
+      {status === "auto" && (
+        <div style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 6, paddingLeft: 72, flexWrap: "wrap" }}>
+          <span style={{ flex: 1, minWidth: 0, fontSize: 12, color: T.t3 }}>
+            {t("stmt.matched_with", { id: r.auto.txn_id, party: r.auto.txn_party || "—" })}{r.auto.day_gap > 0 ? ` · ${t("stmt.gap_days", { n: r.auto.day_gap })}` : ""}
+          </span>
+          <button onClick={() => upd(i, { unmatched: true, edit: true })} style={{ ...sm(T.t3, false), border: "none", textDecoration: "underline", padding: "2px 4px" }}>{t("jz.unmatch")}</button>
         </div>
-        {conf && <span style={chip(conf[0], conf[1])}>{conf[2]}</span>}
-        {r.outcome && OUT[r.outcome] && (
-          <span style={chip(OUT[r.outcome][0], OUT[r.outcome][1])}>
-            {OUT[r.outcome][2]}{r.txn_id ? ` #${r.txn_id}` : ""}
-          </span>
-        )}
-        {r.outcome === "duplicate_suspect" && (
-          <label style={{ fontSize: 11.5, color: T.amb, display: "flex", alignItems: "center", gap: 4, cursor: "pointer" }}>
-            <input type="checkbox" checked={r.force} onChange={(e) => upd(i, { force: e.target.checked })} /> {t("stmt.force_create")}
-          </label>
-        )}
-      </div>
-      <div style={{ display: "flex", gap: "4px 12px", alignItems: "center", flexWrap: "wrap", marginTop: 5, paddingLeft: 26 }}>
-        {locked ? (
-          r.note ? <span style={{ fontSize: 11.5, color: T.t3 }}>{r.note}</span> : null
-        ) : (
-          <input value={r.note} maxLength={500} onChange={(e) => upd(i, { note: e.target.value })}
-            placeholder={t("stmt.remark_ph")} aria-label={t("stmt.remark_ph")}
-            style={{ flex: "1 1 220px", maxWidth: 380, height: 28, fontSize: 11.5, padding: "0 9px", border: `1px solid ${T.b1}`, borderRadius: 6, background: T.surface, color: T.t1, boxSizing: "border-box", fontFamily: "inherit" }} />
-        )}
-        {r.pick === "x:" && (
-          <div style={{ display: "flex", alignItems: "center", gap: 6, flex: "0 1 auto" }}>
-            <span style={{ fontSize: 11, fontWeight: 600, color: r.head ? T.t3 : T.red }}>{t("stmt.exp_head_label")}</span>
-            <div style={{ width: 190, borderRadius: 7, boxShadow: r.head ? "none" : `0 0 0 1.5px ${T.red}` }}>
-              <SearchSelect compact value={r.head || ""} options={headOpts} disabled={locked} theme={T}
-                onChange={(k) => upd(i, { head: k || "" })} placeholder={t("stmt.exp_head_ph")} />
-            </div>
+      )}
+
+      {/* Doosre khaate me wahi rakam mili — pehle iska faisla */}
+      {needElse && !locked && (
+        <div style={{ marginTop: 8, marginLeft: 72, padding: "9px 11px", borderRadius: 7, background: T.ambL, border: `1px solid ${T.ambM}` }}>
+          <div style={{ fontSize: 12, color: T.t2 }}>
+            {t("jz.else_found", { acc: r.elsewhere.account_name })} <b>{r.elsewhere.party || r.elsewhere.note || r.elsewhere.type}</b>
+            <span style={{ color: T.t3 }}> · {dmy(r.elsewhere.date)} · #{r.elsewhere.txn_id}{r.elsewhere.created_by_name ? " · " + t("stmt.by_whom", { name: r.elsewhere.created_by_name }) : ""}</span>
           </div>
-        )}
-        {!(r.pick || "").startsWith("a:") && (
-          <div style={{ display: "flex", alignItems: "center", gap: 6, flex: "0 1 auto" }}>
-            <span style={{ fontSize: 11, fontWeight: 600, color: T.t3 }}>{t("stmt.proj_label")}</span>
-            <div style={{ width: 210 }}>
-              <SearchSelect compact value={r.proj || ""} options={projOpts} disabled={locked} theme={T}
-                onChange={(k) => upd(i, { proj: k || "", proj_touched: true })} placeholder={t("stmt.proj_company")} />
-            </div>
-            {!locked && (r.proj_touched
-              ? <span style={{ fontSize: 10.5, color: T.t4 }}>{t("stmt.proj_yours")}</span>
-              : r.proj_why && <span title={t("stmt.proj_why_tip")} style={{ fontSize: 10.5, fontWeight: 600, padding: "2px 7px", borderRadius: 10, background: T.bluL, color: T.blu, whiteSpace: "nowrap" }}>{projWhy(r.proj_why)}</span>)}
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 7 }}>
+            <button onClick={() => upd(i, { els: { kind: "skip" } })} style={sm(T.grn, false)}>{t("stmt.dec_skip_btn")}</button>
+            <button onClick={move} disabled={!r.elsewhere.can_move || moving} title={r.elsewhere.can_move ? "" : t("stmt.move_no_access")}
+              style={{ ...sm(T.blu, false), opacity: r.elsewhere.can_move ? 1 : 0.45, cursor: r.elsewhere.can_move ? "pointer" : "not-allowed" }}>{moving ? "…" : t("stmt.dec_move_btn")}</button>
+            <button onClick={alag} style={sm(T.amb, false)}>{t("stmt.dec_create_btn")}</button>
           </div>
-        )}
-        {top && !r.bank_own && r.confidence !== "none" && (
-          <span style={{ flex: "2 1 260px", fontSize: 11, color: T.t4, lineHeight: 1.5 }}>
-            {t("stmt.why_prefix")} <b style={{ fontWeight: 600, color: T.t3 }}>{top.party_name}</b> — {whyText(top)}
+        </div>
+      )}
+
+      {/* Pakka andaza — ek click me maan lo */}
+      {pre && !locked && (
+        <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 7, paddingLeft: 72, flexWrap: "wrap" }}>
+          <span style={{ flex: 1, minWidth: 0, fontSize: 12, color: T.t2 }}>
+            {t("jz.guess")} <b style={{ color: T.t1 }}>{nameOf(r.pick)}</b>{r.kind === "xfer" ? ` · ${t("stmt.sub_transfer")}` : ` · ${projName(r.proj)}`}
+            {top ? <span style={{ color: T.t4 }}> — {whyText(top)}</span> : null}
           </span>
-        )}
-      </div>
-      {r.outcome === "duplicate_suspect" && r.existing && (
-        <div style={{ fontSize: 11, color: T.amb, marginTop: 3, paddingLeft: 26 }}>
-          {r.other ? t("stmt.dup_existing_other", { acct: r.other, desc: r.existing }) : t("stmt.dup_existing", { desc: r.existing })}
+          <button onClick={() => upd(i, { ok: true })} style={sm(T.grn, true)}>{t("jz.yes")}</button>
+          <button onClick={() => upd(i, { edit: true })} style={sm(T.t3, false)}>{t("jz.change")}</button>
+        </div>
+      )}
+
+      {/* Faisla ho chuka — ek line me, badalna ho to kholo */}
+      {closed && !locked && (
+        <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 6, paddingLeft: 72, flexWrap: "wrap" }}>
+          <span style={{ flex: 1, minWidth: 0, fontSize: 12, color: T.t2 }}>{summary()}{r.note ? <span style={{ color: T.t4 }}> · “{r.note}”</span> : null}</span>
+          {!(r.els && r.els.kind === "moved") && (
+            <button onClick={() => (r.els && r.els.kind === "skip" ? upd(i, { els: null }) : upd(i, { edit: true }))}
+              style={{ ...sm(T.t3, false), border: "none", textDecoration: "underline", padding: "2px 4px" }}>{t("jz.change")}</button>
+          )}
+        </div>
+      )}
+
+      {/* Sawaal + jawab */}
+      {!closed && !pre && !needElse && !locked && status !== "auto" && (
+        <div style={{ marginTop: 8, paddingLeft: 72 }}>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+            <span style={{ ...lbl, marginRight: 2 }}>{t("jz.ask")}</span>
+            {kinds.map((k) => (
+              <button key={k} onClick={() => setKind(k)} aria-pressed={r.kind === k}
+                style={{ fontSize: 12, fontWeight: r.kind === k ? 700 : 500, padding: "5px 11px", borderRadius: 6, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap",
+                  border: `1px solid ${r.kind === k ? T.blu : T.b2}`, background: r.kind === k ? T.bluL : T.surface, color: r.kind === k ? T.blu : k === "skip" ? T.t3 : T.t2 }}>
+                {kLabel(k)}
+              </button>
+            ))}
+            {!r.kind && !r.bank_own && top && r.confidence !== "strong" && top.kind !== "account" && (
+              <button onClick={() => upd(i, { kind: "party", pick: pickKey(top), edit: true, touched: true })} title={whyText(top)}
+                style={{ fontSize: 11.5, padding: "4px 9px", borderRadius: 14, cursor: "pointer", fontFamily: "inherit", border: `1px dashed ${T.amb}`, background: T.surface, color: T.amb }}>
+                {t("jz.maybe", { name: top.party_name })}
+              </button>
+            )}
+          </div>
+
+          {r.kind && r.kind !== "skip" && (
+            <div style={{ display: "flex", gap: "8px 12px", flexWrap: "wrap", alignItems: "center", marginTop: 8 }}>
+              {r.kind === "party" && (
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <span style={{ ...lbl, color: (r.pick || "").startsWith("p:") ? T.t3 : T.red }}>{t("jz.l_party")}</span>
+                  <div style={{ width: 240, borderRadius: 7, boxShadow: (r.pick || "").startsWith("p:") ? "none" : `0 0 0 1.5px ${T.red}` }}>
+                    <SearchSelect compact value={(r.pick || "").startsWith("p:") ? r.pick : ""} options={pOpts} theme={T}
+                      onChange={(k) => upd(i, { pick: k || "", touched: true })} placeholder={t("stmt.party_search_ph")} />
+                  </div>
+                </div>
+              )}
+              {r.kind === "xfer" && (
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <span style={{ ...lbl, color: (r.pick || "").startsWith("a:") ? T.t3 : T.red }}>{t("jz.l_acc")}</span>
+                  <div style={{ width: 240, borderRadius: 7, boxShadow: (r.pick || "").startsWith("a:") ? "none" : `0 0 0 1.5px ${T.red}` }}>
+                    <SearchSelect compact value={(r.pick || "").startsWith("a:") ? r.pick : ""} options={accOpts} theme={T}
+                      onChange={(k) => upd(i, { pick: k || "", touched: true })} placeholder={t("jz.acc_ph")} />
+                  </div>
+                </div>
+              )}
+              {r.kind === "exp" && (
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <span style={{ ...lbl, color: r.head ? T.t3 : T.red }}>{t("stmt.exp_head_label")}</span>
+                  <div style={{ width: 200, borderRadius: 7, boxShadow: r.head ? "none" : `0 0 0 1.5px ${T.red}` }}>
+                    <SearchSelect compact value={r.head || ""} options={headOpts} theme={T}
+                      onChange={(k) => upd(i, { head: k || "", touched: true })} placeholder={t("stmt.exp_head_ph")} />
+                  </div>
+                </div>
+              )}
+              {r.kind === "have" && (
+                <div style={{ display: "flex", alignItems: "center", gap: 6, flex: "1 1 360px" }}>
+                  <span style={{ ...lbl, color: r.haveTxn ? T.t3 : T.red }}>{t("jz.l_have")}</span>
+                  <div style={{ flex: 1, minWidth: 260, borderRadius: 7, boxShadow: r.haveTxn ? "none" : `0 0 0 1.5px ${T.red}` }}>
+                    <SearchSelect compact value={r.haveTxn || ""} options={bOpts} theme={T}
+                      onChange={(k) => upd(i, { haveTxn: k || "", touched: true })} placeholder={bOpts.length ? t("jz.have_ph") : t("jz.have_none")} />
+                  </div>
+                </div>
+              )}
+              {(r.kind === "party" || r.kind === "exp" || r.kind === "bare") && (
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <span style={lbl}>{t("stmt.proj_label")}</span>
+                  <div style={{ width: 200 }}>
+                    <SearchSelect compact value={r.proj || ""} options={projOpts} theme={T}
+                      onChange={(k) => upd(i, { proj: k || "", proj_touched: true, touched: true })} placeholder={t("stmt.proj_company")} />
+                  </div>
+                  {!r.proj_touched && r.proj_why && (
+                    <span title={t("stmt.proj_why_tip")} style={{ fontSize: 10.5, fontWeight: 600, padding: "2px 7px", borderRadius: 10, background: T.bluL, color: T.blu, whiteSpace: "nowrap" }}>{projWhy(r.proj_why)}</span>
+                  )}
+                </div>
+              )}
+              {r.kind !== "have" && (
+                <input value={r.note} maxLength={500} onChange={(e) => upd(i, { note: e.target.value })}
+                  placeholder={t("stmt.remark_ph")} aria-label={t("stmt.remark_ph")}
+                  style={{ flex: "1 1 200px", maxWidth: 340, height: 28, fontSize: 11.5, padding: "0 9px", border: `1px solid ${T.b1}`, borderRadius: 6, background: T.surface, color: T.t1, boxSizing: "border-box", fontFamily: "inherit" }} />
+              )}
+              {(status === "ready" || status === "have") && (
+                <button onClick={() => upd(i, { edit: false })} style={sm(T.grn, false)}>{t("jz.done")}</button>
+              )}
+            </div>
+          )}
+          {r.kind === "have" && <div style={{ marginTop: 5, fontSize: 11, color: T.t4 }}>{t("jz.have_note")}</div>}
+          {r.els && r.els.kind === "create" && <div style={{ marginTop: 5, fontSize: 11, color: T.amb }}>{t("jz.else_alag", { why: r.els.reason })}</div>}
         </div>
       )}
     </div>
   );
 });
 
-function Rows({ rows, kind }) {
-  if (!rows.length) {
-    return <div style={{ padding: "26px 16px", textAlign: "center", fontSize: 12.5, color: T.t4 }}>{t("stmt.nothing_here")}</div>;
-  }
-  return rows.map((r, i) => {
-    const s = kind === "ok" ? r.statement : r;
-    const amt = kind === "ok" ? r.statement.amount : r.amount;
-    const dir = kind === "ok" ? r.statement.dir : r.dir;
-    return (
-      <div key={i} style={{ display: "flex", gap: 12, padding: "9px 13px", borderBottom: i < rows.length - 1 ? `1px solid ${T.b1}` : "none", alignItems: "baseline" }}>
-        <span style={{ fontSize: 11.5, color: T.t3, whiteSpace: "nowrap", width: 62, flexShrink: 0 }}>{dmy(s.date)}</span>
-        <span style={{ flex: 1, minWidth: 0 }}>
-          <span style={{ fontSize: 12.5, color: T.t1 }}>
-            {kind === "books" ? (r.party || r.description || "—") : (s.description || "—")}
+// Kitaab me hai, statement me nahi — ya doosre khaate ki entry, ya rakam / tareekh galat, ya dohri
+function BookRows({ rows }) {
+  if (!rows.length) return <div style={{ padding: "26px 16px", textAlign: "center", fontSize: 12.5, color: T.t4 }}>{t("stmt.nothing_here")}</div>;
+  return (
+    <>
+      <div style={{ padding: "8px 13px", fontSize: 12, color: T.t3, borderBottom: `1px solid ${T.b1}`, lineHeight: 1.5 }}>{t("jz.extra_help")}</div>
+      {rows.map((r, i) => (
+        <div key={i} style={{ display: "flex", gap: 10, padding: "9px 13px", borderBottom: i < rows.length - 1 ? `1px solid ${T.b1}` : "none", alignItems: "baseline" }}>
+          <span style={{ fontSize: 11.5, color: T.t3, width: 62, flexShrink: 0 }}>{dmy(r.date)}</span>
+          <span style={{ flex: 1, minWidth: 0 }}>
+            <span style={{ fontSize: 12.5, color: T.t1 }}>{r.party || r.description || "—"}</span>
+            <span style={{ display: "block", fontSize: 11, color: T.t4, marginTop: 1 }}>#{r.txn_id}{r.type ? " · " + r.type : ""}</span>
           </span>
-          {kind === "ok" && (
-            <span style={{ display: "block", fontSize: 11, color: T.t4, marginTop: 1 }}>
-              {t("stmt.matched_with", { id: r.txn_id, party: r.txn_party || "—" })}
-              {r.day_gap > 0 ? ` · ${t("stmt.gap_days", { n: r.day_gap })}` : ""}
-            </span>
-          )}
-          {kind === "books" && r.txn_id && (
-            <span style={{ display: "block", fontSize: 11, color: T.t4, marginTop: 1 }}>#{r.txn_id} · {r.type}</span>
-          )}
-        </span>
-        <span style={{ fontSize: 12.5, fontWeight: 600, whiteSpace: "nowrap", color: dir === "in" ? T.grn : T.red }}>
-          {dir === "in" ? "+" : "−"}{inr(amt)}
-        </span>
-      </div>
-    );
-  });
+          <b style={{ fontSize: 12.5, whiteSpace: "nowrap", color: r.dir === "in" ? T.grn : T.red }}>{r.dir === "in" ? "+" : "−"}{inr2(r.amount)}</b>
+        </div>
+      ))}
+    </>
+  );
 }
