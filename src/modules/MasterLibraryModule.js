@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, useCallback, useRef, createContext, useContext } from "react";
 import ExpenseLibrarySection from "./library/ExpenseLibrarySection";
+import SubconStdRates from "./library/SubconStdRates";
 import PickSelect from "../components/PickSelect";
 import api from "../config/api";
 import SearchSelect from "../components/SearchSelect";
@@ -2058,7 +2059,9 @@ function SubconRateCardSection() {
   const lc = useLibCan();
 
   // ── Mode ──────────────────────────────────────────────────────────────
-  const [mode, setMode] = useState("package"); // "package" | "item_wise"
+  // "category" / "install" (23 Nov 2026) = city-wise rate card jo WO ke "Rate card se"
+  // aur "Item-wise" me aata hai (library/SubconStdRates.js).
+  const [mode, setMode] = useState("category"); // "category" | "install" | "package" | "item_wise"
 
   // ── Shared: Construction Type + City ──────────────────────────────────
   const [conTypes, setConTypes] = useState([]);
@@ -2601,11 +2604,12 @@ function SubconRateCardSection() {
     }}>{label}</button>
   );
 
-  return (
-    <div>
-      {/* ── Mode Toggle ─────────────────────────────────────────────────── */}
-      <div style={{display:"flex",gap:8,marginBottom:18,alignItems:"center"}}>
+  const stdMode = mode === "category" || mode === "install";
+  const modeBar = (
+      <div style={{display:"flex",gap:8,marginBottom:18,alignItems:"center",flexWrap:"wrap"}}>
         {[
+          {id:"category",  icon:"",   label:t("master_library.rc_mode_cat")},
+          {id:"install",   icon:"",   label:t("master_library.rc_mode_install")},
           {id:"package",   icon:"📐", label:t("master_library.floor_package_rates"),  desc:t("master_library.sqft_based_package_for_full_floor")},
           {id:"item_wise", icon:"🔧", label:t("master_library.work_item_rates"),       desc:t("master_library.unit_based_items_for_specialist_work")},
         ].map(m => (
@@ -2617,15 +2621,31 @@ function SubconRateCardSection() {
             color:mode===m.id?"white":T.textMid,
             fontSize:13, fontWeight:700, cursor:"pointer", transition:"all .15s",
           }}>
-            <span>{m.icon}</span> {m.label}
+            {m.icon ? <span>{m.icon}</span> : null} {m.label}
           </button>
         ))}
         <span style={{marginLeft:8,fontSize:11.5,color:T.textLight,alignSelf:"center"}}>
-          {mode==="package"
+          {mode==="category" ? t("master_library.rc_mode_cat_sub")
+            : mode==="install" ? t("master_library.rc_mode_install_sub")
+            : mode==="package"
             ? t("master_library.entire_floor_given_to_one_subcon")
             : t("master_library.specific_items_given_to_subcon_item")}
         </span>
       </div>
+  );
+  if (stdMode) {
+    return (
+      <div>
+        {modeBar}
+        <SubconStdRates key={mode} kind={mode === "category" ? "category" : "material"} canEdit={lc("edit")} />
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      {/* ── Mode Toggle ─────────────────────────────────────────────────── */}
+      {modeBar}
 
       {/* ── Step 1: Construction Type ──────────────────────────────────── */}
       <div style={{background:"white",borderRadius:10,border:`1px solid ${T.border}`,padding:"14px 18px",marginBottom:12}}>

@@ -9,6 +9,7 @@ import { t, Rich } from "../../i18n";
 import { can, canAny, currentUser } from "../../utils/perms";
 import { StageBillGrid, StageLinesPanel, HandoverModal, BackchargeList } from "./StageBilling";
 import { StatementView, ProjectStatementView, MeasureBillModal, BillMeasuresInline } from "./BillingV2";
+import WoLinePicker from "./WoLinePicker";
 
 function TabSubcon({ projectId, project }) {
   // Roles & Access (5 Oct 2026) — buttons usi Subcon tick se jo server
@@ -431,6 +432,8 @@ function TabSubcon({ projectId, project }) {
                 <span style={{fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:3,background:stC+"22",color:stC}}>{wo.status}</span>
               </div>
               {wo.bill_count>0&&<div style={{fontSize:9.5,color:T.t4,marginTop:3}}>{wo.bill_count} bill{wo.bill_count>1?"s":""}</div>}
+              {/* Banate waqt ka rate / qty approval baaki — tab tak bill nahi (23 Nov 2026) */}
+              {wo.create_approval_pending ? <div style={{fontSize:9.5,color:T.amb,fontWeight:700,marginTop:3}}>{t("subcon.wo_list_appr_baaki")}</div> : null}
             </div>
           );
         })}
@@ -2331,13 +2334,45 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
   const removeItem = (si,ii) => setForm(p=>({...p, sections:p.sections.map((s,i)=>i===si?{...s,items:s.items.filter((_,j)=>j!==ii)}:s)}));
   const updateItem = (si,ii,key,val) => setForm(p=>({...p, sections:p.sections.map((s,i)=>i===si?{...s,items:s.items.map((it,j)=>j===ii?{...it,[key]:val}:it)}:s)}));
 
+  // ── Line jodne ke 4 tareeke (23 Nov 2026) — Estimate se / Rate card se / Item-wise
+  // (WoLinePicker) aur Manual (khaali line). Picker ki line section ke naam se judti
+  // hai: usi naam ka section ho to usme, warna naya. Pehla khaali section badal jaata hai.
+  const [picker, setPicker] = useState(null);          // "estimate" | "rate_card" | "item" | null
+  const [apprReason, setApprReason] = useState("");
+  const [apprAsk, setApprAsk] = useState(false);       // server ne wajah maangi
+  const isBlankSec = (sec) => !sec.title.trim() && sec.items.every(i => !i.description && !i.qty && !i.rate);
+  const addGroups = (groups) => {
+    setForm(p => {
+      let secs = p.sections.filter(sec => !isBlankSec(sec));
+      for (const g of groups) {
+        const k = secs.findIndex(sec => sec.title.trim().toLowerCase() === String(g.title || "").trim().toLowerCase());
+        if (k >= 0) secs = secs.map((sec, i) => i === k ? { ...sec, items: [...sec.items.filter(i => i.description || i.qty || i.rate), ...g.items] } : sec);
+        else secs = [...secs, { title: g.title || "", items: g.items }];
+      }
+      return { ...p, sections: secs.length ? secs : [blankSection()] };
+    });
+    setPicker(null);
+  };
+  const addManualLine = () => {
+    if (!form.sections.length) { addSection(); return; }
+    addItem(form.sections.length - 1);
+  };
+  // Server ka hi niyam (utils/subconRates): rate card se zyada rate, BOQ ke baaki se zyada qty.
+  const lineFlags = (it) => {
+    const out = [];
+    if (it.card_rate != null && it.card_rate !== "" && (parseFloat(it.rate) || 0) > Number(it.card_rate) + 0.005) out.push({ kind: "rate", card: Number(it.card_rate) });
+    if (it.source === "estimate" && it.balance != null && (parseFloat(it.qty) || 0) > Number(it.balance) + 0.0005) out.push({ kind: "qty", balance: Number(it.balance) });
+    return out;
+  };
+  const flaggedCount = form.sections.reduce((n, sec) => n + sec.items.filter(it => lineFlags(it).length).length, 0);
+  const SRC_LABEL = { estimate: t("subcon.src_estimate"), rate_card: t("subcon.src_rate_card"), item: t("subcon.src_item") };
+
   // Pick from library
   const pickLibItem = (item) => {
     if(!showLibFor) return;
     const {secIdx,itemIdx} = showLibFor;
     updateItem(secIdx,itemIdx,"description",item.name);
     updateItem(secIdx,itemIdx,"unit",item.unit||"");
-    updateItem(secIdx,itemIdx,"rate",item.rate||"");
     updateItem(secIdx,itemIdx,"isLibrary",true);
     setShowLibFor(null); setLibSearch("");
   };
@@ -2359,8 +2394,13 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
       if (!finalSections.length) return alert(t("subcon.select_at_least_one_item_with"));
     } else {
       // manual
+      // Line hai par rate khaali / 0 → pehle chupchaap gir jaati thi; ab batao.
+      const noRate = form.sections.flatMap(s => s.items).filter(i => i.description && parseFloat(i.qty) > 0 && !(parseFloat(i.rate) > 0));
+      if (noRate.length) return alert(t("subcon.wo_rate_khaali", { n: noRate.length, item: noRate[0].description }));
+      if (form.sections.some(s => !s.title.trim() && s.items.some(i => i.description))) return alert(t("subcon.wo_section_naam"));
       finalSections = form.sections.filter(s=>s.title.trim() && s.items.some(i=>i.description&&i.qty&&i.rate));
       if (!finalSections.length) return alert(t("subcon.at_least_1_section_with_items"));
+      if (flaggedCount && apprReason.trim().length < 3) { setApprAsk(true); return alert(t("subcon.wo_approval_wajah_likho")); }
     }
 
     setSaving(true);
@@ -2385,14 +2425,25 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
             unit:        i.unit||"Sqft",
             qty:         parseFloat(i.qty||0),
             rate:        parseFloat(i.rate),
+            // Line kahan se aayi (23 Nov 2026) — server isi se rate card / BOQ dekhta hai.
+            source:           i.source || "manual",
+            work_category_id: i.work_category_id || undefined,
+            material_id:      i.material_id || undefined,
+            estimate_item_id: i.estimate_item_id || undefined,
           })),
       })).filter(s=>s.items.length>0),
+      approval_reason: apprReason.trim() || undefined,
     };
     const res = await api.post("/subcon/work-orders", payload)
       .catch(e=>({success:false,message:e?.message||"Network error"}));
     setSaving(false);
     if(res.success) {
+      const ca = res.data && res.data.create_approval;
+      if (ca && ca.status === "Pending") alert(t("subcon.wo_bana_approval_baaki", { n: ca.lines }));
       onSaved();
+    } else if (res.code === "WO_APPROVAL_REASON") {
+      setApprAsk(true);
+      alert(res.message);
     } else {
       const errMsg = res.message || res.error || `Server error (${res._status||500})`;
       alert("Create Work Order failed:\n" + errMsg);
@@ -2448,10 +2499,11 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
             <div style={{fontSize:14,fontWeight:700,color:"white",marginBottom:8}}>{t("subcon.new_work_order")}</div>
             {/* WO Type toggle */}
             <div style={{display:"flex",gap:6}}>
+              {/* 23 Nov 2026: purana "Item-wise" (subcon_work_items) ab "Line se" ke andar
+                  material + installation rate wala Item-wise hai. */}
               {[
-                {id:"manual",    icon:"✏️", label:t("common.manual")},
-                {id:"package",   icon:"📐", label:t("subcon.package")},
-                {id:"item_wise", icon:"🔧", label:t("subcon.item_wise")},
+                {id:"manual",    icon:"", label:t("subcon.way_tab_lines")},
+                {id:"package",   icon:"", label:t("subcon.package")},
               ].map(m=>(
                 <button key={m.id} onClick={()=>setWoType(m.id)} style={{
                   padding:"5px 12px", borderRadius:6, fontSize:11, fontWeight:700, cursor:"pointer",
@@ -2464,7 +2516,7 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
                 </button>
               ))}
               <span style={{fontSize:10,color:"rgba(255,255,255,0.35)",alignSelf:"center",marginLeft:4}}>
-                {woType==="manual" ? t("subcon.type_items_manually") : woType==="package" ? t("subcon.load_from_subcon_rate_card") : t("subcon.pick_individual_items_from_library")}
+                {woType==="manual" ? t("subcon.way_tab_lines_sub") : woType==="package" ? t("subcon.load_from_subcon_rate_card") : t("subcon.pick_individual_items_from_library")}
               </span>
             </div>
           </div>
@@ -3440,6 +3492,21 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
              {t("common.add_section")}
             </button>
           </div>
+          {/* Line jodne ke 4 tareeke */}
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:8,marginBottom:12}}>
+            {[
+              {k:"estimate",  l:t("subcon.way_estimate"),  d:t("subcon.way_estimate_sub")},
+              {k:"rate_card", l:t("subcon.way_rate_card"), d:t("subcon.way_rate_card_sub")},
+              {k:"item",      l:t("subcon.way_item"),      d:t("subcon.way_item_sub")},
+              {k:"manual",    l:t("subcon.way_manual"),    d:t("subcon.way_manual_sub")},
+            ].map(w=>(
+              <button key={w.k} onClick={()=> w.k==="manual" ? addManualLine() : setPicker(w.k)}
+                style={{textAlign:"left",padding:"9px 11px",borderRadius:8,border:`1px solid ${T.b2}`,background:T.surface,cursor:"pointer"}}>
+                <div style={{fontSize:12.5,fontWeight:600,color:T.ind}}>{w.l}</div>
+                <div style={{fontSize:11,color:T.t3,marginTop:2,lineHeight:1.35}}>{w.d}</div>
+              </button>
+            ))}
+          </div>
 
           {form.sections.map((sec,si)=>{
             const secTotal = sec.items.reduce((s,it)=>s+(parseFloat(it.qty)||0)*(parseFloat(it.rate)||0),0);
@@ -3466,13 +3533,17 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
 
                 {/* Items — hidden when collapsed */}
                 {!secCollapsed[si]&&(<div style={{padding:"10px 12px"}}>
-                  <div style={{display:"grid",gridTemplateColumns:"1fr 70px 80px 90px 34px 28px",gap:6,marginBottom:5}}>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 70px 80px 90px 84px 28px",gap:6,marginBottom:5}}>
                     {["Description","Unit","Qty","Rate/Unit","Amt",""].map(h=><div key={h} style={{fontSize:8.5,color:T.t4,fontWeight:700,textTransform:"uppercase"}}>{h}</div>)}
                   </div>
                   {sec.items.map((it,ii)=>{
                     const amt=(parseFloat(it.qty)||0)*(parseFloat(it.rate)||0);
+                    const fl = lineFlags(it);
+                    // Rate card ka unit aaya ho tabhi lock (category / material par unit na bhara ho to likhne do).
+                    const unitLocked = (it.source==="rate_card" || it.source==="item") && !!String(it.unit||"").trim();
                     return(
-                      <div key={ii} style={{display:"grid",gridTemplateColumns:"1fr 70px 80px 90px 34px 28px",gap:6,marginBottom:6,alignItems:"center"}}>
+                      <React.Fragment key={ii}>
+                      <div style={{display:"grid",gridTemplateColumns:"1fr 70px 80px 90px 84px 28px",gap:6,marginBottom:(it.source&&it.source!=="manual")||fl.length?2:6,alignItems:"center"}}>
                         <div style={{position:"relative"}}>
                           <input value={it.description} onChange={e=>updateItem(si,ii,"description",e.target.value)}
                             placeholder={t("estimate.item_description")}
@@ -3482,12 +3553,27 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
                             title={t("subcon.pick_from_library")}
                             style={{position:"absolute",right:4,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:T.blu,fontSize:14,lineHeight:1,padding:0}}>📚</button>
                         </div>
-                        <input value={it.unit} onChange={e=>updateItem(si,ii,"unit",e.target.value)} placeholder={t("master_library.sqft")} style={inpStyle}/>
-                        <input type="number" value={it.qty} onChange={e=>updateItem(si,ii,"qty",e.target.value)} placeholder="0" style={inpStyle}/>
-                        <input type="number" value={it.rate} onChange={e=>updateItem(si,ii,"rate",e.target.value)} placeholder="0" style={inpStyle}/>
+                        <input value={it.unit} onChange={e=>updateItem(si,ii,"unit",e.target.value)} placeholder={t("master_library.sqft")}
+                          readOnly={unitLocked} title={unitLocked?t("subcon.unit_rate_card_ka"):undefined}
+                          style={unitLocked?{...inpStyle,background:T.surfaceB,color:T.t3}:inpStyle}/>
+                        <input type="number" value={it.qty} onChange={e=>updateItem(si,ii,"qty",e.target.value)} placeholder="0" style={fl.some(x=>x.kind==="qty")?{...inpStyle,borderColor:T.amb}:inpStyle}/>
+                        <input type="number" value={it.rate} onChange={e=>updateItem(si,ii,"rate",e.target.value)} placeholder="0" style={fl.some(x=>x.kind==="rate")?{...inpStyle,borderColor:T.amb}:inpStyle}/>
                         <div style={{fontSize:11,fontWeight:700,color:T.grn,textAlign:"right"}}>{amt>0?fmtC(amt):""}</div>
                         <button onClick={()=>removeItem(si,ii)} style={{background:"none",border:"none",color:T.red,cursor:"pointer",fontSize:15,padding:0,lineHeight:1}}>×</button>
                       </div>
+                      {((it.source&&it.source!=="manual")||fl.length>0)&&(
+                        <div style={{display:"flex",flexWrap:"wrap",gap:"2px 10px",fontSize:10.5,margin:"0 0 7px 2px"}}>
+                          {SRC_LABEL[it.source]&&<span style={{color:T.ind,fontWeight:600}}>{SRC_LABEL[it.source]}</span>}
+                          {it.card_rate!=null&&it.card_rate!==""&&<span style={{color:T.t3}}>{t("subcon.line_card_rate",{rate:fmtC(it.card_rate)})}</span>}
+                          {it.source==="estimate"&&it.balance!=null&&<span style={{color:T.t3}}>{t("subcon.line_boq_baaki",{n:it.balance,unit:it.unit||""})}</span>}
+                          {fl.map(x=>(
+                            <span key={x.kind} style={{color:T.amb,fontWeight:600}}>
+                              {x.kind==="rate"?t("subcon.line_rate_upar"):t("subcon.line_qty_upar")}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      </React.Fragment>
                     );
                   })}
                   <button onClick={()=>addItem(si)}
@@ -3499,8 +3585,20 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
             );
           })}
 
+          {/* Rate card se zyada rate / BOQ se zyada qty → approval ki wajah */}
+          {(flaggedCount>0||apprAsk)&&(
+            <div style={{border:`1px solid ${T.ambM}`,background:T.ambL,borderRadius:8,padding:"10px 12px",marginBottom:10}}>
+              <div style={{fontSize:12.5,fontWeight:600,color:T.t1,marginBottom:4}}>{t("subcon.appr_box_title",{n:flaggedCount})}</div>
+              <div style={{fontSize:11.5,color:T.t2,marginBottom:6,lineHeight:1.45}}>{t("subcon.appr_box_help")}</div>
+              <textarea value={apprReason} onChange={e=>setApprReason(e.target.value)} rows={2}
+                placeholder={t("subcon.appr_box_placeholder")} aria-label={t("subcon.appr_box_title",{n:flaggedCount})}
+                style={{...inpStyle,resize:"vertical",fontFamily:"inherit"}}/>
+            </div>
+          )}
+
           {/* Grand Total */}
           <div style={{textAlign:"right",fontSize:14,fontWeight:800,color:T.grn,padding:"6px 0"}}>{t("subcon.grand_total_fmtc", { fmtC: fmtC(grandTotal) })}</div>
+          {picker&&<WoLinePicker mode={picker} projectId={projectId} onAdd={addGroups} onClose={()=>setPicker(null)}/>}
           </>)}
         </div>
 
@@ -3779,7 +3877,6 @@ function EditWOModal({ wo, subcons, projectId, fmtC, inpStyle, lblStyle, onClose
     const {si,ii} = showLibFor;
     updateItem(si,ii,"description",item.name);
     updateItem(si,ii,"unit",item.unit||"");
-    updateItem(si,ii,"rate",item.rate||"");
     setShowLibFor(null); setLibSearch("");
   };
 
