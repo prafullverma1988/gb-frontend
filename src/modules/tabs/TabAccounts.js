@@ -18,6 +18,7 @@
 // lagta hai, aur ye screen galat number pakadne ke liye hi bani hai.
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import PickSelect from "../../components/PickSelect";
+import SearchSelect from "../../components/SearchSelect";
 import api, { getUser } from "../../config/api";
 import { T, fmtN } from "../shared/tokens";
 import { Panel, PHead, Pill } from "../shared/ui";
@@ -295,9 +296,237 @@ function HealthLog() {
   );
 }
 
+// ── Insight se sudhaar (23 Nov 2026) ──────────────────────────────────
+// Prafull: insight me jo entry galat hai use wahin theek karo, par badlaav
+// approval ke baad hi lage — approval yahin Khaata Ledger me (drawer nahi).
+// "Spend kisi khaate se nahi kata" ki har entry: paisa kahan se gaya —
+// company khaata / staff wallet / udhaar tha. Admin bheje to usi waqt lagu.
+// Server: POST /accounts/health/fixes, niyam utils/khaataFix.js
+
+// Sudhaar jo admin ke approve ka intezaar kar rahe hain
+function FixRequests({ reqs, canDecide, onDone }) {
+  const [open, setOpen] = useState({});
+  const [busy, setBusy] = useState(null);
+  const [err, setErr] = useState("");
+  if (!reqs.length) return null;
+  const decide = async (r, decision) => {
+    let note = "";
+    if (decision === "reject") { note = (window.prompt(t("kf.reject_why")) || "").trim(); if (note.length < 3) return; }
+    setBusy(r.id); setErr("");
+    const x = await api.post(`/finance/accounts/health/fixes/${r.id}/decide`, { decision, note }).catch((e) => ({ success: false, message: e.message }));
+    setBusy(null);
+    if (!x || !x.success) { setErr((x && x.message) || t("kf.fail")); return; }
+    onDone();
+  };
+  const ACT = { account: t("kf.a_account"), wallet: t("kf.a_wallet"), udhaar: t("kf.a_udhaar") };
+  return (
+    <div style={{ padding: "10px 16px", borderBottom: `1px solid ${T.b1}`, background: T.ambL }}>
+      <div style={{ fontSize: 12.5, fontWeight: 700, color: T.amb, marginBottom: 6 }}>{t("kf.pending_title", { n: reqs.length })}</div>
+      {err && <div style={{ fontSize: 12, color: T.red, marginBottom: 6 }}>{err}</div>}
+      {reqs.map((r) => {
+        // Kahan jaa raha hai — khaata / wallet / udhaar ke hisaab se jod
+        const g = {};
+        r.items.forEach((it) => { const k = it.action + ":" + (it.target || ""); (g[k] = g[k] || { label: (it.target ? it.target + " · " : "") + ACT[it.action], n: 0, amt: 0 }); g[k].n += 1; g[k].amt += it.amount; });
+        return (
+          <div key={r.id} style={{ background: T.surface, border: `1px solid ${T.b1}`, borderRadius: 8, padding: "9px 12px", marginBottom: 6 }}>
+            <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+              <b style={{ fontSize: 12.5, color: T.t1 }}>#{r.id}</b>
+              <span style={{ fontSize: 12, color: T.t2, flex: 1, minWidth: 200 }}>
+                {t("kf.req_line", { by: r.created_by_name || "—", n: r.items.length, amt: inr(r.total) })} · “{r.note}”
+              </span>
+              <button onClick={() => setOpen((o) => ({ ...o, [r.id]: !o[r.id] }))} style={{ border: "none", background: "none", color: T.blu, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
+                {open[r.id] ? t("kf.hide_lines") : t("kf.show_lines")}
+              </button>
+              {canDecide ? (
+                <>
+                  <button disabled={busy === r.id} onClick={() => decide(r, "reject")} style={{ fontSize: 12, fontWeight: 700, padding: "5px 12px", borderRadius: 6, cursor: "pointer", fontFamily: "inherit", border: `1px solid ${T.red}`, background: T.surface, color: T.red }}>{t("kf.reject")}</button>
+                  <button disabled={busy === r.id} onClick={() => decide(r, "approve")} style={{ fontSize: 12, fontWeight: 700, padding: "5px 12px", borderRadius: 6, cursor: "pointer", fontFamily: "inherit", border: `1px solid ${T.grn}`, background: T.grn, color: "#fff" }}>{busy === r.id ? "…" : t("kf.approve")}</button>
+                </>
+              ) : <span style={{ fontSize: 11.5, color: T.t3 }}>{t("kf.wait_admin")}</span>}
+            </div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
+              {Object.values(g).map((x) => (
+                <span key={x.label} style={{ fontSize: 11.5, padding: "2px 9px", borderRadius: 12, background: T.surfaceB, border: `1px solid ${T.b1}`, color: T.t2 }}>{x.label}: {x.n} · {inr(x.amt)}</span>
+              ))}
+            </div>
+            {open[r.id] && (
+              <div style={{ marginTop: 7, border: `1px solid ${T.b1}`, borderRadius: 6, maxHeight: 240, overflowY: "auto" }}>
+                {r.items.map((it, i) => (
+                  <div key={it.txn_id} style={{ display: "flex", gap: 10, padding: "5px 9px", borderTop: i ? `1px solid ${T.b1}` : "none", fontSize: 12, alignItems: "baseline" }}>
+                    <span style={{ width: 62, color: T.t3 }}>{dmy(it.date)}</span>
+                    <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: T.t2 }} title={it.note || ""}>#{it.txn_id} · {it.party || "—"}{it.note ? ` · ${it.note}` : ""}</span>
+                    <span style={{ color: T.blu, whiteSpace: "nowrap" }}>→ {(it.target ? it.target + " · " : "") + ACT[it.action]}</span>
+                    <b style={{ whiteSpace: "nowrap", color: T.t1 }}>{inr(it.amount)}</b>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// "Spend kisi khaate se nahi kata" — har entry ka jawab, phir ek request
+function UnbackedFixModal({ accounts, isAdmin, onClose }) {
+  const [rows, setRows] = useState(null);
+  const [staff, setStaff] = useState([]);
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [q, setQ] = useState("");
+  const [by, setBy] = useState("");
+  const [sel, setSel] = useState({});      // txn_id → true (chuni hui)
+  const [plan, setPlan] = useState({});    // txn_id → { action, account_id?, staff_party_id?, label }
+  const [note, setNote] = useState("");
+  const [done, setDone] = useState(null);
+  const dlgRef = useRef(null);
+  useEffect(() => {
+    api.get("/finance/accounts/health/unbacked-rows").then((r) => { if (r && r.success) setRows(r.data || []); else setErr((r && r.message) || t("kf.fail")); }).catch((e) => setErr(e.message));
+    api.get("/finance/parties").then((r) => { if (r && r.success) setStaff((r.data || []).filter((p) => Number(p.is_staff) === 1)); }).catch(() => {});
+    if (dlgRef.current) dlgRef.current.focus();
+  }, []);
+  const accOpts = useMemo(() => (accounts || []).map((a) => ({ key: String(a.id), label: a.name, sub: a.type === "cash" ? t("acctledger.cash_box") : (a.bank_name || "") })), [accounts]);
+  const stOpts = useMemo(() => staff.map((p) => ({ key: String(p.id), label: p.name })), [staff]);
+  const list = rows || [];
+  const byCnt = useMemo(() => {
+    const m = {};
+    list.forEach((r) => { const k = r.created_by_name || "—"; m[k] = (m[k] || 0) + 1; });
+    return Object.entries(m).sort((a, b) => b[1] - a[1]);
+  }, [list]);
+  const ql = q.trim().toLowerCase();
+  const shown = list.filter((r) => (!by || (r.created_by_name || "—") === by)
+    && (!ql || `${r.party || ""} ${r.project || ""} ${r.note || ""} ${r.description || ""} ${r.amount} ${r.id}`.toLowerCase().includes(ql)));
+  const free = shown.filter((r) => !r.pending_request);
+  const selIds = Object.keys(sel).filter((k) => sel[k]).map(Number);
+  const allOn = free.length > 0 && free.every((r) => sel[r.id]);
+  const assign = (p) => {
+    if (!selIds.length) { setErr(t("kf.pick_rows")); return; }
+    setPlan((pl) => { const n = { ...pl }; selIds.forEach((id) => { n[id] = p; }); return n; });
+    setSel({}); setErr("");
+  };
+  const planned = Object.entries(plan).map(([id, p]) => ({ txn_id: Number(id), ...p }));
+  const plannedAmt = planned.reduce((a, p) => a + ((list.find((r) => r.id === p.txn_id) || {}).amount || 0), 0);
+  const send = async () => {
+    if (!planned.length) return;
+    if (note.trim().length < 3) { setErr(t("kf.note_req")); return; }
+    setBusy(true); setErr("");
+    const items = planned.map((p) => ({ txn_id: p.txn_id, action: p.action, account_id: p.account_id, staff_party_id: p.staff_party_id }));
+    const r = await api.post("/finance/accounts/health/fixes", { kind: "unbacked", note, items }).catch((e) => ({ success: false, message: e.message }));
+    setBusy(false);
+    if (!r || !r.success) { setErr((r && r.message) || t("kf.fail")); return; }
+    setDone(r.data);
+  };
+  const td = { padding: "7px 10px", borderTop: `1px solid ${T.b1}`, fontSize: 12, color: T.t2, verticalAlign: "middle" };
+  const chipBtn = (on) => ({ fontSize: 11.5, fontWeight: on ? 700 : 500, padding: "4px 10px", borderRadius: 14, cursor: "pointer", fontFamily: "inherit", border: `1px solid ${on ? T.blu : T.b1}`, background: on ? T.bluL : T.surface, color: on ? T.blu : T.t3, whiteSpace: "nowrap" });
+  return (
+    <div onClick={() => !busy && onClose(!!done)} style={{ position: "fixed", inset: 0, zIndex: 420, background: "rgba(15,23,42,.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+      <div ref={dlgRef} role="dialog" aria-modal="true" aria-label={t("kf.title")} tabIndex={-1} onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => { if (e.key === "Escape" && !e.defaultPrevented && !busy) { e.preventDefault(); onClose(!!done); } }}
+        style={{ background: T.surface, borderRadius: 12, width: "min(1000px,100%)", maxHeight: "92vh", display: "flex", flexDirection: "column", overflow: "hidden", boxShadow: "0 20px 60px rgba(0,0,0,.25)", outline: "none" }}>
+        <div style={{ padding: "13px 18px", borderBottom: `1px solid ${T.b1}`, display: "flex", gap: 10, alignItems: "center" }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: T.t1 }}>{t("kf.title")}</div>
+            <div style={{ fontSize: 11.5, color: T.t3, marginTop: 2 }}>{t("kf.sub")}</div>
+          </div>
+          <button onClick={() => onClose(!!done)} aria-label={t("kf.close")} style={{ border: "none", background: "none", fontSize: 20, color: T.t4, cursor: "pointer" }}>×</button>
+        </div>
+        {done ? (
+          <div style={{ padding: "28px 20px", textAlign: "center" }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: T.grn }}>{done.status === "approved" ? t("kf.done_applied", { n: done.done }) : t("kf.done_sent", { id: done.id })}</div>
+            <button onClick={() => onClose(true)} style={{ marginTop: 14, fontSize: 12.5, fontWeight: 700, padding: "7px 18px", borderRadius: 7, cursor: "pointer", fontFamily: "inherit", border: `1px solid ${T.blu}`, background: T.blu, color: "#fff" }}>{t("kf.close")}</button>
+          </div>
+        ) : (
+          <>
+            <div style={{ padding: "10px 18px", borderBottom: `1px solid ${T.b1}`, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+              <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("kf.search_ph")} aria-label={t("kf.search_ph")}
+                style={{ flex: "1 1 200px", maxWidth: 280, height: 30, fontSize: 12.5, padding: "0 10px", border: `1px solid ${T.b2}`, borderRadius: 6, fontFamily: "inherit", background: T.surface, color: T.t1 }} />
+              <span style={{ fontSize: 11.5, color: T.t3 }}>{t("kf.by")}</span>
+              <button onClick={() => setBy("")} style={chipBtn(!by)}>{t("kf.all", { n: list.length })}</button>
+              {byCnt.map(([name, n]) => <button key={name} onClick={() => setBy(name)} style={chipBtn(by === name)}>{name} {n}</button>)}
+            </div>
+            {/* Chuni hui line par ek saath jawab */}
+            <div style={{ padding: "9px 18px", borderBottom: `1px solid ${T.b1}`, background: selIds.length ? T.bluL : T.surfaceB, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+              <b style={{ fontSize: 12.5, color: selIds.length ? T.blu : T.t3 }}>{selIds.length ? t("kf.sel_n", { n: selIds.length }) : t("kf.sel_none")}</b>
+              <span style={{ fontSize: 12, color: T.t2 }}>{t("kf.where")}</span>
+              <div style={{ width: 210 }}>
+                <SearchSelect compact value="" options={accOpts} theme={T} placeholder={t("kf.a_account_ph")}
+                  onChange={(k) => k && assign({ action: "account", account_id: Number(k), label: (accOpts.find((o) => o.key === k) || {}).label })} />
+              </div>
+              <div style={{ width: 190 }}>
+                <SearchSelect compact value="" options={stOpts} theme={T} placeholder={t("kf.a_wallet_ph")}
+                  onChange={(k) => k && assign({ action: "wallet", staff_party_id: Number(k), label: (stOpts.find((o) => o.key === k) || {}).label + " · " + t("kf.a_wallet") })} />
+              </div>
+              <button onClick={() => assign({ action: "udhaar", label: t("kf.a_udhaar") })} style={{ fontSize: 12, fontWeight: 700, padding: "5px 11px", borderRadius: 6, cursor: "pointer", fontFamily: "inherit", border: `1px solid ${T.slt}`, background: T.surface, color: T.slt }}>{t("kf.a_udhaar")}</button>
+            </div>
+            {err && <div style={{ padding: "8px 18px", fontSize: 12.5, color: T.red, background: T.redL }}>{err}</div>}
+            <div style={{ flex: 1, overflow: "auto" }}>
+              {!rows ? <div style={{ padding: 24, textAlign: "center", color: T.t4, fontSize: 13 }}>{t("common.loading")}</div> : (
+                <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 760 }}>
+                  <thead><tr style={{ background: T.surfaceB }}>
+                    <th style={{ ...td, borderTop: "none", width: 30 }}>
+                      <input type="checkbox" aria-label={t("kf.sel_all")} checked={allOn} onChange={(e) => setSel(e.target.checked ? Object.fromEntries(free.map((r) => [r.id, true])) : {})} />
+                    </th>
+                    {[t("kf.c_date"), t("kf.c_what"), t("kf.c_by"), t("kf.c_amt"), t("kf.c_where")].map((h, i) => (
+                      <th key={h} style={{ ...td, borderTop: "none", fontSize: 10, fontWeight: 700, color: T.t4, textTransform: "uppercase", textAlign: i === 3 ? "right" : "left" }}>{h}</th>
+                    ))}
+                  </tr></thead>
+                  <tbody>
+                    {shown.map((r) => {
+                      const p = plan[r.id];
+                      return (
+                        <tr key={r.id} style={{ background: sel[r.id] ? T.bluL : r.pending_request ? T.surfaceB : T.surface }}>
+                          <td style={td}>{r.pending_request ? null : <input type="checkbox" aria-label={"#" + r.id} checked={!!sel[r.id]} onChange={(e) => setSel((s) => ({ ...s, [r.id]: e.target.checked }))} />}</td>
+                          <td style={{ ...td, whiteSpace: "nowrap" }}>{dmy(r.date)}</td>
+                          <td style={{ ...td, maxWidth: 380 }}>
+                            <div style={{ color: T.t1, fontWeight: 600 }}>{r.party || "—"}{r.project ? <span style={{ color: T.t3, fontWeight: 400 }}> · {r.project}</span> : null}</div>
+                            <div style={{ color: T.t3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.note || r.description || ""}>#{r.id}{(r.note || r.description) ? " · " + (r.note || r.description) : ""}</div>
+                          </td>
+                          <td style={{ ...td, whiteSpace: "nowrap" }}>{r.created_by_name || "—"}</td>
+                          <td style={{ ...td, textAlign: "right", whiteSpace: "nowrap", fontWeight: 700, color: T.t1 }}>{inr(r.amount)}</td>
+                          <td style={{ ...td, whiteSpace: "nowrap" }}>
+                            {r.pending_request ? <span style={{ fontSize: 11, fontWeight: 700, color: T.amb }}>{t("kf.in_approval", { id: r.pending_request })}</span>
+                              : p ? (
+                                <span style={{ display: "inline-flex", gap: 5, alignItems: "center", fontSize: 11.5, fontWeight: 700, padding: "2px 4px 2px 9px", borderRadius: 12, background: p.action === "udhaar" ? T.sltL : T.grnL, color: p.action === "udhaar" ? T.slt : T.grn }}>
+                                  {p.label}
+                                  <button onClick={() => setPlan((pl) => { const n = { ...pl }; delete n[r.id]; return n; })} aria-label={t("kf.unset")} style={{ border: "none", background: "none", cursor: "pointer", color: "inherit", fontSize: 13, padding: "0 4px" }}>×</button>
+                                </span>
+                              ) : <span style={{ color: T.t4 }}>—</span>}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
+            <div style={{ padding: "11px 18px", borderTop: `1px solid ${T.b1}`, background: T.surfaceB, display: "flex", gap: 9, alignItems: "center", flexWrap: "wrap" }}>
+              <span style={{ fontSize: 12.5, color: planned.length ? T.t1 : T.t3, fontWeight: 600 }}>{t("kf.planned", { n: planned.length, amt: inr(plannedAmt) })}</span>
+              <input value={note} onChange={(e) => setNote(e.target.value)} maxLength={2000} placeholder={t("kf.note_ph")} aria-label={t("kf.note_ph")}
+                style={{ flex: "1 1 220px", fontSize: 12.5, padding: "7px 10px", borderRadius: 6, border: `1.5px solid ${note.trim().length >= 3 ? T.grnM : T.ambM}`, fontFamily: "inherit", background: T.surface, color: T.t1 }} />
+              <button onClick={send} disabled={busy || !planned.length}
+                style={{ fontSize: 12.5, fontWeight: 700, padding: "8px 16px", borderRadius: 7, cursor: busy || !planned.length ? "default" : "pointer", fontFamily: "inherit", border: "none",
+                  background: planned.length ? (isAdmin ? T.grn : T.blu) : T.b2, color: "#fff" }}>
+                {busy ? "…" : isAdmin ? t("kf.apply_n", { n: planned.length }) : t("kf.send_n", { n: planned.length })}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function HealthPanel({ health, onShow, onPickAccount, onReload, role }) {
   const [open, setOpen] = useState(true);
   const [showLog, setShowLog] = useState(false);
+  // Insight se sudhaar: khuli request (approval ka intezaar) + sudhaar ki khidki
+  const [fixReqs, setFixReqs] = useState([]);
+  const [fixOpen, setFixOpen] = useState(false);
+  const loadFix = useCallback(() => {
+    api.get("/finance/accounts/health/fixes?status=pending").then((r) => { if (r && r.success) setFixReqs(r.data || []); }).catch(() => {});
+  }, []);
+  useEffect(() => { if (health) loadFix(); }, [health, loadFix]);
   if (!health) return null;
   const { transfer_legs: legs, unbacked_spend: un, duplicates: dup, zero_opening: zo, went_negative: neg } = health;
   // Server ki findings (key + review halat) type se jodte hain — dikhne ki
@@ -364,6 +593,7 @@ function HealthPanel({ health, onShow, onPickAccount, onReload, role }) {
         </div>
       ) : open && (
         <div>
+          <FixRequests reqs={fixReqs} canDecide={canDecide} onDone={() => { loadFix(); onReload(); }} />
           {items.map((it, i) => {
             const can = (it.ids && it.ids.length) || it.account;
             return (
@@ -374,6 +604,12 @@ function HealthPanel({ health, onShow, onPickAccount, onReload, role }) {
                   <div style={{ fontSize: 12, color: T.t3, lineHeight: 1.5 }}>{it.detail}</div>
                   <ReviewBox finding={fByType[it.type]} canReview={canReview} canDecide={canDecide} onDone={onReload} />
                 </div>
+                {it.type === "unbacked" && canReview && (
+                  <button onClick={() => setFixOpen(true)}
+                    style={{ flexShrink: 0, whiteSpace: "nowrap", cursor: "pointer", border: `1px solid ${T.grn}`, background: T.grn, color: "#fff", fontSize: 11.5, fontWeight: 700, padding: "5px 11px", borderRadius: 6 }}>
+                    {t("kf.fix_btn")}
+                  </button>
+                )}
                 {can ? (
                   <button
                     onClick={() => (it.account ? onPickAccount(it.account, it.accountLabel) : onShow(it.title, it.ids))}
@@ -393,6 +629,8 @@ function HealthPanel({ health, onShow, onPickAccount, onReload, role }) {
         </div>
       )}
       {showLog && <HealthLog key={(health.findings || []).map((f) => (f.review ? f.review.id + f.review.status : "-")).join("|")} />}
+      {fixOpen && <UnbackedFixModal accounts={health.accounts} isAdmin={canDecide}
+        onClose={(changed) => { setFixOpen(false); loadFix(); if (changed) onReload(); }} />}
     </Panel>
   );
 }
