@@ -318,7 +318,9 @@ function FixRequests({ reqs, canDecide, onDone }) {
     if (!x || !x.success) { setErr((x && x.message) || t("kf.fail")); return; }
     onDone();
   };
-  const ACT = { account: t("kf.a_account"), wallet: t("kf.a_wallet"), udhaar: t("kf.a_udhaar") };
+  const ACT = { account: t("kf.a_account"), wallet: t("kf.a_wallet"), udhaar: t("kf.a_udhaar"), delete: t("kfd.a_delete"), edit: t("kfd.a_edit"), not_dup: t("kfd.a_not_dup") };
+  // Badlo: kya badlega — tareekh / rakam / naya khaata
+  const editTxt = (it) => (it.action !== "edit" || !it.changes ? "" : [it.changes.date ? dmy(it.changes.date) : "", it.changes.amount ? inr(it.changes.amount) : "", it.new_account || ""].filter(Boolean).join(" · "));
   return (
     <div style={{ padding: "10px 16px", borderBottom: `1px solid ${T.b1}`, background: T.ambL }}>
       <div style={{ fontSize: 12.5, fontWeight: 700, color: T.amb, marginBottom: 6 }}>{t("kf.pending_title", { n: reqs.length })}</div>
@@ -327,10 +329,12 @@ function FixRequests({ reqs, canDecide, onDone }) {
         // Kahan jaa raha hai — khaata / wallet / udhaar ke hisaab se jod
         const g = {};
         r.items.forEach((it) => { const k = it.action + ":" + (it.target || ""); (g[k] = g[k] || { label: (it.target ? it.target + " · " : "") + ACT[it.action], n: 0, amt: 0 }); g[k].n += 1; g[k].amt += it.amount; });
+        const kindLbl = r.kind === "dup" ? t("kfd.kind") : t("kf.kind");
         return (
           <div key={r.id} style={{ background: T.surface, border: `1px solid ${T.b1}`, borderRadius: 8, padding: "9px 12px", marginBottom: 6 }}>
             <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
               <b style={{ fontSize: 12.5, color: T.t1 }}>#{r.id}</b>
+              <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 10, background: T.surfaceB, color: T.t2 }}>{kindLbl}</span>
               <span style={{ fontSize: 12, color: T.t2, flex: 1, minWidth: 200 }}>
                 {t("kf.req_line", { by: r.created_by_name || "—", n: r.items.length, amt: inr(r.total) })} · “{r.note}”
               </span>
@@ -355,7 +359,7 @@ function FixRequests({ reqs, canDecide, onDone }) {
                   <div key={it.txn_id} style={{ display: "flex", gap: 10, padding: "5px 9px", borderTop: i ? `1px solid ${T.b1}` : "none", fontSize: 12, alignItems: "baseline" }}>
                     <span style={{ width: 62, color: T.t3 }}>{dmy(it.date)}</span>
                     <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: T.t2 }} title={it.note || ""}>#{it.txn_id} · {it.party || "—"}{it.note ? ` · ${it.note}` : ""}</span>
-                    <span style={{ color: T.blu, whiteSpace: "nowrap" }}>→ {(it.target ? it.target + " · " : "") + ACT[it.action]}</span>
+                    <span style={{ color: it.action === "delete" ? T.red : T.blu, whiteSpace: "nowrap" }}>→ {(it.target ? it.target + " · " : "") + ACT[it.action]}{editTxt(it) ? ": " + editTxt(it) : ""}</span>
                     <b style={{ whiteSpace: "nowrap", color: T.t1 }}>{inr(it.amount)}</b>
                   </div>
                 ))}
@@ -517,12 +521,149 @@ function UnbackedFixModal({ accounts, isAdmin, onClose }) {
   );
 }
 
+// "Duplicate lag rahi entry" — har jodi aamne-saamne; har entry: Rakho / Hatao / Badlo,
+// ya poori jodi "Dono alag hain". Phir ek request → admin approval (23 Nov 2026)
+function DupFixModal({ accounts, isAdmin, onClose }) {
+  const [groups, setGroups] = useState(null);
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [plan, setPlan] = useState({});    // txn_id → { action: delete|edit|not_dup, changes? }
+  const [edit, setEdit] = useState(null);  // txn_id jiska Badlo khula hai
+  const [note, setNote] = useState("");
+  const [done, setDone] = useState(null);
+  const dlgRef = useRef(null);
+  useEffect(() => {
+    api.get("/finance/accounts/health/dup-groups").then((r) => { if (r && r.success) setGroups(r.data || []); else setErr((r && r.message) || t("kf.fail")); }).catch((e) => setErr(e.message));
+    if (dlgRef.current) dlgRef.current.focus();
+  }, []);
+  const accOpts = useMemo(() => (accounts || []).map((a) => ({ key: String(a.id), label: a.name })), [accounts]);
+  const accName = (id) => ((accounts || []).find((a) => Number(a.id) === Number(id)) || {}).name || "#" + id;
+  const setP = (id, v) => setPlan((p) => { const n = { ...p }; if (v) n[id] = v; else delete n[id]; return n; });
+  const planned = Object.entries(plan).map(([id, p]) => ({ txn_id: Number(id), ...p }));
+  const send = async () => {
+    if (!planned.length) return;
+    if (note.trim().length < 3) { setErr(t("kf.note_req")); return; }
+    for (const g of groups || []) {
+      if (g.ids.every((id) => plan[id] && plan[id].action === "delete")) { setErr(t("kfd.all_delete")); return; }
+    }
+    setBusy(true); setErr("");
+    const r = await api.post("/finance/accounts/health/fixes", { kind: "dup", note, items: planned }).catch((e) => ({ success: false, message: e.message }));
+    setBusy(false);
+    if (!r || !r.success) { setErr((r && r.message) || t("kf.fail")); return; }
+    setDone(r.data);
+  };
+  const btn = (on, c) => ({ fontSize: 11.5, fontWeight: 700, padding: "4px 10px", borderRadius: 6, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap",
+    border: `1px solid ${on ? c : T.b2}`, background: on ? c : T.surface, color: on ? "#fff" : T.t2 });
+  const inp = { height: 28, fontSize: 12, padding: "0 8px", border: `1px solid ${T.b2}`, borderRadius: 6, fontFamily: "inherit", background: T.surface, color: T.t1 };
+  return (
+    <div onClick={() => !busy && onClose(!!done)} style={{ position: "fixed", inset: 0, zIndex: 420, background: "rgba(15,23,42,.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+      <div ref={dlgRef} role="dialog" aria-modal="true" aria-label={t("kfd.title")} tabIndex={-1} onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => { if (e.key === "Escape" && !e.defaultPrevented && !busy) { e.preventDefault(); onClose(!!done); } }}
+        style={{ background: T.surface, borderRadius: 12, width: "min(1000px,100%)", maxHeight: "92vh", display: "flex", flexDirection: "column", overflow: "hidden", boxShadow: "0 20px 60px rgba(0,0,0,.25)", outline: "none" }}>
+        <div style={{ padding: "13px 18px", borderBottom: `1px solid ${T.b1}`, display: "flex", gap: 10, alignItems: "center" }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: T.t1 }}>{t("kfd.title")}</div>
+            <div style={{ fontSize: 11.5, color: T.t3, marginTop: 2 }}>{t("kfd.sub")}</div>
+          </div>
+          <button onClick={() => onClose(!!done)} aria-label={t("kf.close")} style={{ border: "none", background: "none", fontSize: 20, color: T.t4, cursor: "pointer" }}>×</button>
+        </div>
+        {done ? (
+          <div style={{ padding: "28px 20px", textAlign: "center" }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: T.grn }}>{done.status === "approved" ? t("kf.done_applied", { n: done.done }) : t("kf.done_sent", { id: done.id })}</div>
+            <button onClick={() => onClose(true)} style={{ marginTop: 14, fontSize: 12.5, fontWeight: 700, padding: "7px 18px", borderRadius: 7, cursor: "pointer", fontFamily: "inherit", border: `1px solid ${T.blu}`, background: T.blu, color: "#fff" }}>{t("kf.close")}</button>
+          </div>
+        ) : (
+          <>
+            {err && <div style={{ padding: "8px 18px", fontSize: 12.5, color: T.red, background: T.redL }}>{err}</div>}
+            <div style={{ flex: 1, overflow: "auto", padding: "12px 18px" }}>
+              {!groups ? <div style={{ padding: 24, textAlign: "center", color: T.t4, fontSize: 13 }}>{t("common.loading")}</div>
+                : !groups.length ? <div style={{ padding: 24, textAlign: "center", color: T.t4, fontSize: 13 }}>{t("kfd.none")}</div>
+                : groups.map((g) => {
+                  const allNot = g.ids.every((id) => plan[id] && plan[id].action === "not_dup");
+                  const busyG = g.rows.some((r) => r.pending_request);
+                  return (
+                    <div key={g.ids.join("-")} style={{ border: `1px solid ${T.b1}`, borderRadius: 9, marginBottom: 10, overflow: "hidden" }}>
+                      <div style={{ padding: "8px 12px", background: T.surfaceB, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                        <b style={{ fontSize: 12.5, color: T.t1 }}>{dmy(g.date)} · {g.party || "—"}</b>
+                        <span style={{ fontSize: 12, color: T.t3 }}>{g.type === "receipt" ? t("kfd.in") : t("kfd.out")} · {g.account_name} · {inr(g.amount)} × {g.count}</span>
+                        <span style={{ flex: 1 }} />
+                        {busyG ? <span style={{ fontSize: 11.5, fontWeight: 700, color: T.amb }}>{t("kf.in_approval", { id: g.rows.find((r) => r.pending_request).pending_request })}</span> : (
+                          <button onClick={() => setPlan((p) => { const n = { ...p }; g.ids.forEach((id) => { if (allNot) delete n[id]; else n[id] = { action: "not_dup" }; }); return n; })}
+                            style={btn(allNot, T.grn)}>{t("kfd.not_dup")}</button>
+                        )}
+                      </div>
+                      {g.rows.map((r) => {
+                        const p = plan[r.id];
+                        const act = p ? p.action : "keep";
+                        return (
+                          <div key={r.id} style={{ padding: "8px 12px", borderTop: `1px solid ${T.b1}`, opacity: act === "delete" ? 0.6 : 1 }}>
+                            <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                              <span style={{ fontSize: 12, fontWeight: 700, color: T.t1, width: 64 }}>#{r.id}</span>
+                              <span style={{ flex: 1, minWidth: 220, fontSize: 12, color: T.t2 }}>
+                                {t("kfd.by", { name: r.created_by_name || "—", when: dmy(String(r.created_at || "").slice(0, 10)) })}
+                                {r.project ? ` · ${r.project}` : ""}{r.reference_no ? ` · ${t("kfd.ref")} ${r.reference_no}` : ""}{r.mop ? ` · ${r.mop}` : ""}
+                                {(r.note || r.description) ? <span style={{ display: "block", color: T.t3 }}>“{r.note || r.description}”</span> : null}
+                              </span>
+                              {!r.pending_request && !allNot && (
+                                <span style={{ display: "flex", gap: 5 }}>
+                                  <button onClick={() => { setP(r.id, null); setEdit(null); }} style={btn(act === "keep", T.slt)}>{t("kfd.keep")}</button>
+                                  <button onClick={() => { setP(r.id, { action: "delete" }); setEdit(null); }} style={btn(act === "delete", T.red)}>{t("kfd.delete")}</button>
+                                  <button onClick={() => { setEdit(r.id); setP(r.id, { action: "edit", changes: (p && p.changes) || {} }); }} style={btn(act === "edit", T.blu)}>{t("kfd.edit")}</button>
+                                </span>
+                              )}
+                            </div>
+                            {act === "edit" && (
+                              <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginTop: 7, paddingLeft: 74 }}>
+                                <label style={{ fontSize: 11.5, color: T.t3 }}>{t("kfd.f_date")}
+                                  <input type="date" defaultValue={(p.changes && p.changes.date) || r.date} style={{ ...inp, marginLeft: 5 }}
+                                    onChange={(e) => setP(r.id, { action: "edit", changes: { ...(plan[r.id] || {}).changes, date: e.target.value !== r.date ? e.target.value : undefined } })} />
+                                </label>
+                                <label style={{ fontSize: 11.5, color: T.t3 }}>{t("kfd.f_amount")}
+                                  <input type="number" min="0" step="0.01" defaultValue={(p.changes && p.changes.amount) || r.amount} style={{ ...inp, width: 110, marginLeft: 5 }}
+                                    onChange={(e) => setP(r.id, { action: "edit", changes: { ...(plan[r.id] || {}).changes, amount: Number(e.target.value) !== Number(r.amount) ? Number(e.target.value) : undefined } })} />
+                                </label>
+                                <span style={{ fontSize: 11.5, color: T.t3 }}>{t("kfd.f_account")}</span>
+                                <div style={{ width: 200 }}>
+                                  <SearchSelect compact value={String((p.changes && p.changes.account_id) || r.account_id || "")} options={accOpts} theme={T}
+                                    onChange={(k) => setP(r.id, { action: "edit", changes: { ...(plan[r.id] || {}).changes, account_id: Number(k) !== Number(r.account_id) ? Number(k) : undefined } })} />
+                                </div>
+                                {p.changes && !Object.values(p.changes).some((v) => v != null) && <span style={{ fontSize: 11.5, color: T.amb }}>{t("kfd.no_change")}</span>}
+                              </div>
+                            )}
+                            {act === "edit" && edit !== r.id && p.changes && p.changes.account_id ? <div style={{ fontSize: 11.5, color: T.blu, paddingLeft: 74 }}>→ {accName(p.changes.account_id)}</div> : null}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })}
+            </div>
+            <div style={{ padding: "11px 18px", borderTop: `1px solid ${T.b1}`, background: T.surfaceB, display: "flex", gap: 9, alignItems: "center", flexWrap: "wrap" }}>
+              <span style={{ fontSize: 12.5, color: planned.length ? T.t1 : T.t3, fontWeight: 600 }}>
+                {t("kfd.planned", { d: planned.filter((x) => x.action === "delete").length, e: planned.filter((x) => x.action === "edit").length, o: planned.filter((x) => x.action === "not_dup").length })}
+              </span>
+              <input value={note} onChange={(e) => setNote(e.target.value)} maxLength={2000} placeholder={t("kfd.note_ph")} aria-label={t("kfd.note_ph")}
+                style={{ flex: "1 1 220px", fontSize: 12.5, padding: "7px 10px", borderRadius: 6, border: `1.5px solid ${note.trim().length >= 3 ? T.grnM : T.ambM}`, fontFamily: "inherit", background: T.surface, color: T.t1 }} />
+              <button onClick={send} disabled={busy || !planned.length}
+                style={{ fontSize: 12.5, fontWeight: 700, padding: "8px 16px", borderRadius: 7, cursor: busy || !planned.length ? "default" : "pointer", fontFamily: "inherit", border: "none",
+                  background: planned.length ? (isAdmin ? T.grn : T.blu) : T.b2, color: "#fff" }}>
+                {busy ? "…" : isAdmin ? t("kf.apply_n", { n: planned.length }) : t("kf.send_n", { n: planned.length })}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function HealthPanel({ health, onShow, onPickAccount, onReload, role }) {
   const [open, setOpen] = useState(true);
   const [showLog, setShowLog] = useState(false);
   // Insight se sudhaar: khuli request (approval ka intezaar) + sudhaar ki khidki
   const [fixReqs, setFixReqs] = useState([]);
   const [fixOpen, setFixOpen] = useState(false);
+  const [dupOpen, setDupOpen] = useState(false);
   const loadFix = useCallback(() => {
     api.get("/finance/accounts/health/fixes?status=pending").then((r) => { if (r && r.success) setFixReqs(r.data || []); }).catch(() => {});
   }, []);
@@ -604,6 +745,12 @@ function HealthPanel({ health, onShow, onPickAccount, onReload, role }) {
                   <div style={{ fontSize: 12, color: T.t3, lineHeight: 1.5 }}>{it.detail}</div>
                   <ReviewBox finding={fByType[it.type]} canReview={canReview} canDecide={canDecide} onDone={onReload} />
                 </div>
+                {it.type === "duplicates" && canReview && (
+                  <button onClick={() => setDupOpen(true)}
+                    style={{ flexShrink: 0, whiteSpace: "nowrap", cursor: "pointer", border: `1px solid ${T.grn}`, background: T.grn, color: "#fff", fontSize: 11.5, fontWeight: 700, padding: "5px 11px", borderRadius: 6 }}>
+                    {t("kf.fix_btn")}
+                  </button>
+                )}
                 {it.type === "unbacked" && canReview && (
                   <button onClick={() => setFixOpen(true)}
                     style={{ flexShrink: 0, whiteSpace: "nowrap", cursor: "pointer", border: `1px solid ${T.grn}`, background: T.grn, color: "#fff", fontSize: 11.5, fontWeight: 700, padding: "5px 11px", borderRadius: 6 }}>
@@ -631,6 +778,8 @@ function HealthPanel({ health, onShow, onPickAccount, onReload, role }) {
       {showLog && <HealthLog key={(health.findings || []).map((f) => (f.review ? f.review.id + f.review.status : "-")).join("|")} />}
       {fixOpen && <UnbackedFixModal accounts={health.accounts} isAdmin={canDecide}
         onClose={(changed) => { setFixOpen(false); loadFix(); if (changed) onReload(); }} />}
+      {dupOpen && <DupFixModal accounts={health.accounts} isAdmin={canDecide}
+        onClose={(changed) => { setDupOpen(false); loadFix(); if (changed) onReload(); }} />}
     </Panel>
   );
 }
