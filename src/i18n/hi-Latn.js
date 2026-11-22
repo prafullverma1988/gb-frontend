@@ -17504,6 +17504,20 @@ const dict = {
   "bm.approve_now": "Abhi approve karo",
   "bm.open_batch": "Batch kholo",
   "bm.open_draft": "Draft kholo",
+  "bk.s_made": "Bana",
+  "bk.s_appr": "Approval me",
+  "bk.s_final": "Faisla",
+  "bk.s_not_sent": "abhi bheja nahi",
+  "bk.m_draft": "Abhi bheja nahi — neeche note likh kar approval ke liye bhejo.",
+  "bk.m_skip": "{n} line par faisla baaki",
+  "bk.t_sum": "Saransh",
+  "bk.t_lines": "Line ({n})",
+  "bk.t_skip": "Nahi bani ({n})",
+  "bk.t_change": "Badlaav",
+  "bk.o_made": "bani #{id}",
+  "bk.o_already": "pehle se thi",
+  "bk.o_not": "nahi bani",
+  "bk.close": "Band karo",
 };
 
 export default dict;

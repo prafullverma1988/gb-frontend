@@ -17501,6 +17501,20 @@ const dict = {
   "bm.approve_now": "अभी अप्रूव करें",
   "bm.open_batch": "बैच खोलें",
   "bm.open_draft": "ड्राफ़्ट खोलें",
+  "bk.s_made": "बना",
+  "bk.s_appr": "अप्रूवल में",
+  "bk.s_final": "फ़ैसला",
+  "bk.s_not_sent": "अभी भेजा नहीं",
+  "bk.m_draft": "अभी भेजा नहीं — नीचे नोट लिखकर अप्रूवल के लिए भेजें।",
+  "bk.m_skip": "{n} लाइन पर फ़ैसला बाकी",
+  "bk.t_sum": "सारांश",
+  "bk.t_lines": "लाइन ({n})",
+  "bk.t_skip": "नहीं बनी ({n})",
+  "bk.t_change": "बदलाव",
+  "bk.o_made": "बनी #{id}",
+  "bk.o_already": "पहले से थी",
+  "bk.o_not": "नहीं बनी",
+  "bk.close": "बंद करें",
 };
 
 export default dict;

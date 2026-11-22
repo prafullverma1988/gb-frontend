@@ -17502,6 +17502,20 @@ const dict = {
   "bm.approve_now": "Approve now",
   "bm.open_batch": "Open batch",
   "bm.open_draft": "Open draft",
+  "bk.s_made": "Created",
+  "bk.s_appr": "In approval",
+  "bk.s_final": "Decision",
+  "bk.s_not_sent": "not sent yet",
+  "bk.m_draft": "Not sent yet — write the note below and send it for approval.",
+  "bk.m_skip": "{n} lines still need a decision",
+  "bk.t_sum": "Summary",
+  "bk.t_lines": "Lines ({n})",
+  "bk.t_skip": "Not entered ({n})",
+  "bk.t_change": "Changes",
+  "bk.o_made": "entered #{id}",
+  "bk.o_already": "was already there",
+  "bk.o_not": "not entered",
+  "bk.close": "Close",
 };
 
 export default dict;

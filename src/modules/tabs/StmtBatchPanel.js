@@ -189,6 +189,11 @@ export function BatchModal({ id, onClose }) {
   const [edits, setEdits] = useState({});
   const [cnote, setCnote] = useState("");
   const [parties, setParties] = useState([]);
+  // Khidki ke tab (22 Nov 2026): sum Saransh · lines Line · skip Nahi bani · change Badlaav.
+  // null = abhi tay nahi — batch aate hi wahi tab jahan kaam baaki hai.
+  const [tab, setTab] = useState(null);
+  // Approval me ho to kiski baari: { mine } ya { name, more }
+  const [turn, setTurn] = useState(null);
   // Chhooti line: chuni hui idx + wajah
   const [skSel, setSkSel] = useState({});
   const [skNote, setSkNote] = useState("");
@@ -233,6 +238,34 @@ export function BatchModal({ id, onClose }) {
   const submit = () => act(() => api.put(`/finance/statement/batches/${id}`, { batch_note: note, submit: true })).catch(() => {});
   const drop = () => { if (!window.confirm(t("stb.cancel_confirm"))) return; act(() => api.del ? api.del(`/finance/statement/batches/${id}`) : api(`/finance/statement/batches/${id}`, { method: "DELETE" })).catch(() => {}); };
 
+  const skAll = b && b.status === "approved" && b.results && Array.isArray(b.results.results)
+    ? b.results.results.filter((x) => x.outcome === "duplicate_suspect" || x.outcome === "invalid") : [];
+  const skOpen = skAll.filter((x) => !x.followup).length;
+  const chgPend = b ? (b.changes || []).filter((c) => c.status === "pending").length : 0;
+  const hasChange = !!b && ((b.status === "approved" && (b.created || []).length > 0) || (b.changes || []).length > 0);
+  const bStatus = b ? b.status : null;
+  const bReq = b ? b.approval_request_id : null;
+  // Pehli baar: jahan kaam baaki hai wahi tab
+  useEffect(() => {
+    if (!b || tab) return;
+    setTab(skOpen ? "skip" : chgPend ? "change" : "sum");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [b]);
+  // Approval me: meri baari hai ya kiski — approvals ki apni list se
+  useEffect(() => {
+    if (bStatus !== "pending" || !bReq) { setTurn(null); return undefined; }
+    let dead = false;
+    const find = (x) => ((x && x.success && Array.isArray(x.data)) ? x.data : []).find((it) => Number(it.id) === Number(bReq) || Number(it._request_id) === Number(bReq));
+    (async () => {
+      try {
+        if (find(await api.get("/approvals/pending?scope=my"))) { if (!dead) setTurn({ mine: true }); return; }
+        const it = find(await api.get("/approvals/pending?scope=all"));
+        if (!dead) setTurn(it ? { name: it._waitingOnName || it._waitingOn || it.pending_role || "", more: Number(it._waitingOnMore) || 0 } : null);
+      } catch (_) { if (!dead) setTurn(null); }
+    })();
+    return () => { dead = true; };
+  }, [bStatus, bReq]);
+
   const st = ST();
   const th = { fontSize: 10, fontWeight: 700, color: T.t4, textTransform: "uppercase", padding: "6px 10px", textAlign: "left", background: T.surfaceB };
   const td = { fontSize: 12.5, color: T.t2, padding: "6px 10px", borderTop: `1px solid ${T.b1}` };
@@ -261,8 +294,58 @@ export function BatchModal({ id, onClose }) {
           {!b && !err && <div style={{ color: T.t4, fontSize: 13 }}>{t("common.loading")}</div>}
           {b && (
             <>
-              {b.status === "rejected" && b.decision_note && <div style={{ marginBottom: 10, padding: "8px 12px", borderRadius: 7, background: T.redL, color: T.red, fontSize: 12.5 }}>{t("stb.rejected_why", { name: b.decided_by_name || "—", why: b.decision_note })}</div>}
-              {b.status === "approved" && res && <div style={{ marginBottom: 10, padding: "8px 12px", borderRadius: 7, background: T.grnL, color: T.grn, fontSize: 12.5, fontWeight: 600 }}>{t("stb.approved_res", { c: res.created, d: res.duplicate_suspect, a: res.already_imported })}</div>}
+              {/* Sthiti: Bana → Approval me → faisla. Ek nazar me batch kahan hai aur ab kya karna hai. */}
+              {(() => {
+                const fin = ["approved", "rejected", "failed", "undone"].includes(b.status);
+                const steps = [
+                  [t("bk.s_made"), `${b.created_by_name || "—"} · ${dmy(b.created_at)}`, true, T.blu],
+                  [t("bk.s_appr"), b.submitted_at ? dmy(b.submitted_at) : (b.status === "draft" ? t("bk.s_not_sent") : ""), b.status !== "draft", b.status === "pending" ? T.pur : T.blu],
+                  [fin ? st[b.status][2] : t("bk.s_final"), fin ? `${b.decided_by_name || ""}${b.decided_at ? " · " + dmy(b.decided_at) : ""}` : "", fin, fin ? st[b.status][0] : T.t4],
+                ];
+                const msg = b.status === "draft" ? [t("bk.m_draft"), T.t2]
+                  : b.status === "pending" ? [turn ? (turn.mine ? t("bm.turn_mine") : t("bm.turn_other", { name: turn.name + (turn.more ? " +" + turn.more : "") })) : t("stb.pending_help"), turn && turn.mine ? T.grn : T.t2]
+                  : b.status === "rejected" ? [t("stb.rejected_why", { name: b.decided_by_name || "—", why: b.decision_note || "—" }), T.red]
+                  : b.status === "approved" && res ? [t("stb.approved_res", { c: res.created, d: res.duplicate_suspect, a: res.already_imported }), T.grn]
+                  : b.status === "failed" ? [(b.results && b.results.error) || t("stb.fail"), T.red] : null;
+                return (
+                  <div style={{ marginBottom: 12, padding: "11px 13px", borderRadius: 8, border: `1px solid ${T.b1}`, background: T.surfaceB }}>
+                    <div style={{ display: "flex", alignItems: "flex-start" }}>
+                      {steps.map(([label, sub, on, c], i) => (
+                        <React.Fragment key={i}>
+                          {i > 0 && <div style={{ flex: 1, height: 2, margin: "9px 8px 0", background: on ? c : T.b2, borderRadius: 1 }} />}
+                          <div style={{ display: "flex", gap: 7, alignItems: "flex-start", minWidth: 0 }}>
+                            <span style={{ width: 20, height: 20, borderRadius: 10, flexShrink: 0, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700,
+                              background: on ? c : T.surface, color: on ? "#fff" : T.t4, border: `1.5px solid ${on ? c : T.b2}` }}>{i + 1}</span>
+                            <span style={{ minWidth: 0 }}>
+                              <b style={{ display: "block", fontSize: 12.5, color: on ? T.t1 : T.t4 }}>{label}</b>
+                              {sub ? <span style={{ fontSize: 11, color: T.t3 }}>{sub}</span> : null}
+                            </span>
+                          </div>
+                        </React.Fragment>
+                      ))}
+                    </div>
+                    {msg && (
+                      <div style={{ marginTop: 9, fontSize: 12.5, fontWeight: 600, color: msg[1] }}>
+                        {msg[0]}
+                        {skOpen > 0 && <button onClick={() => setTab("skip")} style={{ marginLeft: 8, border: "none", background: "none", padding: 0, color: T.red, fontWeight: 700, fontSize: 12.5, cursor: "pointer", fontFamily: "inherit", textDecoration: "underline" }}>{t("bk.m_skip", { n: skOpen })}</button>}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+              <div role="tablist" style={{ display: "flex", gap: 4, marginBottom: 12, borderBottom: `1px solid ${T.b1}`, flexWrap: "wrap" }}>
+                {[["sum", t("bk.t_sum"), 0, T.t1], ["lines", t("bk.t_lines", { n: b.entries.length }), 0, T.t1],
+                  ...(skAll.length ? [["skip", t("bk.t_skip", { n: skAll.length }), skOpen, T.red]] : []),
+                  ...(hasChange ? [["change", t("bk.t_change"), chgPend, T.amb]] : [])].map(([k, label, dot, c]) => (
+                  <button key={k} role="tab" aria-selected={tab === k} onClick={() => setTab(k)}
+                    style={{ fontSize: 12.5, fontWeight: tab === k ? 700 : 500, padding: "8px 13px", marginBottom: -1, cursor: "pointer", fontFamily: "inherit", border: "none",
+                      borderBottom: `2px solid ${tab === k ? T.blu : "transparent"}`, background: "none", color: tab === k ? T.t1 : T.t3, display: "inline-flex", alignItems: "center", gap: 6 }}>
+                    {label}
+                    {dot > 0 && <span style={{ fontSize: 10.5, fontWeight: 700, minWidth: 17, height: 17, padding: "0 5px", borderRadius: 9, background: c, color: "#fff", display: "inline-flex", alignItems: "center", justifyContent: "center" }}>{dot}</span>}
+                  </button>
+                ))}
+              </div>
+              {tab === "sum" && (<>
               <div style={{ marginBottom: 12, padding: "9px 12px", borderRadius: 8, background: T.bluL, border: `1px solid ${T.bluM}`, fontSize: 12.5, color: T.t2, display: "flex", gap: 18, flexWrap: "wrap" }}>
                 <b style={{ color: T.t1 }}>{b.account_name}</b>
                 {b.account_now != null && <span>{t("stmt.pv_acc_now")}: <b>{inr(b.account_now)}</b></span>}
@@ -287,20 +370,29 @@ export function BatchModal({ id, onClose }) {
                   ))}
                 </tbody>
               </table>
-              <details style={{ marginBottom: 12 }}>
-                <summary style={{ fontSize: 12, fontWeight: 700, color: T.t2, cursor: "pointer" }}>{t("stb.all_lines", { n: b.entries.length })}</summary>
-                <div style={{ marginTop: 6, border: `1px solid ${T.b1}`, borderRadius: 8, maxHeight: 280, overflow: "auto" }}>
-                  {b.entries.map((e, i) => (
-                    <div key={i} style={{ padding: "5px 10px", borderTop: i ? `1px solid ${T.b1}` : "none", display: "flex", gap: 10, fontSize: 12 }}>
-                      <span style={{ width: 62, color: T.t3 }}>{dmy(e.date)}</span>
-                      <span style={{ flex: 1, color: T.t2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={e.description || ""}>{e.description || "—"}{e.note ? ` · “${e.note}”` : ""}</span>
-                      {e.project_id && <span style={{ color: T.blu, fontSize: 11.5, whiteSpace: "nowrap" }}>{(b.project_names && b.project_names[e.project_id]) || "#" + e.project_id}</span>}
-                      <b style={{ color: e.dir === "in" ? T.grn : T.red }}>{e.dir === "in" ? "+" : "−"}{inr(e.amount)}</b>
-                    </div>
-                  ))}
+              {b.batch_note && b.status !== "draft" && b.status !== "rejected" && <div style={{ fontSize: 12.5, color: T.t2 }}><b>{t("stb.note")}:</b> {b.batch_note}</div>}
+              </>)}
+              {tab === "lines" && (
+                <div style={{ border: `1px solid ${T.b1}`, borderRadius: 8, overflow: "hidden" }}>
+                  {b.entries.map((e, i) => {
+                    // Approve ke baad har line ka nateeja saamne
+                    const o = b.results && Array.isArray(b.results.results) ? b.results.results[i] : null;
+                    const oc = !o ? null : o.outcome === "created" ? [T.grn, T.grnL, t("bk.o_made", { id: o.txn_id })]
+                      : o.outcome === "already_imported" ? [T.slt, T.sltL, t("bk.o_already")]
+                      : [T.red, T.redL, o.followup ? (o.followup.kind === "resend" ? t("stb.skip_resent", { id: o.followup.batch_id }) : t("stb.skip_acked")) : t("bk.o_not")];
+                    return (
+                      <div key={i} style={{ padding: "7px 10px", borderTop: i ? `1px solid ${T.b1}` : "none", display: "flex", gap: 10, fontSize: 12, alignItems: "baseline" }}>
+                        <span style={{ width: 62, color: T.t3, flexShrink: 0 }}>{dmy(e.date)}</span>
+                        <span style={{ flex: 1, minWidth: 0, color: T.t2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={e.description || ""}>{e.description || "—"}{e.note ? ` · “${e.note}”` : ""}</span>
+                        {e.project_id && <span style={{ color: T.blu, fontSize: 11.5, whiteSpace: "nowrap" }}>{(b.project_names && b.project_names[e.project_id]) || "#" + e.project_id}</span>}
+                        {oc && <span style={{ fontSize: 10.5, fontWeight: 700, padding: "2px 8px", borderRadius: 10, color: oc[0], background: oc[1], whiteSpace: "nowrap" }}>{oc[2]}</span>}
+                        <b style={{ color: e.dir === "in" ? T.grn : T.red, whiteSpace: "nowrap", width: 96, textAlign: "right" }}>{e.dir === "in" ? "+" : "−"}{inr(e.amount)}</b>
+                      </div>
+                    );
+                  })}
                 </div>
-              </details>
-              {b.status === "approved" && b.results && Array.isArray(b.results.results) && (() => {
+              )}
+              {tab === "skip" && b.status === "approved" && b.results && Array.isArray(b.results.results) && (() => {
                 // Approve par jo line nahi bani — har ek dikhe, kabhi chupchaap nahi (23 Oct 2026)
                 const sk = b.results.results.map((x, i) => ({ ...x, idx: i, e: b.entries[i] || {} }))
                   .filter((x) => x.outcome === "duplicate_suspect" || x.outcome === "invalid");
@@ -350,7 +442,7 @@ export function BatchModal({ id, onClose }) {
                   </div>
                 );
               })()}
-              {b.status === "approved" && Array.isArray(b.created) && b.created.length > 0 && (() => {
+              {tab === "change" && b.status === "approved" && Array.isArray(b.created) && b.created.length > 0 && (() => {
                 const pend = (b.changes || []).some((c) => c.status === "pending");
                 const live = b.created.filter((x) => Number(x.is_active) !== 0);
                 // Party pehle, phir Staff (16 Oct 2026: staff chhupe the — Priya jaise naam nahi milte the).
@@ -403,7 +495,7 @@ export function BatchModal({ id, onClose }) {
                   </div>
                 );
               })()}
-              {Array.isArray(b.changes) && b.changes.length > 0 && (
+              {tab === "change" && Array.isArray(b.changes) && b.changes.length > 0 && (
                 <div style={{ marginBottom: 12 }}>
                   <div style={{ fontSize: 11, fontWeight: 700, color: T.t3, textTransform: "uppercase", marginBottom: 5 }}>{t("stb.change_log")}</div>
                   {b.changes.map((c) => (
@@ -421,16 +513,21 @@ export function BatchModal({ id, onClose }) {
                   ))}
                 </div>
               )}
-              {(b.status === "draft" || b.status === "rejected") ? (
-                <div><label style={{ fontSize: 11, fontWeight: 700, color: T.t3 }}>{t("stmt.batch_note_ph")}</label>
-                  <input value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} style={{ width: "100%", boxSizing: "border-box", marginTop: 4, fontSize: 12.5, padding: "7px 10px", borderRadius: 6, border: `1.5px solid ${note.trim().length >= 3 ? T.grnM : T.ambM}`, fontFamily: "inherit" }} /></div>
-              ) : (b.batch_note && <div style={{ fontSize: 12.5, color: T.t2 }}><b>{t("stb.note")}:</b> {b.batch_note}</div>)}
             </>
           )}
         </div>
         {b && (
           <div style={{ padding: "11px 18px", borderTop: `1px solid ${T.b1}`, background: T.surfaceB, display: "flex", gap: 8, justifyContent: "flex-end", alignItems: "center" }}>
-            {b.status === "pending" && <span style={{ fontSize: 11.5, color: T.t3, flex: 1 }}>{t("stb.pending_help")}</span>}
+            {b.status === "pending" && (
+              <span style={{ fontSize: 12, fontWeight: 600, color: turn && turn.mine ? T.grn : T.t3, flex: 1 }}>
+                {turn ? (turn.mine ? t("bm.turn_mine") : t("bm.turn_other", { name: turn.name + (turn.more ? " +" + turn.more : "") })) : t("stb.pending_help")}
+              </span>
+            )}
+            {(b.status === "draft" || b.status === "rejected") && (
+              <input value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} placeholder={t("stmt.batch_note_ph")} aria-label={t("stmt.batch_note_ph")}
+                style={{ flex: 1, minWidth: 160, fontSize: 12.5, padding: "7px 10px", borderRadius: 6, border: `1.5px solid ${note.trim().length >= 3 ? T.grnM : T.ambM}`, fontFamily: "inherit", background: T.surface, color: T.t1 }} />
+            )}
+            {!["pending", "draft", "rejected"].includes(b.status) && <button onClick={() => onClose(changed)} style={btn(T.t3, false)}>{t("bk.close")}</button>}
             {b.status === "pending" && b.approval_request_id && <button disabled={busy} onClick={reject} style={btn(T.red, false)}>{t("stb.reject")}</button>}
             {b.status === "pending" && b.approval_request_id && <button disabled={busy} onClick={approve} style={btn(T.grn, true)}>{t("stb.approve")}</button>}
             {(b.status === "draft" || b.status === "rejected") && <button disabled={busy} onClick={drop} style={btn(T.red, false)}>{t("stb.cancel")}</button>}
