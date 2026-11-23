@@ -17728,7 +17728,7 @@ const dict = {
   "estimate.ad_if_approved": "अप्रूव होने पर",
   "estimate.ad_no_money": "₹ वही",
   "estimate.ad_project_boq": "प्रोजेक्ट की BOQ वैल्यू: {before} → {after}",
-  "estimate.ad_stale": "यह अमेंडमेंट पुराने BOQ पर बना था — उसके बाद एस्टिमेट की {n} लाइन बदल चुकी है (जैसे स्टेज / हिस्से लगे)। अप्रूव करने पर अभी की वह लाइन हटकर प्रस्ताव वाली लगेंगी (नीचे देखें)। ठीक न हो तो रिजेक्ट करके नया अमेंडमेंट बनाएँ।",
+  "estimate.ad_stale": "यह अमेंडमेंट पुराने BOQ पर बना था — उसके बाद एस्टिमेट की {n} लाइन बदल चुकी है (जैसे स्टेज / हिस्से लगे)। अप्रूव करने से अभी की वह लाइन हट जातीं, इसलिए यह अप्रूव नहीं हो सकता। इसे रिजेक्ट करके Edit BOQ से नया अमेंडमेंट बनाएँ।",
   "estimate.ad_col_work": "काम",
   "estimate.ad_col_before": "पहले: मात्रा × रेट = ₹",
   "estimate.ad_col_after": "अब: मात्रा × रेट = ₹",
@@ -17749,6 +17749,7 @@ const dict = {
   "estimate.boq_total_with_gst": "कुल (GST के साथ)",
   "estimate.ad_k_stages_removed": "स्टेज हट गए (₹ वही)",
   "estimate.ad_k_stages_added": "स्टेज लगे (₹ वही)",
+  "estimate.ad_stale_btn": "पुराने BOQ पर बना — रिजेक्ट करके नया अमेंडमेंट बनाएँ",
 };
 
 export default dict;

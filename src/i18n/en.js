@@ -17729,7 +17729,7 @@ const dict = {
   "estimate.ad_if_approved": "if approved",
   "estimate.ad_no_money": "₹ same",
   "estimate.ad_project_boq": "Project BOQ value: {before} → {after}",
-  "estimate.ad_stale": "This amendment was made on an older BOQ — {n} lines of the estimate have changed since (for example stages / parts were applied). Approving will remove the current lines and put the proposed ones (see below). If that is not right, reject it and make a new amendment.",
+  "estimate.ad_stale": "This amendment was made on an older BOQ — {n} lines of the estimate have changed since (for example stages / parts were applied). Approving would remove those current lines, so it cannot be approved. Reject it and make a new amendment from Edit BOQ.",
   "estimate.ad_col_work": "Work",
   "estimate.ad_col_before": "Before: qty × rate = ₹",
   "estimate.ad_col_after": "Now: qty × rate = ₹",
@@ -17750,6 +17750,7 @@ const dict = {
   "estimate.boq_total_with_gst": "Total (with GST)",
   "estimate.ad_k_stages_removed": "Stages removed (₹ same)",
   "estimate.ad_k_stages_added": "Stages added (₹ same)",
+  "estimate.ad_stale_btn": "Made on an older BOQ — reject it and make a new amendment",
 };
 
 export default dict;

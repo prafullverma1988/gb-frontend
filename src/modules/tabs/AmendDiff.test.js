@@ -87,6 +87,7 @@ test("Pending + purani id: chetavni; card ke upar pehle → ab", async () => {
   await mount(<><AmendTotals diff={d} pending /><AmendDiffView diff={d} pending /></>);
   expect(document.querySelector('[data-testid="ad-totals"]').textContent).toBe("₹1,00,000→₹1,50,000+₹50,000approve hone par");
   expect(document.querySelector('[data-testid="ad-stale"]').textContent).toContain("2 line badal chuki hai");
+  expect(document.querySelector('[data-testid="ad-stale"]').textContent).toContain("approve nahi ho sakta");
   expect(document.querySelector('[data-testid="ad-summary"]').textContent).toContain("Approve hone par₹1,50,000");
 });
 

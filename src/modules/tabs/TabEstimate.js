@@ -2492,8 +2492,9 @@ function TabEstimate({ project }) {
                                 style={{background:"white",color:"#DC2626",border:"1.5px solid #FCA5A5",borderRadius:6,padding:"7px 16px",fontSize:12,fontWeight:700,cursor:"pointer"}}>
                                {t("common.reject_2")}
                               </button>
-                              <button onClick={()=>decideAmendment(a.id,"Approved")}
-                                style={{background:T.grn,color:"white",border:"none",borderRadius:6,padding:"7px 18px",fontSize:12,fontWeight:700,cursor:"pointer"}}>
+                              <button onClick={()=>decideAmendment(a.id,"Approved")} data-testid="amend-approve"
+                                disabled={!!(adiff && adiff.stale > 0)} title={adiff && adiff.stale > 0 ? t("estimate.ad_stale_btn") : undefined}
+                                style={{background:adiff && adiff.stale > 0 ? T.t4 : T.grn,color:"white",border:"none",borderRadius:6,padding:"7px 18px",fontSize:12,fontWeight:700,cursor:adiff && adiff.stale > 0 ? "not-allowed" : "pointer"}}>
                                {t("common.approve_apply")}
                               </button>
                             </div>

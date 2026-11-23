@@ -17731,7 +17731,7 @@ const dict = {
   "estimate.ad_if_approved": "approve hone par",
   "estimate.ad_no_money": "₹ wahi",
   "estimate.ad_project_boq": "Project ki BOQ value: {before} → {after}",
-  "estimate.ad_stale": "Ye amendment purane BOQ par bana tha — uske baad estimate ki {n} line badal chuki hai (jaise stage / hisse lage). Approve karne par abhi ki wo line hat kar proposal wali lagengi (neeche dekho). Theek na ho to Reject karke naya amendment banao.",
+  "estimate.ad_stale": "Ye amendment purane BOQ par bana tha — uske baad estimate ki {n} line badal chuki hai (jaise stage / hisse lage). Approve karne se abhi ki wo line hat jaatin, isliye ye approve nahi ho sakta. Ise Reject karke Edit BOQ se naya amendment banao.",
   "estimate.ad_col_work": "Kaam",
   "estimate.ad_col_before": "Pehle: qty × rate = ₹",
   "estimate.ad_col_after": "Ab: qty × rate = ₹",
@@ -17752,6 +17752,7 @@ const dict = {
   "estimate.boq_total_with_gst": "Kul (GST ke saath)",
   "estimate.ad_k_stages_removed": "Stage hat gaye (₹ wahi)",
   "estimate.ad_k_stages_added": "Stage lage (₹ wahi)",
+  "estimate.ad_stale_btn": "Purane BOQ par bana — Reject karke naya amendment banao",
 };
 
 export default dict;
