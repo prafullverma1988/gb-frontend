@@ -17768,7 +17768,7 @@ const dict = {
   "stage_lib.item_also_ph": "Other names (comma separated): Ground Floor",
   "stage_lib.item_remove": "Remove this work",
   "stage_lib.add_item": "Work",
-  "stage_lib.problems": "Problems in: {names} — each work needs a name, at least 2 stages, each with a name and %, totalling 100%.",
+  "stage_lib.problems": "Problems in: {names} — each work needs a name, at least 1 stage, each with a name and %, totalling 100%.",
   "stage_lib.dupe": "Work name used twice: {names}",
   "stage_lib.save": "Save library",
   "stage_lib.saved": "\"{name}\" saved",
@@ -17793,6 +17793,7 @@ const dict = {
   "stage_lib.d_head": "Head Room",
   "stage_lib.d_septic": "Septic tank",
   "stage_lib.d_boundary": "Boundary wall",
+  "stage_lib.one_stage_preview": "Single stage — {stage}: full {amt} / unit, on completion of the work",
 };
 
 export default dict;

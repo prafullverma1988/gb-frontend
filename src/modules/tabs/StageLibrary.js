@@ -42,7 +42,7 @@ export function defaultItems() {
     { label: "FF", also: t("stage_lib.d_ff_also"), parts: upper.map(p => ({ ...p })) },
     { label: "SF", also: t("stage_lib.d_sf_also"), parts: upper.map(p => ({ ...p })) },
     { label: t("stage_lib.d_head"), also: "", parts: upper.map(p => ({ ...p })) },
-    { label: t("stage_lib.d_septic"), also: "", parts: [P("ms_brick", 50, S), P("ms_slab", 50, S)] },
+    { label: t("stage_lib.d_septic"), also: "", parts: [P("ms_complete", 100, S)] },
     { label: t("stage_lib.d_boundary"), also: "", parts: [P("ms_brick", 70, S), P("ms_plaster", 30, S)] },
   ];
 }
@@ -57,7 +57,8 @@ export function matchLibItem(items, work) {
   return null;
 }
 export const sumPct = (parts) => r2((parts || []).reduce((s, p) => s + num(p.pct), 0));
-const itemProblem = (it) => !String(it.label || "").trim() || (it.parts || []).length < 2
+// 1 stage bhi chalega (26 Nov 2026 — Septic tank ek baar me): 100% = kaam poora hone par poora
+const itemProblem = (it) => !String(it.label || "").trim() || (it.parts || []).length < 1
   || it.parts.some(p => !String(p.name || "").trim() || !(num(p.pct) > 0)) || Math.abs(sumPct(it.parts) - 100) > 0.01;
 export const partsBodyPct = (parts) => parts.map(p => ({ name: String(p.name).trim(), pct: num(p.pct), group: grpOf(p) || null, ...(p.together ? { together: true } : {}) }));
 
@@ -91,7 +92,7 @@ function ItemEditor({ it, idx, onChange, onRemove }) {
           <input type="number" value={p.pct} placeholder="%" data-lib-pct={idx + "¦" + j} onChange={e => setPart(j, { pct: e.target.value })} style={inpS} />
           <input value={p.group || ""} list="stage-lib-grp" placeholder={t("stage_billing.part_group_ph")}
             onChange={e => { const g = e.target.value.trim(); const ex = it.parts.find((x, k) => k !== j && grpOf(x) && grpOf(x) === g); setPart(j, { group: e.target.value, ...(ex ? { together: !!ex.together } : {}) }); }} style={inpS} />
-          <button type="button" disabled={it.parts.length <= 2} onClick={() => onChange({ ...it, parts: it.parts.filter((_, k) => k !== j) })} style={btnS("plain", it.parts.length <= 2)}>×</button>
+          <button type="button" disabled={it.parts.length <= 1} data-lib-del={idx + "¦" + j} onClick={() => onChange({ ...it, parts: it.parts.filter((_, k) => k !== j) })} style={btnS("plain", it.parts.length <= 1)}>×</button>
         </div>
       ))}
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", marginTop: 4 }}>
@@ -203,7 +204,8 @@ export function LibApplyModal({ estimateId, items, onClose, onDone }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [skipped, setSkipped] = useState([]);
-  useEffect(() => { loadLibs().then(l => { setLibs(l); if (l.length) setLibId(String(l[0].id)); }); }, []);
+  // Har baar taaza (library kahin aur badli ho sakti hai)
+  useEffect(() => { loadLibs(true).then(l => { setLibs(l); if (l.length) setLibId(String(l[0].id)); }); }, []);
   const lib = (libs || []).find(l => String(l.id) === String(libId)) || null;
   const works = useMemo(() => {
     const out = [], idx = {};
@@ -269,7 +271,10 @@ export function LibApplyModal({ estimateId, items, onClose, onDone }) {
                   </select>
                 )}
               </div>
-              {s && (
+              {s && s.parts.length === 1 && (
+                <div data-preview={w.key} style={{ fontSize: 10.5, color: T.t3, marginTop: 4 }}>{t("stage_lib.one_stage_preview", { stage: s.parts[0].name, amt: fmtC(w.rate) })}</div>
+              )}
+              {s && s.parts.length > 1 && (
                 <div data-preview={w.key} style={{ fontSize: 10.5, color: T.t3, marginTop: 4, lineHeight: 1.5 }}>
                   {s.parts.map((p, i) => <span key={i}>{i ? " · " : ""}{p.name} {r2(p.pct)}% <b style={{ color: T.t2 }}>{fmtC(w.rate * num(p.pct) / 100)}</b></span>)}
                 </div>

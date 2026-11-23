@@ -17770,7 +17770,7 @@ const dict = {
   "stage_lib.item_also_ph": "Doosre naam (comma se): Ground Floor, Bhutal",
   "stage_lib.item_remove": "Ye kaam hatao",
   "stage_lib.add_item": "Kaam",
-  "stage_lib.problems": "In kaam me galti: {names} — har kaam ka naam, kam se kam 2 stage, har stage ka naam aur %, jod 100%.",
+  "stage_lib.problems": "In kaam me galti: {names} — har kaam ka naam, kam se kam 1 stage, har stage ka naam aur %, jod 100%.",
   "stage_lib.dupe": "Ek kaam ka naam do baar: {names}",
   "stage_lib.save": "Library save karo",
   "stage_lib.saved": "\"{name}\" save ho gayi",
@@ -17795,6 +17795,7 @@ const dict = {
   "stage_lib.d_head": "Head Room",
   "stage_lib.d_septic": "Septic tank",
   "stage_lib.d_boundary": "Boundary wall",
+  "stage_lib.one_stage_preview": "Ek hi stage — {stage}: poora {amt} / unit, kaam poora hone par",
 };
 
 export default dict;

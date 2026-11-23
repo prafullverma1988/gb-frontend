@@ -47,6 +47,7 @@ test("Nayi library ke shuru ke set: har kaam ka jod 100%, GF me Plinth, FF me na
   const d = defaultItems();
   expect(d.map((x) => x.label)).toEqual(["GF", "FF", "SF", "Head Room", "Septic tank", "Boundary wall"]);
   for (const it of d) expect(sumPct(it.parts)).toBe(100);
+  expect(d[4].parts.map((p) => [p.name, p.pct])).toEqual([["Completion", "100"]]);   // Septic ek baar me
   expect(d[0].parts.some((p) => p.name === "Plinth")).toBe(true);
   expect(d[1].parts.some((p) => p.name === "Plinth")).toBe(false);
 });
@@ -75,6 +76,30 @@ test("Library se lagao: naam se set, har kaam ke rate par ₹; na mila / bill wa
   expect(body.item_parts[2]).toEqual([{ name: "Slab casting", pct: 51, group: "Structure" }, { name: "Tile", pct: 49, group: "Finishing", together: true }]);
   expect(body.item_parts[4].length).toBe(2);
   expect(onDone.mock.calls[0][0]).toContain("\"Ghar G+1\" se 3 kaam ka schedule laga");
+});
+
+test("Ek hi stage: library me 1 stage 100% save hota hai; Library se lagao me 'ek baar me poora'", async () => {
+  const ONE = { ...LIB, items: [{ key: "septic_tank", label: "Septic tank", also: "", parts: [{ name: "Kaam poora", pct: 100, group: "Structure" }] }] };
+  api.get.mockImplementation(async (url) => (url === "/stage-libraries" ? { success: true, data: [ONE] } : { success: false }));
+  api.post.mockResolvedValue({ success: true, data: { done: [{ item_id: 4, whole: true }], skipped: [] } });
+  await mount(<LibApplyModal estimateId={74} items={[L(4, "SEPTIC TANK", "Septic tank", 80, 1000)]} onClose={() => {}} onDone={() => {}} />);
+  expect($('[data-preview="SEPTIC TANK¦#4"]').textContent).toBe("Ek hi stage — Kaam poora: poora ₹1,000 / unit, kaam poora hone par");
+  await act(async () => { $('[data-testid="lib-apply-go"]').click(); });
+  await flush();
+  expect(api.post.mock.calls[0][1].item_parts[4]).toEqual([{ name: "Kaam poora", pct: 100, group: "Structure" }]);
+});
+
+test("Library editor: stage hata kar 1 rakho (100%) — Save chalu", async () => {
+  api.get.mockImplementation(async (url) => (url === "/stage-libraries" ? { success: true, data: [] } : { success: false }));
+  await mount(<StageLibraryManager onClose={() => {}} />);
+  await act(async () => { $('[data-testid="lib-new"]').click(); });
+  // Boundary wall (index 5): Brickwork 70 + Plaster 30 → Plaster hatao, Brickwork 100
+  await act(async () => { $('[data-lib-del="5¦1"]').click(); });
+  expect($('[data-lib-del="5¦0"]').disabled).toBe(true);
+  expect($('[data-testid="lib-save"]').disabled).toBe(true);
+  await act(async () => { setVal($('[data-lib-pct="5¦0"]'), "100"); });
+  expect($('[data-lib-sum="5"]').textContent).toBe("Total 100%");
+  expect($('[data-testid="lib-save"]').disabled).toBe(false);
 });
 
 test("Library banao: shuru ke 6 kaam, jod 100 na ho to Save band; theek karke POST", async () => {

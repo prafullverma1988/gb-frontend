@@ -17767,7 +17767,7 @@ const dict = {
   "stage_lib.item_also_ph": "दूसरे नाम (कॉमा से): Ground Floor, भूतल",
   "stage_lib.item_remove": "यह काम हटाएँ",
   "stage_lib.add_item": "काम",
-  "stage_lib.problems": "इन कामों में ग़लती: {names} — हर काम का नाम, कम से कम 2 स्टेज, हर स्टेज का नाम और %, जोड़ 100%।",
+  "stage_lib.problems": "इन कामों में ग़लती: {names} — हर काम का नाम, कम से कम 1 स्टेज, हर स्टेज का नाम और %, जोड़ 100%।",
   "stage_lib.dupe": "एक काम का नाम दो बार: {names}",
   "stage_lib.save": "लाइब्रेरी सेव करें",
   "stage_lib.saved": "\"{name}\" सेव हो गई",
@@ -17792,6 +17792,7 @@ const dict = {
   "stage_lib.d_head": "Head Room",
   "stage_lib.d_septic": "Septic tank",
   "stage_lib.d_boundary": "Boundary wall",
+  "stage_lib.one_stage_preview": "एक ही स्टेज — {stage}: पूरा {amt} / यूनिट, काम पूरा होने पर",
 };
 
 export default dict;
