@@ -76,6 +76,8 @@ test("Milestone-wise: sab floor ka Plinth ek row, contract ka %", async () => {
   ] };
   await mount(<StageLinesPanel kind="wo" id={3} canEdit canApprove={false} />);
   await act(async () => { btn(/^Milestone-wise$/).click(); });
+  // Schedule ban chuka ho to tareeke ke card band (23 Nov 2026) — patti se kholo
+  await act(async () => { btn(/Schedule kaise banana hai/).click(); });
   const txt = noKeys();
   expect(txt).toContain("Plinth");
   expect(txt).toContain("₹2,70,000");      // 1000×150 + 800×150
@@ -147,6 +149,7 @@ test("Hisse hatao: pakka poochh kar unsplit route", async () => {
   api.post.mockResolvedValue({ success: true, data: { merged_item_id: 99, removed: 5, rate: 900 } });
   await mount(<StageLinesPanel kind="estimate" id={7} canEdit canApprove={false} projectId={70} />);
   await act(async () => { btn(/^Line-wise$/).click(); });
+  await act(async () => { btn(/^⋯$/).click(); });          // ab line ke ⋯ menu me (23 Nov 2026)
   await act(async () => { btn(/^Hisse hatao$/).click(); });
   expect(noKeys()).toContain("\"Structure\" ke 5 hisse hata kar wapas ek line (₹900/Sqft)?");
   await act(async () => { btn(/^Haan, ek line karo$/).click(); });

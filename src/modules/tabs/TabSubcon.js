@@ -10,6 +10,7 @@ import { can, canAny, currentUser } from "../../utils/perms";
 import { StageBillGrid, StageLinesPanel, HandoverModal, BackchargeList } from "./StageBilling";
 import { StatementView, ProjectStatementView, MeasureBillModal, BillMeasuresInline } from "./BillingV2";
 import WoLinePicker from "./WoLinePicker";
+import WoCopyPicker from "./WoCopyPicker";
 
 function TabSubcon({ projectId, project }) {
   // Roles & Access (5 Oct 2026) — buttons usi Subcon tick se jo server
@@ -2357,11 +2358,58 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
     if (!form.sections.length) { addSection(); return; }
     addItem(form.sections.length - 1);
   };
+  // ── Doosre WO se copy (23 Nov 2026) — format + payment schedule (WoCopyPicker) ──
+  const [copyOpen, setCopyOpen] = useState(false);
+  const [copyFrom, setCopyFrom] = useState(null);       // { id, label, method }
+  const [srvFlags, setSrvFlags] = useState(() => new Set());   // server ne jin line par approval bataya
+  const applyCopy = async (d) => {
+    const hasLines = form.sections.some(sec => sec.items.some(i => i.description || i.qty || i.rate));
+    if (hasLines && !window.confirm(t("subcon.copy_replace_q"))) return;
+    // Rate card wali line par naye project ki city ka rate (chetavni ke liye)
+    let cats = new Map();
+    const r = await api.get(`/subcon/wo-pick/categories?project_id=${projectId}`).catch(() => null);
+    if (r && r.success) cats = new Map(r.data.categories.map(c => [c.id, c]));
+    setForm(p => ({
+      ...p,
+      subcon_name: p.subcon_name || d.wo.subcon_name || "",
+      subcon_category: d.wo.subcon_category || p.subcon_category,
+      description: d.wo.description || p.description,
+      retention_pct: d.wo.retention_pct == null ? p.retention_pct : d.wo.retention_pct,
+      tds_pct: d.wo.tds_pct == null ? p.tds_pct : d.wo.tds_pct,
+      material_mode: d.wo.material_mode === "deduct" ? "deduct" : "company",
+      sections: d.sections.map(sec => ({ title: sec.title || "", items: sec.items.map(i => {
+        const c = i.work_category_id ? cats.get(i.work_category_id) : null;
+        return { description: i.description, unit: i.unit || "", qty: String(i.qty), rate: String(i.rate), isLibrary: false,
+          source: i.source || "manual", work_category_id: i.work_category_id || null, material_id: i.material_id || null,
+          part_of: i.part_of || null, part_group: i.part_group || null, copy_item_id: i.id,
+          card_rate: c && c.rate != null ? c.rate : null };
+      }) })),
+    }));
+    setCopyFrom({ id: d.wo.id, label: (d.wo.subcon_name || "") + " · " + (d.wo.project_name || ""), method: d.schedule.billing_method });
+    setSrvFlags(new Set());
+    setCopyOpen(false);
+  };
+  // Section ka "Area": sqft wali line ki aam qty; badlo to un sab line ki qty (jo usi area par thi).
+  const isSqft = (u) => /^(sq\.?\s*ft\.?|sqft|sft|sq\.?\s*feet)$/i.test(String(u || "").trim());
+  // Box tab tak dikhe jab tak section me Sqft line hai (khaali karne par bhi — likhte waqt gayab na ho).
+  const qKey = (q) => String(q ?? "").trim();
+  const areaOf = (sec) => {
+    const cnt = {};
+    for (const i of sec.items) if (isSqft(i.unit)) cnt[qKey(i.qty)] = (cnt[qKey(i.qty)] || 0) + 1;
+    const top = Object.keys(cnt).sort((a, b) => cnt[b] - cnt[a])[0];
+    return top === undefined ? null : top;
+  };
+  const setArea = (si, v) => setForm(p => ({ ...p, sections: p.sections.map((sec, i) => {
+    if (i !== si) return sec;
+    const old = areaOf(sec);
+    return { ...sec, items: sec.items.map(it => isSqft(it.unit) && old !== null && qKey(it.qty) === old ? { ...it, qty: v } : it) };
+  }) }));
   // Server ka hi niyam (utils/subconRates): rate card se zyada rate, BOQ ke baaki se zyada qty.
   const lineFlags = (it) => {
     const out = [];
     if (it.card_rate != null && it.card_rate !== "" && (parseFloat(it.rate) || 0) > Number(it.card_rate) + 0.005) out.push({ kind: "rate", card: Number(it.card_rate) });
     if (it.source === "estimate" && it.balance != null && (parseFloat(it.qty) || 0) > Number(it.balance) + 0.0005) out.push({ kind: "qty", balance: Number(it.balance) });
+    if (!out.length && srvFlags.has(it.description)) out.push({ kind: "rate" });
     return out;
   };
   const flaggedCount = form.sections.reduce((n, sec) => n + sec.items.filter(it => lineFlags(it).length).length, 0);
@@ -2430,19 +2478,30 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
             work_category_id: i.work_category_id || undefined,
             material_id:      i.material_id || undefined,
             estimate_item_id: i.estimate_item_id || undefined,
+            // Copy (23 Nov 2026): hisse aur kis purani line se — schedule usi se
+            part_of:          i.part_of || undefined,
+            part_group:       i.part_group || undefined,
+            copy_item_id:     copyFrom ? (i.copy_item_id || undefined) : undefined,
           })),
       })).filter(s=>s.items.length>0),
       approval_reason: apprReason.trim() || undefined,
+      copy_from_wo_id: copyFrom ? copyFrom.id : undefined,
     };
     const res = await api.post("/subcon/work-orders", payload)
       .catch(e=>({success:false,message:e?.message||"Network error"}));
     setSaving(false);
     if(res.success) {
       const ca = res.data && res.data.create_approval;
-      if (ca && ca.status === "Pending") alert(t("subcon.wo_bana_approval_baaki", { n: ca.lines }));
+      const cs = res.data && res.data.copied_schedule;
+      const notes = [];
+      if (ca && ca.status === "Pending") notes.push(t("subcon.wo_bana_approval_baaki", { n: ca.lines }));
+      if (cs && cs.billing_method !== "manual") notes.push(t("subcon.copy_done_sched", { n: cs.rate_items || cs.percent }));
+      if (copyFrom) notes.push(t("subcon.copy_task_note"));
+      if (notes.length) alert(notes.join("\n\n"));
       onSaved();
     } else if (res.code === "WO_APPROVAL_REASON") {
       setApprAsk(true);
+      setSrvFlags(new Set(((res.data && res.data.flagged) || []).map(x => x.description)));
       alert(res.message);
     } else {
       const errMsg = res.message || res.error || `Server error (${res._status||500})`;
@@ -3499,8 +3558,9 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
               {k:"rate_card", l:t("subcon.way_rate_card"), d:t("subcon.way_rate_card_sub")},
               {k:"item",      l:t("subcon.way_item"),      d:t("subcon.way_item_sub")},
               {k:"manual",    l:t("subcon.way_manual"),    d:t("subcon.way_manual_sub")},
+              {k:"copy",      l:t("subcon.way_copy"),      d:t("subcon.way_copy_sub")},
             ].map(w=>(
-              <button key={w.k} onClick={()=> w.k==="manual" ? addManualLine() : setPicker(w.k)}
+              <button key={w.k} onClick={()=> w.k==="manual" ? addManualLine() : w.k==="copy" ? setCopyOpen(true) : setPicker(w.k)}
                 style={{textAlign:"left",padding:"9px 11px",borderRadius:8,border:`1px solid ${T.b2}`,background:T.surface,cursor:"pointer"}}>
                 <div style={{fontSize:12.5,fontWeight:600,color:T.ind}}>{w.l}</div>
                 <div style={{fontSize:11,color:T.t3,marginTop:2,lineHeight:1.35}}>{w.d}</div>
@@ -3508,8 +3568,17 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
             ))}
           </div>
 
+          {copyFrom && (
+            <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",padding:"7px 10px",marginBottom:10,borderRadius:8,background:T.indL,fontSize:12,color:T.t2}}>
+              <span><b style={{color:T.ind}}>{t("subcon.copy_from_label")}</b> {copyFrom.label}</span>
+              {copyFrom.method !== "manual" && <span style={{color:T.t3}}>· {t("subcon.copy_sched_will")}</span>}
+              <button type="button" onClick={()=>setCopyFrom(null)} aria-label={t("subcon.copy_unlink")} title={t("subcon.copy_unlink")}
+                style={{marginLeft:"auto",background:"none",border:"none",color:T.t3,cursor:"pointer",fontSize:15,lineHeight:1}}>×</button>
+            </div>
+          )}
           {form.sections.map((sec,si)=>{
             const secTotal = sec.items.reduce((s,it)=>s+(parseFloat(it.qty)||0)*(parseFloat(it.rate)||0),0);
+            const secArea = areaOf(sec);
             return(
               <div key={si} style={{background:T.surfaceB,border:"1.5px solid "+T.b1,borderRadius:9,marginBottom:12,overflow:"hidden"}}>
                 {/* Section header */}
@@ -3525,6 +3594,13 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
                     onClick={e=>e.stopPropagation()}
                     placeholder={t("subcon.section_name_e_g_plinth_work")}
                     style={{flex:1,padding:"5px 9px",borderRadius:5,border:"1px solid rgba(255,255,255,0.15)",background:"rgba(255,255,255,0.08)",color:"white",fontSize:12.5,outline:"none",fontFamily:"inherit"}}/>
+                  {secArea!==null&&(
+                    <label style={{display:"flex",alignItems:"center",gap:5,fontSize:10.5,color:"rgba(255,255,255,0.6)",whiteSpace:"nowrap"}} onClick={e=>e.stopPropagation()}>
+                      {t("subcon.area_label")}
+                      <input type="number" min="0" value={secArea} onChange={e=>setArea(si,e.target.value)} aria-label={t("subcon.area_label")} title={t("subcon.area_title")}
+                        style={{width:80,padding:"4px 6px",borderRadius:5,border:"1px solid rgba(255,255,255,0.25)",background:"rgba(255,255,255,0.12)",color:"white",fontSize:12,outline:"none",fontFamily:"inherit"}}/>
+                    </label>
+                  )}
                   <span style={{fontSize:11,fontWeight:700,color:"#4ADE80",minWidth:80,textAlign:"right"}}>{fmtC(secTotal)}</span>
                   {form.sections.length>1&&(
                     <button onClick={()=>removeSection(si)} style={{background:"none",border:"none",color:"rgba(255,255,255,0.4)",cursor:"pointer",fontSize:16,padding:0,lineHeight:1}}>×</button>
@@ -3599,6 +3675,7 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
           {/* Grand Total */}
           <div style={{textAlign:"right",fontSize:14,fontWeight:800,color:T.grn,padding:"6px 0"}}>{t("subcon.grand_total_fmtc", { fmtC: fmtC(grandTotal) })}</div>
           {picker&&<WoLinePicker mode={picker} projectId={projectId} onAdd={addGroups} onClose={()=>setPicker(null)}/>}
+          {copyOpen&&<WoCopyPicker currentProjectId={projectId} onPick={applyCopy} onClose={()=>setCopyOpen(false)}/>}
           </>)}
         </div>
 

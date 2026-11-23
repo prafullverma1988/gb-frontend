@@ -18,7 +18,7 @@ import React, { useState, useEffect, useCallback, useMemo } from "react";
 import api from "../../config/api";
 import { T } from "../shared/tokens";
 import { t } from "../../i18n";
-import { ScheduleMethods, MilestoneView, WoFromLinesModal, ClientScheduleView, ScheduleEditModal } from "./ScheduleTools";
+import { ScheduleMethods, MilestoneView, WoFromLinesModal, ClientScheduleView, ScheduleEditModal, partNameOf } from "./ScheduleTools";
 
 const num = (v) => { const n = parseFloat(v); return Number.isFinite(n) ? n : 0; };
 const r2 = (n) => Math.round(num(n) * 100) / 100;
@@ -84,6 +84,33 @@ export function perUnitDone(rows) {
 }
 // Poora floor (group) ek area par ho to ek note; warna har % schedule wali
 // line (part_of) ka alag note. [{ name, unit, rate, done, billed }]
+// Line ka "⋯" menu (23 Nov 2026, Prafull: screen bhari) — kam chalne wale button
+// (Pehle bill ho chuka, Hisse hatao / % Schedule, Auto-bill band) yahan.
+// items: [{ label, onClick, checked? }]
+export function RowMenu({ items, label }) {
+  const [open, setOpen] = useState(false);
+  if (!items || !items.length) return <span />;
+  return (
+    <div style={{ position: "relative", justifySelf: "end" }}
+      onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setOpen(false); }}>
+      <button type="button" aria-label={label || t("stage_billing.row_menu")} aria-expanded={open} title={label || t("stage_billing.row_menu")}
+        onClick={() => setOpen(o => !o)}
+        style={{ width: 30, height: 28, borderRadius: 6, border: "1px solid " + T.b1, background: open ? T.indL : T.surface, color: T.t2, cursor: "pointer", fontSize: 15, lineHeight: 1, fontFamily: "inherit" }}>⋯</button>
+      {open && (
+        <div role="menu" style={{ position: "absolute", right: 0, top: 32, zIndex: 20, minWidth: 190, background: T.surface, border: "1px solid " + T.b1, borderRadius: 8, boxShadow: "0 8px 24px rgba(0,0,0,0.12)", padding: 4 }}>
+          {items.map((m, i) => (
+            <button key={i} type="button" role="menuitem" onClick={() => { setOpen(false); m.onClick(); }}
+              style={{ display: "flex", alignItems: "center", gap: 7, width: "100%", textAlign: "left", padding: "7px 9px", border: "none", borderRadius: 6, background: "transparent", cursor: "pointer", fontSize: 12, color: T.t1, fontFamily: "inherit" }}>
+              {m.checked !== undefined && <span aria-hidden="true" style={{ width: 14, color: T.ind, fontWeight: 800 }}>{m.checked ? "✓" : ""}</span>}
+              {m.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function perUnitSummary(rows) {
   const whole = perUnitDone(rows);
   if (whole) return [{ name: null, ...whole }];
@@ -221,6 +248,8 @@ export function StageLinesPanel({ kind, id, canEdit, canApprove, projectId }) {
   const [extraOpen, setExtraOpen] = useState(false);
   const [view, setView] = useState("client");        // "client" (saaf schedule) | "line" | "milestone"
   const [unsplit, setUnsplit] = useState(null);      // hisse wali line jiske "Hisse hatao" ka pakka poocha
+  const [help, setHelp] = useState(false);           // "?" — samjhane wala text ek jagah
+  const [tgOpen, setTgOpen] = useState(null);        // ek-saath wali stage jiske floor khule
 
   const [editWork, setEditWork] = useState(null);   // "Schedule badlo": { work, works }
   const load = useCallback(async () => {
@@ -471,119 +500,66 @@ export function StageLinesPanel({ kind, id, canEdit, canApprove, projectId }) {
       </div>
     );
   }
-  return (
-    <div style={{ marginBottom: 14 }}>
-      <ScheduleMethods kind={kind} id={id} items={ledger.items} canEdit={canEdit} qtyCount={qtyCount}
-        onDone={async (m) => { setMsg(m); await load(); }} />
-      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 8, padding: "10px 12px",
-        background: T.indL, borderRadius: "8px 8px 0 0", border: "1px solid " + T.indL }}>
-        <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 12.5, fontWeight: 800, color: T.ind }}>{t("stage_billing.panel_title")}</div>
-          <div style={{ fontSize: 10.5, color: T.t3, marginTop: 2 }}>{t("stage_billing.panel_hint")}</div>
-        </div>
-        {canEdit && (
-          <div style={{ display: "flex", gap: 6 }}>
-            <button type="button" disabled={!unlinked || busy} onClick={applySuggestions} style={btnS("soft", !unlinked || busy)}>{t("stage_billing.apply_suggestions", { n: unlinked })}</button>
-            <button type="button" disabled={!dirty || busy} onClick={saveLinks} style={btnS("primary", !dirty || busy)}>{busy ? t("common.saving_2") : t("stage_billing.save_links")}</button>
-          </div>
-        )}
-      </div>
-      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6, padding: "7px 12px", background: T.surfaceB,
-        borderLeft: "1px solid " + T.b1, borderRight: "1px solid " + T.b1 }}>
-        {[["client", t("schedule.view_client")], ["line", t("schedule.view_line")], ["milestone", t("schedule.view_milestone")]].map(([v, l]) => (
-          <button key={v} type="button" onClick={() => setView(v)} style={{ ...btnS(view === v ? "primary" : "plain"), padding: "3px 10px" }}>{l}</button>
-        ))}
-        <div style={{ flex: 1 }} />
-        {boardActions}
-      </div>
-      {board && <div style={{ padding: "4px 12px 6px", fontSize: 10.5, color: T.t3, background: T.surfaceB, borderLeft: "1px solid " + T.b1, borderRight: "1px solid " + T.b1 }}>{t("stage_billing.board_hint")}</div>}
-      {msg && <div style={{ padding: "6px 12px", fontSize: 11.5, color: T.t2, background: T.surfaceB, borderLeft: "1px solid " + T.b1, borderRight: "1px solid " + T.b1 }}>{msg}</div>}
-      <div style={{ border: "1px solid " + T.b1, borderTop: "none", borderRadius: "0 0 8px 8px", overflow: "hidden", background: T.surface }}>
-        {view === "client" && (
-          <div style={{ padding: 10 }}>
-            <ClientScheduleView items={ledger.items} canEdit={canEdit && kind === "estimate"} onEdit={(work, works) => setEditWork({ work, works })} />
-            {editWork && (
-              <ScheduleEditModal estimateId={id} work={editWork.work} works={editWork.works} onClose={() => setEditWork(null)}
-                onDone={async (m) => { setEditWork(null); setMsg(m); await load(); }} />
+  const taskSelect = (value, onChange, s, sugIds, disabled) => (
+    <select value={value} disabled={disabled} onChange={e => onChange(e.target.value)} style={inpS} aria-label={t("stage_billing.task_label")}>
+      <option value="">{t("stage_billing.no_task")}</option>
+      {(s.suggestions || []).length > 0 && (
+        <optgroup label={t("stage_billing.suggested")}>
+          {s.suggestions.map(x => <option key={"s" + x.task_id} value={String(x.task_id)}>{x.task_name} ({x.progress}%)</option>)}
+        </optgroup>
+      )}
+      <optgroup label={t("stage_billing.all_tasks")}>
+        {taskOpts.filter(x => !sugIds.has(String(x.id))).map(x => <option key={x.id} value={String(x.id)}>{x.name} ({x.progress}%)</option>)}
+      </optgroup>
+    </select>
+  );
+  // Ek line (floor ke neeche, ya ek-saath wali stage ke "floor dekho" me — inTg: task stage ka)
+  const lineRow = (it, inTg = false) => {
+    const s = sugById[it.item_id] || { suggestions: [] };
+    const cur = links[it.item_id] || { task_id: "", trigger_pct: "100" };
+    const sugIds = new Set((s.suggestions || []).map(x => String(x.task_id)));
+    const isPart = !!it.part_of;
+    const menu = !canEdit ? [] : [
+      { label: t("stage_billing.opening_btn"), onClick: () => setOpening({ item_id: it.item_id, qty: String(it.opening_qty || ""), note: it.opening_note || "" }) },
+      ...(isPart ? [{ label: t("stage_billing.unsplit_btn"), onClick: () => setUnsplit(unsplit === it.item_id ? null : it.item_id) }]
+        : [{ label: t("stage_billing.split_btn"), onClick: () => setSplit({ item_id: it.item_id, others: false,
+            mode: lastParts ? lastParts.mode : "pct",
+            parts: lastParts ? lastParts.parts.map(p => ({ ...p })) : [{ name: "", pct: "", rate: "", group: "" }, { name: "", pct: "", rate: "", group: "" }] }) }]),
+      ...(kind === "estimate" && !inTg ? [{ label: t("stage_billing.auto_off"), checked: !!cur.no_auto, onClick: () => setLink(it.item_id, { no_auto: !cur.no_auto }) }] : []),
+    ];
+    return (
+      <div key={it.item_id} style={{ borderTop: "1px solid " + T.b1, padding: "8px 12px" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1.3fr) minmax(0,1.6fr) 74px 32px", gap: 8, alignItems: "center" }}>
+          <div style={{ minWidth: 0, display: "flex", gap: 7, alignItems: "flex-start" }}>
+            {board && (
+              <input type="checkbox" aria-label={t("stage_billing.tick_line")} style={{ marginTop: 3 }}
+                disabled={num(it.remaining_qty) <= 0 || !can.estimate_create} checked={selItems.has(it.item_id)} onChange={() => toggleSel(selItems, setSelItems, it.item_id)} />
             )}
-          </div>
-        )}
-        {view === "milestone" && (
-          <div style={{ padding: 10 }}>
-            <MilestoneView items={ledger.items} links={links} setLink={setLink} taskOpts={taskOpts} canEdit={canEdit} />
-          </div>
-        )}
-        {view === "line" && groups.map(g => (
-          <div key={g.key}>
-            <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", gap: 8, padding: "6px 12px", background: T.sltL }}>
-              <span style={{ fontSize: 10.5, fontWeight: 800, color: T.slt, letterSpacing: ".4px", textTransform: "uppercase" }}>{g.category || g.section || t("stage_billing.no_category")}</span>
-              {board && (() => {
-                const cUpto = g.rows.reduce((a, it) => a + num((boardLine[it.item_id] || {}).billed_amount), 0);
-                const sUpto = g.rows.reduce((a, it) => a + ((boardLine[it.item_id] || {}).subs || []).reduce((b2, x) => b2 + num(x.billed_amount), 0), 0);
-                return (
-                  <span style={{ fontSize: 11, color: T.ind, fontVariantNumeric: "tabular-nums" }}>
-                    {t("stage_billing.board_client_upto", { amt: fmtC(cUpto) })}
-                    {subHead && <> · {t("stage_billing.board_subcon_upto", { amt: fmtC(sUpto) })} · {t("stage_billing.board_diff", { amt: fmtC(cUpto - sUpto) })}</>}
-                  </span>
-                );
-              })()}
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: T.t1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={nameOf(it)}>
+                {inTg ? (it.category || it.section_title || "") + " · " : ""}{isPart ? partNameOf(it) : nameOf(it)}
+                {it.item_type === "extra" && <> <span style={chip(T.redL, T.red)}>{t("stage_billing.extra_chip")}</span></>}
+                {kind === "estimate" && !inTg && cur.no_auto && <> <span style={chip(T.sltL, T.slt)}>{t("stage_billing.auto_off_chip")}</span></>}
+              </div>
+              <div style={{ fontSize: 10.5, color: T.t3, fontVariantNumeric: "tabular-nums", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {isPart && !inTg && <>{it.part_of} · </>}
+                {fmtQ(it.planned_qty)} {it.unit} × {fmtC(it.rate)} · {t("stage_billing.billed_short", { qty: fmtQ(it.billed_qty) })}
+                {board && num(it.billed_amount) > 0 && <> ({fmtC(it.billed_amount)})</>}
+                {num(it.opening_qty) > 0 && <> · <span style={{ color: T.amb }}>{t("stage_billing.opening_chip", { qty: fmtQ(it.opening_qty) })}</span></>}
+                {board && num((boardLine[it.item_id] || {}).draft_qty) > 0 && <> <span style={chip(T.purL, T.pur)}>{t("stage_billing.draft_chip", { no: boardLine[it.item_id].draft_no || "" })}</span></>}
+              </div>
             </div>
-            {perUnitSummary(g.rows.map(it => ({ unit: it.unit, qty: it.planned_qty, rate: it.rate, billed: it.billed_qty, task: it.linked_task,
-              item_type: it.item_type, part_of: it.part_of }))).map((s, i) => (
-              <div key={"pu" + i} style={{ padding: "4px 12px", fontSize: 11, color: T.ind, background: T.indL, borderTop: "1px solid " + T.b1 }}><PerUnitNote s={s} /></div>
-            ))}
-            {g.rows.map(it => {
-              const s = sugById[it.item_id] || { suggestions: [] };
-              const cur = links[it.item_id] || { task_id: "", trigger_pct: "100" };
-              const sugIds = new Set((s.suggestions || []).map(x => String(x.task_id)));
-              return (
-                <div key={it.item_id} style={{ borderTop: "1px solid " + T.b1, padding: "8px 12px" }}>
-                  <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1.3fr) minmax(0,1.6fr) 74px auto", gap: 8, alignItems: "center" }}>
-                    <div style={{ minWidth: 0, display: "flex", gap: 7, alignItems: "flex-start" }}>
-                      {board && (
-                        <input type="checkbox" aria-label={t("stage_billing.tick_line")} style={{ marginTop: 3 }}
-                          disabled={num(it.remaining_qty) <= 0 || !can.estimate_create} checked={selItems.has(it.item_id)} onChange={() => toggleSel(selItems, setSelItems, it.item_id)} />
-                      )}
-                      <div style={{ minWidth: 0 }}>
-                        <div style={{ fontSize: 12, fontWeight: 600, color: T.t1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={nameOf(it)}>
-                          {nameOf(it)} {it.item_type === "extra" && <span style={chip(T.redL, T.red)}>{t("stage_billing.extra_chip")}</span>}
-                        </div>
-                        <div style={{ fontSize: 10.5, color: T.t3, fontVariantNumeric: "tabular-nums" }}>
-                          {fmtQ(it.planned_qty)} {it.unit} × {fmtC(it.rate)} · {t("stage_billing.billed_short", { qty: fmtQ(it.billed_qty) })}
-                          {board && num(it.billed_amount) > 0 && <> ({fmtC(it.billed_amount)})</>}
-                          {num(it.opening_qty) > 0 && <> · <span style={{ color: T.amb }}>{t("stage_billing.opening_chip", { qty: fmtQ(it.opening_qty) })}</span></>}
-                          {board && num((boardLine[it.item_id] || {}).draft_qty) > 0 && <> <span style={chip(T.purL, T.pur)}>{t("stage_billing.draft_chip", { no: boardLine[it.item_id].draft_no || "" })}</span></>}
-                        </div>
-                      </div>
-                    </div>
-                    <select value={cur.task_id} disabled={!canEdit} onChange={e => setLink(it.item_id, { task_id: e.target.value })} style={inpS}>
-                      <option value="">{t("stage_billing.no_task")}</option>
-                      {(s.suggestions || []).length > 0 && (
-                        <optgroup label={t("stage_billing.suggested")}>
-                          {s.suggestions.map(x => <option key={"s" + x.task_id} value={String(x.task_id)}>{x.task_name} ({x.progress}%)</option>)}
-                        </optgroup>
-                      )}
-                      <optgroup label={t("stage_billing.all_tasks")}>
-                        {taskOpts.filter(x => !sugIds.has(String(x.id))).map(x => <option key={x.id} value={String(x.id)}>{x.name} ({x.progress}%)</option>)}
-                      </optgroup>
-                    </select>
-                    <input type="number" min="1" max="100" value={cur.trigger_pct} disabled={!canEdit || !cur.task_id}
-                      onChange={e => setLink(it.item_id, { trigger_pct: e.target.value })} title={t("stage_billing.trigger_title")} style={inpS} />
-                    {canEdit && (
-                      <div style={{ display: "flex", gap: 4, justifyContent: "flex-end", flexWrap: "wrap" }}>
-                        <button type="button" onClick={() => setOpening({ item_id: it.item_id, qty: String(it.opening_qty || ""), note: it.opening_note || "" })} style={btnS()}>{t("stage_billing.opening_btn")}</button>
-                        {it.part_of && (
-                          <button type="button" onClick={() => setUnsplit(unsplit === it.item_id ? null : it.item_id)} style={btnS()}>{t("stage_billing.unsplit_btn")}</button>
-                        )}
-                        {!it.part_of && (
-                          <button type="button" onClick={() => setSplit({ item_id: it.item_id, others: false,
-                            mode: lastParts ? lastParts.mode : "pct",
-                            parts: lastParts ? lastParts.parts.map(p => ({ ...p })) : [{ name: "", pct: "", rate: "", group: "" }, { name: "", pct: "", rate: "", group: "" }] })} style={btnS()}>{t("stage_billing.split_btn")}</button>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                  {canEdit && (kind === "estimate" || sug?.measure_ready) && (() => {
+          </div>
+          {inTg ? (
+            <div style={{ gridColumn: "2 / span 2", fontSize: 11, color: T.t3 }}>{t("stage_billing.tg_task_from_stage")}</div>
+          ) : (<>
+            {taskSelect(cur.task_id, (v) => setLink(it.item_id, { task_id: v }), s, sugIds, !canEdit)}
+            <input type="number" min="1" max="100" value={cur.trigger_pct} disabled={!canEdit || !cur.task_id} aria-label={t("stage_billing.trigger_title")}
+              onChange={e => setLink(it.item_id, { trigger_pct: e.target.value })} title={t("stage_billing.trigger_title")} style={inpS} />
+          </>)}
+          <RowMenu items={menu} />
+        </div>
+        {canEdit && kind === "wo" && sug?.measure_ready && (() => {
                     // Billing v2 (2 Nov 2026): WO line — Stage (task % par) ya Naap (task ki
                     // darj qty × factor, Finance "Naap se bill"); dono me "Auto-bill band".
                     const tk = (sug?.tasks || []).find(x => String(x.id) === String(cur.task_id));
@@ -699,11 +675,163 @@ export function StageLinesPanel({ kind, id, canEdit, canApprove, projectId }) {
                       </div>
                     </div>
                   )}
+      </div>
+    );
+  };
+  // Ek-saath wali ek stage (Tiles / Paint …) — sab floor ki line, ek task
+  const tgRow = (st) => {
+    const ids = st.lines.map(x => x.item_id);
+    const curs = ids.map(i => links[i] || { task_id: "", trigger_pct: "100" });
+    const same = new Set(curs.map(c => String(c.task_id || "") + "¦" + String(c.trigger_pct || "100"))).size === 1;
+    const cur = curs[0] || { task_id: "", trigger_pct: "100" };
+    const noAutoAll = curs.every(c => !!c.no_auto);
+    const s = sugById[ids[0]] || { suggestions: [] };
+    const sugIds = new Set((s.suggestions || []).map(x => String(x.task_id)));
+    const setAll = (patch) => { setLinks(p => { const n = { ...p }; for (const i of ids) n[i] = { ...(n[i] || {}), ...patch }; return n; }); setDirty(true); };
+    const amt = st.lines.reduce((a, x) => a + num(x.planned_qty) * num(x.rate), 0);
+    const billedAmt = st.lines.reduce((a, x) => a + num(x.billed_qty) * num(x.rate), 0);
+    const floors = [...new Set(st.lines.map(x => x.category || x.section_title || ""))].filter(Boolean).join(" + ");
+    const open = tgOpen === st.key;
+    const tickable = st.lines.filter(x => num(x.remaining_qty) > 0);
+    const allTicked = tickable.length > 0 && tickable.every(x => selItems.has(x.item_id));
+    const tickAll = () => { const n = new Set(selItems); for (const x of tickable) { if (allTicked) n.delete(x.item_id); else n.add(x.item_id); } setSelItems(n); };
+    const drafts = st.lines.filter(x => num((boardLine[x.item_id] || {}).draft_qty) > 0);
+    const menu = [
+      { label: open ? t("stage_billing.tg_hide_floors") : t("stage_billing.tg_show_floors", { n: st.lines.length }), onClick: () => setTgOpen(open ? null : st.key) },
+      ...(canEdit ? [{ label: t("stage_billing.auto_off"), checked: noAutoAll, onClick: () => setAll({ no_auto: !noAutoAll }) }] : []),
+    ];
+    return (
+      <div key={st.key} data-together-row={st.key} style={{ borderTop: "1px solid " + T.b1 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1.3fr) minmax(0,1.6fr) 74px 32px", gap: 8, alignItems: "center", padding: "8px 12px" }}>
+          <div style={{ minWidth: 0, display: "flex", gap: 7, alignItems: "flex-start" }}>
+            {board && (
+              <input type="checkbox" aria-label={t("stage_billing.tg_tick")} style={{ marginTop: 3 }}
+                disabled={!tickable.length || !can.estimate_create} checked={allTicked} onChange={tickAll} />
+            )}
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: T.t1 }}>
+                {st.name}
+                {noAutoAll && <> <span style={chip(T.sltL, T.slt)}>{t("stage_billing.auto_off_chip")}</span></>}
+                {drafts.length > 0 && <> <span style={chip(T.purL, T.pur)}>{t("stage_billing.draft_chip", { no: (boardLine[drafts[0].item_id] || {}).draft_no || "" })}</span></>}
+              </div>
+              <div style={{ fontSize: 10.5, color: T.t3, fontVariantNumeric: "tabular-nums" }}>
+                {floors} · {fmtC(amt)} · {t("stage_billing.tg_billed", { amt: fmtC(billedAmt) })}
+              </div>
+              {!same && <div style={{ fontSize: 10.5, color: T.amb, fontWeight: 700 }}>{t("stage_billing.tg_mixed")}</div>}
+            </div>
+          </div>
+          {taskSelect(same ? cur.task_id : "", (v) => setAll({ task_id: v, trigger_pct: same ? cur.trigger_pct : "100" }), s, sugIds, !canEdit)}
+          <input type="number" min="1" max="100" value={same ? cur.trigger_pct : ""} disabled={!canEdit || !same || !cur.task_id} aria-label={t("stage_billing.trigger_title")}
+            onChange={e => setAll({ trigger_pct: e.target.value })} title={t("stage_billing.trigger_title")} style={inpS} />
+          <RowMenu items={menu} />
+        </div>
+        {open && <div style={{ background: T.surfaceB, paddingLeft: 18 }}>{st.lines.map(x => lineRow(x, true))}</div>}
+      </div>
+    );
+  };
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <ScheduleMethods kind={kind} id={id} items={ledger.items} canEdit={canEdit} qtyCount={qtyCount}
+        onDone={async (m) => { setMsg(m); await load(); }} />
+      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 8, padding: "10px 12px",
+        background: T.indL, borderRadius: "8px 8px 0 0", border: "1px solid " + T.indL }}>
+        <div style={{ minWidth: 0, display: "flex", alignItems: "center", gap: 6 }}>
+          <div style={{ fontSize: 12.5, fontWeight: 800, color: T.ind }}>{t("stage_billing.panel_title")}</div>
+          <button type="button" aria-expanded={help} aria-label={t("stage_billing.help_btn")} title={t("stage_billing.help_btn")} onClick={() => setHelp(h => !h)}
+            style={{ width: 20, height: 20, borderRadius: 999, border: "1px solid " + T.ind, background: help ? T.ind : "transparent", color: help ? "white" : T.ind, fontSize: 11, fontWeight: 800, cursor: "pointer", lineHeight: 1, padding: 0, fontFamily: "inherit" }}>?</button>
+        </div>
+        {canEdit && (
+          <div style={{ display: "flex", gap: 6 }}>
+            <button type="button" disabled={!unlinked || busy} onClick={applySuggestions} style={btnS("soft", !unlinked || busy)}>{t("stage_billing.apply_suggestions", { n: unlinked })}</button>
+            <button type="button" disabled={!dirty || busy} onClick={saveLinks} style={btnS("primary", !dirty || busy)}>{busy ? t("common.saving_2") : t("stage_billing.save_links")}</button>
+          </div>
+        )}
+      </div>
+      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6, padding: "7px 12px", background: T.surfaceB,
+        borderLeft: "1px solid " + T.b1, borderRight: "1px solid " + T.b1 }}>
+        {[["client", t("schedule.view_client")], ["line", t("schedule.view_line")], ["milestone", t("schedule.view_milestone")]].map(([v, l]) => (
+          <button key={v} type="button" onClick={() => setView(v)} style={{ ...btnS(view === v ? "primary" : "plain"), padding: "3px 10px" }}>{l}</button>
+        ))}
+        <div style={{ flex: 1 }} />
+        {boardActions}
+      </div>
+      {help && (
+        <div style={{ padding: "8px 12px", fontSize: 11.5, color: T.t2, lineHeight: 1.5, background: T.surfaceB, borderLeft: "1px solid " + T.b1, borderRight: "1px solid " + T.b1, display: "grid", gap: 4 }}>
+          {kind === "estimate" && <div>{t("stage_billing.manual_notice")}</div>}
+          <div>{t("stage_billing.panel_hint")}</div>
+          {board && <div>{t("stage_billing.board_hint")}</div>}
+        </div>
+      )}
+      {msg && <div style={{ padding: "6px 12px", fontSize: 11.5, color: T.t2, background: T.surfaceB, borderLeft: "1px solid " + T.b1, borderRight: "1px solid " + T.b1 }}>{msg}</div>}
+      <div style={{ border: "1px solid " + T.b1, borderTop: "none", borderRadius: "0 0 8px 8px", overflow: "hidden", background: T.surface }}>
+        {view === "client" && (
+          <div style={{ padding: 10 }}>
+            <ClientScheduleView items={ledger.items} canEdit={canEdit && kind === "estimate"} onEdit={(work, works) => setEditWork({ work, works })} />
+            {editWork && (
+              <ScheduleEditModal estimateId={id} work={editWork.work} works={editWork.works} onClose={() => setEditWork(null)}
+                onDone={async (m) => { setEditWork(null); setMsg(m); await load(); }} />
+            )}
+          </div>
+        )}
+        {view === "milestone" && (
+          <div style={{ padding: 10 }}>
+            <MilestoneView items={ledger.items} links={links} setLink={setLink} taskOpts={taskOpts} canEdit={canEdit} />
+          </div>
+        )}
+        {view === "line" && (() => {
+          // "Sab floor ek saath" (23 Nov 2026, Prafull): ek-saath wali line (server ka
+          // together_key) floor ke neeche nahi — neeche ek block, har stage ki ek row,
+          // ek task sab floor par (server bhi saathi ko wahi task deta hai).
+          const tgGroups = [], tgi = {};
+          for (const x of ledger.items) {
+            if (!x.together_key) continue;
+            const gk = x.part_group || "";
+            if (tgi[gk] === undefined) { tgi[gk] = tgGroups.length; tgGroups.push({ group: gk, stages: [], si: {} }); }
+            const G = tgGroups[tgi[gk]];
+            if (G.si[x.together_key] === undefined) { G.si[x.together_key] = G.stages.length; G.stages.push({ key: x.together_key, name: partNameOf(x), lines: [] }); }
+            G.stages[G.si[x.together_key]].lines.push(x);
+          }
+          return (<>
+            {groups.map(g => {
+              const shown = g.rows.filter(x => !x.together_key);
+              const below = [...new Set(g.rows.filter(x => x.together_key).map(x => x.part_group || t("schedule.cl_tg_default")))];
+              return (
+                <div key={g.key}>
+                <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", gap: 8, padding: "6px 12px", background: T.sltL }}>
+                  <span style={{ fontSize: 10.5, fontWeight: 800, color: T.slt, letterSpacing: ".4px", textTransform: "uppercase" }}>{g.category || g.section || t("stage_billing.no_category")}</span>
+                  {board && (() => {
+                    const cUpto = g.rows.reduce((a, it) => a + num((boardLine[it.item_id] || {}).billed_amount), 0);
+                    const sUpto = g.rows.reduce((a, it) => a + ((boardLine[it.item_id] || {}).subs || []).reduce((b2, x) => b2 + num(x.billed_amount), 0), 0);
+                    return (
+                      <span style={{ fontSize: 11, color: T.ind, fontVariantNumeric: "tabular-nums" }}>
+                        {t("stage_billing.board_client_upto", { amt: fmtC(cUpto) })}
+                        {subHead && <> · {t("stage_billing.board_subcon_upto", { amt: fmtC(sUpto) })} · {t("stage_billing.board_diff", { amt: fmtC(cUpto - sUpto) })}</>}
+                      </span>
+                    );
+                  })()}
+                </div>
+                {perUnitSummary(g.rows.map(it => ({ unit: it.unit, qty: it.planned_qty, rate: it.rate, billed: it.billed_qty, task: it.linked_task,
+                  item_type: it.item_type, part_of: it.part_of }))).map((s, i) => (
+                  <div key={"pu" + i} style={{ padding: "4px 12px", fontSize: 11, color: T.ind, background: T.indL, borderTop: "1px solid " + T.b1 }}><PerUnitNote s={s} /></div>
+                ))}
+                  {shown.map(it => lineRow(it))}
+                  {below.length > 0 && (
+                    <div style={{ borderTop: "1px solid " + T.b1, padding: "6px 12px", fontSize: 11, color: T.t3 }}>{t("stage_billing.tg_below", { groups: below.join(", ") })}</div>
+                  )}
                 </div>
               );
             })}
-          </div>
-        ))}
+            {tgGroups.map(G => (
+              <div key={"tg¦" + G.group} data-together-block={G.group}>
+                <div style={{ padding: "7px 12px", background: T.grnL, borderTop: "1px solid " + T.b1 }}>
+                  <span style={{ fontSize: 11.5, fontWeight: 800, color: T.grn }}>{t("schedule.cl_tg_title", { group: G.group || t("schedule.cl_tg_default") })}</span>
+                  <span style={{ fontSize: 11, color: T.t3 }}> · {t("stage_billing.tg_one_task")}</span>
+                </div>
+                {G.stages.map(st => tgRow(st))}
+              </div>
+            ))}
+          </>);
+        })()}
         {view === "line" && subHead && orphan.length > 0 && (
           <div style={{ borderTop: "1px solid " + T.b1 }}>
             <div style={{ padding: "6px 12px", background: T.sltL, fontSize: 10.5, fontWeight: 800, color: T.slt }}>{t("stage_billing.only_subcon")}</div>

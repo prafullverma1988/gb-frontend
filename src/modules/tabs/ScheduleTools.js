@@ -214,6 +214,8 @@ export function ScheduleMethods({ kind, id, items, canEdit, qtyCount = 0, onDone
   const plain = lines.filter(x => !x.part_of && num(x.planned_qty) > 0);
   const locked = (x) => num(x.billed_qty) > 0 || num(x.opening_qty) > 0;
   const splitLines = lines.filter(x => x.part_of).length;
+  // Schedule ban chuka ho to tareeke ke card band (23 Nov 2026 — screen bhari thi); patti se khulte.
+  const [showCards, setShowCards] = useState(splitLines === 0);
 
   // Ek floor (category) ki 2+ bina-hisse line ek hi unit + area par, aur naam stage
   // jaise (plinth ₹300 / lintel ₹200 / slab ₹200) = pehle se stage — unpar dobara %
@@ -275,15 +277,19 @@ export function ScheduleMethods({ kind, id, items, canEdit, qtyCount = 0, onDone
   );
   return (
     <div style={{ marginBottom: 12 }}>
-      <div style={{ fontSize: 11, fontWeight: 800, color: T.t2, margin: "0 0 6px", textTransform: "uppercase", letterSpacing: ".4px" }}>{t("schedule.methods_title")}</div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: 8 }}>
+      <button type="button" aria-expanded={showCards} onClick={() => setShowCards(v => !v)}
+        style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", textAlign: "left", background: "none", border: "none", padding: "0 0 6px", cursor: "pointer", fontFamily: "inherit" }}>
+        <span style={{ fontSize: 11, fontWeight: 800, color: T.t2, textTransform: "uppercase", letterSpacing: ".4px" }}>{showCards ? "▾" : "▸"} {t("schedule.methods_title")}</span>
+        {!showCards && splitLines > 0 && <span style={{ fontSize: 11, color: T.t3 }}>{t("schedule.m_parts_stat", { n: splitLines })}</span>}
+      </button>
+      {showCards && <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: 8 }}>
         {card(t("schedule.m_item"), t("schedule.m_item_desc"), t("schedule.m_item_stat", { n: plain.length }))}
         {card(t("schedule.m_parts"), t("schedule.m_parts_desc"), splitLines ? t("schedule.m_parts_stat", { n: splitLines }) : null,
           canEdit && <button type="button" disabled={!plain.length} onClick={() => open("parts")} style={btnS("soft", !plain.length)}>{t("schedule.m_parts_btn")}</button>)}
         {card(t("schedule.m_contract"), t("schedule.m_contract_desc"), null,
           canEdit && <button type="button" disabled={!plain.length} onClick={() => open("contract")} style={btnS("soft", !plain.length)}>{t("schedule.m_contract_btn")}</button>)}
         {kind === "wo" && card(t("schedule.m_naap"), t("schedule.m_naap_desc"), qtyCount ? t("schedule.m_naap_stat", { n: qtyCount }) : null)}
-      </div>
+      </div>}
 
       {wiz && (<>
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 300 }} onClick={() => !wiz.busy && setWiz(null)} />
@@ -515,7 +521,7 @@ export function ClientScheduleView({ items, canEdit, onEdit }) {
     if (isBilled(x)) return [T.grnL, T.grn, t("schedule.cl_st_billed")];
     if (tk && tk.eligible) return [T.grnL, T.grn, t("schedule.cl_st_done")];
     if (tk && num(tk.progress) > 0) return [T.ambL, T.amb, t("schedule.cl_st_prog", { pct: num(tk.progress) })];
-    return [T.sltL, T.slt, t("schedule.cl_st_pend")];
+    return null;   // baaki — chip nahi (har row par "Pending" bhari lagta tha)
   };
   // Kai floor ki ek stage: sab ka bill → "Bill bana"; sab ka kaam hua → "Kaam hua"; warna jo chal raha
   const statusMany = (xs) => {
@@ -524,15 +530,15 @@ export function ClientScheduleView({ items, canEdit, onEdit }) {
     if (tasks.length === xs.length && tasks.every(tk => tk.eligible)) return [T.grnL, T.grn, t("schedule.cl_st_done")];
     const going = tasks.map(tk => num(tk.progress)).filter(p => p > 0);
     if (going.length) return [T.ambL, T.amb, t("schedule.cl_st_prog", { pct: Math.min(...going) })];
-    return [T.sltL, T.slt, t("schedule.cl_st_pend")];
+    return null;
   };
+  const stChip = (st) => st ? <span style={chip(st[0], st[1])}>{st[2]}</span> : null;
   const amtOf = (xs) => xs.reduce((a, x) => a + num(x.planned_qty) * num(x.rate), 0);
   const billedOf = (xs) => xs.reduce((a, x) => a + num(x.billed_qty) * num(x.rate), 0);
   const tdN = { padding: "7px 8px", textAlign: "right", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" };
-  let grand = 0, billed = 0;
+  let grand = 0, billed = 0, tgNoted = false;
   return (
     <div style={{ display: "grid", gap: 10 }}>
-      <div style={{ fontSize: 11, color: T.t3, lineHeight: 1.45 }}>{t("schedule.cl_hint")}</div>
       {cards.map(c => {
         const qty = num(c.all[0].planned_qty), unit = c.all[0].unit || "";
         const rate = c.lines.reduce((a, x) => a + num(x.rate), 0);
@@ -540,6 +546,10 @@ export function ClientScheduleView({ items, canEdit, onEdit }) {
         grand += amt;
         billed += billedOf(c.lines);
         const tgGroups = [...new Set(c.all.filter(x => x.part_of && x.part_together).map(x => x.part_group || t("schedule.cl_tg_default")))];
+        // "Finishing neeche" sirf pehle card par (har floor par wahi line dohraati thi); jis card me apni koi line nahi uspar hamesha.
+        const showTgNote = tgGroups.length > 0 && (!c.lines.length || !tgNoted);
+        if (tgGroups.length && c.lines.length) tgNoted = true;
+        const many = c.lines.length > 1;
         const lk = workLocked(c);
         let cum = 0;
         return (
@@ -550,8 +560,8 @@ export function ClientScheduleView({ items, canEdit, onEdit }) {
               <span style={{ display: "inline-flex", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
                 {c.lines.length > 0 && <span style={{ fontSize: 12, color: T.ind, fontVariantNumeric: "tabular-nums" }}>{t("schedule.cl_item_head", { qty: fmtQ(qty), unit, rate: fmtC(rate), amt: fmtC(amt) })}</span>}
                 {canEdit && onEdit && (
-                  <button type="button" data-edit-work={c.key} disabled={lk} title={lk ? t("schedule.edit_locked") : undefined} onClick={() => onEdit(c, cards)}
-                    style={{ ...btnS("plain", lk), padding: "2px 9px" }}>✎ {t("schedule.edit_btn")}</button>
+                  <button type="button" data-edit-work={c.key} disabled={lk} title={lk ? t("schedule.edit_locked") : t("schedule.edit_btn")} aria-label={t("schedule.edit_btn")} onClick={() => onEdit(c, cards)}
+                    style={{ ...btnS("plain", lk), padding: "2px 8px" }}>✎</button>
                 )}
               </span>
             </div>
@@ -561,23 +571,22 @@ export function ClientScheduleView({ items, canEdit, onEdit }) {
                   {c.lines.map((x, i) => {
                     const a = num(x.planned_qty) * num(x.rate);
                     cum += a;
-                    const [bg, fg, label] = status(x);
                     return (
                       <tr key={x.item_id} style={{ borderTop: "1px solid " + T.b1 }}>
                         <td style={{ padding: "7px 12px", color: T.t1 }}>
                           {x.part_of ? t("schedule.cl_stage", { n: i + 1, stage: partNameOf(x) }) : t("schedule.cl_stage_whole", { n: i + 1 })}
                         </td>
-                        <td style={{ ...tdN, color: T.t3 }}>{rate > 0 ? r2(num(x.rate) / rate * 100) + "%" : "—"}</td>
-                        <td style={{ ...tdN, fontWeight: 800, color: T.t1 }}>{fmtC(a)}</td>
-                        <td style={{ ...tdN, fontSize: 11, color: T.t3 }}>{t("schedule.cl_cum", { amt: fmtC(cum) })}</td>
-                        <td style={{ padding: "7px 12px", textAlign: "right" }}><span style={chip(bg, fg)}>{label}</span></td>
+                        <td style={{ ...tdN, color: T.t3 }}>{many ? (rate > 0 ? r2(num(x.rate) / rate * 100) + "%" : "—") : ""}</td>
+                        <td style={{ ...tdN, fontWeight: 800, color: T.t1 }}>{many ? fmtC(a) : ""}</td>
+                        <td style={{ ...tdN, fontSize: 11, color: T.t3 }}>{many ? t("schedule.cl_cum", { amt: fmtC(cum) }) : ""}</td>
+                        <td style={{ padding: "7px 12px", textAlign: "right", width: 110 }}>{stChip(status(x))}</td>
                       </tr>
                     );
                   })}
                 </tbody>
               </table>
             )}
-            {tgGroups.length > 0 && (
+            {showTgNote && (
               <div style={{ padding: "6px 12px", fontSize: 11, color: T.t3, borderTop: "1px solid " + T.b1 }}>
                 {t(c.lines.length ? "schedule.cl_rest_together" : "schedule.cl_all_together", { groups: tgGroups.join(", ") })}
               </div>
@@ -602,7 +611,6 @@ export function ClientScheduleView({ items, canEdit, onEdit }) {
                 {G.stages.map((s, i) => {
                   const a = amtOf(s.lines);
                   cum += a;
-                  const [bg, fg, label] = statusMany(s.lines);
                   return (
                     <tr key={s.name} style={{ borderTop: "1px solid " + T.b1 }}>
                       <td style={{ padding: "7px 12px", color: T.t1 }}>
@@ -611,8 +619,8 @@ export function ClientScheduleView({ items, canEdit, onEdit }) {
                       </td>
                       <td style={{ ...tdN, color: T.t3 }}>{gAmt > 0 ? r2(a / gAmt * 100) + "%" : "—"}</td>
                       <td style={{ ...tdN, fontWeight: 800, color: T.t1 }}>{fmtC(a)}</td>
-                      <td style={{ ...tdN, fontSize: 11, color: T.t3 }}>{t("schedule.cl_cum", { amt: fmtC(cum) })}</td>
-                      <td style={{ padding: "7px 12px", textAlign: "right" }}><span style={chip(bg, fg)}>{label}</span></td>
+                      <td style={{ ...tdN, fontSize: 11, color: T.t3 }}>{G.stages.length > 1 ? t("schedule.cl_cum", { amt: fmtC(cum) }) : ""}</td>
+                      <td style={{ padding: "7px 12px", textAlign: "right", width: 110 }}>{stChip(statusMany(s.lines))}</td>
                     </tr>
                   );
                 })}

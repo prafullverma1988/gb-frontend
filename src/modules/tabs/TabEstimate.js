@@ -1943,9 +1943,7 @@ function TabEstimate({ project }) {
                 {selEst.billing_method === "manual" && (<>
                   {/* Stage billing (30 Oct 2026): line-wise estimate par bill seedha line par —
                       schedule ki zaroorat nahi. Yahan line ka task, pehle bill ho chuka, hisse, had. */}
-                  <div style={{padding:"10px 14px",marginBottom:10,color:T.t3,background:T.surface,border:"1px dashed "+T.b1,borderRadius:8,fontSize:11.5,lineHeight:1.5}}>
-                    {t("stage_billing.manual_notice")}
-                  </div>
+                  {/* manual_notice ab panel ke "?" me (23 Nov 2026 — screen bhari thi) */}
                   {/* Stage Board bhi isi me (5 Nov 2026) — client aaj tak, thekedar ki WO line, Bill banao / Subcon WO banao / Extra kaam */}
                   <StageLinesPanel key={selEst.id} kind="estimate" id={selEst.id} canEdit={eEdit} canApprove={eApprove} projectId={projectId} />
                 </>)}

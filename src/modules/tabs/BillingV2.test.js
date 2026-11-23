@@ -108,6 +108,7 @@ test("% schedule: floor ka ₹/sqft note + WO line par ghar wala preset", async 
   await mount(<StageLinesPanel kind="wo" id={2} canEdit canApprove={false} />);
   await act(async () => { [...document.querySelectorAll("button")].find((b) => b.textContent === "Line-wise").click(); });
   const btn = (re) => [...document.querySelectorAll("button")].find((b) => re.test(b.textContent));
+  await act(async () => { btn(/^⋯$/).click(); });   // % Schedule ab line ke ⋯ menu me (23 Nov 2026)
   await act(async () => { btn(/^% Schedule$/).click(); });
   await act(async () => { btn(/^Ghar wala:/).click(); });
   const txt = noKeys();

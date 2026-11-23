@@ -86,7 +86,7 @@ test("Ek saath wali stage: sab floor ka bill bana tabhi 'Bill bana'", async () =
   LEDGER.items.find((x) => x.item_id === 13).billed_qty = 1000;        // sirf GF ka Tile
   await panel();
   const row = () => [...$('[data-together-card="Finishing"]').querySelectorAll("tr")][0].textContent;
-  expect(row()).toContain("Baaki");
+  expect(row()).not.toContain("Bill bana");   // ek floor ka bill = poori stage nahi ("Pending" chip ab nahi dikhta)
   unmount();
   LEDGER = split();
   for (const id of [13, 23]) { const x = LEDGER.items.find((y) => y.item_id === id); x.billed_qty = x.planned_qty; }
@@ -171,4 +171,35 @@ test("'Hisse lagao' box me bhi Structure + Finishing; Finishing ka tick hataya t
   expect(body.parts.length).toBe(10);
   expect(body.parts.some((p) => p.together)).toBe(false);
   expect(body.parts[0]).toEqual({ name: "Plinth", rate: 276, group: "Structure" });
+});
+
+// Sab floor ek saath (23 Nov 2026, Prafull): Line-wise me ek-saath wali stage ki EK row,
+// ek task picker — chuna task GF aur FF dono line par; floor ke neeche ye line nahi.
+test("Line-wise: ek-saath wali stage ki ek row, ek task sab floor par", async () => {
+  for (const x of LEDGER.items) if (x.part_together) x.together_key = x.part_group + "¦" + x.description.replace(/^.* · /, "").replace(/ \(₹\d+\)$/, "").toLowerCase();
+  const tasks = [{ id: 5, name: "Tile work", progress: 0 }, { id: 6, name: "GF Plinth", progress: 0 }];
+  api.get.mockImplementation(async (url) => {
+    if (url.includes("billing-ledger")) return { success: true, data: LEDGER };
+    if (url.includes("task-suggest")) return { success: true, data: { lines: LEDGER.items.map(x => ({ item_id: x.item_id, suggestions: [], task_id: x.item_id === 23 ? 6 : null, trigger_pct: 100 })), tasks, measure_ready: true } };
+    if (url.includes("stage-board")) return { success: true, data: BOARD };
+    return { success: false };
+  });
+  api.put.mockResolvedValue({ success: true, data: { updated: 2, drafts: [] } });
+  await panel();
+  const btnT = (re) => [...document.querySelectorAll("button")].find((b) => re.test(b.textContent));
+  await act(async () => { btnT(/^Line-wise$/).click(); });
+  const txt = noKeys();
+  const tile = $('[data-together-row="Finishing¦tile"]');
+  expect(tile).toBeTruthy();
+  expect(tile.textContent).toContain("GF + FF");
+  expect(tile.textContent).toContain("₹5,22,000");                 // 1800 × 290
+  expect(tile.textContent).toContain("alag-alag task");            // FF par pehle se doosra task
+  expect(txt).toContain("Finishing neeche — sab floor ek saath");
+  // Floor ke neeche Tile ki line nahi (sirf block me)
+  expect(document.querySelectorAll('[data-together-row]').length).toBe(2);   // Tile + Paint
+  const sel = tile.querySelector("select");
+  await act(async () => { sel.value = "5"; sel.dispatchEvent(new Event("change", { bubbles: true })); });
+  await act(async () => { btnT(/^Task Save karo$/).click(); });
+  const links = api.put.mock.calls[0][1].links;
+  expect(links.filter((l) => [13, 23].includes(l.item_id)).map((l) => l.task_id)).toEqual([5, 5]);
 });
