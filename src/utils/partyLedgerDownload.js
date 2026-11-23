@@ -16,6 +16,30 @@ import { API_BASE, getToken } from "../config/api";
 import { t, getLang } from "../i18n";
 import { LEDGER_PLUS, LEDGER_MINUS, balanceLabel } from "./moneyRules";
 
+// Bill ki row ka "Particulars" — material ka byora (23 Nov 2026, Prafull: "pdf particular
+// me material ka detail hona chahiye"). Pehle sirf note / description jaata tha, jo bill par
+// zyadatar "Material Purchase Bill — <vendor>" hota hai — kya aaya, kitna, kis rate, kuch nahi.
+// Ab: "Cement (Acc Gold) 40 Bag @ ₹345, Cement Transport 1 Nos @ ₹400" + note ho to " — note".
+// Line items na hon (payment, purana bill) to pehle jaisa note / description.
+// Backend utils/partyLedger.js aur web utils/partyLedgerDownload.js me HOOBAHOO ek jaisa.
+const numTxt = (v) => (Number(v) || 0).toLocaleString("en-IN", { maximumFractionDigits: 3 });
+export function particularsOf(r, items) {
+  const lines = (Array.isArray(items) ? items : [])
+    .map((it) => {
+      const name = String((it && (it.item_name || it.item || it.name)) || "").trim();
+      if (!name) return "";
+      const desc = String((it && it.description) || "").trim();
+      const qty = Number(it.qty) || 0, rate = Number(it.rate) || 0;
+      return name + (desc && desc.toLowerCase() !== name.toLowerCase() ? " (" + desc + ")" : "")
+        + (qty ? " " + numTxt(qty) + (it.unit ? " " + String(it.unit).trim() : "") : "")
+        + (rate ? " @ ₹" + numTxt(rate) : "");
+    })
+    .filter(Boolean);
+  const note = String((r && r.note) || "").trim();
+  if (!lines.length) return String(note || (r && r.description) || "").trim();
+  return lines.join(", ") + (note ? " — " + note : "");
+}
+
 // GET /finance/parties/:id/ledger ki kachchi row → statement row.
 // Sign server ka ledger_sign; customer_invoices / customer_payments wali rows
 // (client party) me wo aata hi nahi — tab type se (sales_invoice +1, receipt −1).
@@ -33,7 +57,7 @@ export const fromApiRow = (r) => ({
   type: r.display_type === "wallet_material" ? "material_purchase" : (r.type || ""),
   invoiceNo: r.invoice_no || null,
   project: r.project_name || "",
-  particulars: String(r.note || r.description || "").trim(),
+  particulars: particularsOf(r, r.line_items || r.items),
   paidBy: r.paid_by || "",
 });
 
@@ -49,7 +73,7 @@ export const fromScreenRow = (r) => ({
   type: r.displayType === "wallet_material" ? "material_purchase" : (r.txnType || ""),
   invoiceNo: r.invoiceNo || null,
   project: r.project || "",
-  particulars: String(r.note || r.sub || "").trim(),
+  particulars: particularsOf({ note: r.note, description: r.sub }, r.items),
   paidBy: r.paidBy || "",
 });
 
