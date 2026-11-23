@@ -3417,7 +3417,7 @@ function ReportsTab({ byEquipment, byProject, from, to, onRange, projects, equip
 // dip. Sensor side telematics se aata hai (/fuel/sensor-checks) — GPS/fuel
 // sensor jud'ne ke baad hi; tab tak wo checks "Baaki hai" dikhte hain aur
 // khaali jagah bharne ko kuch gadha nahi jaata.
-function CrossCheckTab({ stores, byEquipment, purchases, issues, sensor, onReload }) {
+function CrossCheckOverview({ stores, byEquipment, purchases, issues, sensor, onReload }) {
   const openEntry = useOpenEntry();
   // Meter reading jispar shak hai — pichhli reading se kam ya namumkin badi.
   // Entry rukti nahi (30 Sep 2026 se), isliye yahi jagah hai jahan use dekha jaata hai.
@@ -3603,6 +3603,357 @@ function CrossCheckTab({ stores, byEquipment, purchases, issues, sensor, onReloa
           </>
         )}
       </Panel>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════
+// CROSS-CHECK — MACHINE-WISE TRACKING + FLAGS REPORT (24 Nov 2026, Ratna Khanij)
+// Telematics provider ki "Fuel filling report" jaisa: har machine ke har fill par fill se
+// pehle tank me kitna tha, hamari entry kitni thi, sensor ne kitna dekha, aur antar.
+// Data: GET /fuel/machine-tracking (gb-backend services/fuelTracking.js). Wahi sensor data jo
+// purana Cross-check dekhta hai — sirf padhta hai. Flag sensor ka andaza hai, chori ka saboot nahi.
+// ══════════════════════════════════════════════════════════════════
+const mtSev = (sev) => (sev === "red" ? { c: T.red, bg: T.redL } : sev === "amber" ? { c: T.amb, bg: T.ambL } : { c: T.grn, bg: T.grnL });
+const mtTypeLabel = (type) => ({
+  no_entry: t("fuel.mt_f_no_entry"),
+  entry_more: t("fuel.mt_f_entry_more"),
+  entry_less: t("fuel.mt_f_entry_less"),
+  sensor_missing: t("fuel.mt_f_sensor_missing"),
+  drop: t("fuel.mt_f_drop"),
+}[type] || String(type || ""));
+const MT_TYPES = ["no_entry", "entry_more", "entry_less", "sensor_missing", "drop"];
+const mtSigned = (n) => (n == null ? "—" : n > 0 ? "+" + fmtN(n) : n < 0 ? "−" + fmtN(Math.abs(n)) : fmtN(n));
+
+function MtState({ err, tr, children }) {
+  if (err) return <div style={{ padding: "11px 14px", background: T.redL, border: `1px solid ${T.redM}`, borderRadius: 8, fontSize: 12, color: T.red, fontWeight: 600 }}>{err}</div>;
+  if (!tr) return <Empty>{t("fuel.mt_loading")}</Empty>;
+  if (!tr.enabled) return <Empty>{t("fuel.mt_not_enabled")}</Empty>;
+  return <>{children}</>;
+}
+
+// Haal ka chhota pill — flag ka rang severity se, naam type se.
+const MtStatus = ({ row }) => {
+  if (row.reviewed) return <Pill label={t("fuel.mt_reviewed")} c={T.t3} bg={T.sltL} />;
+  if (row.flags && row.flags.length) {
+    const s = mtSev(row.severity);
+    return <Pill label={mtTypeLabel(row.flags[0])} c={s.c} bg={s.bg} />;
+  }
+  return <Pill label={t("fuel.mt_ok")} c={T.grn} bg={T.grnL} />;
+};
+
+function MachineWiseView({ tr, err, from, to, onRange, eq, setEq, reload }) {
+  const canMach = can("Machinery", "create");
+  const [busy, setBusy] = useState(false);
+  const machines = tr && tr.machines ? tr.machines : [];
+  const sel = machines.find((m) => String(m.equipment_id) === String(eq)) || null;
+
+  const link = async (u) => {
+    if (!u.suggest || busy) return;
+    if (!window.confirm(t("fuel.mt_link_confirm", { unit: u.unit_name, machine: u.suggest.name }))) return;
+    setBusy(true);
+    const r = await api.post(`/telematics/units/${u.unit_id}/link`, { equipment_id: u.suggest.equipment_id }).catch(() => null);
+    setBusy(false);
+    if (!r || r.success === false) { window.alert((r && r.message) || t("fuel.mt_link_fail")); return; }
+    reload();
+  };
+  const review = async (id) => {
+    const r = await api.post(`/telematics/events/${id}/review`, { status: "ok" }).catch(() => null);
+    if (!r || r.success === false) { window.alert((r && r.message) || t("fuel.mt_action_fail")); return; }
+    reload();
+  };
+
+  const excel = () => {
+    const rows = [];
+    for (const m of machines) for (const r of m.rows) rows.push({ machine: m.name, ...r });
+    exportExcel(rows, [
+      { label: t("fuel.mt_col_machine"), key: "machine", w: 26 },
+      { label: t("fuel.mt_col_when"), w: 18, excel: (r) => fmtDT(r.time) },
+      { label: t("fuel.mt_col_before"), w: 10, excel: (r) => r.level_before ?? "" },
+      { label: t("fuel.mt_col_entry"), w: 10, excel: (r) => r.entry_l ?? "" },
+      { label: t("fuel.mt_col_sensor"), w: 10, excel: (r) => (r.kind === "drop" ? "" : r.sensor_l ?? "") },
+      { label: t("fuel.mt_col_diff"), w: 12, excel: (r) => (r.kind === "drop" ? -(r.litres || 0) : r.diff_l ?? "") },
+      { label: t("fuel.mt_col_diff_pct"), w: 8, excel: (r) => r.diff_pct ?? "" },
+      { label: t("fuel.mt_col_after"), w: 10, excel: (r) => r.level_after ?? "" },
+      { label: t("fuel.mt_col_status"), w: 34, excel: (r) => (r.reviewed ? t("fuel.mt_reviewed") : r.flags && r.flags.length ? mtTypeLabel(r.flags[0]) : t("fuel.mt_ok")) },
+      { label: t("fuel.mt_col_place"), w: 22, excel: (r) => r.location || "" },
+    ], `fuel-machine-wise-${from}-${to}`, t("fuel.mt_sub_machine").slice(0, 28));
+  };
+
+  return (
+    <div style={{ display: "grid", gap: 12 }}>
+      <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+        <DateRange from={from} to={to} onRange={onRange} />
+        <span style={{ flex: 1 }} />
+        {tr && tr.enabled && machines.length > 0 && <Btn size="sm" ghost onClick={excel}>{t("fuel.mt_excel")}</Btn>}
+      </div>
+      <div style={{ padding: "11px 14px", background: T.indL, border: `1px solid ${T.indM}`, borderRadius: 8, fontSize: 12, color: T.ind, lineHeight: 1.55 }}>
+        {t("fuel.mt_intro_machine")}
+      </div>
+
+      <MtState err={err} tr={tr}>
+        {tr && tr.unlinked && tr.unlinked.length > 0 && (
+          <div style={{ padding: "10px 14px", background: T.ambL, border: `1px solid ${T.amb}`, borderRadius: 8 }}>
+            <div style={{ fontSize: 12.5, fontWeight: 700, color: T.amb }}>
+              ⚠ {t("fuel.mt_unlinked_title", { n: tr.unlinked.length, l: fmtN(tr.unlinked.reduce((s, u) => s + (u.litres || 0), 0)) })}
+            </div>
+            <div style={{ fontSize: 11.5, color: T.t3, margin: "3px 0 8px", lineHeight: 1.5 }}>{t("fuel.mt_unlinked_hint")}</div>
+            {tr.unlinked.map((u) => (
+              <div key={u.unit_id} style={{ display: "flex", gap: 10, alignItems: "center", padding: "6px 0", borderTop: `1px solid ${T.ambM}`, flexWrap: "wrap" }}>
+                <span style={{ fontSize: 12, fontWeight: 600, color: T.t1, minWidth: 190 }}>{u.unit_name}</span>
+                <span style={{ fontSize: 11.5, color: T.t3 }}>{t("fuel.mt_unlinked_fills", { n: u.fills, l: fmtN(u.litres) })}</span>
+                <span style={{ flex: 1 }} />
+                {u.suggest ? (
+                  <>
+                    <span style={{ fontSize: 11.5, color: T.t2 }}>{t("fuel.mt_suggest")}: <b>{u.suggest.name}</b> <span style={{ color: T.t4 }}>({u.suggest.why})</span></span>
+                    {canMach && <Btn size="sm" disabled={busy} onClick={() => link(u)}>{t("fuel.mt_link_btn")}</Btn>}
+                  </>
+                ) : (
+                  <span style={{ fontSize: 11.5, color: T.t4 }}>{t("fuel.mt_no_suggest")}</span>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {machines.length === 0 ? (
+          <Panel title={t("fuel.mt_sub_machine")}><Empty>{t("fuel.mt_empty_machine")}</Empty></Panel>
+        ) : (
+          <Panel title={t("fuel.mt_machines_title", { n: machines.length, fills: tr.totals.fills })}>
+            <div style={{ overflowX: "auto" }}>
+              <div style={{ minWidth: 860 }}>
+                <Row head cols="1.7fr 56px 86px 86px 100px 66px 150px 120px">
+                  <span>{t("fuel.mt_col_machine")}</span><span style={{ textAlign: "right" }}>{t("fuel.mt_col_fills")}</span>
+                  <span style={{ textAlign: "right" }}>{t("fuel.mt_col_entry")}</span><span style={{ textAlign: "right" }}>{t("fuel.mt_col_sensor")}</span>
+                  <span style={{ textAlign: "right" }}>{t("fuel.mt_col_diff")}</span><span style={{ textAlign: "right" }}>{t("fuel.mt_col_diff_pct")}</span>
+                  <span>{t("fuel.mt_col_flags")}</span><span>{t("fuel.mt_col_last")}</span>
+                </Row>
+                {machines.map((m) => {
+                  const on = String(m.equipment_id) === String(eq);
+                  return (
+                    <div key={m.equipment_id} style={{ background: on ? T.indL : "transparent" }}>
+                      <Row cols="1.7fr 56px 86px 86px 100px 66px 150px 120px" onClick={() => setEq(on ? "" : String(m.equipment_id))}>
+                        <span style={{ fontSize: 12.5, fontWeight: 700, color: T.t1 }}>{m.name}{m.registration_no ? <span style={{ fontWeight: 400, color: T.t4, fontSize: 10.5 }}> · {m.registration_no}</span> : null}</span>
+                        <span style={{ fontSize: 12, textAlign: "right" }}>{m.fills_n}</span>
+                        <span style={{ fontSize: 12, textAlign: "right", fontFamily: "monospace" }}>{fmtN(m.entry_l)}</span>
+                        <span style={{ fontSize: 12, textAlign: "right", fontFamily: "monospace" }}>{fmtN(m.sensor_l)}</span>
+                        <span style={{ fontSize: 12, textAlign: "right", fontFamily: "monospace", fontWeight: 700, color: m.diff_pct != null && m.diff_pct > tr.tol.pct ? T.amb : T.t2 }}>{mtSigned(m.diff_l)}</span>
+                        <span style={{ fontSize: 11.5, textAlign: "right", color: T.t3 }}>{m.diff_pct != null ? m.diff_pct + "%" : "—"}</span>
+                        <span style={{ fontSize: 11.5 }}>
+                          {m.flag_n === 0 ? <Pill label={t("fuel.mt_all_ok")} c={T.grn} bg={T.grnL} />
+                            : <>
+                                {m.red_n > 0 && <Pill label={t("fuel.mt_n_red", { n: m.red_n })} c={T.red} bg={T.redL} />}{" "}
+                                {m.flag_n - m.red_n > 0 && <Pill label={t("fuel.mt_n_amber", { n: m.flag_n - m.red_n })} c={T.amb} bg={T.ambL} />}
+                              </>}
+                        </span>
+                        <span style={{ fontSize: 11, color: T.t3 }}>{fmtDT(m.last_fill_at)}</span>
+                      </Row>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+            <div style={{ fontSize: 11, color: T.t4, padding: "9px 14px", lineHeight: 1.5 }}>{t("fuel.mt_note_diff", { pct: tr.tol.pct })}</div>
+          </Panel>
+        )}
+
+        {sel && (
+          <Panel title={t("fuel.mt_detail_title", { name: sel.name })} action={<Btn size="sm" ghost onClick={() => setEq("")}>{t("fuel.mt_close")}</Btn>}>
+            <div style={{ overflowX: "auto" }}>
+              <div style={{ minWidth: 940 }}>
+                <Row head cols="124px 64px 72px 74px 76px 58px 64px 1.7fr 1fr 84px">
+                  <span>{t("fuel.mt_col_when")}</span><span style={{ textAlign: "right" }}>{t("fuel.mt_col_before")}</span>
+                  <span style={{ textAlign: "right" }}>{t("fuel.mt_col_entry")}</span><span style={{ textAlign: "right" }}>{t("fuel.mt_col_sensor")}</span>
+                  <span style={{ textAlign: "right" }}>{t("fuel.mt_col_diff")}</span><span style={{ textAlign: "right" }}>{t("fuel.mt_col_diff_pct")}</span>
+                  <span style={{ textAlign: "right" }}>{t("fuel.mt_col_after")}</span><span>{t("fuel.mt_col_status")}</span>
+                  <span>{t("fuel.mt_col_place")}</span><span />
+                </Row>
+                {sel.rows.map((r) => (
+                  <Row key={r.kind + r.id} cols="124px 64px 72px 74px 76px 58px 64px 1.7fr 1fr 84px">
+                    <span style={{ fontSize: 11, color: T.t3 }}>{fmtDT(r.time)}</span>
+                    <span style={{ fontSize: 11.5, textAlign: "right", fontFamily: "monospace", color: T.t3 }}>{r.level_before != null ? fmtN(r.level_before) : "—"}</span>
+                    <span style={{ fontSize: 12, textAlign: "right", fontFamily: "monospace" }}>{r.entry_l != null ? fmtN(r.entry_l) : "—"}</span>
+                    <span style={{ fontSize: 12, textAlign: "right", fontFamily: "monospace" }}>{r.kind === "drop" ? "—" : r.sensor_l != null ? fmtN(r.sensor_l) : "—"}</span>
+                    <span style={{ fontSize: 12, textAlign: "right", fontFamily: "monospace", fontWeight: 700, color: r.severity ? mtSev(r.severity).c : T.t2 }}>
+                      {r.kind === "drop" ? "−" + fmtN(r.litres) : mtSigned(r.diff_l)}
+                    </span>
+                    <span style={{ fontSize: 11, textAlign: "right", color: T.t3 }}>{r.diff_pct != null ? r.diff_pct + "%" : "—"}</span>
+                    <span style={{ fontSize: 11.5, textAlign: "right", fontFamily: "monospace", color: T.t3 }}>{r.level_after != null ? fmtN(r.level_after) : "—"}</span>
+                    <span><MtStatus row={r} /></span>
+                    <span style={{ fontSize: 11, color: T.t3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.location || ""}>{r.location || "—"}</span>
+                    <span style={{ textAlign: "right" }}>
+                      {canMach && r.event_id && r.flags && r.flags.length > 0 && <Btn size="sm" ghost onClick={() => review(r.event_id)}>{t("fuel.theek_tha")}</Btn>}
+                    </span>
+                  </Row>
+                ))}
+              </div>
+            </div>
+          </Panel>
+        )}
+      </MtState>
+    </div>
+  );
+}
+
+function FlagsReportView({ tr, err, from, to, onRange, reload, onPickMachine }) {
+  const canMach = can("Machinery", "create");
+  const [type, setType] = useState("all");
+  const [machine, setMachine] = useState("");
+  const [onlyRed, setOnlyRed] = useState(false);
+  const flags = tr && tr.flags ? tr.flags : [];
+  const counts = useMemo(() => { const c = { all: flags.length }; for (const f of flags) c[f.type] = (c[f.type] || 0) + 1; return c; }, [flags]);
+  const shown = flags.filter((f) => (type === "all" || f.type === type) && (!machine || String(f.equipment_id) === machine) && (!onlyRed || f.severity === "red"));
+  const rank = (tr && tr.machines ? tr.machines : []).filter((m) => m.flag_n > 0).slice(0, 5);
+  const maxL = rank.reduce((a, m) => Math.max(a, m.suspect_l), 0) || 1;
+
+  const review = async (f) => {
+    const r = await api.post(`/telematics/events/${f.event_id}/review`, { status: "ok" }).catch(() => null);
+    if (!r || r.success === false) { window.alert((r && r.message) || t("fuel.mt_action_fail")); return; }
+    reload();
+  };
+  const excel = () => exportExcel(shown, [
+    { label: t("fuel.mt_col_when"), w: 18, excel: (f) => fmtDT(f.time) },
+    { label: t("fuel.mt_col_machine"), key: "machine", w: 26 },
+    { label: t("fuel.mt_col_what"), w: 36, excel: (f) => mtTypeLabel(f.type) },
+    { label: t("fuel.mt_col_level"), w: 8, excel: (f) => (f.severity === "red" ? t("fuel.mt_red") : t("fuel.mt_amber")) },
+    { label: t("fuel.mt_col_entry"), w: 10, excel: (f) => f.entry_l ?? "" },
+    { label: t("fuel.mt_col_sensor"), w: 10, excel: (f) => f.sensor_l ?? "" },
+    { label: t("fuel.mt_col_diff"), w: 12, excel: (f) => (f.type === "drop" ? -(f.litres || 0) : f.diff_l ?? "") },
+    { label: t("fuel.mt_col_diff_pct"), w: 8, excel: (f) => f.diff_pct ?? "" },
+    { label: t("fuel.mt_col_place"), w: 22, excel: (f) => f.location || "" },
+  ], `fuel-flags-${from}-${to}`, t("fuel.mt_sub_flags").slice(0, 28));
+
+  return (
+    <div style={{ display: "grid", gap: 12 }}>
+      <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+        <DateRange from={from} to={to} onRange={onRange} />
+        <span style={{ flex: 1 }} />
+        {tr && tr.enabled && flags.length > 0 && <Btn size="sm" ghost onClick={excel}>{t("fuel.mt_excel")}</Btn>}
+      </div>
+      <div style={{ padding: "11px 14px", background: T.indL, border: `1px solid ${T.indM}`, borderRadius: 8, fontSize: 12, color: T.ind, lineHeight: 1.55 }}>
+        {t("fuel.mt_intro_flags")}
+      </div>
+
+      <MtState err={err} tr={tr}>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          <Pill label={t("fuel.mt_flags_total", { n: tr && tr.totals ? tr.totals.flags : 0, red: tr && tr.totals ? tr.totals.red : 0, l: fmtN(tr && tr.totals ? tr.totals.suspect_l : 0) })}
+            c={tr && tr.totals && tr.totals.red > 0 ? T.red : T.grn} bg={tr && tr.totals && tr.totals.red > 0 ? T.redL : T.grnL} />
+        </div>
+
+        {rank.length > 0 && (
+          <Panel title={t("fuel.mt_rank_title")}>
+            <div style={{ padding: "6px 15px 12px", display: "grid", gap: 7 }}>
+              {rank.map((m) => (
+                <div key={m.equipment_id} onClick={() => onPickMachine(m.equipment_id)} style={{ display: "grid", gridTemplateColumns: "minmax(140px,1.4fr) 3fr 150px", gap: 10, alignItems: "center", cursor: "pointer" }}>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: T.t1 }}>{m.name}</span>
+                  <span style={{ background: T.sltL, borderRadius: 4, height: 9, overflow: "hidden" }}>
+                    <span style={{ display: "block", height: "100%", width: Math.max(4, Math.round(m.suspect_l / maxL * 100)) + "%", background: m.red_n > 0 ? T.red : T.amb }} />
+                  </span>
+                  <span style={{ fontSize: 11.5, fontFamily: "monospace", color: T.t2, textAlign: "right" }}>{fmtL(m.suspect_l)} · {t("fuel.mt_n_flags", { n: m.flag_n })}</span>
+                </div>
+              ))}
+            </div>
+          </Panel>
+        )}
+
+        <Panel title={t("fuel.mt_flags_title", { n: shown.length })}>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", padding: "10px 15px", borderBottom: `1px solid ${T.b1}`, alignItems: "center" }}>
+            {["all", ...MT_TYPES].filter((k) => k === "all" || counts[k]).map((k) => {
+              const on = type === k;
+              return (
+                <button key={k} type="button" onClick={() => setType(k)}
+                  style={{ padding: "5px 11px", borderRadius: 14, border: `1px solid ${on ? T.ind : T.b1}`, background: on ? T.ind : T.surface, color: on ? "white" : T.t2, fontSize: 11.5, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
+                  {k === "all" ? t("fuel.mt_f_all") : mtTypeLabel(k)} ({counts[k] || 0})
+                </button>
+              );
+            })}
+            <span style={{ flex: 1 }} />
+            <label style={{ fontSize: 11.5, color: T.t2, display: "flex", gap: 5, alignItems: "center", cursor: "pointer" }}>
+              <input type="checkbox" checked={onlyRed} onChange={(e) => setOnlyRed(e.target.checked)} /> {t("fuel.mt_only_red")}
+            </label>
+            <PickSelect value={machine} onChange={(e) => setMachine(e.target.value)} style={{ ...inp, width: 200, padding: "6px 9px", fontSize: 11.5 }}>
+              <option value="">{t("fuel.mt_all_machines")}</option>
+              {(tr && tr.machines ? tr.machines : []).filter((m) => m.flag_n > 0).map((m) => <option key={m.equipment_id} value={String(m.equipment_id)}>{m.name}</option>)}
+            </PickSelect>
+          </div>
+          {shown.length === 0 ? <Empty>{t("fuel.mt_empty_flags")}</Empty> : (
+            <div style={{ overflowX: "auto" }}>
+              <div style={{ minWidth: 960 }}>
+                <Row head cols="124px 1.4fr 1.7fr 72px 74px 80px 58px 1fr 84px">
+                  <span>{t("fuel.mt_col_when")}</span><span>{t("fuel.mt_col_machine")}</span><span>{t("fuel.mt_col_what")}</span>
+                  <span style={{ textAlign: "right" }}>{t("fuel.mt_col_entry")}</span><span style={{ textAlign: "right" }}>{t("fuel.mt_col_sensor")}</span>
+                  <span style={{ textAlign: "right" }}>{t("fuel.mt_col_diff")}</span><span style={{ textAlign: "right" }}>{t("fuel.mt_col_diff_pct")}</span>
+                  <span>{t("fuel.mt_col_place")}</span><span />
+                </Row>
+                {shown.map((f) => {
+                  const s = mtSev(f.severity);
+                  return (
+                    <Row key={f.key} cols="124px 1.4fr 1.7fr 72px 74px 80px 58px 1fr 84px">
+                      <span style={{ fontSize: 11, color: T.t3 }}>{fmtDT(f.time)}</span>
+                      <span onClick={() => onPickMachine(f.equipment_id)} style={{ fontSize: 12, fontWeight: 600, color: T.ind, cursor: "pointer" }}>{f.machine}</span>
+                      <span><Pill label={mtTypeLabel(f.type)} c={s.c} bg={s.bg} /></span>
+                      <span style={{ fontSize: 12, textAlign: "right", fontFamily: "monospace" }}>{f.entry_l != null ? fmtN(f.entry_l) : "—"}</span>
+                      <span style={{ fontSize: 12, textAlign: "right", fontFamily: "monospace" }}>{f.sensor_l != null ? fmtN(f.sensor_l) : "—"}</span>
+                      <span style={{ fontSize: 12, textAlign: "right", fontFamily: "monospace", fontWeight: 700, color: s.c }}>{f.type === "drop" ? "−" + fmtN(f.litres) : mtSigned(f.diff_l)}</span>
+                      <span style={{ fontSize: 11, textAlign: "right", color: T.t3 }}>{f.diff_pct != null ? f.diff_pct + "%" : "—"}</span>
+                      <span style={{ fontSize: 11, color: T.t3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={f.location || ""}>{f.location || "—"}</span>
+                      <span style={{ textAlign: "right" }}>{canMach && f.event_id && <Btn size="sm" ghost onClick={() => review(f)}>{t("fuel.theek_tha")}</Btn>}</span>
+                    </Row>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+          <div style={{ fontSize: 11, color: T.t4, padding: "9px 14px", lineHeight: 1.5 }}>{t("fuel.mt_note_flags", { pct: tr && tr.tol ? tr.tol.pct : 15, red_pct: tr && tr.tol ? tr.tol.red_pct : 25, red_l: tr && tr.tol ? tr.tol.red_l : 10 })}</div>
+        </Panel>
+      </MtState>
+    </div>
+  );
+}
+
+// Cross-check ka naya shell: Jaanch (purana) · Machine wise · Flags. Data ek hi baar — teeno ginti ke saath.
+function CrossCheckTab(props) {
+  const [sub, setSub] = useState("check");
+  const [from, setFrom] = useState(() => new Date(Date.now() - 30 * 864e5).toLocaleDateString("en-CA"));
+  const [to, setTo] = useState(() => todayStr());
+  const [tr, setTr] = useState(null);
+  const [err, setErr] = useState("");
+  const [tick, setTick] = useState(0);
+  const [eq, setEq] = useState("");
+  useEffect(() => {
+    let alive = true;
+    api.get("/fuel/machine-tracking?" + qs({ from, to }))
+      .then((r) => {
+        if (!alive) return;
+        if (r && r.success) { setTr(r.data); setErr(""); } else setErr((r && r.message) || t("fuel.mt_load_fail"));
+      })
+      .catch(() => { if (alive) setErr(t("fuel.mt_load_fail")); });
+    return () => { alive = false; };
+  }, [from, to, tick]);
+  const onRange = (f, tt) => { setFrom(f); setTo(tt); };
+  const reload = () => { setTick((x) => x + 1); if (props.onReload) props.onReload(); };
+  const live = tr && tr.enabled;
+  const SUBS = [
+    { id: "check", l: t("fuel.mt_sub_check") },
+    { id: "machine", l: t("fuel.mt_sub_machine") + (live ? ` (${tr.totals.machines})` : "") },
+    { id: "flags", l: t("fuel.mt_sub_flags") + (live ? ` (${tr.totals.flags})` : ""), alert: live && tr.totals.red > 0 },
+  ];
+  return (
+    <div style={{ display: "grid", gap: 12 }}>
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+        {SUBS.map((s) => (
+          <button key={s.id} type="button" onClick={() => setSub(s.id)}
+            style={{ padding: "7px 14px", borderRadius: 7, border: `1px solid ${sub === s.id ? T.ind : T.b1}`, background: sub === s.id ? T.ind : T.surface, color: sub === s.id ? "white" : s.alert ? T.red : T.t2, fontSize: 12.5, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
+            {s.l}
+          </button>
+        ))}
+      </div>
+      {sub === "check" && <CrossCheckOverview {...props} />}
+      {sub === "machine" && <MachineWiseView tr={tr} err={err} from={from} to={to} onRange={onRange} eq={eq} setEq={setEq} reload={reload} />}
+      {sub === "flags" && (
+        <FlagsReportView tr={tr} err={err} from={from} to={to} onRange={onRange} reload={reload}
+          onPickMachine={(id) => { setEq(String(id)); setSub("machine"); }} />
+      )}
     </div>
   );
 }
@@ -3948,3 +4299,5 @@ function FuelModule() {
 }
 
 export default FuelModule;
+// Test ke liye (Cross-check machine wise + flags: FuelModule.tracking.test.js)
+export { CrossCheckTab, MachineWiseView, FlagsReportView };
