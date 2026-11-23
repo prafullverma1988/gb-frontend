@@ -26,6 +26,7 @@ import React, { useState, useMemo, useEffect } from "react";
 import api from "../../config/api";
 import { T } from "../shared/tokens";
 import { t } from "../../i18n";
+import { LibApplyModal, LibPicker, StageLibraryManager } from "./StageLibrary";
 
 const num = (v) => { const n = parseFloat(v); return Number.isFinite(n) ? n : 0; };
 const r2 = (n) => Math.round(num(n) * 100) / 100;
@@ -208,6 +209,7 @@ export function PartsEditor({ pmode, parts, onParts, onMode, modes, presetsFor, 
         {presetsFor && presets(presetsFor).map(p => (
           <button key={p.key} type="button" onClick={() => onParts(presetParts(p), "pct")} style={btnS("soft")}>{p.label}</button>
         ))}
+        {presetsFor === "parts" && <LibPicker onPick={(ps) => onParts(ps, "pct")} />}
       </div>
       <datalist id="sch-grp-list"><option value={t("schedule.grp_structure")} /><option value={t("stage_billing.grp_civil")} /><option value={t("stage_billing.grp_finishing")} /></datalist>
       {parts.map((p, i, arr) => {
@@ -297,6 +299,7 @@ export function ScheduleMethods({ kind, id, items, canEdit, qtyCount = 0, onDone
   const splitLines = lines.filter(x => x.part_of).length;
   // Schedule ban chuka ho to tareeke ke card band (23 Nov 2026 — screen bhari thi); patti se khulte.
   const [showCards, setShowCards] = useState(splitLines === 0);
+  const [libOpen, setLibOpen] = useState(null);   // "apply" | "manage"
 
   // Ek floor (category) ki 2+ bina-hisse line ek hi unit + area par, aur naam stage
   // jaise (plinth ₹300 / lintel ₹200 / slab ₹200) = pehle se stage — unpar dobara %
@@ -368,6 +371,18 @@ export function ScheduleMethods({ kind, id, items, canEdit, qtyCount = 0, onDone
         <span style={{ fontSize: 11, fontWeight: 800, color: T.t2, textTransform: "uppercase", letterSpacing: ".4px" }}>{showCards ? "▾" : "▸"} {t("schedule.methods_title")}</span>
         {!showCards && splitLines > 0 && <span style={{ fontSize: 11, color: T.t3 }}>{t("schedule.m_parts_stat", { n: splitLines })}</span>}
       </button>
+      {kind === "estimate" && (
+        <div data-testid="lib-strip" style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, padding: "8px 11px", marginBottom: 8, borderRadius: 8, border: "1px dashed " + T.ind, background: T.indL }}>
+          <div style={{ flex: "1 1 260px", minWidth: 0 }}>
+            <div style={{ fontSize: 12, fontWeight: 800, color: T.ind }}>📚 {t("stage_lib.strip_title")}</div>
+            <div style={{ fontSize: 10.5, color: T.t3, lineHeight: 1.45 }}>{t("stage_lib.strip_hint")}</div>
+          </div>
+          {canEdit && <button type="button" data-testid="lib-apply-open" onClick={() => setLibOpen("apply")} style={btnS("primary")}>{t("stage_lib.apply_open")}</button>}
+          <button type="button" data-testid="lib-manage-open" onClick={() => setLibOpen("manage")} style={btnS("soft")}>{t("stage_lib.manage_btn")}</button>
+        </div>
+      )}
+      {libOpen === "apply" && <LibApplyModal estimateId={id} items={lines} onClose={() => setLibOpen(null)} onDone={(m) => { setLibOpen(null); onDone && onDone(m); }} />}
+      {libOpen === "manage" && <StageLibraryManager canEdit={canEdit} onClose={() => setLibOpen(null)} />}
       {showCards && <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: 8 }}>
         {card(t("schedule.m_item"), t("schedule.m_item_desc"), t("schedule.m_item_stat", { n: plain.length }))}
         {card(t("schedule.m_parts"), t("schedule.m_parts_desc"), splitLines ? t("schedule.m_parts_stat", { n: splitLines }) : null,

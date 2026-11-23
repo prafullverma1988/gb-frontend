@@ -19,6 +19,7 @@ import PackageDetail, { RateLine } from "./PackageDetail";
 import PackageCreate, { NewMenu } from "./PackageCreate";
 import PackageCompare from "./PackageCompare";
 import PackageLetterhead from "./PackageLetterhead";
+import { StageLibraryManager } from "../tabs/StageLibrary";
 
 function PackageCard({ p, onOpen }) {
   return (
@@ -47,6 +48,7 @@ export default function PackagesTab() {
   const [err, setErr] = useState("");
   const [view, setView] = useState({ name: "list" });
   const [menu, setMenu] = useState(false);
+  const [stageLib, setStageLib] = useState(false);   // 📚 Stage Library (25 Nov 2026)
 
   const load = useCallback(async () => {
     const r = await api.get(BASE);
@@ -90,6 +92,7 @@ export default function PackagesTab() {
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
             <button type="button" onClick={() => go({ name: "compare" })} disabled={packages.length < 2} style={btn("plain", packages.length < 2)}>⇄ {t("sales_pkg_ui.compare")}</button>
             {canEdit ? <button type="button" onClick={() => go({ name: "letterhead" })} style={btn()}>🏢 {t("sales_pkg_ui.letterhead")}</button> : null}
+            <button type="button" data-testid="pk-stage-lib" onClick={() => setStageLib(true)} style={btn()}>📚 {t("stage_lib.manage_btn")}</button>
             {canEdit ? <button type="button" onClick={() => setMenu((m) => !m)} data-testid="btn-new" style={btn("primary")}>+ {t("sales_pkg_ui.new_package")}</button> : null}
           </div>
         </div>
@@ -114,6 +117,7 @@ export default function PackagesTab() {
   return (
     <div data-pkg-scroll="1" style={{ height: "100%", overflowY: "auto", overflowX: "hidden", background: T.bg, fontFamily: FONT, WebkitOverflowScrolling: "touch" }}>
       <div style={{ maxWidth: 940, margin: "0 auto", padding: "12px 12px 48px", boxSizing: "border-box" }}>{body}</div>
+      {stageLib ? <StageLibraryManager canEdit={canEdit} onClose={() => setStageLib(false)} /> : null}
     </div>
   );
 }
