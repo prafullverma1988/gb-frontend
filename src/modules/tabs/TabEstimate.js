@@ -14,6 +14,7 @@ import { StageBillGrid, StageLinesPanel } from "./StageBilling";
 import { StatementView, ProjectStatementView, DraftLinesModal } from "./BillingV2";
 import { ChaluBillView, ProjectChaluView } from "./ChaluBill";
 import PackageEstimateModal from "../crm/PackageEstimateModal";
+import AmendDiffView, { AmendTotals, BoqTotalBar, boqTotals, diffFromApplied, diffFromProposal } from "./AmendDiff";
 import UnitSelect, { DEFAULT_UNIT, isLumpUnit, withUnit } from "../crm/EstimateUnit";
 
 function TabEstimate({ project }) {
@@ -486,6 +487,7 @@ function TabEstimate({ project }) {
     if (status === "Approved") {
       // Refresh the parent estimate detail + summary (header + total updated)
       await selectEst(selEst);
+      await loadEstimates();
     }
   };
 
@@ -603,7 +605,7 @@ function TabEstimate({ project }) {
     const tdsAmt = Math.round(grand * tdsPct/100);
     const taxAmt = Math.round(grand * taxPct/100);
     const net    = grand - retAmt - tdsAmt + taxAmt;
-    let summary = `<div class="row"><span>Gross Amount</span><span>${inr(grand)}</span></div>`;
+    let summary = `<div class="row"><span>${esc(t("estimate.boq_total_label"))}</span><span>${inr(grand)}</span></div>`;
     if (retPct) summary += `<div class="row ret"><span>Retention (${retPct}%)</span><span>− ${inr(retAmt)}</span></div>`;
     if (tdsPct) summary += `<div class="row tds"><span>TDS (${tdsPct}%)</span><span>− ${inr(tdsAmt)}</span></div>`;
     if (taxPct) summary += `<div class="row"><span>Tax (${taxPct}%)</span><span>+ ${inr(taxAmt)}</span></div>`;
@@ -634,6 +636,9 @@ function TabEstimate({ project }) {
         tr.sec td{background:#EFF6FF;color:#1D4ED8;font-weight:800;border-top:1px solid #BFDBFE}
         tr.cat td{background:#F1F5F9;color:#111827;font-weight:700;padding-left:16px}
         td.it{padding-left:24px}
+        tr.grand td{background:#0F172A;color:#fff;font-weight:800;font-size:13px;padding:9px;text-transform:uppercase;letter-spacing:.3px}
+        tr.grand td.r{color:#5EEAD4;font-size:14px}
+        tr.grand-sub td{color:#475569;font-size:11px;background:#F8FAFC}
         .tag{font-size:8px;font-weight:700;background:#FEF3C7;color:#92400E;padding:1px 5px;border-radius:3px;letter-spacing:.3px}
         .cnt{font-size:9.5px;color:#9CA3AF;font-weight:500}
         .totals{margin-top:16px;width:300px;margin-left:auto;border:1px solid #E5E7EB;border-radius:8px;overflow:hidden}
@@ -656,6 +661,9 @@ function TabEstimate({ project }) {
         <table>
           <tr><th>Description</th><th>Unit</th><th style="text-align:right">Qty</th><th style="text-align:right">Rate</th><th style="text-align:right">Amount</th><th style="text-align:right">Subtotal</th></tr>
           ${body}
+          <tr class="grand"><td colspan="5">${esc(t("estimate.boq_total_label"))}</td><td class="r">${inr(grand)}</td></tr>
+          ${(() => { const x = boqTotals(estDetail?.sections, estDetail?.unsectioned, 0); return x.extra > 0
+            ? `<tr class="grand-sub"><td colspan="5">${esc(t("estimate.boq_total_contract"))} · ${esc(t("estimate.boq_total_extra"))}</td><td class="r">${inr(x.boq)} · ${inr(x.extra)}</td></tr>` : ""; })()}
         </table>
         <div class="totals">${summary}</div>
         ${termsBlock}
@@ -1933,6 +1941,9 @@ function TabEstimate({ project }) {
                     );
                   });
                 })()}
+                {((estDetail.sections||[]).length > 0 || (estDetail.unsectioned||[]).length > 0) && (
+                  <BoqTotalBar sections={estDetail.sections} unsectioned={estDetail.unsectioned} taxPct={selEst?.tax_pct} />
+                )}
               </div>
             )}
 
@@ -2384,10 +2395,13 @@ function TabEstimate({ project }) {
                   const form  = a.proposed?.proposed_form || {};
                   let amendTotal = 0;
                   secs.forEach(s => (s.items||[]).forEach(it => amendTotal += (parseFloat(it.qty)||0) * (parseFloat(it.rate)||0)));
+                  // Kya badla: approve hua to server ka applied_diff, Pending to abhi ka BOQ vs proposal
+                  const adiff = a.status === "Approved" ? diffFromApplied(a.applied_diff)
+                    : a.status === "Pending" && estDetail ? diffFromProposal(estDetail.sections, secs) : null;
                   return (
                     <div key={a.id} style={{background:T.surface,border:"1px solid "+T.b1,borderRadius:8,marginBottom:8,overflow:"hidden"}}>
                       <div onClick={()=>setExpandedAmend(o => o === a.id ? null : a.id)}
-                        style={{padding:"10px 14px",display:"grid",gridTemplateColumns:"24px 1fr 140px 110px 110px",gap:10,alignItems:"center",cursor:"pointer",borderBottom: isOpen ? "1px solid "+T.b1 : "none"}}>
+                        style={{padding:"10px 14px",display:"grid",gridTemplateColumns:"24px 1fr 140px minmax(110px,auto) 110px",gap:10,alignItems:"center",cursor:"pointer",borderBottom: isOpen ? "1px solid "+T.b1 : "none"}}>
                         <span style={{transform: isOpen ? "rotate(90deg)" : "rotate(0deg)", transition:"transform .15s", color:T.t3, fontSize:13}}>▸</span>
                         <div>
                           <div style={{fontSize:12.5,fontWeight:700,color:T.t1}}>{t("estimate.amendment_id", { id: a.id })}</div>
@@ -2399,15 +2413,19 @@ function TabEstimate({ project }) {
                           {(a.created_at || "").slice(0,16).replace("T", " ")}
                           {a.created_by_name && <><br/>by {a.created_by_name}</>}
                         </span>
-                        <span style={{fontSize:13,fontWeight:700,color:T.t1,textAlign:"right",fontVariantNumeric:"tabular-nums"}}>
-                          {fmtC(amendTotal)}
-                        </span>
+                        {adiff ? <AmendTotals diff={adiff} pending={a.status === "Pending"} /> : (
+                          <span style={{fontSize:13,fontWeight:700,color:T.t1,textAlign:"right",fontVariantNumeric:"tabular-nums"}}>
+                            {fmtC(amendTotal)}
+                          </span>
+                        )}
                         <span style={{padding:"3px 9px",borderRadius:4,fontSize:10.5,fontWeight:700,background:stBg,color:stCol,textAlign:"center"}}>
                           {a.status}
                         </span>
                       </div>
                       {isOpen && (
                         <div style={{padding:"12px 16px",background:T.surfaceB}}>
+                          {adiff && <AmendDiffView diff={adiff} pending={a.status === "Pending"} />}
+                          {adiff && <div style={{fontSize:11,fontWeight:800,color:T.t3,textTransform:"uppercase",letterSpacing:".4px",margin:"2px 0 6px"}}>{t("estimate.ad_full_boq")}</div>}
                           {/* Proposed header diff */}
                           <div style={{display:"grid",gridTemplateColumns:"repeat(4, 1fr)",gap:10,marginBottom:12}}>
                             {[
