@@ -61,6 +61,53 @@ export const sumPct = (parts) => r2((parts || []).reduce((s, p) => s + num(p.pct
 const itemProblem = (it) => !String(it.label || "").trim() || (it.parts || []).length < 1
   || it.parts.some(p => !String(p.name || "").trim() || !(num(p.pct) > 0)) || Math.abs(sumPct(it.parts) - 100) > 0.01;
 export const partsBodyPct = (parts) => parts.map(p => ({ name: String(p.name).trim(), pct: num(p.pct), group: grpOf(p) || null, ...(p.together ? { together: true } : {}) }));
+const oneStagePart = () => [{ name: t("schedule.ms_complete"), pct: "100", group: "", together: false }];
+
+// Estimate ke kaam: billing-ledger ki line → floor + kaam (hisse ek saath). Extra / bina qty nahi.
+export function worksOf(items) {
+  const out = [], idx = {};
+  for (const x of items || []) {
+    if (x.item_type === "extra" || !(num(x.planned_qty) > 0)) continue;
+    const k = (x.category || x.section_title || "") + "¦" + (x.part_of || "#" + x.item_id);
+    if (idx[k] === undefined) { idx[k] = out.length; out.push({ key: k, category: x.category || x.section_title || "", name: x.part_of || x.description || "", all: [] }); }
+    out[idx[k]].all.push(x);
+  }
+  return out.map(w => ({ ...w, qty: num(w.all[0].planned_qty), unit: w.all[0].unit || "", rate: r2(w.all.reduce((s, x) => s + num(x.rate), 0)),
+    locked: w.all.some(x => num(x.billed_qty) > 0 || num(x.opening_qty) > 0) }));
+}
+export const workName = (w) => (w.category && norm(w.category) !== norm(w.name) ? w.category + " · " : "") + w.name;
+// Library me kaam ka naam: floor / category (GF, Septic tank). Ek category me kai alag kaam hon to
+// kaam ka naam (warna sab ek hi set par chale jaate).
+export function labelFor(works) {
+  const names = {};
+  for (const w of works || []) { const c = norm(w.category); if (c) (names[c] = names[c] || new Set()).add(norm(w.name)); }
+  return (w) => {
+    const c = norm(w.category);
+    return String((c && names[c] && names[c].size > 1 ? w.name : w.category) || w.name || "").trim().slice(0, 80);
+  };
+}
+const addAlso = (it, nm) => {
+  nm = String(nm || "").trim();
+  if (!nm || [it.label, ...String(it.also || "").split(",")].map(norm).includes(norm(nm))) return false;
+  const nx = it.also ? it.also + ", " + nm : nm;
+  if (nx.length > 200) return false;
+  it.also = nx;
+  return true;
+};
+// Estimate ke kaam → library ke set (ek naam ek baar). Shuru ke set (GF / FF / Septic…) se mile to
+// wahi stage + uske doosre naam, warna ek stage "Completion" 100%.
+export function estimateLibItems(works, allWorks) {
+  const nameOf = labelFor(allWorks || works), defs = defaultItems(), out = [], seen = new Set();
+  for (const w of works || []) {
+    const label = nameOf(w), k = norm(label);
+    if (!k || seen.has(k)) continue;
+    seen.add(k);
+    const d = matchLibItem(defs, w), it = { label, also: "", parts: d ? d.parts.map(p => ({ ...p })) : oneStagePart() };
+    if (d) [d.label, ...String(d.also || "").split(",")].forEach(x => addAlso(it, x));
+    out.push(it);
+  }
+  return out;
+}
 
 let libCache = null;
 export const loadLibs = (fresh) => {
@@ -113,15 +160,33 @@ function ItemEditor({ it, idx, onChange, onRemove }) {
   );
 }
 
-export function StageLibraryManager({ onClose, onChanged, canEdit = true }) {
+// works = estimate se khula (27 Nov 2026, Prafull: "yahi se stage library banate hai to estimate me jitne
+// item hai sab show kare"): upar estimate ke saare kaam — library me hai ✓ / nahi to "+"; nayi library
+// = yahi kaam (koi library na ho to seedha khulti hai).
+export function StageLibraryManager({ onClose, onChanged, canEdit = true, works }) {
   const [libs, setLibs] = useState(null);
   const [sel, setSel] = useState(null);       // { id?, name, items, edit_seq? } — form
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
-  useEffect(() => { loadLibs(true).then(l => { setLibs(l); if (l.length) setSel(clone(l[0])); }); }, []);
+  const est = works && works.length ? works : null;
+  const fromEst = (ws) => estimateLibItems(ws, est);
+  useEffect(() => {
+    loadLibs(true).then(l => {
+      setLibs(l);
+      if (l.length) setSel(clone(l[0]));
+      else if (est && canEdit) setSel({ name: t("stage_lib.new_name", { n: 1 }), items: fromEst(est) });
+    });
+  }, []);
   const clone = (l) => ({ id: l.id, name: l.name, edit_seq: l.edit_seq,
     items: l.items.map(it => ({ label: it.label, also: it.also || "", parts: it.parts.map(p => ({ name: p.name, pct: String(p.pct), group: p.group || "", together: !!p.together })) })) });
-  const startNew = () => { setErr(""); setSel({ name: t("stage_lib.new_name", { n: (libs || []).length + 1 }), items: defaultItems() }); };
+  const startNew = () => { setErr(""); setSel({ name: t("stage_lib.new_name", { n: (libs || []).length + 1 }), items: est ? fromEst(est) : defaultItems() }); };
+  // Estimate ka kaam is library me hai? (naam / doosre naam se — wahi jo "Library se lagao" karta hai)
+  const missing = est && sel ? est.filter(w => !matchLibItem(sel.items, w)) : [];
+  const missN = new Set(fromEst(missing).map(it => norm(it.label))).size;
+  const addWorks = (ws) => setSel(s => {
+    const have = new Set(s.items.map(it => norm(it.label)));
+    return { ...s, items: [...s.items, ...fromEst(ws).filter(it => !have.has(norm(it.label)))] };
+  });
   const problems = sel ? sel.items.filter(itemProblem).map(it => it.label || "—") : [];
   const dupe = sel ? sel.items.map(it => norm(it.label)).filter((x, i, a) => x && a.indexOf(x) !== i) : [];
   const ok = !!sel && String(sel.name || "").trim() && sel.items.length > 0 && !problems.length && !dupe.length;
@@ -170,6 +235,25 @@ export function StageLibraryManager({ onClose, onChanged, canEdit = true }) {
             <label style={lblS}>{t("stage_lib.name")}</label>
             <input value={sel.name} data-testid="lib-name" disabled={!canEdit} onChange={e => setSel(s => ({ ...s, name: e.target.value }))} style={{ ...inpS, fontWeight: 700, maxWidth: 360 }} />
           </div>
+          {est && (
+            <div data-testid="lib-est-works" style={{ border: "1px dashed " + T.b2, borderRadius: 8, padding: "8px 10px", background: T.surface }}>
+              <div style={{ fontSize: 11.5, fontWeight: 700, color: missN ? T.amb : T.grn, marginBottom: 6 }}>
+                {missN ? t("stage_lib.est_works_miss", { n: est.length, miss: missN }) : t("stage_lib.est_works_all", { n: est.length })}
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+                {est.map(w => {
+                  const m = matchLibItem(sel.items, w);
+                  return m ? (
+                    <span key={w.key} data-est-ok={w.key} style={{ fontSize: 10.5, padding: "2px 8px", borderRadius: 99, background: T.grnL, color: T.grn, fontWeight: 600 }}>✓ {workName(w)} → {m.label}</span>
+                  ) : (
+                    <button key={w.key} type="button" data-est-add={w.key} disabled={!canEdit} onClick={() => addWorks([w])} title={t("stage_lib.est_add_one")}
+                      style={{ fontSize: 10.5, padding: "2px 8px", borderRadius: 99, background: T.ambL, color: T.amb, border: "1px solid " + T.ambL, fontWeight: 700, cursor: canEdit ? "pointer" : "default", fontFamily: "inherit" }}>+ {workName(w)}</button>
+                  );
+                })}
+              </div>
+              {canEdit && missN > 1 && <button type="button" data-testid="lib-est-add-all" onClick={() => addWorks(missing)} style={{ ...btnS("soft"), marginTop: 6 }}>+ {t("stage_lib.est_add_all", { n: missN })}</button>}
+            </div>
+          )}
           {sel.items.map((it, i) => (
             <ItemEditor key={i} it={it} idx={i} onChange={(nx) => setSel(s => ({ ...s, items: s.items.map((x, k) => (k === i ? nx : x)) }))}
               onRemove={() => setSel(s => ({ ...s, items: s.items.filter((_, k) => k !== i) }))} />
@@ -194,12 +278,20 @@ export function StageLibraryManager({ onClose, onChanged, canEdit = true }) {
 }
 
 // ── 2. Library se schedule: har kaam ko uska set, ek saath ──
+// Library me nahi mila kaam (27 Nov 2026, Prafull: "yahi pe ek stage add karne ka option, then remember
+// kar do — kabhi phir aaya to yaad rakhega"): dropdown me "+ Naya stage set (yahin banao)" — set
+// isi kaam ke naam se library me judta hai. Haath se koi aur set chuna to us set ke "Doosre naam"
+// me ye naam (tick se). Dono pehle library me save, phir estimate par.
+const NEW = "__new__";
 // items = billing-ledger ki line. Kaam = floor + kaam (hisse ek saath). Bill / pehle ka
 // bill wale kaam band (server bhi rokta hai).
 export function LibApplyModal({ estimateId, items, onClose, onDone }) {
   const [libs, setLibs] = useState(null);
   const [libId, setLibId] = useState("");
-  const [pick, setPick] = useState({});          // work key → library item key ("" = chhodo)
+  const [pick, setPick] = useState({});          // work key → library item key ("" = chhodo, NEW = yahin naya set)
+  const [auto, setAuto] = useState({});          // naam se jo apne aap mila — usse alag chuna = "yaad rakho" ka tick
+  const [newSets, setNewSets] = useState({});    // work key → { label, also, parts } (yahin banaya set)
+  const [remember, setRemember] = useState({});  // work key → false = yaad mat rakho
   const [manage, setManage] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -207,28 +299,47 @@ export function LibApplyModal({ estimateId, items, onClose, onDone }) {
   // Har baar taaza (library kahin aur badli ho sakti hai)
   useEffect(() => { loadLibs(true).then(l => { setLibs(l); if (l.length) setLibId(String(l[0].id)); }); }, []);
   const lib = (libs || []).find(l => String(l.id) === String(libId)) || null;
-  const works = useMemo(() => {
-    const out = [], idx = {};
-    for (const x of items || []) {
-      if (x.item_type === "extra" || !(num(x.planned_qty) > 0)) continue;
-      const k = (x.category || x.section_title || "") + "¦" + (x.part_of || "#" + x.item_id);
-      if (idx[k] === undefined) { idx[k] = out.length; out.push({ key: k, category: x.category || x.section_title || "", name: x.part_of || x.description || "", all: [] }); }
-      out[idx[k]].all.push(x);
-    }
-    return out.map(w => ({ ...w, qty: num(w.all[0].planned_qty), unit: w.all[0].unit || "", rate: r2(w.all.reduce((s, x) => s + num(x.rate), 0)),
-      locked: w.all.some(x => num(x.billed_qty) > 0 || num(x.opening_qty) > 0) }));
-  }, [items]);
+  const works = useMemo(() => worksOf(items), [items]);
+  const memName = useMemo(() => labelFor(works), [works]);   // kaam ka naam jo library yaad rakhegi
   // Library badli → har kaam ka set naam se dobara
   useEffect(() => {
     if (!lib) return;
     const nx = {};
     for (const w of works) { const m = !w.locked && matchLibItem(lib.items, w); nx[w.key] = m ? m.key : ""; }
-    setPick(nx);
+    setPick(nx); setAuto(nx); setNewSets({}); setRemember({});
   }, [lib, works]);
+  // Naya set: kaam ke naam se (shuru ke set GF / Septic… se mile to wahi stage). Kaam ka naam (jaise
+  // "Construction") doosre naam me NAHI — warna FF ka Construction bhi GF ke set par chala jaata.
+  const choose = (w, v) => {
+    setPick(p => ({ ...p, [w.key]: v }));
+    if (v === NEW && !newSets[w.key]) setNewSets(n => ({ ...n, [w.key]: estimateLibItems([w], works)[0] || { label: memName(w), also: "", parts: oneStagePart() } }));
+  };
+  const isNew = (w) => pick[w.key] === NEW;
   const chosen = works.filter(w => !w.locked && pick[w.key]);
-  const setOf = (w) => lib && lib.items.find(it => it.key === pick[w.key]);
+  const setOf = (w) => (isNew(w) ? newSets[w.key] : lib && lib.items.find(it => it.key === pick[w.key]));
+  // Haath se chuna (naam se nahi mila / alag set) — naam us set ke "Doosre naam" me jaayega
+  const remembers = chosen.filter(w => !isNew(w) && pick[w.key] !== auto[w.key] && remember[w.key] !== false);
+  const newBad = chosen.filter(isNew).map(w => newSets[w.key]).filter(ns => !ns || itemProblem(ns));
+  const newLabels = chosen.filter(isNew).map(w => norm(newSets[w.key] && newSets[w.key].label));
+  const newDupe = newLabels.some((x, i) => x && (newLabels.indexOf(x) !== i || (lib && lib.items.some(it => norm(it.label) === x))));
   const apply = async () => {
     setBusy(true); setErr(""); setSkipped([]);
+    let libNow = lib, saved = 0;
+    // 1. Pehle library me yaad: naye set + manual pick ka naam (agli baar apne aap)
+    if (chosen.some(isNew) || remembers.length) {
+      const items = lib.items.map(it => ({ label: it.label, also: it.also || "", parts: partsBodyPct(it.parts) }));
+      for (const w of remembers) if (addAlso(items[lib.items.findIndex(x => x.key === pick[w.key])], memName(w))) saved++;
+      for (const w of chosen.filter(isNew)) {
+        const ns = newSets[w.key];
+        items.push({ label: ns.label.trim(), also: ns.also || "", parts: partsBodyPct(ns.parts) });
+        saved++;
+      }
+      const r0 = await api.put("/stage-libraries/" + lib.id, { name: lib.name, edit_seq: lib.edit_seq, items }).catch(e => ({ success: false, message: e.message }));
+      if (!r0?.success) { setBusy(false); setErr(r0?.message || t("stage_lib.save_failed")); return; }
+      libNow = r0.data;
+      loadLibs(true).then(l => setLibs(l));
+    }
+    // 2. Estimate par: har kaam ko uska set
     const ids = chosen.map(w => w.all[0].item_id);
     const item_parts = Object.fromEntries(chosen.map(w => [w.all[0].item_id, partsBodyPct(setOf(w).parts)]));
     const r = await api.post("/customer-estimates/" + estimateId + "/schedule/replace", { item_ids: ids, parts: item_parts[ids[0]], item_parts })
@@ -236,9 +347,11 @@ export function LibApplyModal({ estimateId, items, onClose, onDone }) {
     setBusy(false);
     if (!r?.success) { setErr(r?.message || t("schedule.failed")); setSkipped(r?.data?.skipped || []); return; }
     const sk = r.data.skipped || [];
-    onDone && onDone(t("stage_lib.applied", { n: r.data.done.length, lib: lib.name }) + (sk.length ? " — " + sk.map(s => (s.name || "#" + s.item_id) + ": " + s.reason).join("; ") : ""));
+    onDone && onDone(t("stage_lib.applied", { n: r.data.done.length, lib: libNow.name })
+      + (saved ? " · " + t("stage_lib.remembered", { n: saved }) : "")
+      + (sk.length ? " — " + sk.map(s => (s.name || "#" + s.item_id) + ": " + s.reason).join("; ") : ""));
   };
-  const wName = (w) => (w.category && norm(w.category) !== norm(w.name) ? w.category + " · " : "") + w.name;
+  const wName = workName;
   return (<>
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 300 }} onClick={() => !busy && onClose()} />
     <div role="dialog" aria-label={t("stage_lib.apply_title")} data-testid="lib-apply"
@@ -255,6 +368,7 @@ export function LibApplyModal({ estimateId, items, onClose, onDone }) {
         </div>
       </div>
       <div style={{ padding: "12px 18px", overflowY: "auto", flex: 1, display: "grid", gap: 8, alignContent: "start" }}>
+        {!manage && chosen.some(isNew) && <datalist id="stage-lib-grp"><option value={t("schedule.grp_structure")} /><option value={t("stage_billing.grp_finishing")} /></datalist>}
         {libs == null ? <div style={{ fontSize: 12, color: T.t3 }}>{t("stage_lib.loading")}</div> : !lib ? (
           <div data-testid="lib-none" style={{ fontSize: 12.5, color: T.t3, lineHeight: 1.5 }}>{t("stage_lib.none_yet")}</div>
         ) : works.map(w => {
@@ -265,12 +379,25 @@ export function LibApplyModal({ estimateId, items, onClose, onDone }) {
                 <b style={{ fontSize: 12.5, color: T.t1, flex: "1 1 220px", minWidth: 0 }}>{wName(w)}</b>
                 <span style={{ fontSize: 11, color: T.t3, fontVariantNumeric: "tabular-nums" }}>{num(w.qty).toLocaleString("en-IN")} {w.unit} × {fmtC(w.rate)}</span>
                 {w.locked ? <span style={{ fontSize: 10.5, color: T.amb, fontWeight: 700 }}>{t("schedule.edit_locked")}</span> : (
-                  <select value={pick[w.key] || ""} data-pick={w.key} onChange={e => setPick(p => ({ ...p, [w.key]: e.target.value }))} style={{ ...inpS, width: 200 }}>
+                  <select value={pick[w.key] || ""} data-pick={w.key} onChange={e => choose(w, e.target.value)} style={{ ...inpS, width: 220 }}>
                     <option value="">{t("stage_lib.skip_work")}</option>
                     {lib.items.map(it => <option key={it.key} value={it.key}>{it.label}</option>)}
+                    <option value={NEW}>+ {t("stage_lib.new_set_opt")}</option>
                   </select>
                 )}
               </div>
+              {!w.locked && !isNew(w) && pick[w.key] && pick[w.key] !== auto[w.key] && (
+                <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 11, color: T.t2, marginTop: 4, cursor: "pointer" }}>
+                  <input type="checkbox" data-remember={w.key} checked={remember[w.key] !== false} onChange={e => setRemember(r => ({ ...r, [w.key]: e.target.checked }))} />
+                  {t("stage_lib.remember_lbl", { name: memName(w), set: (lib.items.find(it => it.key === pick[w.key]) || {}).label || "" })}
+                </label>
+              )}
+              {!w.locked && isNew(w) && newSets[w.key] && (
+                <div data-new-set={w.key} style={{ marginTop: 6 }}>
+                  <div style={{ fontSize: 10.5, color: T.ind, marginBottom: 4 }}>{t("stage_lib.new_set_hint", { lib: lib.name, name: newSets[w.key].label || "—" })}</div>
+                  <ItemEditor it={newSets[w.key]} idx={"n" + w.all[0].item_id} onChange={(nx) => setNewSets(n => ({ ...n, [w.key]: nx }))} onRemove={() => choose(w, "")} />
+                </div>
+              )}
               {s && s.parts.length === 1 && (
                 <div data-preview={w.key} style={{ fontSize: 10.5, color: T.t3, marginTop: 4 }}>{t("stage_lib.one_stage_preview", { stage: s.parts[0].name, amt: fmtC(w.rate) })}</div>
               )}
@@ -283,6 +410,11 @@ export function LibApplyModal({ estimateId, items, onClose, onDone }) {
           );
         })}
         {lib && works.some(w => !w.locked && !pick[w.key]) && <div style={{ fontSize: 10.5, color: T.t4 }}>{t("stage_lib.unmatched_hint")}</div>}
+        {(newBad.length > 0 || newDupe) && (
+          <div role="alert" data-testid="lib-new-bad" style={{ padding: "7px 10px", borderRadius: 6, background: T.redL, color: T.red, fontSize: 11.5 }}>
+            {newDupe ? t("stage_lib.dupe", { names: [...new Set(newLabels.filter(Boolean))].join(", ") }) : t("stage_lib.problems", { names: newBad.map(x => (x && x.label) || "—").join(", ") })}
+          </div>
+        )}
         {err && (
           <div role="alert" style={{ padding: "8px 10px", borderRadius: 7, background: T.redL, color: T.red, fontSize: 11.5 }}>
             {err}
@@ -292,12 +424,12 @@ export function LibApplyModal({ estimateId, items, onClose, onDone }) {
       </div>
       <div style={{ padding: "12px 18px", borderTop: "1px solid " + T.b1, display: "flex", justifyContent: "flex-end", gap: 8, flexWrap: "wrap" }}>
         <button type="button" disabled={busy} onClick={onClose} style={btnS()}>{t("common.cancel")}</button>
-        <button type="button" data-testid="lib-apply-go" disabled={busy || !chosen.length} onClick={apply} style={btnS("primary", busy || !chosen.length)}>
+        <button type="button" data-testid="lib-apply-go" disabled={busy || !chosen.length || newBad.length > 0 || newDupe} onClick={apply} style={btnS("primary", busy || !chosen.length || newBad.length > 0 || newDupe)}>
           {busy ? t("common.saving_2") : t("stage_lib.apply_btn", { n: chosen.length })}
         </button>
       </div>
     </div>
-    {manage && <StageLibraryManager onClose={() => setManage(false)} onChanged={(l) => { setLibs(l); if (!l.some(x => String(x.id) === String(libId))) setLibId(l.length ? String(l[0].id) : ""); }} />}
+    {manage && <StageLibraryManager works={works} onClose={() => setManage(false)} onChanged={(l) => { setLibs(l); if (!l.some(x => String(x.id) === String(libId))) setLibId(l.length ? String(l[0].id) : ""); }} />}
   </>);
 }
 

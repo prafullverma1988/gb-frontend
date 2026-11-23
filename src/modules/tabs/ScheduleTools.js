@@ -26,7 +26,7 @@ import React, { useState, useMemo, useEffect } from "react";
 import api from "../../config/api";
 import { T } from "../shared/tokens";
 import { t } from "../../i18n";
-import { LibApplyModal, LibPicker, StageLibraryManager } from "./StageLibrary";
+import { LibApplyModal, LibPicker, StageLibraryManager, worksOf } from "./StageLibrary";
 
 const num = (v) => { const n = parseFloat(v); return Number.isFinite(n) ? n : 0; };
 const r2 = (n) => Math.round(num(n) * 100) / 100;
@@ -382,7 +382,7 @@ export function ScheduleMethods({ kind, id, items, canEdit, qtyCount = 0, onDone
         </div>
       )}
       {libOpen === "apply" && <LibApplyModal estimateId={id} items={lines} onClose={() => setLibOpen(null)} onDone={(m) => { setLibOpen(null); onDone && onDone(m); }} />}
-      {libOpen === "manage" && <StageLibraryManager canEdit={canEdit} onClose={() => setLibOpen(null)} />}
+      {libOpen === "manage" && <StageLibraryManager canEdit={canEdit} works={worksOf(lines)} onClose={() => setLibOpen(null)} />}
       {showCards && <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: 8 }}>
         {card(t("schedule.m_item"), t("schedule.m_item_desc"), t("schedule.m_item_stat", { n: plain.length }))}
         {card(t("schedule.m_parts"), t("schedule.m_parts_desc"), splitLines ? t("schedule.m_parts_stat", { n: splitLines }) : null,

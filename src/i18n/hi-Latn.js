@@ -17785,7 +17785,7 @@ const dict = {
   "stage_lib.apply_hint": "Library select karo — har kaam ko naam se uska stage set apne aap milta hai; badalna ho to dropdown se. Stage % me lagte hain, har kaam ke apne rate par. Pehle se laga schedule badal jaata hai; jis stage ka naam wahi raha uska task bana rehta hai.",
   "stage_lib.none_yet": "Abhi koi library nahi. Upar \"Stage Library\" se pehle library banao.",
   "stage_lib.skip_work": "— Isko chhodo —",
-  "stage_lib.unmatched_hint": "Jis kaam ka naam library me nahi mila wo chhoda gaya — dropdown se set select karo, ya library me us kaam ke \"Doosre naam\" me ye naam likh do.",
+  "stage_lib.unmatched_hint": "Jis kaam ka naam library me nahi mila wo chhoda gaya — dropdown se set select karo, ya \"+ Naya stage set (yahin banao)\" se yahin bana lo (library me yaad rahega, agli baar apne aap).",
   "stage_lib.apply_btn": "{n} kaam par lagao",
   "stage_lib.applied": "\"{lib}\" se {n} kaam ka schedule laga",
   "stage_lib.pick_ph": "Library se bharo",
@@ -17796,6 +17796,14 @@ const dict = {
   "stage_lib.d_septic": "Septic tank",
   "stage_lib.d_boundary": "Boundary wall",
   "stage_lib.one_stage_preview": "Ek hi stage — {stage}: poora {amt} / unit, kaam poora hone par",
+  "stage_lib.new_set_opt": "Naya stage set (yahin banao)",
+  "stage_lib.new_set_hint": "Ye set library \"{lib}\" me \"{name}\" naam se save hoga — agli baar ye kaam apne aap milega.",
+  "stage_lib.remember_lbl": "Agli baar ke liye yaad rakho — \"{name}\" ko \"{set}\" ke doosre naam me likh do",
+  "stage_lib.remembered": "{n} naya set / naam library me yaad hua",
+  "stage_lib.est_works_all": "Is estimate ke saare {n} kaam is library me hain ✓",
+  "stage_lib.est_works_miss": "Is estimate ke {n} kaam — {miss} is library me nahi (+ dabao, unka set ban jayega)",
+  "stage_lib.est_add_one": "Is kaam ka set library me banao",
+  "stage_lib.est_add_all": "Baaki {n} kaam ke set banao",
 };
 
 export default dict;

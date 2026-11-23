@@ -4,7 +4,7 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import api from "../../config/api";
 import { loadFullPack, setLang } from "../../i18n";
-import { LibApplyModal, StageLibraryManager, defaultItems, matchLibItem, sumPct } from "./StageLibrary";
+import { LibApplyModal, StageLibraryManager, defaultItems, estimateLibItems, matchLibItem, sumPct, worksOf } from "./StageLibrary";
 
 jest.mock("../../config/api", () => {
   const api = jest.fn();
@@ -125,5 +125,127 @@ test("Library banao: shuru ke 6 kaam, jod 100 na ho to Save band; theek karke PO
   expect(body.items.length).toBe(6);
   expect(body.items[0].parts[0]).toEqual({ name: "Plinth", pct: 15.3, group: "Structure" });
   expect(body.items[0].parts[9]).toEqual({ name: "Handover", pct: 4.9, group: "Finishing", together: true });
+  noKeys();
+});
+
+// 27 Nov 2026: library me nahi wala kaam — yahin naya set, library me yaad; haath se chuna = doosra naam
+test("Library se lagao: '+ Naya stage set' → library me PUT (naya set), phir estimate par usi set se", async () => {
+  api.get.mockImplementation(async (url) => (url === "/stage-libraries" ? { success: true, data: [LIB] } : { success: false }));
+  api.put.mockImplementation(async (url, body) => ({ success: true, data: { ...LIB, edit_seq: 3, items: body.items.map((it, i) => ({ ...it, key: "k" + i })) } }));
+  api.post.mockResolvedValue({ success: true, data: { done: [{ item_id: 1 }, { item_id: 3 }], skipped: [] } });
+  const onDone = jest.fn();
+  await mount(<LibApplyModal estimateId={74} items={[L(1, "GF", "Ground Floor", 1000, 1800), L(3, "PORCH", "Porch", 120, 900)]} onClose={() => {}} onDone={onDone} />);
+  expect($('[data-pick="PORCH¦#3"]').value).toBe("");
+  await act(async () => { setVal($('[data-pick="PORCH¦#3"]'), "__new__"); });
+  expect($('[data-new-set="PORCH¦#3"]')).not.toBeNull();
+  expect($('[data-lib-label="n3"]').value).toBe("PORCH");
+  expect($('[data-preview="PORCH¦#3"]').textContent).toContain("Completion");
+  noKeys();
+  // naam library ke kisi set jaisa → rok
+  await act(async () => { setVal($('[data-lib-label="n3"]'), "GF"); });
+  expect($('[data-testid="lib-new-bad"]')).not.toBeNull();
+  expect($('[data-testid="lib-apply-go"]').disabled).toBe(true);
+  await act(async () => { setVal($('[data-lib-label="n3"]'), "Porch"); });
+  expect($('[data-testid="lib-apply-go"]').disabled).toBe(false);
+  await act(async () => { $('[data-testid="lib-apply-go"]').click(); });
+  await flush();
+  const [purl, pbody] = api.put.mock.calls[0];
+  expect(purl).toBe("/stage-libraries/3");
+  expect(pbody.edit_seq).toBe(2);
+  expect(pbody.items.length).toBe(5);
+  expect(pbody.items[4]).toEqual({ label: "Porch", also: "", parts: [{ name: "Completion", pct: 100, group: null }] });
+  expect(pbody.items[0].also).toBe("Ground Floor");                         // purane set waise hi
+  const body = api.post.mock.calls[0][1];
+  expect(body.item_ids).toEqual([1, 3]);
+  expect(body.item_parts[3]).toEqual([{ name: "Completion", pct: 100, group: null }]);
+  expect(onDone.mock.calls[0][0]).toContain("1 naya set / naam library me yaad hua");
+});
+
+test("Library se lagao: haath se set chuna → tick se kaam ka naam us set ke doosre naam me; tick hatao to PUT nahi", async () => {
+  api.get.mockImplementation(async (url) => (url === "/stage-libraries" ? { success: true, data: [LIB] } : { success: false }));
+  api.put.mockImplementation(async (url, body) => ({ success: true, data: { ...LIB, edit_seq: 3, items: body.items.map((it, i) => ({ ...it, key: "k" + i })) } }));
+  api.post.mockResolvedValue({ success: true, data: { done: [{ item_id: 6 }], skipped: [] } });
+  await mount(<LibApplyModal estimateId={74} items={[L(6, "MUMTY", "Mumty room", 100, 1500)]} onClose={() => {}} onDone={() => {}} />);
+  await act(async () => { setVal($('[data-pick="MUMTY¦#6"]'), "head_room"); });
+  expect($('[data-remember="MUMTY¦#6"]').checked).toBe(true);
+  expect(document.body.textContent).toContain("\"MUMTY\" ko \"Head Room\" ke doosre naam me likh do");
+  await act(async () => { $('[data-testid="lib-apply-go"]').click(); });
+  await flush();
+  expect(api.put.mock.calls[0][1].items[2].also).toBe("MUMTY");
+  expect(api.post.mock.calls[0][1].item_parts[6].map((p) => p.name)).toEqual(["Slab casting", "Plaster"]);
+
+  // dobara, is baar tick hata kar → library nahi badli
+  act(() => root.unmount()); box.remove(); root = null;
+  api.put.mockClear(); api.post.mockClear();
+  await mount(<LibApplyModal estimateId={74} items={[L(6, "MUMTY", "Mumty room", 100, 1500)]} onClose={() => {}} onDone={() => {}} />);
+  await act(async () => { setVal($('[data-pick="MUMTY¦#6"]'), "head_room"); });
+  await act(async () => { $('[data-remember="MUMTY¦#6"]').click(); });
+  await act(async () => { $('[data-testid="lib-apply-go"]').click(); });
+  await flush();
+  expect(api.put).not.toHaveBeenCalled();
+  expect(api.post).toHaveBeenCalledTimes(1);
+});
+
+test("Naam se mila kaam par na tick, na PUT (library jaisi thi)", async () => {
+  api.get.mockImplementation(async (url) => (url === "/stage-libraries" ? { success: true, data: [LIB] } : { success: false }));
+  api.put.mockClear(); api.post.mockClear();
+  api.post.mockResolvedValue({ success: true, data: { done: [{ item_id: 1 }], skipped: [] } });
+  await mount(<LibApplyModal estimateId={74} items={[L(1, "GF", "Ground Floor", 1000, 1800)]} onClose={() => {}} onDone={() => {}} />);
+  expect($('[data-remember="GF¦#1"]')).toBeNull();
+  await act(async () => { $('[data-testid="lib-apply-go"]').click(); });
+  await flush();
+  expect(api.put).not.toHaveBeenCalled();
+});
+
+// 27 Nov 2026: estimate se Stage Library kholo → estimate ke saare kaam dikhein
+test("estimateLibItems: har floor / kaam ek set; shuru ke set se mile to wahi stage, warna Completion 100%", () => {
+  const ws = worksOf([L(1, "GF", "Construction", 1000, 1800), L(2, "FF", "Construction", 800, 1800), L(3, "", "Septic tank", 1, 50000),
+    L(4, "", "Porch", 120, 900), L(5, "GF", "Construction", 0, 0), L(7, "EXTRA", "Kuch", 5, 10, { item_type: "extra" })]);
+  const it = estimateLibItems(ws);
+  expect(it.map((x) => x.label)).toEqual(["GF", "FF", "Septic tank", "Porch"]);
+  expect(it[0].parts.some((p) => p.name === "Plinth")).toBe(true);
+  expect(it[1].parts.some((p) => p.name === "Plinth")).toBe(false);
+  expect(it[0].also).not.toMatch(/Construction/);                          // warna FF ka kaam GF par
+  expect(it[2].parts.map((p) => [p.name, p.pct])).toEqual([["Completion", "100"]]);
+  expect(it[3].parts.map((p) => [p.name, p.pct])).toEqual([["Completion", "100"]]);
+  // ek category me kai alag kaam → kaam ka naam
+  const ws2 = worksOf([L(1, "CIVIL", "Septic tank", 1, 50000), L(2, "CIVIL", "Boundary wall", 100, 400)]);
+  expect(estimateLibItems(ws2).map((x) => x.label)).toEqual(["Septic tank", "Boundary wall"]);
+  for (const x of it) expect(sumPct(x.parts)).toBe(100);
+});
+
+test("Estimate se Stage Library: library nahi → seedhi nayi library me estimate ke saare kaam; POST", async () => {
+  api.get.mockImplementation(async (url) => (url === "/stage-libraries" ? { success: true, data: [] } : { success: false }));
+  api.post.mockClear();
+  api.post.mockImplementation(async (url, body) => ({ success: true, data: { id: 9, edit_seq: 1, ...body, items: body.items.map((it) => ({ ...it, key: it.label.toLowerCase() })) } }));
+  const ws = worksOf([L(1, "GF", "Ground Floor", 1000, 1800), L(2, "FF", "First Floor", 800, 1800), L(4, "PORCH", "Porch", 120, 900)]);
+  await mount(<StageLibraryManager works={ws} onClose={() => {}} />);
+  expect(document.querySelectorAll("[data-lib-item]").length).toBe(3);
+  expect($('[data-testid="lib-est-works"]').textContent).toContain("Is estimate ke saare 3 kaam is library me hain");
+  expect(document.querySelectorAll("[data-est-ok]").length).toBe(3);
+  noKeys();
+  await act(async () => { $('[data-testid="lib-save"]').click(); });
+  await flush();
+  const [url, body] = api.post.mock.calls[0];
+  expect(url).toBe("/stage-libraries");
+  expect(body.items.map((x) => x.label)).toEqual(["GF", "FF", "PORCH"]);
+  expect(body.items[2].parts).toEqual([{ name: "Completion", pct: 100, group: null }]);
+});
+
+test("Estimate se Stage Library: purani library me jo kaam nahi — '+' aur 'Baaki sab' se set banta hai", async () => {
+  api.get.mockImplementation(async (url) => (url === "/stage-libraries" ? { success: true, data: [LIB] } : { success: false }));
+  const ws = worksOf([L(1, "GF", "Ground Floor", 1000, 1800), L(4, "PORCH", "Porch", 120, 900), L(5, "MUMTY", "Mumty", 100, 1500), L(6, "LIFT", "Lift pit", 1, 9000)]);
+  await mount(<StageLibraryManager works={ws} onClose={() => {}} />);
+  expect(document.querySelectorAll("[data-lib-item]").length).toBe(4);       // LIB ke 4
+  expect($('[data-testid="lib-est-works"]').textContent).toContain("Is estimate ke 4 kaam — 3 is library me nahi");
+  expect($('[data-est-ok="GF¦#1"]').textContent).toBe("✓ GF · Ground Floor → GF");
+  await act(async () => { $('[data-est-add="PORCH¦#4"]').click(); });
+  expect(document.querySelectorAll("[data-lib-item]").length).toBe(5);
+  expect($('[data-est-ok="PORCH¦#4"]')).not.toBeNull();
+  expect($('[data-testid="lib-est-add-all"]').textContent).toBe("+ Baaki 2 kaam ke set banao");
+  await act(async () => { $('[data-testid="lib-est-add-all"]').click(); });
+  expect(document.querySelectorAll("[data-lib-item]").length).toBe(7);
+  expect($('[data-testid="lib-est-works"]').textContent).toContain("saare 4 kaam is library me hain");
+  expect($('[data-testid="lib-est-add-all"]')).toBeNull();
   noKeys();
 });

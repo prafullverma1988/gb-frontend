@@ -17783,7 +17783,7 @@ const dict = {
   "stage_lib.apply_hint": "Pick a library — each work gets its stage set by name automatically; change it from the dropdown if needed. Stages apply in %, on each work's own rate. An existing schedule is replaced; a stage that keeps its name keeps its task.",
   "stage_lib.none_yet": "No library yet. Create one first from \"Stage Library\" above.",
   "stage_lib.skip_work": "— Skip this —",
-  "stage_lib.unmatched_hint": "Works whose name was not found in the library are skipped — pick a set from the dropdown, or add this name to that work's \"Other names\" in the library.",
+  "stage_lib.unmatched_hint": "Works whose name was not found in the library were skipped — select a set from the dropdown, or make one right here with \"+ New stage set (make it here)\" (the library will remember it for next time).",
   "stage_lib.apply_btn": "Apply to {n} works",
   "stage_lib.applied": "Schedule applied to {n} works from \"{lib}\"",
   "stage_lib.pick_ph": "Fill from library",
@@ -17794,6 +17794,14 @@ const dict = {
   "stage_lib.d_septic": "Septic tank",
   "stage_lib.d_boundary": "Boundary wall",
   "stage_lib.one_stage_preview": "Single stage — {stage}: full {amt} / unit, on completion of the work",
+  "stage_lib.new_set_opt": "New stage set (make it here)",
+  "stage_lib.new_set_hint": "This set will be saved in library \"{lib}\" as \"{name}\" — next time this work will match automatically.",
+  "stage_lib.remember_lbl": "Remember for next time — add \"{name}\" to the other names of \"{set}\"",
+  "stage_lib.remembered": "{n} new set / name remembered in the library",
+  "stage_lib.est_works_all": "All {n} works of this estimate are in this library ✓",
+  "stage_lib.est_works_miss": "{n} works in this estimate — {miss} not in this library (press + to make their set)",
+  "stage_lib.est_add_one": "Make a set for this work in the library",
+  "stage_lib.est_add_all": "Make sets for the remaining {n} works",
 };
 
 export default dict;
