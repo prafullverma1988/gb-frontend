@@ -4,7 +4,7 @@
 // Deal band ho rahi hai: package se is lead ka final estimate. Upar quote no.,
 // status, TOTAL. Neeche: client details (header), scope (Poora / Structure
 // only — package rate wali line ka rate), rate schedule (area / rate / naam,
-// "AI se area bharo"), payment schedule (har line ke hisse, yaad), document
+// "AI se area bharo"), payment schedule (har line ke hisse, Stage Library se), document
 // (client ki copy — sirf is quote me badlaav). Neeche patti: Save (PUT
 // edit_seq ke saath; 409 STALE = kisi aur ne badla → taaza; 409 LOCKED),
 // PDF, Send (jam jaata hai), Share, Revision, Accept, Lost, Delete (draft),
@@ -124,7 +124,6 @@ export default function QuoteEditor({ quoteId, lead: leadProp, onClose, onChange
   const [q, setQ] = useState(null);
   const [d, setD] = useState(null);
   const [err, setErr] = useState("");
-  const [remember, setRemember] = useState(false);
   const [saving, setSaving] = useState(false);
   const [act, setAct] = useState("");
   const [notice, setNotice] = useState("");
@@ -211,14 +210,12 @@ export default function QuoteEditor({ quoteId, lead: leadProp, onClose, onChange
     if (nl.bad.length || ns.bad.length) { setNotice(nl.bad.length ? t("sales_quote_ui.err_line_bad") : t("sales_quote_ui.err_sched_bad")); return false; }
     const body = { edit_seq: q.edit_seq, header: normHeader(d.header), scope: d.scope, lines: nl.lines, schedule: ns.schedule };
     if (d.content !== q.content) body.content = d.content;
-    if (remember) body.remember = true;
     setSaving(true); setNotice("");
     const r = await api.put(`${QBASE}/${q.id}`, body, { timeoutMs: 30000 });
     setSaving(false);
     if (r && r.success && r.data) {
       merge(r.data);
-      setRemember(false);
-      window.toast?.success?.(r.data.remembered ? t("sales_quote_ui.saved_remembered", { n: r.data.remembered }) : t("sales_quote_ui.saved_ok"));
+      window.toast?.success?.(t("sales_quote_ui.saved_ok"));
       onChanged && onChanged();
       return true;
     }
@@ -302,7 +299,7 @@ export default function QuoteEditor({ quoteId, lead: leadProp, onClose, onChange
     </button>
   );
   if (editable) bar.push(
-    <button key="save" type="button" onClick={save} disabled={saving || !(dirty || remember)} data-testid="btn-save" style={btn("primary", saving || !(dirty || remember))}>
+    <button key="save" type="button" onClick={save} disabled={saving || !dirty} data-testid="btn-save" style={btn("primary", saving || !dirty)}>
       {saving ? <Spinner size={13} color="white" /> : "💾"} {t("sales_quote_ui.save")}
     </button>
   );
@@ -368,7 +365,7 @@ export default function QuoteEditor({ quoteId, lead: leadProp, onClose, onChange
       <QuoteLines quoteId={q.id} rows={comp.rows} lines={d.lines} editable={editable} onLines={(l) => { set({ lines: l }); setBadLines(new Set()); }}
         badKeys={badLines} total={comp.total} preview={dirtyNums} baseDesc={baseDesc} />
       <QuoteSchedule quoteId={q.id} rows={comp.rows} schedule={d.schedule} onSchedule={(s) => { set({ schedule: s }); setBadSched(new Set()); }} editable={editable} canEdit={canEdit}
-        badKeys={badSched} remember={remember} onRemember={setRemember} dirty={dirty} scopes={d.content && d.content.scopes} preview={dirtyNums} />
+        badKeys={badSched} preview={dirtyNums} scope={d.scope} />
       <QuoteDocPanel quoteId={q.id} content={d.content} letterhead={lh} editable={editable} dirty={dirty}
         fill={{ header: { ...normHeader(d.header), quotation_no: q.quote_no }, scope: d.scope, computed: comp }}
         onContent={(c) => set({ content: c })} onReload={async () => { await load(); onChanged && onChanged(); }} />

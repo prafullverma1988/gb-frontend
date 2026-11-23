@@ -79,7 +79,6 @@ export default function PackageEstimateModal({ project, projectId, customers, on
   const [schedule, setSchedule] = useState({});
   const [copySched, setCopySched] = useState(true);
   const [schedTouched, setSchedTouched] = useState(false);
-  const [remember, setRemember] = useState(false);
   const [check, setCheck] = useState(null);   // dry_run ka jawab
   const [newItems, setNewItems] = useState([]);   // sirf is estimate ke naye item
 
@@ -176,7 +175,7 @@ export default function PackageEstimateModal({ project, projectId, customers, on
   }, [quotes, project, qSearch]);
 
   // Kuch bhi badla → purana "Check" bekaar
-  useEffect(() => { setCheck(null); }, [lines, schedule, scope, pkgId, qid, link, cust, pct, desc, remember, src, newItems]);
+  useEffect(() => { setCheck(null); }, [lines, schedule, scope, pkgId, qid, link, cust, pct, desc, src, newItems]);
 
   const C = useMemo(() => (content ? previewCompute(content, scope, allLines, schedule) : null), [content, scope, allLines, schedule]);
   const baseRows = useMemo(() => (C ? C.rows.filter((r) => r.group_key !== NEW_GROUP) : []), [C]);
@@ -194,7 +193,7 @@ export default function PackageEstimateModal({ project, projectId, customers, on
   const body = () => ({
     project_id: projectId, customer_id: cust.id || "", customer_name: cust.name || "", description: desc,
     retention_pct: pctNum(pct.retention_pct), tds_pct: pctNum(pct.tds_pct), tax_pct: pctNum(pct.tax_pct),
-    scope, lines: nl.lines, schedule: ns.schedule, remember, new_items: added,
+    scope, lines: nl.lines, schedule: ns.schedule, new_items: added,
     ...(src === "package" ? { package_id: P.package.id, version_id: P.package.version_id }
                           : { quote_id: Q.id, quote_seq: Q.edit_seq, link_quote: canLink && link }),
   });
@@ -336,8 +335,8 @@ export default function PackageEstimateModal({ project, projectId, customers, on
           <button type="button" onClick={clearSched} data-testid="btn-sched-clear" style={btn()}>{t("pkg_est.sched_clear")}</button>
         </div>
       </div>
-      <QuoteSchedule rows={C.rows} schedule={schedule} editable preview noAi noSaved badKeys={badKeys} scopes={scopes}
-        onSchedule={(s) => { setSchedule(s); setSchedTouched(true); }} remember={remember} onRemember={setRemember} />
+      <QuoteSchedule rows={C.rows} schedule={schedule} editable preview badKeys={badKeys} scope={scope}
+        onSchedule={(s) => { setSchedule(s); setSchedTouched(true); }} />
     </>
   ) : null;
 

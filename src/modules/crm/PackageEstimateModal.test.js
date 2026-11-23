@@ -138,7 +138,8 @@ test("Package: chuno → structure par yaad wala GF schedule → area → Check 
   expect($('[data-testid="pe-total"]').textContent).toContain("11,76,073");
   await click($('[data-testid="pe-check"]'));
   const dry = api.post.mock.calls.find((c) => c[0] === "/sales-quotes/project-estimate")[1];
-  expect(dry).toMatchObject({ project_id: 716, package_id: 5, version_id: 41, scope: "structure", dry_run: true, remember: false });
+  expect(dry).toMatchObject({ project_id: 716, package_id: 5, version_id: 41, scope: "structure", dry_run: true });
+  expect(dry.remember).toBeUndefined();
   expect(dry.lines["main.gf"].qty).toBe(1278.34);
   expect(dry.schedule["main.gf"].length).toBe(5);
   txt = noKeys();

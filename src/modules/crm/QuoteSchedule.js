@@ -4,25 +4,33 @@
 // Har amount wali line ka paisa kis kaam par milega: hisse (naam, %, group
 // jaise "Structure"). Jod 100%, kam se kam 2 hisse — ya khaali = kaam poora
 // hone par poora paisa. ₹ server ke computed se (Save se pehle ≈ andaza).
-//   • "Yaad se / AI se milao" — company ki yaad (pichhle quote / estimate) se
-//     exact line, warna AI milta-julta pattern (sirf prastaav, tick karke lagao)
-//   • "Isko default bana do" — Save par in line ka schedule company ki yaad me
-//   • "Saved schedules" — yaad ki list, hatao
-// Server: routes/sales-quotes.js (PUT remember, /schedule-patterns),
-// routes/sales-quotes-ai.js (/:id/ai/schedule).
+//   • Stage Library se (24 Nov 2026, Prafull: "package me bhi schedule stage
+//     library se … last memory type logic ki jarurat nahi"): upar library
+//     select karo → "Library se sab line bharo" (naam se, Library se lagao jaisa);
+//     har line par "📚 Library se". Ek stage wala set = kaam poora hone par.
+//   • Company ki "yaad" (Isko default bana do / Saved schedules / AI milao) hata.
+// Naya quote server par hi library se bhar kar banta hai (routes/sales-quotes.js).
 // ════════════════════════════════════════════════════════════════
-import { useCallback, useEffect, useState } from "react";
-import api from "../../config/api";
+import { useEffect, useState } from "react";
 import { t } from "../../i18n";
 import PickSelect from "../../components/PickSelect";
-import { T, btn, inp, chip, card, Sheet, Spinner, ErrBox, Loading } from "./pkgUi";
-import { AI_TIMEOUT, fmtD, inr } from "./pkgUtil";
-import { QBASE, ask, normParts, partsProblem, partsSum, scopeLabel } from "./quoteUtil";
+import { T, btn, inp, card } from "./pkgUi";
+import { inr } from "./pkgUtil";
+import { normParts, partsForScope, partsProblem, partsSum } from "./quoteUtil";
+import { loadLibs, matchLibItem } from "../tabs/StageLibrary";
+
+// Library ka set → line ke hisse (form ki shakl). 1 stage (100%) = [] = kaam poora hone par.
+// "Structure only" scope par Finishing ke stage nahi (partsForScope).
+export const libParts = (it, scope) => {
+  const P = it && it.parts ? partsForScope(it.parts, scope) : [];
+  return P.length >= 2 ? P.map((p) => ({ name: p.name, pct: String(p.pct), group: p.group || "", ...(p.together ? { together: true } : {}) })) : [];
+};
+// Quote ki line → library ka set: row key (gf, septic_tank) ya line ka naam
+export const libMatch = (items, row) => matchLibItem(items, { category: row.row_key || "", name: row.description || "" });
 
 const th = { padding: "6px 6px", fontSize: 10.5, fontWeight: 800, color: T.t3, textTransform: "uppercase", letterSpacing: ".3px", textAlign: "left", background: T.surfaceB, whiteSpace: "nowrap" };
 const td = { padding: "4px 5px", borderTop: "1px solid " + T.b1, verticalAlign: "middle" };
 const cellInp = { ...inp, minHeight: 34, padding: "5px 7px", fontSize: 13.5 };
-const summary = (parts) => normParts(parts).map((p) => (p.group ? p.group + ": " : "") + p.name + " " + inr(p.pct) + "%").join(" · ");
 const sv = (v) => (v == null ? "" : String(v));
 
 function problemText(code, sum) {
@@ -32,7 +40,7 @@ function problemText(code, sum) {
   return "";
 }
 
-function LineSchedule({ row, parts, editable, onParts, copyFrom, isBad, preview }) {
+function LineSchedule({ row, parts, editable, onParts, copyFrom, isBad, preview, libItems, scope }) {
   const P = parts || [];
   const problem = partsProblem(P);
   const sum = partsSum(P);
@@ -101,6 +109,13 @@ function LineSchedule({ row, parts, editable, onParts, copyFrom, isBad, preview 
       ) : null}
       {editable ? (
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8, alignItems: "center" }}>
+          {libItems && libItems.length ? (
+            <PickSelect value="" onChange={(e) => { const it = libItems.find((x) => x.key === e.target.value); if (it) onParts(libParts(it, scope)); }}
+              style={{ ...inp, minHeight: 34, width: "auto", maxWidth: 220, fontSize: 12.5, padding: "5px 8px" }} aria-label={t("sales_quote_ui.lib_pick_line")}>
+              <option value="">📚 {t("sales_quote_ui.lib_pick_line")}</option>
+              {libItems.map((x) => <option key={x.key} value={x.key}>{x.label}{x.parts.length < 2 ? " — " + t("sales_quote_ui.lib_one_stage") : ""}</option>)}
+            </PickSelect>
+          ) : null}
           <button type="button" onClick={addPart} data-add-part={row.key} style={btn("soft")}>+ {P.length ? t("sales_quote_ui.add_part") : t("sales_quote_ui.make_schedule")}</button>
           {others.length ? (
             <PickSelect value="" onChange={(e) => { const src = others.find((x) => x.key === e.target.value); if (src) onParts(normParts(src.parts).map((p) => ({ ...p, pct: String(p.pct), group: p.group || "" }))); }}
@@ -116,142 +131,66 @@ function LineSchedule({ row, parts, editable, onParts, copyFrom, isBad, preview 
   );
 }
 
-// ── Yaad se / AI se milao ka nateeja ──
-function SuggestBox({ data, schedule, onApply, onClose }) {
-  const S = data.suggestions || [];
-  const [picked, setPicked] = useState(() => new Set(S.map((s) => s.key)));
-  const toggle = (k) => setPicked((p) => { const n = new Set(p); if (n.has(k)) n.delete(k); else n.add(k); return n; });
+// Upar: library select + "Library se sab line bharo". Naye quote me server pehle se bhar deta hai.
+function LibBar({ libs, libId, setLibId, onFill }) {
+  if (libs == null) return null;
+  if (!libs.length) return <div data-testid="qt-lib-none" style={{ fontSize: 12.5, color: T.t3, margin: "6px 0 10px", lineHeight: 1.45 }}>📚 {t("sales_quote_ui.lib_none")}</div>;
   return (
-    <div data-testid="sched-suggest" style={{ background: T.purL, border: "1px solid #DDD6FE", borderRadius: 12, padding: 12, marginBottom: 12 }}>
-      {!data.patterns ? <div style={{ fontSize: 13, color: T.t2 }}>{t("sales_quote_ui.sched_no_patterns")}</div> : null}
-      {S.length ? (
-        <div style={{ border: "1px solid " + T.b1, borderRadius: 10, overflow: "hidden", background: "white" }}>
-          {S.map((s, i) => (
-            <label key={s.key} data-suggest={s.key} style={{ display: "flex", gap: 10, padding: "9px 10px", borderTop: i ? "1px solid " + T.b1 : "none", cursor: "pointer", alignItems: "flex-start" }}>
-              <input type="checkbox" checked={picked.has(s.key)} onChange={() => toggle(s.key)} style={{ width: 20, height: 20, flexShrink: 0, marginTop: 1 }} />
-              <div style={{ flex: 1, minWidth: 0, fontSize: 13, lineHeight: 1.45, overflowWrap: "anywhere" }}>
-                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-                  <b>{s.label}</b>
-                  {s.source === "exact" ? <span style={chip(T.grnL, T.grn, T.grnM)}>{t("sales_quote_ui.src_exact")}</span> : <span style={chip(T.purL, T.pur, "#DDD6FE")}>✨ {t("sales_quote_ui.src_ai")}</span>}
-                  {schedule && Array.isArray(schedule[s.key]) && schedule[s.key].length ? <span style={chip(T.ambL, "#92400E", T.ambM)}>{t("sales_quote_ui.sched_will_replace")}</span> : null}
-                </div>
-                <div style={{ fontSize: 12, color: T.t3 }}>{t("sales_quote_ui.sched_from", { name: (s.pattern && (s.pattern.label || s.pattern.line_key)) || "—" })}</div>
-                <div style={{ fontSize: 12.5, color: T.t1 }}>{summary(s.pattern && s.pattern.parts)}</div>
-                {s.reason ? <div style={{ fontSize: 11.5, color: T.t3, fontStyle: "italic" }}>{s.reason}</div> : null}
-              </div>
-            </label>
-          ))}
-        </div>
-      ) : data.patterns ? <div style={{ fontSize: 13, color: T.t3 }}>{t("sales_quote_ui.sched_none_found")}</div> : null}
-      {(data.no_match || []).length ? (
-        <div style={{ fontSize: 12, color: T.t3, marginTop: 8 }}>{t("sales_quote_ui.sched_no_match", { list: data.no_match.map((x) => x.label).join(", ") })}</div>
-      ) : null}
-      <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 10, flexWrap: "wrap" }}>
-        <button type="button" onClick={onClose} style={btn()}>{t("sales_quote_ui.close")}</button>
-        {S.length ? (
-          <button type="button" disabled={!picked.size} data-testid="btn-sched-apply" style={btn("primary", !picked.size)}
-            onClick={() => onApply(S.filter((s) => picked.has(s.key)))}>{t("sales_quote_ui.apply_n", { n: picked.size })}</button>
-        ) : null}
-      </div>
+    <div data-testid="qt-lib-bar" style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", margin: "6px 0 10px", padding: "8px 10px", background: T.indL || T.surfaceB, borderRadius: 10 }}>
+      <span style={{ fontSize: 12.5, fontWeight: 700, color: T.t1 }}>📚 {t("sales_quote_ui.lib_label")}</span>
+      <PickSelect value={libId} onChange={(e) => setLibId(e.target.value)} aria-label={t("sales_quote_ui.lib_label")}
+        style={{ ...inp, minHeight: 34, width: "auto", maxWidth: 220, fontSize: 12.5, padding: "5px 8px" }}>
+        {libs.map((l) => <option key={l.id} value={String(l.id)}>{l.name}</option>)}
+      </PickSelect>
+      <button type="button" onClick={onFill} data-testid="btn-lib-fill" style={btn("primary")}>{t("sales_quote_ui.lib_fill_all")}</button>
+      <span style={{ fontSize: 11.5, color: T.t3, flex: "1 1 220px" }}>{t("sales_quote_ui.lib_hint")}</span>
     </div>
   );
 }
 
-// ── Saved schedules (company ki yaad) ──
-export function SavedPatterns({ scopes, canEdit, onClose }) {
-  const [list, setList] = useState(null);
-  const [err, setErr] = useState("");
-  const load = useCallback(async () => {
-    const r = await api.get(`${QBASE}/schedule-patterns`);
-    if (r && r.success) { setList(r.data || []); setErr(""); } else { setList((p) => p || []); setErr((r && r.message) || t("sales_quote_ui.load_failed")); }
-  }, []);
-  useEffect(() => { load(); }, [load]);
-  const del = async (p) => {
-    if (!(await ask(t("sales_quote_ui.confirm_pattern_delete", { name: p.label || p.line_key })))) return;
-    const r = await api.del(`${QBASE}/schedule-patterns/${p.id}`);
-    if (r && r.success) load(); else window.toast?.error?.((r && r.message) || t("sales_quote_ui.save_failed"));
-  };
-  return (
-    <Sheet heading={t("sales_quote_ui.saved_title")} subline={t("sales_quote_ui.saved_sub")} onClose={onClose}>
-      <ErrBox>{err}</ErrBox>
-      {list == null ? <Loading text={t("sales_quote_ui.loading")} /> : !list.length ? <div style={{ fontSize: 13, color: T.t3 }}>{t("sales_quote_ui.saved_empty")}</div> : (
-        <div style={{ border: "1px solid " + T.b1, borderRadius: 10, overflow: "hidden" }} data-testid="saved-patterns">
-          {list.map((p, i) => (
-            <div key={p.id} data-pattern={p.id} style={{ display: "flex", gap: 10, padding: "10px 12px", borderTop: i ? "1px solid " + T.b1 : "none", alignItems: "flex-start" }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-                  <b style={{ fontSize: 13, overflowWrap: "anywhere" }}>{p.label || p.line_key}</b>
-                  <span style={chip(T.sltL, T.slt)}>{p.scope === "any" ? t("sales_quote_ui.scope_any") : scopeLabel(p.scope, scopes)}</span>
-                  <span style={chip(T.surfaceB, T.t3, T.b1)}>{p.source === "estimate" ? t("sales_quote_ui.pat_src_estimate") : t("sales_quote_ui.pat_src_quote")}</span>
-                </div>
-                <div style={{ fontSize: 12.5, color: T.t1, marginTop: 3, lineHeight: 1.45 }}>{summary(p.parts)}</div>
-                <div style={{ fontSize: 11, color: T.t4, marginTop: 2 }}>{t("sales_quote_ui.pat_meta", { n: p.use_count || 1, at: fmtD(p.updated_at) })}</div>
-              </div>
-              {canEdit ? <button type="button" onClick={() => del(p)} style={btn("danger")} aria-label={t("sales_quote_ui.delete")}>🗑</button> : null}
-            </div>
-          ))}
-        </div>
-      )}
-    </Sheet>
-  );
-}
-
-// noAi / noSaved: project ke "Pick from Package" me (quote nahi, CRM permission nahi bhi ho sakti)
-export default function QuoteSchedule({ quoteId, rows, schedule, onSchedule, editable, canEdit, badKeys, remember, onRemember, dirty, scopes, preview, noAi, noSaved }) {
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState("");
-  const [sugg, setSugg] = useState(null);
-  const [showSaved, setShowSaved] = useState(false);
+// scope: "structure" par Finishing ke stage nahi
+export default function QuoteSchedule({ rows, schedule, onSchedule, editable, badKeys, preview, scope }) {
+  const [libs, setLibs] = useState(null);
+  const [libId, setLibId] = useState("");
+  useEffect(() => {
+    if (!editable) return undefined;
+    let on = true;
+    loadLibs(true).then((l) => { if (!on) return; setLibs(l); if (l.length) setLibId(String(l[0].id)); });   // har baar taaza
+    return () => { on = false; };
+  }, [editable]);
+  const lib = (libs || []).find((l) => String(l.id) === String(libId)) || null;
   const S = schedule || {};
   const list = (rows || []).filter((r) => r.amount || (Array.isArray(S[r.key]) && S[r.key].length));
   const withParts = list.filter((r) => Array.isArray(S[r.key]) && S[r.key].length && !partsProblem(S[r.key])).map((r) => ({ key: r.key, description: r.description, parts: S[r.key] }));
   const groups = [...new Set(["Structure", "Finishing", ...Object.values(S).flat().map((p) => p && p.group).filter(Boolean)])];
-
-  const match = async () => {
-    if (dirty) { window.toast?.warning?.(t("sales_quote_ui.save_first")); setErr(t("sales_quote_ui.save_first")); return; }
-    setBusy(true); setErr(""); setSugg(null);
-    const r = await api.post(`${QBASE}/${quoteId}/ai/schedule`, {}, { timeoutMs: AI_TIMEOUT });
-    setBusy(false);
-    if (r && r.success && r.data) setSugg(r.data); else setErr((r && r.message) || t("sales_quote_ui.ai_failed"));
-  };
-  const apply = (picks) => {
+  // Har line ko library ka set naam se; na mila to jaisa tha
+  const fillAll = () => {
+    if (!lib) return;
     const next = { ...S };
-    for (const s of picks) next[s.key] = normParts(s.pattern && s.pattern.parts).map((p) => ({ ...p, pct: String(p.pct), group: p.group || "" }));
+    let n = 0;
+    const miss = [];
+    for (const r of list) {
+      const it = libMatch(lib.items, r);
+      if (!it) { miss.push(r.description); continue; }
+      next[r.key] = libParts(it, scope);
+      n++;
+    }
     onSchedule(next);
-    setSugg(null);
-    window.toast?.success?.(t("sales_quote_ui.sched_applied", { n: picks.length }));
+    window.toast?.success?.(t("sales_quote_ui.lib_filled", { n, lib: lib.name }) + (miss.length ? " — " + t("sales_quote_ui.lib_missed", { list: miss.join(", ") }) : ""));
   };
 
   return (
     <div style={{ ...card, marginBottom: 12 }} data-testid="qt-schedule">
       <datalist id="qt-groups">{groups.map((g) => <option key={g} value={g} />)}</datalist>
-      <div style={{ display: "flex", gap: 8, alignItems: "flex-start", flexWrap: "wrap", marginBottom: 6 }}>
-        <div style={{ flex: "1 1 200px", minWidth: 0 }}>
-          <div style={{ fontSize: 14.5, fontWeight: 800, color: T.t1 }}>{t("sales_quote_ui.sched_title")}</div>
-          <div style={{ fontSize: 12, color: T.t3, marginTop: 2, lineHeight: 1.45 }}>{t("sales_quote_ui.sched_hint")}</div>
-        </div>
-        {!noSaved ? <button type="button" onClick={() => setShowSaved(true)} style={{ ...btn(), fontSize: 12 }} data-testid="btn-saved-patterns">🧠 {t("sales_quote_ui.saved_link")}</button> : null}
+      <div style={{ marginBottom: 6 }}>
+        <div style={{ fontSize: 14.5, fontWeight: 800, color: T.t1 }}>{t("sales_quote_ui.sched_title")}</div>
+        <div style={{ fontSize: 12, color: T.t3, marginTop: 2, lineHeight: 1.45 }}>{t("sales_quote_ui.sched_hint")}</div>
       </div>
-      {editable && !noAi ? (
-        <div style={{ margin: "6px 0 10px" }}>
-          <button type="button" onClick={match} disabled={busy} data-testid="btn-sched-match" style={btn("ai", busy)}>
-            {busy ? <Spinner size={13} color={T.pur} /> : "✨"} {t("sales_quote_ui.sched_match_btn")}
-          </button>
-        </div>
-      ) : null}
-      <ErrBox>{err}</ErrBox>
-      {sugg ? <SuggestBox data={sugg} schedule={S} onApply={apply} onClose={() => setSugg(null)} /> : null}
+      {editable ? <LibBar libs={libs} libId={libId} setLibId={setLibId} onFill={fillAll} /> : null}
       {!list.length ? <div style={{ fontSize: 13, color: T.t4, padding: "6px 0" }}>{t("sales_quote_ui.sched_empty")}</div> : list.map((r) => (
         <LineSchedule key={r.key} row={r} parts={S[r.key]} editable={editable} isBad={badKeys && badKeys.has(r.key)} preview={preview}
-          onParts={(p) => onSchedule({ ...S, [r.key]: p })} copyFrom={withParts} />
+          onParts={(p) => onSchedule({ ...S, [r.key]: p })} copyFrom={withParts} libItems={lib ? lib.items : null} scope={scope} />
       ))}
-      {editable ? (
-        <label style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 13, color: T.t1, cursor: "pointer", marginTop: 4, padding: "8px 10px", background: T.grnL, border: "1px solid " + T.grnM, borderRadius: 10 }}>
-          <input type="checkbox" checked={!!remember} onChange={(e) => onRemember(e.target.checked)} data-testid="chk-remember" style={{ width: 18, height: 18, flexShrink: 0, marginTop: 1 }} />
-          <span><b>{t("sales_quote_ui.remember_label")}</b><br /><span style={{ fontSize: 11.5, color: T.t3 }}>{t("sales_quote_ui.remember_hint")}</span></span>
-        </label>
-      ) : null}
-      {showSaved ? <SavedPatterns scopes={scopes} canEdit={canEdit} onClose={() => setShowSaved(false)} /> : null}
     </div>
   );
 }

@@ -71,7 +71,23 @@ export function normParts(parts) {
     name: String((p && p.name) || "").trim(),
     pct: (() => { const n = toNum(p && p.pct); return n == null || Number.isNaN(n) ? null : r2(n); })(),
     group: p && p.group && String(p.group).trim() ? String(p.group).trim() : null,
+    ...(p && p.together ? { together: true } : {}),   // Stage Library: "sab floor ka ek saath" (24 Nov 2026)
   }));
+}
+// "Structure only" scope: Finishing group ke stage hata kar baaki 100% par phir se (server ka
+// sales-quotes.partsForScope jaisa) — library ke set me Tile / Paint structure ke kaam me nahi hote
+const FIN = /finish|फ़िनिश|फिनिश/i;
+export function partsForScope(parts, scope) {
+  if (!/struct/i.test(String(scope || "")) || !Array.isArray(parts)) return parts;
+  const keep = parts.filter((p) => !FIN.test(String((p && p.group) || "")));
+  if (!keep.length || keep.length === parts.length) return parts;
+  const sum = keep.reduce((a, p) => a + (Number(p.pct) || 0), 0);
+  let used = 0;
+  return keep.map((p, i) => {
+    const pct = i === keep.length - 1 ? r2(100 - used) : r2((Number(p.pct) || 0) * 100 / sum);
+    used = r2(used + pct);
+    return { ...p, pct };
+  });
 }
 export const partsSum = (parts) => r2(normParts(parts).reduce((s, p) => s + (Number(p.pct) || 0), 0));
 // null = theek; warna galti ka code: min2 | fill | sum
@@ -103,7 +119,7 @@ const linesSig = (L) => stable(Object.fromEntries(Object.entries(L || {}).map(([
   v && v.description != null && String(v.description).trim() ? String(v.description).trim() : null]])
   .filter(([, x]) => x[0] != null || x[1] != null || x[2] != null)));
 const schedSig = (S) => stable(Object.fromEntries(Object.entries(S || {}).filter(([, v]) => Array.isArray(v) && v.length)
-  .map(([k, v]) => [k, v.map((p) => [String((p && p.name) || "").trim(), cmpNum(p && p.pct), p && p.group && String(p.group).trim() ? String(p.group).trim() : null])])));
+  .map(([k, v]) => [k, v.map((p) => [String((p && p.name) || "").trim(), cmpNum(p && p.pct), p && p.group && String(p.group).trim() ? String(p.group).trim() : null, !!(p && p.together)])])));
 export const sameLines = (a, b) => linesSig(a) === linesSig(b);
 export const sameSchedule = (a, b) => schedSig(a) === schedSig(b);
 

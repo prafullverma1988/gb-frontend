@@ -3,7 +3,7 @@
 // Boundary wall ₹300, TOTAL ₹29,27,807) render karke dekho: list + naya quote,
 // editor me server ke computed number, qty badal kar Save = PUT edit_seq + lines,
 // AI se area bharo (AI ka andaza bina tick), payment schedule ka total 100 +
-// "default bana do" = remember:true, Send confirm, bheja gaya quote sirf padhna,
+// Stage Library se bharo (24 Nov 2026 — "yaad" hata), Send confirm, bheja gaya quote sirf padhna,
 // Estimate banao (lead ka project) — aur screen par key ka naam na dikhe.
 import { act } from "react";
 import { createRoot } from "react-dom/client";
@@ -99,7 +99,7 @@ beforeEach(() => {
     if (url === "/sales-packages") return { success: true, data: PKGS, can_edit: true };
     if (url === "/sales-packages/settings") return { success: true, data: { saved: null, effective: LH } };
     if (url === "/customer-estimates/501") return { success: true, data: { id: 501, estimate_no: "EST-2" } };
-    if (url === "/sales-quotes/schedule-patterns") return { success: true, data: [] };
+    if (url === "/stage-libraries") return { success: true, data: LIBS };
     return { success: false, message: "unexpected " + url };
   });
   api.post.mockImplementation(async (url) => {
@@ -120,6 +120,7 @@ beforeEach(() => {
       lead: undefined, package: undefined, package_changed: undefined } };
   });
 });
+let LIBS = [];
 const noKeys = () => { const txt = document.body.textContent; expect(txt).not.toMatch(/sales_quote_ui\.[a-z_]+/); expect(txt).not.toMatch(/sales_pkg_ui\.[a-z_]+/); return txt; };
 const btn = (re) => [...document.querySelectorAll("button")].find((b) => re.test(b.textContent.trim()));
 const $ = (sel) => document.querySelector(sel);
@@ -184,7 +185,7 @@ test("Editor: Jacob jaisi lines + TOTAL server ke computed se, payment schedule 
   expect(gf.textContent).toContain("3,52,822");
   expect($("[data-sum='main.gf']").textContent).toContain("Total 100%");
   expect($("[data-sched='main.ff']").textContent).toContain("kaam poora hone par poora paisa");
-  expect(txt).toContain("Isko default bana do (agle quote me yahi)");
+  expect(txt).not.toContain("Isko default bana do");   // yaad 24 Nov 2026 se nahi — Stage Library
   // Document (client copy) — khol kar dekho: header bhara, amount, TOTAL, PAYMENT SCHEDULE
   await click($("[data-testid='btn-doc-toggle']"));
   const doc = $("[data-testid='pkg-doc']").textContent;
@@ -255,7 +256,7 @@ test("AI se area bharo: AI ka andaza bina tick; Lagao sirf tick wale → Save ke
   noKeys();
 });
 
-test("Payment schedule: total 100 nahi to Save ruka; theek karke 'default bana do' → PUT remember:true", async () => {
+test("Payment schedule: total 100 nahi to Save ruka; theek karke Save (yaad ka tick nahi)", async () => {
   await editor(11);
   const pct = (i) => $(`[data-sched='main.gf'] input[data-part-pct='${i}']`);
   await typeIn(pct(0), "25");
@@ -270,15 +271,55 @@ test("Payment schedule: total 100 nahi to Save ruka; theek karke 'default bana d
   expect($("[data-sum='main.ff']").textContent).toContain("Kam se kam 2 stage chahiye");
   await click($("[data-sched='main.ff'] button[aria-label='Stage hatao']"));
   expect($("[data-sum='main.ff']")).toBeNull();
-  await click($("[data-testid='chk-remember']"));
+  expect($("[data-testid='chk-remember']")).toBeNull();
+  expect($("[data-testid='btn-saved-patterns']")).toBeNull();
+  expect($("[data-testid='btn-sched-match']")).toBeNull();
   await click($("[data-testid='btn-save']"));
   expect(api.put).toHaveBeenCalledTimes(1);
   const body = api.put.mock.calls[0][1];
-  expect(body.remember).toBe(true);
+  expect(body.remember).toBeUndefined();
   expect(body.schedule["main.gf"].map((p) => p.pct)).toEqual([25, 20, 10, 30, 15]);
   expect(body.schedule["main.gf"][0]).toEqual({ name: "Plinth", pct: 25, group: "Structure" });
   expect(body.schedule["main.ff"]).toBeUndefined();
-  expect($("[data-testid='chk-remember']").checked).toBe(false);
+  noKeys();
+});
+
+// 24 Nov 2026 (Prafull): "package me quotation banate time client ko koi schedule bhejna hai to wo bhi stage library se"
+test("Payment schedule: Stage Library se sab line bharo — Structure only quote par Finishing hata kar baaki 100% par; FF me 1 bacha / Septic ek stage = kaam poora hone par", async () => {
+  LIBS = [{ id: 4, name: "Ghar G+1", edit_seq: 1, items: [
+    { key: "gf", label: "GF", also: "Ground Floor", parts: [{ name: "Plinth", pct: 20, group: "Structure" }, { name: "Slab casting", pct: 31, group: "Structure" }, { name: "Tile", pct: 49, group: "Finishing", together: true }] },
+    { key: "ff", label: "FF", also: "First Floor", parts: [{ name: "Slab casting", pct: 51, group: "Structure" }, { name: "Tile", pct: 49, group: "Finishing", together: true }] },
+    { key: "septic_tank", label: "Septic tank", also: "", parts: [{ name: "Completion", pct: 100 }] }] }];
+  await editor(11);
+  for (let i = 0; i < 4; i++) await act(async () => {});
+  expect($("[data-testid='qt-lib-bar']")).toBeTruthy();
+  await click($("[data-testid='btn-lib-fill']"));
+  expect($("[data-sum='main.gf']").textContent).toContain("Total 100%");
+  await click($("[data-testid='btn-save']"));
+  const body = api.put.mock.calls[0][1];
+  expect(body.schedule["main.gf"]).toEqual([{ name: "Plinth", pct: 39.22, group: "Structure" }, { name: "Slab casting", pct: 60.78, group: "Structure" }]);
+  expect(body.schedule["main.ff"]).toBeUndefined();
+  expect(body.schedule["additional.septic_tank"]).toBeUndefined();
+  noKeys();
+  LIBS = [];
+});
+
+test("partsForScope / libParts: Full me sab stage (Tile 'ek saath' bhi), Structure only me Finishing nahi", () => {
+  const { partsForScope } = require("./quoteUtil");
+  const { libParts } = require("./QuoteSchedule");
+  const it = { parts: [{ name: "Plinth", pct: 25.5, group: "Structure" }, { name: "Slab", pct: 25.5, group: "Structure" }, { name: "Tile", pct: 49, group: "Finishing", together: true }] };
+  expect(libParts(it, "full").map((p) => [p.name, p.pct, !!p.together])).toEqual([["Plinth", "25.5", false], ["Slab", "25.5", false], ["Tile", "49", true]]);
+  expect(libParts(it, "structure").map((p) => [p.name, p.pct])).toEqual([["Plinth", "50"], ["Slab", "50"]]);
+  expect(partsForScope([{ name: "A", pct: 100, group: "Finishing" }], "structure")).toEqual([{ name: "A", pct: 100, group: "Finishing" }]);
+  expect(libParts({ parts: [{ name: "Done", pct: 100 }] }, "full")).toEqual([]);
+});
+
+test("Payment schedule: koi Stage Library nahi to banane ka rasta likha aata hai", async () => {
+  LIBS = [];
+  await editor(11);
+  for (let i = 0; i < 4; i++) await act(async () => {});
+  expect($("[data-testid='qt-lib-none']").textContent).toContain("Stage Library");
+  expect($("[data-testid='btn-lib-fill']")).toBeNull();
   noKeys();
 });
 

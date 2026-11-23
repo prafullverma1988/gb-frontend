@@ -15,6 +15,7 @@ import { StatementView, ProjectStatementView, DraftLinesModal } from "./BillingV
 import { ChaluBillView, ProjectChaluView } from "./ChaluBill";
 import PackageEstimateModal from "../crm/PackageEstimateModal";
 import AmendDiffView, { AmendTotals, BoqTotalBar, boqTotals, diffFromApplied, diffFromProposal } from "./AmendDiff";
+import { groupWorks, expandWork } from "./boqWorks";
 import UnitSelect, { DEFAULT_UNIT, isLumpUnit, withUnit } from "../crm/EstimateUnit";
 
 function TabEstimate({ project }) {
@@ -397,12 +398,14 @@ function TabEstimate({ project }) {
         // amendment round-trips cleanly. Edit modal doesn't expose a
         // toggle; admin uses the builder for mode changes.
         per_item_qty: s.per_item_qty ? 1 : 0,
-        items: (s.items || []).map(it => ({
+        // Stage wali line ek kaam (24 Nov 2026): qty / rate yahan, stage Payment schedule me
+        items: groupWorks(s.items || []).map(it => ({
           id: it.id,
-          description: it.description || "",
+          description: it._work ? (/^\[([^\]]+)\]/.exec(it.description || "") ? "[" + /^\[([^\]]+)\]/.exec(it.description)[1] + "] " : "") + it.part_of : (it.description || ""),
           unit: it.unit || "",
           qty:  parseFloat(it.qty)  || 0,
           rate: parseFloat(it.rate) || 0,
+          ...(it._work ? { _parts: it._parts.map(p => ({ id: p.id, description: p.description || "", unit: p.unit || "", rate: parseFloat(p.rate) || 0 })) } : {}),
         })),
       })),
       reason: "",
@@ -424,6 +427,7 @@ function TabEstimate({ project }) {
         // with the same uniform/per-item semantics.
         per_item_qty: s.per_item_qty ? 1 : 0,
         items: (s.items || [])
+          .flatMap(it => expandWork(it))   // kaam ki row → wapas har stage ki line
           .filter(it => (it.description || "").trim() && parseFloat(it.qty) > 0 && parseFloat(it.rate) > 0)
           .map(it => ({
             id: it.id || null,
@@ -501,10 +505,11 @@ function TabEstimate({ project }) {
   const flattenBoqRows = () => {
     const rows = [];
     for (const sec of (estDetail?.sections || [])) {
-      for (const it of (sec.items || [])) {
+      // Stage wali line ek kaam (24 Nov 2026) — stage Payment schedule me
+      for (const it of groupWorks(sec.items || [])) {
         const m = /^\[([^\]]+)\]\s*(.*)$/.exec(it.description || "");
         rows.push({
-          section: sec.title || "", category: m ? m[1] : "", item: m ? m[2] : (it.description || ""),
+          section: sec.title || "", category: m ? m[1] : "", item: it._work ? it.part_of : (m ? m[2] : (it.description || "")),
           unit: it.unit || "", qty: parseFloat(it.qty) || 0, rate: parseFloat(it.rate) || 0, amount: parseFloat(it.amount) || 0,
         });
       }
@@ -555,7 +560,7 @@ function TabEstimate({ project }) {
       grand += secTotal;
       const secCollapsed = collapsedSecs.has(sec.id);
       const secPerItem = !!Number(sec.per_item_qty);
-      const secQtySum  = items.reduce((s,i)=> s + (parseFloat(i.qty)||0), 0);
+      const secQtySum  = groupWorks(items).reduce((s,i)=> s + (parseFloat(i.qty)||0), 0);
       // Group items by category (needed before the section row — the section
       // rollup is derived from the per-category areas).
       const groups = {}; const catOrder = [];
@@ -585,13 +590,14 @@ function TabEstimate({ project }) {
         const catKey = `${sec.id}::${cat}`;
         const catCollapsed = !!cat && collapsedCats.has(catKey);
         const catRateSum = gi.reduce((s,i)=> s + (parseFloat(i.rate)||0), 0);
-        const catQtySum  = gi.reduce((s,i)=> s + (parseFloat(i.qty)||0), 0);
+        const catQtySum  = groupWorks(gi).reduce((s,i)=> s + (parseFloat(i.qty)||0), 0);
         const catArea    = parseFloat(gi[0]?.qty) || 0;
         const catQtyDisp = secPerItem ? catQtySum : catArea;
         const catRateDisp = secPerItem ? "" : inr(catRateSum) + "/sqft";
-        if (cat) body += `<tr class="cat"><td colspan="2">${catCollapsed ? "▸ " : "▾ "}${esc(cat)} <span class="cnt">· ${gi.length} item${gi.length===1?"":"s"}</span></td><td class="r">${Math.round(catQtyDisp).toLocaleString("en-IN")}</td><td class="r">${catRateDisp}</td><td></td><td class="r">${inr(catTotal)}</td></tr>`;
+        const gw = groupWorks(gi);   // stage wali line ek kaam (24 Nov 2026)
+        if (cat) body += `<tr class="cat"><td colspan="2">${catCollapsed ? "▸ " : "▾ "}${esc(cat)} <span class="cnt">· ${gw.length} item${gw.length===1?"":"s"}</span></td><td class="r">${Math.round(catQtyDisp).toLocaleString("en-IN")}</td><td class="r">${catRateDisp}</td><td></td><td class="r">${inr(catTotal)}</td></tr>`;
         if (catCollapsed) continue;
-        for (const it of gi) {
+        for (const it of gw) {
           body += `<tr><td class="it">${esc(it._clean)}</td><td>${esc(it.unit||"")}</td><td class="r">${(parseFloat(it.qty)||0).toLocaleString("en-IN")}</td><td class="r">${inr(it.rate)}</td><td class="r">${inr(it.amount)}</td><td></td></tr>`;
         }
       }
@@ -1827,7 +1833,7 @@ function TabEstimate({ project }) {
                   const GRID = "1fr 60px 70px 95px 110px";
                   return (estDetail.sections||[]).map(sec => {
                     const secTotal   = (sec.items||[]).reduce((s,i) => s + parseFloat(i.amount||0), 0);
-                    const secQtySum  = (sec.items||[]).reduce((s,i) => s + parseFloat(i.qty||0),    0);
+                    const secQtySum  = groupWorks(sec.items||[]).reduce((s,i) => s + parseFloat(i.qty||0),    0);   // kaam se (stage ek baar)
                     const secPerItem = !!Number(sec.per_item_qty);
                     // Group items by parsed [Category] prefix in description.
                     // EstimateBuilderModal flattens 3-level (sec › cat › item)
@@ -1892,7 +1898,7 @@ function TabEstimate({ project }) {
                           const items = groups[catName] || [];
                           const catTotal   = items.reduce((s,i) => s + parseFloat(i.amount||0), 0);
                           const catRateSum = items.reduce((s,i) => s + parseFloat(i.rate||0),   0);
-                          const catQtySum  = items.reduce((s,i) => s + parseFloat(i.qty||0),    0);
+                          const catQtySum  = groupWorks(items).reduce((s,i) => s + parseFloat(i.qty||0),    0);
                           // Category inherits the section's mode (categories
                           // don't carry their own flag — they're just visual
                           // sub-groups within a section).
@@ -1900,6 +1906,8 @@ function TabEstimate({ project }) {
                           const catQtyDisplay = secPerItem ? catQtySum : catArea;
                           const catKey = `${sec.id}::${catName}`;
                           const catCollapsed = !!catName && collapsedCats.has(catKey);
+                          // BOQ me sirf kaam + qty (24 Nov 2026) — stage Payment schedule tab me
+                          const works = groupWorks(items);
                           return (
                             <React.Fragment key={catName || "__none__"}>
                               {catName && (
@@ -1910,7 +1918,7 @@ function TabEstimate({ project }) {
                                     <span style={{display:"inline-block",transition:"transform .15s",transform:catCollapsed?"rotate(-90deg)":"rotate(0deg)",fontSize:9,color:T.t3}}>▼</span>
                                     {catName}
                                     <span style={{fontSize:10,color:T.t4,fontWeight:500}}>
-                                      · {items.length} item{items.length === 1 ? "" : "s"}
+                                      · {works.length} item{works.length === 1 ? "" : "s"}
                                     </span>
                                   </span>
                                   <span/>{/* Unit col */}
@@ -1925,9 +1933,12 @@ function TabEstimate({ project }) {
                                   </span>
                                 </div>
                               )}
-                              {!catCollapsed && items.map(it => (
-                                <div key={it.id} style={{display:"grid",gridTemplateColumns:GRID,padding:"8px 14px",borderBottom:"1px solid "+T.b1,alignItems:"center", paddingLeft: catName ? 28 : 14}}>
-                                  <span style={{fontSize:12.5,color:T.t1}}>{it._cleanDesc}</span>
+                              {!catCollapsed && works.map(it => (
+                                <div key={it.id} data-boq-row={it.id} style={{display:"grid",gridTemplateColumns:GRID,padding:"8px 14px",borderBottom:"1px solid "+T.b1,alignItems:"center", paddingLeft: catName ? 28 : 14}}>
+                                  <span style={{fontSize:12.5,color:T.t1}}>
+                                    {it._cleanDesc}
+                                    {it._work && <span data-boq-stages={it.id} style={{marginLeft:6,fontSize:10.5,color:T.t4}}>· {t("estimate.boq_stages_n", { n: it._parts.length })}</span>}
+                                  </span>
                                   <span style={{fontSize:11.5,color:T.t3}}>{it.unit}</span>
                                   <span style={{fontSize:12,color:T.t2,textAlign:"right",paddingRight:8,fontVariantNumeric:"tabular-nums"}}>{parseFloat(it.qty)}</span>
                                   <span style={{fontSize:12,color:T.t2,textAlign:"right",paddingRight:8,fontVariantNumeric:"tabular-nums"}}>{fmtC(it.rate)}</span>
@@ -2703,11 +2714,14 @@ function TabEstimate({ project }) {
                                   the data — it is what carries the category into
                                   the read view / PDF / Excel. Re-attached on every
                                   keystroke so a rename can't orphan the row. */}
-                              <input value={cleanDesc}
+                              <input value={cleanDesc} readOnly={!!it._parts} data-edit-work={it._parts ? it.id : undefined}
+                                title={it._parts ? t("estimate.boq_work_edit_title", { n: it._parts.length }) : undefined}
                                 onChange={e=>patch(ii, "description", catName ? `[${catName}] ${e.target.value}` : e.target.value)}
                                 placeholder={t("estimate.item_description")}
-                                style={{padding:"5px 8px",border:"1px solid "+T.b1,borderRadius:4,fontSize:12,outline:"none",marginLeft:catName?10:0}}/>
-                              <UnitSelect value={it.unit} onChange={u=>patchUnit(ii, u)} style={{width:"100%"}}/>
+                                style={{padding:"5px 8px",border:"1px solid "+T.b1,borderRadius:4,fontSize:12,outline:"none",marginLeft:catName?10:0,background:it._parts?T.surfaceB:"white"}}/>
+                              {it._parts
+                                ? <span title={t("estimate.boq_work_edit_title", { n: it._parts.length })} style={{fontSize:11.5,color:T.t3,paddingLeft:4}}>{it.unit} · {t("estimate.boq_stages_n", { n: it._parts.length })}</span>
+                                : <UnitSelect value={it.unit} onChange={u=>patchUnit(ii, u)} style={{width:"100%"}}/>}
                               <input type="number" value={isLumpUnit(it.unit) ? 1 : it.qty} disabled={isLumpUnit(it.unit)} onChange={e=>patch(ii, "qty", e.target.value)}
                                 style={{padding:"5px 8px",border:"1px solid "+T.b1,borderRadius:4,fontSize:11.5,outline:"none",textAlign:"right"}}/>
                               <input type="number" value={it.rate} onChange={e=>patch(ii, "rate", e.target.value)}
