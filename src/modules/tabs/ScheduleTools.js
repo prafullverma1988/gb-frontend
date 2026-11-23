@@ -597,6 +597,11 @@ export function WoFromLinesModal({ lines, projectId, estimateNo, onClose, onDone
 // card me nahi: neeche group ka ek card, har stage ka ₹ sab floor ka jod.
 // canEdit + onEdit(kaam, sab kaam) ho to har kaam par "Schedule badlo".
 const workLocked = (w) => w.all.some(x => num(x.billed_qty) > 0 || num(x.opening_qty) > 0);
+// Kaam kitna hua: haath ka "Ho gaya" (⋯ "Mark as complete" / Chalu Bill) task se upar — server ka
+// ledger "ready" aur runningBill.workOf jaisa. Task jaisi shakal (progress, trigger_pct, eligible).
+export const workTaskOf = (x) => (x && x.manual_done
+  ? { progress: num(x.manual_done.pct), trigger_pct: 100, eligible: num(x.manual_done.pct) >= 100, manual: true }
+  : (x && x.linked_task) || null);
 export function ClientScheduleView({ items, canEdit, onEdit }) {
   const { cards, together } = useMemo(() => {
     const out = [], idx = {}, tg = [], tidx = {};
@@ -618,7 +623,7 @@ export function ClientScheduleView({ items, canEdit, onEdit }) {
   if (!cards.length) return <div style={{ padding: 14, fontSize: 12, color: T.t4 }}>{t("schedule.cl_empty")}</div>;
   const isBilled = (x) => num(x.planned_qty) > 0 && num(x.billed_qty) >= num(x.planned_qty) - 0.0005;
   const status = (x) => {
-    const tk = x.linked_task;
+    const tk = workTaskOf(x);
     if (isBilled(x)) return [T.grnL, T.grn, t("schedule.cl_st_billed")];
     if (tk && tk.eligible) return [T.grnL, T.grn, t("schedule.cl_st_done")];
     if (tk && num(tk.progress) > 0) return [T.ambL, T.amb, t("schedule.cl_st_prog", { pct: num(tk.progress) })];
@@ -627,7 +632,7 @@ export function ClientScheduleView({ items, canEdit, onEdit }) {
   // Kai floor ki ek stage: sab ka bill → "Bill bana"; sab ka kaam hua → "Kaam hua"; warna jo chal raha
   const statusMany = (xs) => {
     if (xs.every(isBilled)) return [T.grnL, T.grn, t("schedule.cl_st_billed")];
-    const tasks = xs.map(x => x.linked_task).filter(Boolean);
+    const tasks = xs.map(workTaskOf).filter(Boolean);
     if (tasks.length === xs.length && tasks.every(tk => tk.eligible)) return [T.grnL, T.grn, t("schedule.cl_st_done")];
     const going = tasks.map(tk => num(tk.progress)).filter(p => p > 0);
     if (going.length) return [T.ambL, T.amb, t("schedule.cl_st_prog", { pct: Math.min(...going) })];

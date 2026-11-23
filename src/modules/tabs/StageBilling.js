@@ -18,7 +18,7 @@ import React, { useState, useEffect, useCallback, useMemo } from "react";
 import api from "../../config/api";
 import { T } from "../shared/tokens";
 import { t } from "../../i18n";
-import { ScheduleMethods, MilestoneView, WoFromLinesModal, ClientScheduleView, ScheduleEditModal, partNameOf } from "./ScheduleTools";
+import { ScheduleMethods, MilestoneView, WoFromLinesModal, ClientScheduleView, ScheduleEditModal, partNameOf, workTaskOf } from "./ScheduleTools";
 
 const num = (v) => { const n = parseFloat(v); return Number.isFinite(n) ? n : 0; };
 const r2 = (n) => Math.round(num(n) * 100) / 100;
@@ -37,6 +37,17 @@ const btnS = (kind = "plain", disabled = false) => ({
     : { background: T.surface, color: T.t2, border: "1px solid " + T.b1 }),
 });
 const chip = (bg, fg) => ({ display: "inline-block", padding: "1px 7px", borderRadius: 999, fontSize: 10, fontWeight: 700, background: bg, color: fg, whiteSpace: "nowrap" });
+const todayYmdIST = () => new Date(Date.now() + 330 * 60000).toISOString().slice(0, 10);
+const fmtDay = (d) => { const x = d ? new Date(String(d).slice(0, 10) + "T00:00:00") : null; return x && !isNaN(x) ? x.toLocaleDateString("en-IN", { day: "numeric", month: "short" }) : ""; };
+// Haath se complete (⋯ "Mark as complete" / Chalu Bill "Ho gaya") ka chip
+function DoneChip({ it }) {
+  const m = it && it.manual_done;
+  if (!m) return null;
+  const tip = [m.by, m.note].filter(Boolean).join(" · ");
+  return num(m.pct) >= 100
+    ? <span data-done-chip={it.item_id} style={chip(T.grnL, T.grn)} title={tip}>{t("stage_billing.done_chip", { date: fmtDay(m.at) })}</span>
+    : <span data-done-chip={it.item_id} style={chip(T.ambL, T.amb)} title={tip}>{t("stage_billing.done_pct_chip", { pct: num(m.pct) })}</span>;
+}
 
 // Line ko floor (category) ke group me — section ke andar, aane ke kram me.
 function groupLines(items) {
@@ -168,6 +179,7 @@ export function StageBillGrid({ items, value, onChange, overBillMode }) {
               {it.item_type === "extra" && <span style={chip(T.redL, T.red)} title={it.approval_ref || ""}>{t("stage_billing.extra_chip")}</span>}
               {it.part_of && <span style={chip(T.sltL, T.slt)}>{t("stage_billing.part_of", { item: it.part_of })}</span>}
               {task && <span style={chip(task.eligible ? T.grnL : T.sltL, task.eligible ? T.grn : T.slt)} title={task.task_name}>{t("stage_billing.task_pct", { pct: task.progress, trigger: task.trigger_pct })}</span>}
+              <DoneChip it={it} />
               {num(it.opening_qty) > 0 && <span style={chip(T.ambL, T.amb)} title={it.opening_note || ""}>{t("stage_billing.opening_chip", { qty: fmtQ(it.opening_qty) })}</span>}
               {num(it.in_draft_qty) > 0 && <span style={chip(T.purL, T.pur)}>{t("stage_billing.in_draft", { qty: fmtQ(it.in_draft_qty) })}</span>}
             </div>
@@ -246,7 +258,8 @@ export function StageLinesPanel({ kind, id, canEdit, canApprove, projectId }) {
   const [selWo, setSelWo] = useState(() => new Set());
   const [woFor, setWoFor] = useState(null);          // chuni client line → thekedar ka WO
   const [extraOpen, setExtraOpen] = useState(false);
-  const [view, setView] = useState("client");        // "client" (saaf schedule) | "line" | "milestone"
+  const [view, setView] = useState("client");        // "client" (saaf schedule) | "line" | "milestone" (sirf thekedar WO — estimate se 24 Nov 2026 hata)
+  const [doneForm, setDoneForm] = useState(null);    // ⋯ "Mark as complete": { key, ids, name, date, note, needNote }
   const [unsplit, setUnsplit] = useState(null);      // hisse wali line jiske "Hisse hatao" ka pakka poocha
   const [help, setHelp] = useState(false);           // "?" — samjhane wala text ek jagah
   const [tgOpen, setTgOpen] = useState(null);        // ek-saath wali stage jiske floor khule
@@ -379,6 +392,66 @@ export function StageLinesPanel({ kind, id, canEdit, canApprove, projectId }) {
     if (!r?.success) { setMsg(r?.message || t("stage_billing.save_failed")); return; }
     setOpening(null); setMsg(t("stage_billing.opening_saved")); await load();
   };
+  // ⋯ "Mark as complete" (24 Nov 2026, Prafull: "manual task complete kar sake aur bill ke liye ready"):
+  // Chalu Bill wala haath ka "Ho gaya" (PUT /items/:id/done, 100%) — line bill ke liye ready; Auto-bill
+  // ON ho to server Draft bhi bana deta hai. Task judi line par wajah zaroori (server bhi rokta hai).
+  const openDone = (key, lines, name) => setDoneForm(doneForm && doneForm.key === key ? null : {
+    key, ids: lines.map(x => x.item_id), name, date: todayYmdIST(), note: "",
+    needNote: lines.some(x => !!((sugById[x.item_id] || {}).task_id || x.linked_task)) });
+  const saveDone = async () => {
+    if (!doneForm) return;
+    setBusy(true);
+    let n = 0, err = "";
+    const drafts = new Set();
+    for (const iid of doneForm.ids) {
+      const r = await api.put(base + "/items/" + iid + "/done", { pct: 100, date: doneForm.date, note: doneForm.note.trim() }).catch(e => ({ success: false, message: e.message }));
+      if (!r?.success) { err = r?.message || t("stage_billing.save_failed"); break; }
+      n++;
+      for (const d of r.data?.auto_bill || []) if (d.invoice_no) drafts.add(d.invoice_no);
+    }
+    setBusy(false);
+    if (!err) setDoneForm(null);
+    const ok = n ? (drafts.size ? t("stage_billing.done_saved_draft", { n, no: [...drafts].join(", ") }) : t("stage_billing.done_saved", { n })) : "";
+    setMsg([ok, err].filter(Boolean).join(" — "));
+    if (n) await load();
+  };
+  const clearDone = async (lines) => {
+    setBusy(true);
+    let n = 0, err = "";
+    for (const x of lines) {
+      const r = await api.put(base + "/items/" + x.item_id + "/done", { pct: null }).catch(e => ({ success: false, message: e.message }));
+      if (!r?.success) { err = r?.message || t("stage_billing.save_failed"); break; }
+      n++;
+    }
+    setBusy(false);
+    setMsg([n ? t("stage_billing.done_cleared", { n }) : "", err].filter(Boolean).join(" — "));
+    if (n) await load();
+  };
+  const isDone = (x) => !!(x.manual_done && num(x.manual_done.pct) >= 100);
+  const doneMenu = (lines, all) => {
+    if (kind !== "estimate" || !canEdit) return [];
+    const todo = lines.filter(x => !isDone(x) && num(x.remaining_qty) > 0), done = lines.filter(x => !!x.manual_done);
+    return [
+      ...(todo.length ? [{ label: all ? t("stage_billing.mark_done_all", { n: todo.length }) : t("stage_billing.mark_done"),
+        onClick: () => openDone(all || "i" + lines[0].item_id, todo, all ? null : (lines[0].part_of ? partNameOf(lines[0]) : nameOf(lines[0]))) }] : []),
+      ...(done.length ? [{ label: t("stage_billing.undo_done"), onClick: () => clearDone(done) }] : []),
+    ];
+  };
+  const donePanel = (key) => doneForm && doneForm.key === key && (
+    <div data-done-form={key} style={{ display: "grid", gridTemplateColumns: "140px minmax(0,1fr) auto", gap: 8, alignItems: "end", marginTop: 8, padding: 8, background: T.grnL, borderRadius: 6 }}>
+      <div><label style={lblS}>{t("stage_billing.done_date")}</label>
+        <input type="date" value={doneForm.date} max={todayYmdIST()} onChange={e => setDoneForm(p => ({ ...p, date: e.target.value }))} style={inpS} /></div>
+      <div><label style={lblS}>{t("stage_billing.done_note")}</label>
+        <input value={doneForm.note} maxLength={300} data-done-note={key} placeholder={doneForm.needNote ? t("stage_billing.done_note_ph_req") : t("stage_billing.done_note_ph")}
+          onChange={e => setDoneForm(p => ({ ...p, note: e.target.value }))} style={inpS} /></div>
+      <div style={{ display: "flex", gap: 4 }}>
+        <button type="button" onClick={() => setDoneForm(null)} style={btnS()}>{t("common.cancel")}</button>
+        <button type="button" data-done-save={key} disabled={busy || !doneForm.date || (doneForm.needNote && doneForm.note.trim().length < 3)} onClick={saveDone}
+          style={btnS("primary", busy || !doneForm.date || (doneForm.needNote && doneForm.note.trim().length < 3))}>{busy ? t("common.saving_2") : t("stage_billing.done_save")}</button>
+      </div>
+      <div style={{ gridColumn: "1 / -1", fontSize: 10.5, color: T.grn }}>{t("stage_billing.done_form_hint")}</div>
+    </div>
+  );
   // % se ya ₹ se (Chalu Bill, 4 Nov 2026 — Excel me Advance 200, G Beam 50 …).
   // "others" = isi unit ki baaki line (FF, SF) par bhi wahi hisse; alag rate wali
   // line par server ₹ ko usi anupaat me baant deta hai.
@@ -520,8 +593,10 @@ export function StageLinesPanel({ kind, id, canEdit, canApprove, projectId }) {
     const sugIds = new Set((s.suggestions || []).map(x => String(x.task_id)));
     const isPart = !!it.part_of;
     const menu = !canEdit ? [] : [
+      ...doneMenu([it], null),
       { label: t("stage_billing.opening_btn"), onClick: () => setOpening({ item_id: it.item_id, qty: String(it.opening_qty || ""), note: it.opening_note || "" }) },
-      ...(isPart ? [{ label: t("stage_billing.unsplit_btn"), onClick: () => setUnsplit(unsplit === it.item_id ? null : it.item_id) }]
+      // "Merge parts" sirf thekedar ke WO par — estimate par "Schedule badlo" me ek stage 100% (24 Nov 2026)
+      ...(isPart ? (kind === "estimate" ? [] : [{ label: t("stage_billing.unsplit_btn"), onClick: () => setUnsplit(unsplit === it.item_id ? null : it.item_id) }])
         : [{ label: t("stage_billing.split_btn"), onClick: () => setSplit({ item_id: it.item_id, others: false,
             mode: lastParts ? lastParts.mode : "pct",
             parts: lastParts ? lastParts.parts.map(p => ({ ...p })) : [{ name: "", pct: "", rate: "", group: "" }, { name: "", pct: "", rate: "", group: "" }] }) }]),
@@ -540,6 +615,8 @@ export function StageLinesPanel({ kind, id, canEdit, canApprove, projectId }) {
                 {inTg ? (it.category || it.section_title || "") + " · " : ""}{isPart ? partNameOf(it) : nameOf(it)}
                 {it.item_type === "extra" && <> <span style={chip(T.redL, T.red)}>{t("stage_billing.extra_chip")}</span></>}
                 {kind === "estimate" && !inTg && cur.no_auto && <> <span style={chip(T.sltL, T.slt)}>{t("stage_billing.auto_off_chip")}</span></>}
+                {it.manual_done && <> <DoneChip it={it} /></>}
+                {kind === "estimate" && it.ready && num(it.remaining_qty) > 0 && num(it.in_draft_qty) <= 0 && <> <span data-ready-chip={it.item_id} style={chip(T.indL, T.ind)}>{t("stage_billing.ready_chip")}</span></>}
               </div>
               <div style={{ fontSize: 10.5, color: T.t3, fontVariantNumeric: "tabular-nums", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                 {isPart && !inTg && <>{it.part_of} · </>}
@@ -597,6 +674,7 @@ export function StageLinesPanel({ kind, id, canEdit, canApprove, projectId }) {
                       </div>
                     );
                   })()}
+                  {donePanel("i" + it.item_id)}
                   {unsplit === it.item_id && (() => {
                     const fam = familyOf(it);
                     const rate = fam.reduce((a, x) => a + num(x.rate), 0);
@@ -697,9 +775,12 @@ export function StageLinesPanel({ kind, id, canEdit, canApprove, projectId }) {
     const tickAll = () => { const n = new Set(selItems); for (const x of tickable) { if (allTicked) n.delete(x.item_id); else n.add(x.item_id); } setSelItems(n); };
     const drafts = st.lines.filter(x => num((boardLine[x.item_id] || {}).draft_qty) > 0);
     const menu = [
+      ...doneMenu(st.lines, "tg" + st.key),
       { label: open ? t("stage_billing.tg_hide_floors") : t("stage_billing.tg_show_floors", { n: st.lines.length }), onClick: () => setTgOpen(open ? null : st.key) },
       ...(canEdit ? [{ label: t("stage_billing.auto_off"), checked: noAutoAll, onClick: () => setAll({ no_auto: !noAutoAll }) }] : []),
     ];
+    const allDone = st.lines.every(isDone);
+    const readyN = st.lines.filter(x => x.ready && num(x.remaining_qty) > 0 && num(x.in_draft_qty) <= 0).length;
     return (
       <div key={st.key} data-together-row={st.key} style={{ borderTop: "1px solid " + T.b1 }}>
         <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1.3fr) minmax(0,1.6fr) 74px 32px", gap: 8, alignItems: "center", padding: "8px 12px" }}>
@@ -713,6 +794,8 @@ export function StageLinesPanel({ kind, id, canEdit, canApprove, projectId }) {
                 {st.name}
                 {noAutoAll && <> <span style={chip(T.sltL, T.slt)}>{t("stage_billing.auto_off_chip")}</span></>}
                 {drafts.length > 0 && <> <span style={chip(T.purL, T.pur)}>{t("stage_billing.draft_chip", { no: (boardLine[drafts[0].item_id] || {}).draft_no || "" })}</span></>}
+                {allDone && <> <DoneChip it={st.lines[0]} /></>}
+                {readyN > 0 && <> <span data-ready-chip={"tg" + st.key} style={chip(T.indL, T.ind)}>{t("stage_billing.ready_chip")}</span></>}
               </div>
               <div style={{ fontSize: 10.5, color: T.t3, fontVariantNumeric: "tabular-nums" }}>
                 {floors} · {fmtC(amt)} · {t("stage_billing.tg_billed", { amt: fmtC(billedAmt) })}
@@ -725,6 +808,7 @@ export function StageLinesPanel({ kind, id, canEdit, canApprove, projectId }) {
             onChange={e => setAll({ trigger_pct: e.target.value })} title={t("stage_billing.trigger_title")} style={inpS} />
           <RowMenu items={menu} />
         </div>
+        {doneForm && doneForm.key === "tg" + st.key && <div style={{ padding: "0 12px 8px" }}>{donePanel("tg" + st.key)}</div>}
         {open && <div style={{ background: T.surfaceB, paddingLeft: 18 }}>{st.lines.map(x => lineRow(x, true))}</div>}
       </div>
     );
@@ -749,7 +833,7 @@ export function StageLinesPanel({ kind, id, canEdit, canApprove, projectId }) {
       </div>
       <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6, padding: "7px 12px", background: T.surfaceB,
         borderLeft: "1px solid " + T.b1, borderRight: "1px solid " + T.b1 }}>
-        {[["client", t("schedule.view_client")], ["line", t("schedule.view_line")], ["milestone", t("schedule.view_milestone")]].map(([v, l]) => (
+        {[["client", t("schedule.view_client")], ["line", t("schedule.view_line")], ...(kind === "wo" ? [["milestone", t("schedule.view_milestone")]] : [])].map(([v, l]) => (
           <button key={v} type="button" onClick={() => setView(v)} style={{ ...btnS(view === v ? "primary" : "plain"), padding: "3px 10px" }}>{l}</button>
         ))}
         <div style={{ flex: 1 }} />
@@ -773,7 +857,7 @@ export function StageLinesPanel({ kind, id, canEdit, canApprove, projectId }) {
             )}
           </div>
         )}
-        {view === "milestone" && (
+        {view === "milestone" && kind === "wo" && (
           <div style={{ padding: 10 }}>
             <MilestoneView items={ledger.items} links={links} setLink={setLink} taskOpts={taskOpts} canEdit={canEdit} />
           </div>
@@ -810,7 +894,7 @@ export function StageLinesPanel({ kind, id, canEdit, canApprove, projectId }) {
                     );
                   })()}
                 </div>
-                {perUnitSummary(g.rows.map(it => ({ unit: it.unit, qty: it.planned_qty, rate: it.rate, billed: it.billed_qty, task: it.linked_task,
+                {perUnitSummary(g.rows.map(it => ({ unit: it.unit, qty: it.planned_qty, rate: it.rate, billed: it.billed_qty, task: workTaskOf(it),
                   item_type: it.item_type, part_of: it.part_of }))).map((s, i) => (
                   <div key={"pu" + i} style={{ padding: "4px 12px", fontSize: 11, color: T.ind, background: T.indL, borderTop: "1px solid " + T.b1 }}><PerUnitNote s={s} /></div>
                 ))}

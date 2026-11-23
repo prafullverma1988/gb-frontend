@@ -144,16 +144,21 @@ test("Payment Schedule (client): kaam poora hone par kitna — ₹, %, kul", asy
   expect(txt).toContain("Ab tak bill bana ₹4,91,400");
 });
 
-test("Hisse hatao: pakka poochh kar unsplit route", async () => {
+test("Hisse hatao: thekedar ke WO par pakka poochh kar unsplit route; estimate ke ⋯ me nahi (24 Nov 2026)", async () => {
   LEDGER = jag();
   api.post.mockResolvedValue({ success: true, data: { merged_item_id: 99, removed: 5, rate: 900 } });
   await mount(<StageLinesPanel kind="estimate" id={7} canEdit canApprove={false} projectId={70} />);
   await act(async () => { btn(/^Line-wise$/).click(); });
-  await act(async () => { btn(/^⋯$/).click(); });          // ab line ke ⋯ menu me (23 Nov 2026)
+  await act(async () => { btn(/^⋯$/).click(); });
+  expect(btn(/^Hisse hatao$/)).toBeUndefined();
+  act(() => root.unmount()); box.remove();
+  await mount(<StageLinesPanel kind="wo" id={7} canEdit canApprove={false} projectId={70} />);
+  await act(async () => { btn(/^Line-wise$/).click(); });
+  await act(async () => { btn(/^⋯$/).click(); });
   await act(async () => { btn(/^Hisse hatao$/).click(); });
   expect(noKeys()).toContain("\"Structure\" ke 5 hisse hata kar wapas ek line (₹900/Sqft)?");
   await act(async () => { btn(/^Haan, ek line karo$/).click(); });
-  expect(api.post).toHaveBeenCalledWith("/customer-estimates/7/items/40/unsplit", {});
+  expect(api.post).toHaveBeenCalledWith("/subcon/wo/7/items/40/unsplit", {});
 });
 
 test("stage jaisi line (ek floor, same area) ka tick hata, chetavni", async () => {
@@ -174,3 +179,64 @@ test("GF Structure + GF Finishing (same area) stage jaisi NAHI — dono tick", a
   expect(txt).not.toContain("Stage jaisi line");
   expect(txt).toContain("Line (2) · ₹31,85,000");
 });
+
+// 24 Nov 2026 (Prafull): "By milestone" hatao; ⋯ me "Mark as complete" — bina task bhi kaam poora, bill ke liye ready
+test("By milestone ka button nahi; Client aur Line-wise", async () => {
+  await mount(<StageLinesPanel kind="estimate" id={7} canEdit canApprove={false} projectId={70} />);
+  expect(btn(/^Milestone-wise$/)).toBeUndefined();
+  expect(btn(/^Line-wise$/)).toBeDefined();
+  expect(noKeys()).not.toContain("Milestone-wise");
+});
+
+test("Mark as complete: bina task — date ke saath PUT done 100%, Draft bill ka sandesh; phir chip + ready + hatao", async () => {
+  api.put.mockReset();
+  api.put.mockResolvedValue({ success: true, data: { item_id: 1, done_pct: 100, auto_bill: [{ invoice_id: 3, invoice_no: "INV-0009", lines: 1 }] } });
+  await mount(<StageLinesPanel kind="estimate" id={7} canEdit canApprove={false} projectId={70} />);
+  await act(async () => { btn(/^Line-wise$/).click(); });
+  await act(async () => { btn(/^⋯$/).click(); });
+  await act(async () => { btn(/^Complete mark karo$/).click(); });
+  const save = document.querySelector('[data-done-save="i1"]');
+  expect(save.disabled).toBe(false);                                   // bina task — note zaroori nahi
+  expect(noKeys()).toContain("Complete mark karte hi line bill ke liye ready");
+  LEDGER = { mode: "manual", items: [L(1, "GF", "Structure", 1000, 1000, { manual_done: { pct: 100, at: "2026-11-24", by: "Prafull", note: null }, ready: true }), L(2, "FF", "Structure", 800, 1000)] };
+  await act(async () => { save.click(); });
+  await act(async () => {});
+  const [url, body] = api.put.mock.calls[0];
+  expect(url).toBe("/customer-estimates/7/items/1/done");
+  expect(body.pct).toBe(100);
+  expect(body.date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  const txt = noKeys();
+  expect(txt).toContain("1 line complete — Draft bill INV-0009 me gayi");
+  expect(txt).toContain("✓ Complete 24 Nov");
+  expect(document.querySelector('[data-ready-chip="1"]').textContent).toBe("Bill ke liye ready");
+  // dobara ⋯: ab "Complete hatao"
+  api.put.mockClear();
+  api.put.mockResolvedValue({ success: true, data: { item_id: 1, done_pct: null, auto_bill: [] } });
+  await act(async () => { btn(/^⋯$/).click(); });
+  expect(btn(/^Complete mark karo$/)).toBeUndefined();
+  await act(async () => { btn(/^Complete hatao$/).click(); });
+  expect(api.put).toHaveBeenCalledWith("/customer-estimates/7/items/1/done", { pct: null });
+});
+
+test("Mark as complete: task judi line par wajah (3+ akshar) ke bina Save band", async () => {
+  LEDGER = { mode: "manual", items: [L(1, "GF", "Structure", 1000, 1000, { linked_task: { task_id: 5, task_name: "GF Plinth", progress: 40, trigger_pct: 100, eligible: false } })] };
+  await mount(<StageLinesPanel kind="estimate" id={7} canEdit canApprove={false} projectId={70} />);
+  await act(async () => { btn(/^Line-wise$/).click(); });
+  await act(async () => { btn(/^⋯$/).click(); });
+  await act(async () => { btn(/^Complete mark karo$/).click(); });
+  const save = document.querySelector('[data-done-save="i1"]');
+  expect(save.disabled).toBe(true);
+  const note = document.querySelector('[data-done-note="i1"]');
+  expect(note.placeholder).toBe("Wajah likho — task se alag kyun (zaroori)");
+  const setVal = (el, v) => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(el, v); el.dispatchEvent(new Event("input", { bubbles: true })); };
+  await act(async () => { setVal(note, "site par poora dekha"); });
+  expect(document.querySelector('[data-done-save="i1"]').disabled).toBe(false);
+});
+
+test("Client view: haath se complete line = 'Kaam hua'", async () => {
+  LEDGER = { mode: "manual", items: [L(1, "GF", "Structure", 1000, 1000, { manual_done: { pct: 100, at: "2026-11-24" }, ready: true }), L(2, "FF", "Structure", 800, 1000)] };
+  await mount(<StageLinesPanel kind="estimate" id={7} canEdit canApprove={false} projectId={70} />);
+  const txt = noKeys();
+  expect(txt).toContain("Kaam hua");
+});
+
