@@ -17750,6 +17750,12 @@ const dict = {
   "estimate.ad_k_stages_removed": "स्टेज हट गए (₹ वही)",
   "estimate.ad_k_stages_added": "स्टेज लगे (₹ वही)",
   "estimate.ad_stale_btn": "पुराने BOQ पर बना — रिजेक्ट करके नया अमेंडमेंट बनाएँ",
+  "schedule.where_lbl": "कहाँ:",
+  "schedule.where_on": "{floor} पर लगेगा — दबाएँ तो हटाएँ",
+  "schedule.where_off": "{floor} पर नहीं — दबाएँ तो लगाएँ",
+  "schedule.where_hint": "जिस फ़्लोर पर कोई स्टेज नहीं, उसका ₹ उसी ग्रुप के बाक़ी स्टेज में जाता है (Structure / Finishing का जोड़ वही)। Plinth जैसे नींव वाले स्टेज अपने आप सिर्फ़ GF पर।",
+  "schedule.where_line": "{n} स्टेज · नहीं: {skip}",
+  "schedule.where_min2": "कम से कम 2 स्टेज चाहिए",
 };
 
 export default dict;

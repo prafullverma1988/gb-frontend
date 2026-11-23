@@ -17753,6 +17753,12 @@ const dict = {
   "estimate.ad_k_stages_removed": "Stage hat gaye (₹ wahi)",
   "estimate.ad_k_stages_added": "Stage lage (₹ wahi)",
   "estimate.ad_stale_btn": "Purane BOQ par bana — Reject karke naya amendment banao",
+  "schedule.where_lbl": "Kahan:",
+  "schedule.where_on": "{floor} par lagega — dabao to hatao",
+  "schedule.where_off": "{floor} par nahi — dabao to lagao",
+  "schedule.where_hint": "Jis floor par koi stage nahi, uska ₹ usi group ke baaki stage me jaata hai (Structure / Finishing ka jod wahi). Plinth jaise neev wale stage apne aap sirf GF par.",
+  "schedule.where_line": "{n} stage · nahi: {skip}",
+  "schedule.where_min2": "kam se kam 2 stage chahiye",
 };
 
 export default dict;

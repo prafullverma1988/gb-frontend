@@ -17751,6 +17751,12 @@ const dict = {
   "estimate.ad_k_stages_removed": "Stages removed (₹ same)",
   "estimate.ad_k_stages_added": "Stages added (₹ same)",
   "estimate.ad_stale_btn": "Made on an older BOQ — reject it and make a new amendment",
+  "schedule.where_lbl": "Where:",
+  "schedule.where_on": "Applies to {floor} — click to remove",
+  "schedule.where_off": "Not on {floor} — click to add",
+  "schedule.where_hint": "On a floor without a stage, its ₹ goes to the other stages of the same group (Structure / Finishing totals stay the same). Foundation stages like Plinth apply only to GF by default.",
+  "schedule.where_line": "{n} stages · not: {skip}",
+  "schedule.where_min2": "needs at least 2 stages",
 };
 
 export default dict;

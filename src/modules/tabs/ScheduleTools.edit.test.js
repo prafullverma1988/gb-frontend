@@ -6,7 +6,7 @@ import { createRoot } from "react-dom/client";
 import api from "../../config/api";
 import { loadFullPack, setLang } from "../../i18n";
 import { StageLinesPanel } from "./StageBilling";
-import { sfParts } from "./ScheduleTools";
+import { sfParts, partsForTarget, skipOf, isGroundLine } from "./ScheduleTools";
 
 jest.mock("../../config/api", () => {
   const api = jest.fn();
@@ -202,4 +202,80 @@ test("Line-wise: ek-saath wali stage ki ek row, ek task sab floor par", async ()
   await act(async () => { btnT(/^Task Save karo$/).click(); });
   const links = api.put.mock.calls[0][1].links;
   expect(links.filter((l) => [13, 23].includes(l.item_id)).map((l) => l.task_id)).toEqual([5, 5]);
+});
+
+// ── Har stage kis floor par (25 Nov 2026): Plinth sirf GF, FF ka ₹ usi group me ──
+const T2 = [{ key: 1, label: "GF" }, { key: 2, label: "FF" }, { key: 3, label: "HEAD ROOM" }];
+const grpSum = (ps, g) => Math.round(ps.filter((p) => p.group === g).reduce((s, p) => s + Number(p.rate), 0) * 100) / 100;
+test("partsForTarget: Plinth apne aap sirf GF; FF me Structure ₹920 baaki stage me, Finishing ₹580 wahi", () => {
+  const ps = sfParts(920, 1500);
+  expect(isGroundLine("GF")).toBe(true); expect(isGroundLine("Ground Floor")).toBe(true); expect(isGroundLine("FF")).toBe(false);
+  expect(skipOf(ps[0], T2).map(String)).toEqual(["2", "3"]);           // Plinth: FF + Head Room par nahi
+  const gf = partsForTarget("rate", ps, T2, 1), ff = partsForTarget("rate", ps, T2, 2);
+  expect(gf.length).toBe(10);
+  expect(ff.length).toBe(9);
+  expect(ff.some((p) => p.name === "Plinth")).toBe(false);
+  expect(grpSum(ff, "Structure")).toBe(920);
+  expect(grpSum(ff, "Finishing")).toBe(580);
+  // Poora group hi hata to baaki sab me anupaat se (line ka jod wahi)
+  const only = ps.map((p) => (p.group === "Finishing" ? { ...p, skip: [2] } : p));
+  const ff2 = partsForTarget("rate", only, T2, 2);
+  expect(Math.round(ff2.reduce((s, p) => s + Number(p.rate), 0) * 100) / 100).toBe(1500);
+  // % se bhi
+  const pct = [{ name: "Plinth", pct: "30", group: "S" }, { name: "Slab", pct: "30", group: "S" }, { name: "Tile", pct: "40", group: "F" }];
+  const ffp = partsForTarget("pct", pct, T2, 2);
+  expect(ffp.map((p) => [p.name, p.pct])).toEqual([["Slab", "60"], ["Tile", "40"]]);
+});
+
+test("Hisse lagao: Plinth ke chip me FF band (apne aap); item_parts me FF ke 9 stage; chip dabao to wapas sab par", async () => {
+  LEDGER = { mode: "manual", items: [L(1, "GF", "Ground Floor", 1000, 1500), L(2, "FF", "First Floor", 800, 1500)] };
+  PKGS = [{ id: 5, name: "Signature", rate_full: 1800, rate_structure: 920 }];
+  api.post.mockImplementation(async () => ({ success: true, data: { done: [{ item_id: 1 }, { item_id: 2 }], skipped: [] } }));
+  await panel();
+  const openParts = async () => { await act(async () => { [...document.querySelectorAll("button")].find((b) => b.textContent === "Hisse lagao").click(); }); await flush(); return $("[role=dialog]"); };
+  const dlg = await openParts();
+  await act(async () => { dlg.querySelector('[data-testid="sf-fill"]').click(); });
+  expect(dlg.querySelector('[data-where="0¦1"]').getAttribute("aria-pressed")).toBe("true");    // Plinth · GF
+  expect(dlg.querySelector('[data-where="0¦2"]').getAttribute("aria-pressed")).toBe("false");   // Plinth · FF
+  expect(dlg.querySelector('[data-where="1¦2"]').getAttribute("aria-pressed")).toBe("true");    // Lintel · FF
+  expect(dlg.querySelector('[data-where-note="2"]').textContent).toContain("9 stage · nahi: Plinth");
+  noKeys();
+  await act(async () => { [...dlg.querySelectorAll("button")].find((b) => b.textContent === "2 line par lagao").click(); });
+  await flush();
+  const body = api.post.mock.calls.find((c) => c[0] === "/customer-estimates/7/schedule/apply")[1];
+  expect(body.item_parts[1].length).toBe(10);
+  expect(body.item_parts[2].length).toBe(9);
+  expect(body.item_parts[2].some((p) => p.name === "Plinth")).toBe(false);
+  expect(grpSum(body.item_parts[2], "Structure")).toBe(920);
+  expect(body.parts.length).toBe(10);
+  // Dobara kholo: Plinth ka FF chip dabao → sab par, item_parts nahi jaata
+  api.post.mockClear();
+  const d2 = await openParts();
+  await act(async () => { d2.querySelector('[data-testid="sf-fill"]').click(); });
+  await act(async () => { d2.querySelector('[data-where="0¦2"]').click(); });
+  expect(d2.querySelector('[data-where="0¦2"]').getAttribute("aria-pressed")).toBe("true");
+  expect(d2.querySelector('[data-testid="where-note"]')).toBeNull();
+  await act(async () => { [...d2.querySelectorAll("button")].find((b) => b.textContent === "2 line par lagao").click(); });
+  await flush();
+  const b2 = api.post.mock.calls.find((c) => c[0] === "/customer-estimates/7/schedule/apply")[1];
+  expect(b2.item_parts).toBeUndefined();
+});
+
+test("Schedule badlo + FF par bhi: FF me Plinth nahi, replace ko item_parts", async () => {
+  LEDGER = { mode: "manual", items: [L(1, "GF", "Ground Floor", 1000, 1500), L(2, "FF", "First Floor", 800, 1500)] };
+  PKGS = [{ id: 5, name: "Signature", rate_full: 1800, rate_structure: 920 }];
+  api.post.mockImplementation(async () => ({ success: true, data: { done: [{ item_id: 1 }, { item_id: 2 }], skipped: [] } }));
+  await panel();
+  await act(async () => { $('[data-edit-work="GF¦#1"]').click(); });
+  await flush();
+  const dlg = $('[data-testid="sched-edit"]');
+  await act(async () => { dlg.querySelector('[data-testid="sf-fill"]').click(); });
+  await act(async () => { dlg.querySelector('[data-also="FF¦#2"]').click(); });
+  expect(dlg.querySelector('[data-where="0¦2"]').getAttribute("aria-pressed")).toBe("false");
+  await act(async () => { dlg.querySelector('[data-testid="sched-edit-save"]').click(); });
+  await flush();
+  const body = api.post.mock.calls.find((c) => c[0] === "/customer-estimates/7/schedule/replace")[1];
+  expect(body.item_ids).toEqual([1, 2]);
+  expect(body.item_parts[2].length).toBe(9);
+  expect(body.item_parts[1].length).toBe(10);
 });

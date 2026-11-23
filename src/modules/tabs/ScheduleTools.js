@@ -103,9 +103,50 @@ export const partsOkFor = (pmode, parts) => parts.length >= 2 && parts.every(p =
 const partsBody = (pmode, parts) => parts.map(p => ({ name: p.name.trim(), ...(pmode === "rate" ? { rate: num(p.rate) } : { pct: num(p.pct) }),
   group: grpOf(p) || null, ...(p.together ? { together: true } : {}) }));
 
+// ── Har stage kis floor par (25 Nov 2026, Prafull: "GF me plinth rahta hai, FF / SF me nahi —
+// ek jagah hatao to sab jagah hat jaata hai") ──
+// targets = chuni line / kaam [{ key, label }] (label = floor: GF, FF, HEAD ROOM …). Hisse par
+// skip = jin target par wo stage NAHI. skip na likha ho to apne aap: neev wale stage (Plinth,
+// Foundation, Footing, Excavation, DPC) sirf zameeni floor (GF / Ground) par, jab chuni line me
+// GF ho. Jis floor par koi stage nahi, uska ₹ / % usi group ke baaki stage me (Structure ₹920,
+// Finishing ₹580 wahi rehte); poora group hi na bache to baaki sab stage me anupaat se.
+const GROUND_STAGE = /\b(plinth|foundation|footing|excavation|dpc|neev|pcc)\b|प्लिंथ|नींव|फुटिंग|फ़ुटिंग/i;
+const GROUND_LINE = /^(gf|g\.\s*f\.?|ground|ground floor|bhutal|भूतल)(\b|$)/i;
+export const isGroundStage = (name) => GROUND_STAGE.test(String(name || ""));
+export const isGroundLine = (label) => GROUND_LINE.test(String(label || "").trim());
+export function skipOf(p, targets) {
+  const tg = targets || [];
+  if (Array.isArray(p.skip)) return p.skip.filter(k => tg.some(x => String(x.key) === String(k)));
+  if (tg.length < 2 || !isGroundStage(p.name) || !tg.some(x => isGroundLine(x.label))) return [];
+  return tg.filter(x => !isGroundLine(x.label)).map(x => x.key);
+}
+export function partsForTarget(pmode, parts, targets, key) {
+  const k = pmode === "rate" ? "rate" : "pct";
+  const out = parts.filter(p => !skipOf(p, targets).map(String).includes(String(key))).map(p => ({ ...p }));
+  if (out.length === parts.length || !out.length) return out;
+  const total = parts.reduce((s, p) => s + num(p[k]), 0);
+  const spreadTo = (list, full) => {
+    const have = list.reduce((s, p) => s + num(p[k]), 0);
+    if (!(have > 0) || Math.abs(have - full) < 0.005) return;
+    let used = 0;
+    list.forEach((p, i) => { const v = i === list.length - 1 ? r2(full - used) : r2(num(p[k]) * full / have); used = r2(used + v); p[k] = String(v); });
+  };
+  let lost = false;
+  for (const g of [...new Set(parts.map(grpOf))]) {
+    const kept = out.filter(p => grpOf(p) === g);
+    if (!kept.length) { lost = true; continue; }
+    spreadTo(kept, r2(parts.filter(p => grpOf(p) === g).reduce((s, p) => s + num(p[k]), 0)));
+  }
+  if (lost) spreadTo(out, r2(total));
+  return out;
+}
+const anySkip = (parts, targets) => !!targets && parts.some(p => skipOf(p, targets).length > 0);
+const itemPartsBody = (pmode, parts, targets) => Object.fromEntries(targets.map(x => [x.key, partsBody(pmode, partsForTarget(pmode, parts, targets, x.key))]));
+const targetsOk = (pmode, parts, targets) => !targets || targets.every(x => partsForTarget(pmode, parts, targets, x.key).length >= 2);
+
 // Hisson ka form — "Hisse lagao" box aur "Schedule badlo" dono me.
 // parts = [{ name, pct, rate, group, together }]; onParts(parts, mode?) — mode diya ho to % / ₹ bhi badle.
-export function PartsEditor({ pmode, parts, onParts, onMode, modes, presetsFor, oneRate, refRate, amount, unit, sf, strictRate }) {
+export function PartsEditor({ pmode, parts, onParts, onMode, modes, presetsFor, oneRate, refRate, amount, unit, sf, strictRate, targets }) {
   const [pkgs, setPkgs] = useState([]);
   const [struct, setStruct] = useState(null);   // null = abhi chhua nahi (package se apne aap)
   useEffect(() => {
@@ -123,7 +164,13 @@ export function PartsEditor({ pmode, parts, onParts, onMode, modes, presetsFor, 
   const fin = num(sfRate) > 0 && num(sVal) > 0 ? r2(num(sfRate) - num(sVal)) : null;
   const key = pmode === "rate" ? "rate" : "pct";
   const sum = parts.reduce((s, p) => s + num(p[key]), 0);
-  const ok = partsOkFor(pmode, parts) && (!strictRate || pmode !== "rate" || Math.abs(sum - num(oneRate)) < 0.005);
+  const tg = targets && targets.length >= 2 ? targets : null;
+  const ok = partsOkFor(pmode, parts) && (!strictRate || pmode !== "rate" || Math.abs(sum - num(oneRate)) < 0.005) && targetsOk(pmode, parts, tg);
+  const toggleWhere = (i, keyT) => {
+    const cur = skipOf(parts[i], tg).map(String);
+    const nx = cur.includes(String(keyT)) ? cur.filter(x => x !== String(keyT)) : [...cur, String(keyT)];
+    onParts(parts.map((p, j) => (j === i ? { ...p, skip: nx } : p)));
+  };
   const setPart = (i, patch) => {
     // Naye group me gaya hissa us group ka "ek saath" le leta hai
     if (patch.group !== undefined) {
@@ -178,9 +225,43 @@ export function PartsEditor({ pmode, parts, onParts, onMode, modes, presetsFor, 
                 : (oneRate ? r2(num(p.rate) / oneRate * 100) + "%" : "")}
             </span>
             <button type="button" disabled={parts.length <= 2} onClick={() => onParts(parts.filter((_, j) => j !== i))} style={btnS("plain", parts.length <= 2)}>×</button>
+            {tg && (() => {
+              const sk = skipOf(p, tg).map(String);
+              return (
+                <div style={{ gridColumn: "1 / -1", display: "flex", flexWrap: "wrap", gap: 4, alignItems: "center", margin: "-1px 0 3px" }}>
+                  <span style={{ fontSize: 10, color: T.t4 }}>{t("schedule.where_lbl")}</span>
+                  {tg.map(x => {
+                    const on = !sk.includes(String(x.key));
+                    return (
+                      <button key={x.key} type="button" data-where={i + "¦" + x.key} aria-pressed={on} onClick={() => toggleWhere(i, x.key)}
+                        title={on ? t("schedule.where_on", { floor: x.label }) : t("schedule.where_off", { floor: x.label })}
+                        style={{ padding: "0 7px", borderRadius: 999, fontSize: 10, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", lineHeight: "18px",
+                          border: "1px solid " + (on ? T.ind : T.b1), background: on ? T.indL : T.surface, color: on ? T.ind : T.t4, textDecoration: on ? "none" : "line-through" }}>
+                        {x.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              );
+            })()}
           </div>
         );
       })}
+      {tg && anySkip(parts, tg) && (
+        <div data-testid="where-note" style={{ marginTop: 6, padding: "6px 9px", borderRadius: 6, background: T.surfaceB, fontSize: 10.5, color: T.t3, lineHeight: 1.5 }}>
+          <div>{t("schedule.where_hint")}</div>
+          {tg.filter(x => parts.some(p => skipOf(p, tg).map(String).includes(String(x.key)))).map(x => {
+            const own = partsForTarget(pmode, parts, tg, x.key);
+            const miss = parts.filter(p => skipOf(p, tg).map(String).includes(String(x.key))).map(p => p.name.trim() || "—");
+            return (
+              <div key={x.key} data-where-note={x.key} style={{ color: own.length >= 2 ? T.t2 : T.red }}>
+                <b>{x.label}</b>: {t("schedule.where_line", { n: own.length, skip: miss.join(", ") })}
+                {own.length < 2 ? " — " + t("schedule.where_min2") : ""}
+              </div>
+            );
+          })}
+        </div>
+      )}
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", marginTop: 4 }}>
         <button type="button" onClick={() => onParts([...parts, blankPart()])} style={btnS()}>{t("stage_billing.add_part")}</button>
         <span data-testid="parts-sum" style={{ fontSize: 11, fontWeight: 700, color: ok ? T.grn : T.red }}>
@@ -250,14 +331,19 @@ export function ScheduleMethods({ kind, id, items, canEdit, qtyCount = 0, onDone
   // Alag rate wali line chuni hon to Structure + Finishing sabse aam rate par
   const refRate = oneRate != null ? oneRate : (chosen.length ? mostCommon(chosen.map(x => r2(x.rate))) : null);
   const wmode = wiz && wiz.mode !== "contract" ? wiz.pmode : "pct";
-  const partsOk = !!wiz && (wiz.lib || partsOkFor(wmode, wiz.parts));
+  const wizTargets = wiz && wiz.mode === "parts" && kind === "estimate" && chosen.length >= 2
+    ? chosen.map(x => ({ key: x.item_id, label: x.category || x.section_title || nameOf(x) })) : null;
+  const partsOk = !!wiz && (wiz.lib || (partsOkFor(wmode, wiz.parts) && targetsOk(wmode, wiz.parts, wizTargets)));
   const toggle = (itemId) => setWiz(w => { const n = new Set(w.ids); if (n.has(itemId)) n.delete(itemId); else n.add(itemId); return { ...w, ids: n }; });
 
   const apply = async () => {
     const base = kind === "wo" ? "/subcon/wo/" + id : "/customer-estimates/" + id;
     const body = { item_ids: [...wiz.ids], strict: wiz.mode === "contract" };
     if (wiz.lib) body.from_library = true;
-    else body.parts = partsBody(wmode, wiz.parts);
+    else {
+      body.parts = partsBody(wmode, wiz.parts);
+      if (anySkip(wiz.parts, wizTargets)) body.item_parts = itemPartsBody(wmode, wiz.parts, wizTargets);
+    }
     setWiz(w => ({ ...w, busy: true, err: "", skipped: [] }));
     const r = await api.post(base + "/schedule/apply", body).catch(e => ({ success: false, message: e.message }));
     if (!r?.success) { setWiz(w => ({ ...w, busy: false, err: r?.message || t("schedule.failed"), skipped: r?.data?.skipped || [] })); return; }
@@ -334,7 +420,7 @@ export function ScheduleMethods({ kind, id, items, canEdit, qtyCount = 0, onDone
             {!wiz.lib && (
               <PartsEditor pmode={wmode} modes={wiz.mode === "parts"} presetsFor={wiz.mode} parts={wiz.parts}
                 onParts={(ps, m) => setWiz(w => ({ ...w, parts: ps, ...(m ? { pmode: m } : {}) }))} onMode={(m) => setWiz(w => ({ ...w, pmode: m }))}
-                oneRate={oneRate} refRate={refRate} amount={chosenTotal} unit={chosen[0]?.unit || "—"} sf={wiz.mode === "parts" && kind === "estimate"} />
+                oneRate={oneRate} refRate={refRate} amount={chosenTotal} unit={chosen[0]?.unit || "—"} sf={wiz.mode === "parts" && kind === "estimate"} targets={wizTargets} />
             )}
             {wiz.err && (
               <div style={{ padding: "8px 10px", borderRadius: 7, background: T.redL, color: T.red, fontSize: 11.5 }}>
@@ -672,11 +758,14 @@ export function ScheduleEditModal({ estimateId, work, works, onClose, onDone }) 
     setPmode(m);
   };
   const sumRate = parts.reduce((s, p) => s + num(p.rate), 0);
-  const okParts = partsOkFor(pmode, parts) && (pmode !== "rate" || Math.abs(sumRate - rate) < 0.005);
+  const editTargets = also.size ? [work, ...others.filter(w => also.has(w.key))].map(w => ({ key: w.all[0].item_id, label: w.category || w.name })) : null;
+  const okParts = partsOkFor(pmode, parts) && (pmode !== "rate" || Math.abs(sumRate - rate) < 0.005) && targetsOk(pmode, parts, editTargets);
   const save = async () => {
     setBusy(true); setErr(""); setSkipped([]);
     const ids = [lines[0].item_id, ...others.filter(w => also.has(w.key)).map(w => w.all[0].item_id)];
-    const r = await api.post("/customer-estimates/" + estimateId + "/schedule/replace", { item_ids: ids, parts: partsBody(pmode, parts) })
+    const body = { item_ids: ids, parts: partsBody(pmode, parts) };
+    if (anySkip(parts, editTargets)) body.item_parts = itemPartsBody(pmode, parts, editTargets);
+    const r = await api.post("/customer-estimates/" + estimateId + "/schedule/replace", body)
       .catch(e => ({ success: false, message: e.message }));
     setBusy(false);
     if (!r?.success) { setErr(r?.message || t("schedule.failed")); setSkipped(r?.data?.skipped || []); return; }
@@ -697,7 +786,7 @@ export function ScheduleEditModal({ estimateId, work, works, onClose, onDone }) 
       </div>
       <div style={{ padding: "12px 18px", overflowY: "auto", flex: 1, display: "grid", gap: 12 }}>
         <PartsEditor pmode={pmode} modes presetsFor="parts" parts={parts} onParts={(ps, m) => { setParts(ps); if (m) setPmode(m); }} onMode={switchMode}
-          oneRate={rate} amount={qty * rate} unit={unit || "—"} sf strictRate />
+          oneRate={rate} amount={qty * rate} unit={unit || "—"} sf strictRate targets={editTargets} />
         {pmode === "rate" && partsOkFor(pmode, parts) && !okParts && (
           <div role="alert" data-testid="sched-edit-sum" style={{ padding: "6px 9px", borderRadius: 6, background: T.redL, color: T.red, fontSize: 11.5 }}>
             {t("schedule.edit_rate_must", { sum: fmtC(sumRate), rate: fmtC(rate) })}
