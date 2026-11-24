@@ -13,6 +13,7 @@ import { can } from "../../utils/perms";
 import { StageBillGrid, StageLinesPanel } from "./StageBilling";
 import { StatementView, ProjectStatementView, DraftLinesModal } from "./BillingV2";
 import { ChaluBillView, ProjectChaluView } from "./ChaluBill";
+import GroupBillModal from "./GroupBill";
 import PackageEstimateModal from "../crm/PackageEstimateModal";
 import AmendDiffView, { AmendTotals, BoqTotalBar, boqTotals, diffFromApplied, diffFromProposal } from "./AmendDiff";
 import { groupWorks, expandWork } from "./boqWorks";
@@ -334,6 +335,7 @@ function TabEstimate({ project }) {
   // customer_estimates / sections / items + status flips to Approved.
   const [amendments, setAmendments] = useState([]);   // [{id, status, reason, proposed, ...}]
   const [showEditBoq, setShowEditBoq] = useState(false);
+  const [showGroupBill, setShowGroupBill] = useState(false);   // Invoices → "📄 Group-wise bill" (24 Nov 2026)
   const [amendForm, setAmendForm] = useState({
     description: "", retention_pct: 0, tds_pct: 0, tax_pct: 0,
     start_date: "", end_date: "", remark: "",
@@ -1802,6 +1804,12 @@ function TabEstimate({ project }) {
                 </div>}
                 </>
               )}
+              {subTab==="invoice" && selEst?.billing_method === "manual" && (
+                <button type="button" data-testid="open-group-bill" onClick={()=>setShowGroupBill(true)} title={t("group_bill.open_title")}
+                  style={{background:T.indL,color:T.ind,border:"1px solid "+T.ind,borderRadius:5,padding:"5px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>
+                  📄 {t("group_bill.open_btn")}
+                </button>
+              )}
               {subTab==="invoice" && eCreate && (<>
                 <button onClick={openNewInvoice}
                   style={{background:T.blu,color:"white",border:"none",borderRadius:5,padding:"5px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>
@@ -2522,6 +2530,7 @@ function TabEstimate({ project }) {
         </>)}
       </div>
 
+      {showGroupBill && selEst && <GroupBillModal estimateId={selEst.id} onClose={()=>setShowGroupBill(false)} />}
       {/* ── MODAL: Edit BOQ → Amendment (admin-approval required) ── */}
       {showEditBoq && selEst && (<>
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:300,backdropFilter:"blur(2px)"}}/>

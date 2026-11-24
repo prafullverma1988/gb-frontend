@@ -55,6 +55,37 @@ async function openPdf(estimateId, name) {
   setTimeout(() => URL.revokeObjectURL(url), 1500);
 }
 
+// Kis invoice me (24 Nov 2026) — 2 tak naam, baaki "+n"
+const invLine = (nos) => (nos && nos.length ? <div style={{ fontSize: 9.5, color: T.t4, fontWeight: 400, whiteSpace: "nowrap" }} title={nos.join(", ")}>{nos.slice(0, 2).join(", ") + (nos.length > 2 ? " +" + (nos.length - 2) : "")}</div> : null);
+
+// Excel (CSV) — kaam + har stage: area, rate, estimate, kaam hua, bill hua, kis invoice, haal; neeche kul (24 Nov 2026)
+export function chaluCsvRows(d) {
+  const rows = [[t("chalu_bill.x_section"), t("chalu_bill.col_work"), t("chalu_bill.x_stage"), t("chalu_bill.col_area"), t("chalu_bill.x_unit"), t("chalu_bill.col_rate"),
+    t("chalu_bill.col_est"), t("chalu_bill.col_done"), t("chalu_bill.col_billed"), t("chalu_bill.x_invoices"), t("chalu_bill.col_sthiti")]];
+  const R = (n) => Math.round(num(n));
+  for (const r of d.rows || []) {
+    rows.push([r.section || r.category || "", (r.category && r.category !== r.name ? r.category + " · " : "") + r.name, "", r.qty == null ? "" : r.qty, r.unit || "",
+      r.rate == null ? "" : r.rate, R(r.amount), R(r.done_amt), R(r.billed_amt), (r.inv_nos || []).join(", "), r.sthiti || ""]);
+    if (r.split) for (const p of r.parts) rows.push(["", "", p.part_name, "", "", p.rate, R(p.amount), R(p.done_amt), R(p.billed_amt), (p.inv_nos || []).join(", "),
+      p.work ? (p.work.status === "done" ? t("chalu_bill.lg_done") : p.work.status === "prog" ? t("chalu_bill.st_prog", { pct: p.work.pct }) : t("chalu_bill.lg_pend")) : ""]);
+  }
+  for (const x of d.extras || []) rows.push([t("chalu_bill.x_extra"), x.name, "", x.qty, x.unit || "", x.rate, R(x.amount), R(x.done_amt), R(x.billed_amt), (x.inv_nos || []).join(", "), x.ref || ""]);
+  const TT = d.totals || {};
+  const tot = (l, v) => rows.push(["", "", "", "", "", "", "", "", "", l, R(v)]);
+  tot(t("chalu_bill.l_grand"), TT.grand); tot(t("chalu_bill.l_done"), TT.done); tot(t("chalu_bill.l_received"), TT.received);
+  tot(t("chalu_bill.l_net_due"), TT.net_due); tot(t("chalu_bill.l_grand_due"), TT.grand_due); tot(t("chalu_bill.l_remaining"), TT.remaining);
+  return rows;
+}
+function downloadChaluCsv(d, name) {
+  const esc = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+  const blob = new Blob(["\uFEFF" + chaluCsvRows(d).map((r) => r.map(esc).join(",")).join("\n")], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = String(name || "chalu-bill").replace(/[^\w.-]+/g, "-") + ".csv";
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1500);
+}
+
 // ── Haath se "Ho gaya" — ek line ka chhota box ──
 function TickBox({ line, estimateId, onDone, onCancel }) {
   const [pct, setPct] = useState(line.manual ? String(line.manual.pct) : "100");
@@ -121,12 +152,12 @@ function EstimateBoq({ rows, estimateId, canTick, onReload }) {
     return out;
   }, [rows]);
   const sum = (rs) => {
-    const amount = rs.reduce((a, r) => a + num(r.amount), 0), done = rs.reduce((a, r) => a + num(r.done_amt), 0);
+    const amount = rs.reduce((a, r) => a + num(r.amount), 0), done = rs.reduce((a, r) => a + num(r.done_amt), 0), billed = rs.reduce((a, r) => a + num(r.billed_amt), 0);
     const since = rs.reduce((a, r) => a + Math.max(0, num(r.since_prev)), 0);
     // Sab kaam ek area par (GF Structure + Finishing = 1820 sqft) to area + ₹/unit ka jod
     const units = new Set(rs.map(r => String(r.unit || "").toLowerCase())), qtys = new Set(rs.map(r => r.qty));
     const same = rs.length && units.size === 1 && qtys.size === 1 && rs[0].qty != null && rs.every(r => r.rate != null);
-    return { amount, done, since, pct: amount > 0 ? Math.round(done / amount * 1000) / 10 : 0,
+    return { amount, done, billed, since, pct: amount > 0 ? Math.round(done / amount * 1000) / 10 : 0,
              qty: same ? rs[0].qty : null, unit: same ? rs[0].unit : "", rate: same ? rs.reduce((a, r) => a + num(r.rate), 0) : null };
   };
   const allRows = (rows || []);
@@ -140,7 +171,7 @@ function EstimateBoq({ rows, estimateId, canTick, onReload }) {
   // Chip sirf jab kuch batana ho: chal raha (task %), haath se, ya bill jitna
   const showChip = (l) => l.work.status === "prog" || l.work.source === "manual" || l.work.source === "billed";
   const tickRow = (line) => tick === line.item_id && (
-    <tr key={"tk" + line.item_id}><td colSpan={7} style={{ ...tdS, borderTop: "none" }}>
+    <tr key={"tk" + line.item_id}><td colSpan={8} style={{ ...tdS, borderTop: "none" }}>
       <TickBox line={line} estimateId={estimateId} onCancel={() => setTick(null)} onDone={async () => { setTick(null); await onReload(); }} />
     </td></tr>
   );
@@ -167,7 +198,7 @@ function EstimateBoq({ rows, estimateId, canTick, onReload }) {
           <thead><tr>
             <th style={thS}>{t("chalu_bill.col_work")}</th><th style={{ ...thS, textAlign: "right" }}>{t("chalu_bill.col_area")}</th>
             <th style={{ ...thS, textAlign: "right" }}>{t("chalu_bill.col_rate")}</th><th style={{ ...thS, textAlign: "right" }}>{t("chalu_bill.col_est")}</th>
-            <th style={{ ...thS, textAlign: "right" }}>{t("chalu_bill.col_done")}</th><th style={{ ...thS, textAlign: "right" }}>{t("chalu_bill.col_since")}</th>
+            <th style={{ ...thS, textAlign: "right" }}>{t("chalu_bill.col_done")}</th><th style={{ ...thS, textAlign: "right" }}>{t("chalu_bill.col_billed")}</th><th style={{ ...thS, textAlign: "right" }}>{t("chalu_bill.col_since")}</th>
             <th style={thS}>{t("chalu_bill.col_sthiti")}</th>
           </tr></thead>
           <tbody>
@@ -185,6 +216,7 @@ function EstimateBoq({ rows, estimateId, canTick, onReload }) {
                     {numCells(ss)}
                     <td style={{ ...tdN, fontWeight: 800 }}>{fmtC(ss.amount)}</td>
                     <td style={{ ...tdN, fontWeight: 800 }}>{fmtC(ss.done)}</td>
+                    <td style={{ ...tdN, fontWeight: 800 }}>{fmtC(ss.billed)}</td>
                     <td style={{ ...tdN, fontWeight: 700, color: ss.since > 0 ? T.red : T.t4 }}>{ss.since > 0 ? fmtC(ss.since) : "—"}</td>
                     <td style={{ ...tdS, fontSize: 11, color: T.t2 }}>{t("chalu_bill.sec_done_pct", { pct: ss.pct })}</td>
                   </tr>
@@ -199,6 +231,7 @@ function EstimateBoq({ rows, estimateId, canTick, onReload }) {
                             {numCells(cs)}
                             <td style={{ ...tdN, color: T.t2 }}>{fmtC(cs.amount)}</td>
                             <td style={{ ...tdN, color: T.t2 }}>{fmtC(cs.done)}</td>
+                            <td style={{ ...tdN, color: T.t2 }}>{fmtC(cs.billed)}</td>
                             <td style={{ ...tdN, color: T.t4 }}>{cs.since > 0 ? fmtC(cs.since) : "—"}</td>
                             <td style={{ ...tdS, fontSize: 10.5, color: T.t3 }}>{t("chalu_bill.sec_done_pct", { pct: cs.pct })}</td>
                           </tr>
@@ -226,6 +259,7 @@ function EstimateBoq({ rows, estimateId, canTick, onReload }) {
                                     <div style={{ height: "100%", width: Math.min(100, r.amount > 0 ? r.done_amt / r.amount * 100 : 0) + "%", background: T.grn }} />
                                   </div>
                                 </td>
+                                <td style={tdN} data-rb-billed={r.key}>{fmtC(r.billed_amt)}{invLine(r.inv_nos)}</td>
                                 <td style={{ ...tdN, color: r.since_prev > 0 ? T.red : T.t4 }}>{r.since_prev > 0 ? fmtC(r.since_prev) : "—"}</td>
                                 <td style={{ ...tdS, fontSize: 11, color: T.t2 }}>
                                   <Dot st={r.status} />{r.sthiti}
@@ -246,6 +280,7 @@ function EstimateBoq({ rows, estimateId, canTick, onReload }) {
                                         <td style={{ ...tdN, fontSize: 11.5 }}>₹{fmtR(x.rate)}</td>
                                         <td style={{ ...tdN, fontSize: 11.5 }}>{fmtC(x.amount)}</td>
                                         <td style={{ ...tdN, fontSize: 11.5 }}>{fmtC(x.done_amt)}</td>
+                                        <td style={{ ...tdN, fontSize: 11.5 }}>{fmtC(x.billed_amt)}{invLine(x.inv_nos)}</td>
                                         <td style={{ ...tdN, fontSize: 11.5, color: x.since_prev > 0 ? T.red : T.t4 }}>{x.since_prev > 0 ? fmtC(x.since_prev) : "—"}</td>
                                         <td style={{ ...tdS, fontSize: 11 }}>
                                           <Dot st={x.work.status} />{stLabel(x.work)}
@@ -261,7 +296,7 @@ function EstimateBoq({ rows, estimateId, canTick, onReload }) {
                                       <td style={{ ...tdS, paddingLeft: sub ? 58 : 44, fontWeight: 700, fontSize: 11 }}>{t("chalu_bill.group_total", { group: g.name })}</td>
                                       <td style={tdN} /><td style={{ ...tdN, fontSize: 11 }}>₹{fmtR(g.rate)}</td>
                                       <td style={{ ...tdN, fontSize: 11 }}>{fmtC(num(g.done_amt) + num(g.rem_amt))}</td>
-                                      <td style={{ ...tdN, fontSize: 11 }}>{fmtC(g.done_amt)}</td><td style={tdN} /><td style={tdS} />
+                                      <td style={{ ...tdN, fontSize: 11 }}>{fmtC(g.done_amt)}</td><td style={tdN} /><td style={tdN} /><td style={tdS} />
                                     </tr>
                                   )}
                                 </React.Fragment>
@@ -279,6 +314,7 @@ function EstimateBoq({ rows, estimateId, canTick, onReload }) {
               <td style={tdS}>{t("chalu_bill.total")}</td><td style={tdS} /><td style={tdS} />
               <td style={tdN}>{fmtC(total.amount)}</td>
               <td style={tdN}>{fmtC(total.done)}</td>
+              <td style={tdN}>{fmtC(total.billed)}</td>
               <td style={tdN}>{total.since > 0 ? fmtC(total.since) : "—"}</td>
               <td style={{ ...tdS, fontSize: 11, color: T.t2 }}>{t("chalu_bill.sec_done_pct", { pct: total.pct })}</td>
             </tr>
@@ -363,6 +399,8 @@ export function ChaluBillView({ estimateId, onChanged }) {
             <button type="button" disabled={busy} onClick={save} style={btnS("primary", busy)}>{t(d.saved_today ? "chalu_bill.save_again_btn" : "chalu_bill.save_btn", { n: d.rb_no })}</button>
           )}
           <button type="button" disabled={busy} onClick={pdf} style={btnS("soft", busy)}>{t("chalu_bill.pdf_btn")}</button>
+          <button type="button" data-testid="rb-xls" disabled={busy} onClick={() => downloadChaluCsv(d, "Chalu-Bill-" + (d.estimate.estimate_no || estimateId) + "-RB" + d.rb_no)}
+            style={{ ...btnS(), color: T.grn, borderColor: T.grn }}>⬇ {t("chalu_bill.xls_btn")}</button>
           <a href={"https://wa.me/?text=" + encodeURIComponent(waText)} target="_blank" rel="noopener noreferrer" style={{ ...btnS(), textDecoration: "none" }}>{t("chalu_bill.wa_btn")}</a>
         </div>
       </div>
