@@ -13,6 +13,7 @@ jest.mock("../../config/api", () => {
   return { __esModule: true, default: api, API_BASE: "http://x", getToken: () => "tok" };
 });
 global.IS_REACT_ACT_ENVIRONMENT = true;
+Element.prototype.scrollIntoView = Element.prototype.scrollIntoView || function () {};   // jsdom me nahi (PickField)
 
 const L = (id, cat, name, qty, rate, extra = {}) => ({ item_id: id, description: name, category: cat, unit: "Sqft", planned_qty: qty, rate,
   billed_qty: 0, remaining_qty: qty, opening_qty: 0, billed_amount: 0, part_of: null, item_type: "boq", linked_task: null, ...extra });
@@ -251,4 +252,60 @@ test("Payment Schedule (client): Excel + PDF button sirf canExport par; Line-wis
   await mount(<StageLinesPanel kind="estimate" id={7} canEdit canApprove={false} projectId={70} />);
   expect(document.querySelector("[data-testid='sched-xls']")).toBeNull();
   noKeys();
+});
+
+// 24 Nov 2026 (Prafull): "payment schedule me task lagane ke liye task search option"
+test("Line-wise: task picker me khoj — likho to sirf milte task", async () => {
+  api.get.mockImplementation(async (url) => {
+    if (url.includes("billing-ledger")) return { success: true, data: LEDGER };
+    if (url.includes("task-suggest")) return { success: true, data: { lines: LEDGER.items.map(x => ({ item_id: x.item_id, suggestions: [] })),
+      tasks: [{ id: 5, name: "GF Plinth", progress: 0 }, { id: 6, name: "GF Slab Casting Work", progress: 100 }, { id: 7, name: "FF Slab level", progress: 78 },
+        ...["Brick work", "Plaster", "Tiles", "Paint", "Window"].map((n, i) => ({ id: 20 + i, name: "GF " + n, progress: 0 }))], measure_ready: true } };
+    if (url.includes("stage-board")) return { success: true, data: BOARD };
+    return { success: false };
+  });
+  await mount(<StageLinesPanel kind="estimate" id={7} canEdit canApprove={false} projectId={70} />);
+  await act(async () => { btn(/^Line-wise$/).click(); });
+  const trig = document.querySelector("button[aria-label='Task']");
+  await act(async () => { trig.click(); });
+  const box = document.querySelector("[role='listbox'] input");
+  expect(box).toBeTruthy();
+  await act(async () => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(box, "slab"); box.dispatchEvent(new Event("input", { bubbles: true })); });
+  const opts = [...document.querySelectorAll("[role='option']")].map((o) => o.textContent);
+  expect(opts.some((x) => /GF Slab Casting Work/.test(x))).toBe(true);
+  expect(opts.some((x) => /FF Slab level/.test(x))).toBe(true);
+  expect(opts.some((x) => /GF Plinth/.test(x))).toBe(false);
+});
+
+// 24 Nov 2026 (Prafull): payment schedule badlav ki manzoori — Finance APPROVE usi screen par
+const REQ = (over) => ({ ready: true, can_approve: true, me: 9, recent: [], pending: { id: 31, status: "pending", requested_by: 4, requested_by_name: "Ravi", created_at: "2026-11-24T10:00:00Z",
+  note: "client ne maanga", works: [{ item_id: 1, name: "Ground Floor", category: "GF", before: [{ name: "Plinth", rate: 300 }, { name: "Slab", rate: 450 }],
+  after: [{ name: "Plinth", pct: 30 }, { name: "Slab", pct: 50 }, { name: "Plaster", pct: 20 }] }] }, ...over });
+const withReq = (rq) => api.get.mockImplementation(async (url) => {
+  if (url.includes("schedule/requests")) return { success: true, data: rq };
+  if (url.includes("billing-ledger")) return { success: true, data: LEDGER };
+  if (url.includes("task-suggest")) return { success: true, data: { lines: LEDGER.items.map(x => ({ item_id: x.item_id, suggestions: [] })), tasks: [], measure_ready: true } };
+  if (url.includes("stage-board")) return { success: true, data: BOARD };
+  return { success: false };
+});
+test("Schedule badlav request: approver ko box me pehle → naya + Approve (route) + Reject wajah ke saath", async () => {
+  withReq(REQ());
+  api.post.mockResolvedValue({ success: true, data: { id: 31, status: "approved", done: [{ item_id: 1 }] } });
+  await mount(<StageLinesPanel kind="estimate" id={7} canEdit canApprove={false} projectId={70} />);
+  const box = document.querySelector("[data-testid='sched-req']");
+  expect(box.textContent).toContain("Schedule badlav manzoori me — Ravi, 2026-11-24");
+  expect(box.textContent).toContain("Wajah: client ne maanga");
+  expect(box.textContent).toContain("Plinth ₹300 · Slab ₹450 → Plinth 30% · Slab 50% · Plaster 20%");
+  noKeys();
+  await act(async () => { document.querySelector("[data-testid='sched-req-reject']").click(); });
+  expect(document.querySelector("[data-testid='sched-req-reject-go']").disabled).toBe(true);
+  await act(async () => { document.querySelector("[data-testid='sched-req-approve']").click(); });
+  expect(api.post).toHaveBeenCalledWith("/customer-estimates/7/schedule/requests/31/approve", {});
+});
+test("Schedule badlav request: maangne wala (Finance approve nahi) — sirf Wapas lo + intezaar ka sandesh", async () => {
+  withReq(REQ({ can_approve: false, me: 4 }));
+  await mount(<StageLinesPanel kind="estimate" id={7} canEdit canApprove={false} projectId={70} />);
+  expect(document.querySelector("[data-testid='sched-req-approve']")).toBeNull();
+  expect(document.querySelector("[data-testid='sched-req-cancel']")).toBeTruthy();
+  expect(document.querySelector("[data-testid='sched-req']").textContent).toContain("tab tak purana schedule chalega");
 });

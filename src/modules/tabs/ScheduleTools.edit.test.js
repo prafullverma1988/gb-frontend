@@ -8,6 +8,11 @@ import { loadFullPack, setLang } from "../../i18n";
 import { StageLinesPanel } from "./StageBilling";
 import { sfParts, partsForTarget, skipOf, isGroundLine } from "./ScheduleTools";
 
+// Task picker (PickSelect, khoj wala) ki jagah saada select — yahan task lagana dekhna hai, picker ka panel nahi
+jest.mock("../../components/PickSelect", () => {
+  const React = require("react");
+  return { __esModule: true, default: ({ value, onChange, children, style, title, disabled, ...rest }) => React.createElement("select", { value, onChange, title, disabled, "aria-label": rest["aria-label"] }, children) };
+});
 jest.mock("../../config/api", () => {
   const api = jest.fn();
   api.get = jest.fn(); api.post = jest.fn(); api.put = jest.fn(); api.patch = jest.fn(); api.del = jest.fn();

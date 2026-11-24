@@ -347,7 +347,7 @@ export function LibApplyModal({ estimateId, items, onClose, onDone }) {
     setBusy(false);
     if (!r?.success) { setErr(r?.message || t("schedule.failed")); setSkipped(r?.data?.skipped || []); return; }
     const sk = r.data.skipped || [];
-    onDone && onDone(t("stage_lib.applied", { n: r.data.done.length, lib: libNow.name })
+    onDone && onDone((r.data.requested ? t("schedule.req_sent", { n: r.data.done.length }) : t("stage_lib.applied", { n: r.data.done.length, lib: libNow.name }))
       + (saved ? " · " + t("stage_lib.remembered", { n: saved }) : "")
       + (sk.length ? " — " + sk.map(s => (s.name || "#" + s.item_id) + ": " + s.reason).join("; ") : ""));
   };

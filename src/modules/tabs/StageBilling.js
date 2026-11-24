@@ -20,6 +20,7 @@ import { T } from "../shared/tokens";
 import { t } from "../../i18n";
 import { ScheduleMethods, MilestoneView, WoFromLinesModal, ClientScheduleView, ScheduleEditModal, partNameOf, workTaskOf } from "./ScheduleTools";
 import { scheduleCsv, schedulePdf } from "./scheduleExport";
+import PickSelect from "../../components/PickSelect";
 
 const num = (v) => { const n = parseFloat(v); return Number.isFinite(n) ? n : 0; };
 const r2 = (n) => Math.round(num(n) * 100) / 100;
@@ -267,13 +268,17 @@ export function StageLinesPanel({ kind, id, canEdit, canApprove, projectId, canE
   const [tgOpen, setTgOpen] = useState(null);        // ek-saath wali stage jiske floor khule
 
   const [editWork, setEditWork] = useState(null);   // "Schedule badlo": { work, works }
+  const [sreq, setSreq] = useState(null);           // schedule badlav ki manzoori (24 Nov 2026): { pending, recent, can_approve, me }
+  const [rejNote, setRejNote] = useState(null);     // Reject ki wajah (null = box band)
   const load = useCallback(async () => {
-    const [l, s, b] = await Promise.all([
+    const [l, s, b, q] = await Promise.all([
       api.get(base + "/billing-ledger").catch(() => null),
       api.get(base + "/task-suggest").catch(() => null),
       kind === "estimate" ? api.get(base + "/stage-board").catch(() => null) : Promise.resolve(null),
+      kind === "estimate" ? api.get(base + "/schedule/requests").catch(() => null) : Promise.resolve(null),
     ]);
     if (b?.success) setBoard(b.data);
+    setSreq(q?.success ? q.data : null);
     setSelItems(new Set()); setSelWo(new Set());
     if (l?.success) { setLedger(l.data); setLimit(l.data.extra_qty_limit_pct == null ? "" : String(l.data.extra_qty_limit_pct)); }
     if (s?.success) {
@@ -394,6 +399,49 @@ export function StageLinesPanel({ kind, id, canEdit, canApprove, projectId, canE
     if (!r?.success) { setMsg(r?.message || t("stage_billing.save_failed")); return; }
     setOpening(null); setMsg(t("stage_billing.opening_saved")); await load();
   };
+  // Schedule badlav ki manzoori (24 Nov 2026): Finance APPROVE wala usi screen par Approve / Reject; maangne wala "Wapas lo"
+  const reqAct = async (action, note) => {
+    const p = sreq && sreq.pending;
+    if (!p) return;
+    setBusy(true);
+    const r = await api.post(base + "/schedule/requests/" + p.id + "/" + action, note ? { note } : {}).catch(e => ({ success: false, message: e.message }));
+    setBusy(false);
+    if (!r?.success) { setMsg(r?.message || t("stage_billing.save_failed")); return; }
+    setRejNote(null);
+    setMsg(t(action === "approve" ? "schedule.req_approved" : action === "reject" ? "schedule.req_rejected" : "schedule.req_cancelled"));
+    await load();
+  };
+  const fmtParts = (ps) => (ps || []).map(p => p.name + (p.pct != null ? " " + r2(p.pct) + "%" : p.rate != null ? " ₹" + r2(p.rate) : "")).join(" · ");
+  const reqBox = sreq && sreq.pending && (() => {
+    const p = sreq.pending, mine = Number(p.requested_by) === Number(sreq.me);
+    return (
+      <div data-testid="sched-req" style={{ border: "1px solid " + T.amb, background: T.ambL, borderRadius: 8, padding: "9px 12px", marginBottom: 10, fontSize: 12 }}>
+        <div style={{ fontWeight: 800, color: T.amb }}>⏳ {t("schedule.req_title", { by: p.requested_by_name || "—", date: String(p.created_at || "").slice(0, 10) })}</div>
+        {p.note && <div style={{ color: T.t2, marginTop: 2 }}>{t("schedule.req_note", { note: p.note })}</div>}
+        <div style={{ display: "grid", gap: 3, marginTop: 6 }}>
+          {(p.works || []).map(w => (
+            <div key={w.item_id} data-req-work={w.item_id} style={{ color: T.t1 }}>
+              <b>{(w.category && String(w.category).toLowerCase() !== String(w.name || "").toLowerCase() ? w.category + " · " : "") + w.name}</b>:{" "}
+              <span style={{ color: T.t3 }}>{w.before && w.before.length ? fmtParts(w.before) : t("schedule.req_whole")}</span>
+              {" → "}<span style={{ fontWeight: 700 }}>{fmtParts(w.after)}</span>
+            </div>
+          ))}
+        </div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center", marginTop: 8 }}>
+          {sreq.can_approve && <button type="button" data-testid="sched-req-approve" disabled={busy} onClick={() => reqAct("approve")} style={btnS("primary", busy)}>{t("schedule.req_approve")}</button>}
+          {sreq.can_approve && rejNote == null && <button type="button" data-testid="sched-req-reject" disabled={busy} onClick={() => setRejNote("")} style={btnS("danger", busy)}>{t("schedule.req_reject")}</button>}
+          {sreq.can_approve && rejNote != null && (<>
+            <input value={rejNote} onChange={e => setRejNote(e.target.value)} maxLength={500} data-testid="sched-req-reject-note" placeholder={t("schedule.req_reject_ph")}
+              style={{ ...inpS, width: 240 }} />
+            <button type="button" data-testid="sched-req-reject-go" disabled={busy || !rejNote.trim()} onClick={() => reqAct("reject", rejNote.trim())} style={btnS("danger", busy || !rejNote.trim())}>{t("schedule.req_reject")}</button>
+            <button type="button" onClick={() => setRejNote(null)} style={btnS()}>{t("common.cancel")}</button>
+          </>)}
+          {mine && !sreq.can_approve && <button type="button" data-testid="sched-req-cancel" disabled={busy} onClick={() => reqAct("cancel")} style={btnS("plain", busy)}>{t("schedule.req_cancel")}</button>}
+          {!sreq.can_approve && <span style={{ fontSize: 11, color: T.t3 }}>{t("schedule.req_wait")}</span>}
+        </div>
+      </div>
+    );
+  })();
   // ⋯ "Mark as complete" (24 Nov 2026, Prafull: "manual task complete kar sake aur bill ke liye ready"):
   // Chalu Bill wala haath ka "Ho gaya" (PUT /items/:id/done, 100%) — line bill ke liye ready; Auto-bill
   // ON ho to server Draft bhi bana deta hai. Task judi line par wajah zaroori (server bhi rokta hai).
@@ -575,8 +623,9 @@ export function StageLinesPanel({ kind, id, canEdit, canApprove, projectId, canE
       </div>
     );
   }
+  // Task me khoj (24 Nov 2026, Prafull: "task lagane ke liye task search option") — PickSelect: panel me khoj
   const taskSelect = (value, onChange, s, sugIds, disabled) => (
-    <select value={value} disabled={disabled} onChange={e => onChange(e.target.value)} style={inpS} aria-label={t("stage_billing.task_label")}>
+    <PickSelect value={value} disabled={disabled} onChange={e => onChange(e.target.value)} style={inpS} aria-label={t("stage_billing.task_label")}>
       <option value="">{t("stage_billing.no_task")}</option>
       {(s.suggestions || []).length > 0 && (
         <optgroup label={t("stage_billing.suggested")}>
@@ -586,7 +635,7 @@ export function StageLinesPanel({ kind, id, canEdit, canApprove, projectId, canE
       <optgroup label={t("stage_billing.all_tasks")}>
         {taskOpts.filter(x => !sugIds.has(String(x.id))).map(x => <option key={x.id} value={String(x.id)}>{x.name} ({x.progress}%)</option>)}
       </optgroup>
-    </select>
+    </PickSelect>
   );
   // Ek line (floor ke neeche, ya ek-saath wali stage ke "floor dekho" me — inTg: task stage ka)
   const lineRow = (it, inTg = false) => {
@@ -817,6 +866,7 @@ export function StageLinesPanel({ kind, id, canEdit, canApprove, projectId, canE
   };
   return (
     <div style={{ marginBottom: 14 }}>
+      {reqBox}
       <ScheduleMethods kind={kind} id={id} items={ledger.items} canEdit={canEdit} qtyCount={qtyCount}
         onDone={async (m) => { setMsg(m); await load(); }} />
       <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 8, padding: "10px 12px",
@@ -860,7 +910,7 @@ export function StageLinesPanel({ kind, id, canEdit, canApprove, projectId, canE
           <div style={{ padding: 10 }}>
             <ClientScheduleView items={ledger.items} canEdit={canEdit && kind === "estimate"} onEdit={(work, works) => setEditWork({ work, works })} />
             {editWork && (
-              <ScheduleEditModal estimateId={id} work={editWork.work} works={editWork.works} onClose={() => setEditWork(null)}
+              <ScheduleEditModal estimateId={id} work={editWork.work} works={editWork.works} onClose={() => setEditWork(null)} needsApproval={!!(sreq && sreq.ready && !sreq.can_approve)}
                 onDone={async (m) => { setEditWork(null); setMsg(m); await load(); }} />
             )}
           </div>

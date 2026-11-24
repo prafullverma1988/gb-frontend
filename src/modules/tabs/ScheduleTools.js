@@ -796,8 +796,10 @@ export function ClientScheduleView({ items, canEdit, onEdit }) {
 // work / works = ClientScheduleView ke card (all = us kaam ki saari line). Server
 // POST /customer-estimates/:id/schedule/replace: purane hisse hat kar naye, total wahi;
 // jis stage ka naam wahi raha uska task bana rehta hai. Bill wale kaam par nahi.
-export function ScheduleEditModal({ estimateId, work, works, onClose, onDone }) {
+// needsApproval (24 Nov 2026): bane schedule ka badlav, Finance APPROVE nahi — "Wajah" ka khana; server request banata hai
+export function ScheduleEditModal({ estimateId, work, works, onClose, onDone, needsApproval }) {
   const lines = work.all, split = !!lines[0].part_of;
+  const [note, setNote] = useState("");
   const rate = r2(lines.reduce((s, x) => s + num(x.rate), 0)), qty = num(lines[0].planned_qty), unit = lines[0].unit || "";
   const [pmode, setPmode] = useState(split ? "rate" : "pct");
   const [parts, setParts] = useState(() => (split
@@ -834,12 +836,14 @@ export function ScheduleEditModal({ estimateId, work, works, onClose, onDone }) 
     const ids = [lines[0].item_id, ...others.filter(w => also.has(w.key)).map(w => w.all[0].item_id)];
     const body = { item_ids: ids, parts: partsBody(pmode, parts) };
     if (anySkip(parts, editTargets)) body.item_parts = itemPartsBody(pmode, parts, editTargets);
+    if (note.trim()) body.note = note.trim();
     const r = await api.post("/customer-estimates/" + estimateId + "/schedule/replace", body)
       .catch(e => ({ success: false, message: e.message }));
     setBusy(false);
     if (!r?.success) { setErr(r?.message || t("schedule.failed")); setSkipped(r?.data?.skipped || []); return; }
     const sk = r.data.skipped || [];
-    onDone && onDone(t("schedule.edit_done", { n: r.data.done.length }) + (sk.length ? " — " + sk.map(s => (s.name || "#" + s.item_id) + ": " + s.reason).join("; ") : ""));
+    const head = r.data.requested ? t("schedule.req_sent", { n: r.data.done.length }) : t("schedule.edit_done", { n: r.data.done.length });
+    onDone && onDone(head + (sk.length ? " — " + sk.map(s => (s.name || "#" + s.item_id) + ": " + s.reason).join("; ") : ""));
   };
   const workName = (w) => (w.category && String(w.category).trim().toLowerCase() !== String(w.name || "").trim().toLowerCase() ? w.category + " · " : "") + w.name;
   return (<>
@@ -889,8 +893,12 @@ export function ScheduleEditModal({ estimateId, work, works, onClose, onDone }) 
       </div>
       <div style={{ padding: "12px 18px", borderTop: "1px solid " + T.b1, display: "flex", justifyContent: "flex-end", gap: 8, flexWrap: "wrap" }}>
         <button type="button" disabled={busy} onClick={onClose} style={btnS()}>{t("common.cancel")}</button>
+        {needsApproval && split && (
+          <input value={note} onChange={e => setNote(e.target.value)} maxLength={500} data-testid="sched-edit-note" placeholder={t("schedule.req_note_ph")}
+            style={{ flex: "1 1 220px", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + T.b1, fontSize: 12, fontFamily: "inherit" }} />
+        )}
         <button type="button" data-testid="sched-edit-save" disabled={busy || !okParts} onClick={save} style={btnS("primary", busy || !okParts)}>
-          {busy ? t("common.saving_2") : t("schedule.edit_save", { n: 1 + also.size })}
+          {busy ? t("common.saving_2") : needsApproval && split ? t("schedule.req_save") : t("schedule.edit_save", { n: 1 + also.size })}
         </button>
       </div>
     </div>
