@@ -1967,7 +1967,8 @@ function TabEstimate({ project }) {
                       schedule ki zaroorat nahi. Yahan line ka task, pehle bill ho chuka, hisse, had. */}
                   {/* manual_notice ab panel ke "?" me (23 Nov 2026 — screen bhari thi) */}
                   {/* Stage Board bhi isi me (5 Nov 2026) — client aaj tak, thekedar ki WO line, Bill banao / Subcon WO banao / Extra kaam */}
-                  <StageLinesPanel key={selEst.id} kind="estimate" id={selEst.id} canEdit={eEdit} canApprove={eApprove} projectId={projectId} />
+                  <StageLinesPanel key={selEst.id} kind="estimate" id={selEst.id} canEdit={eEdit} canApprove={eApprove} projectId={projectId}
+                    canExport={eExport} exportMeta={{ estimate_no: selEst.estimate_no, customer: selEst.customer_name, project: project?.name, company: companyName() }} />
                 </>)}
                 {/* Milestone estimate par bhi Stage Board wala hissa (thekedar ka bill, WO banao, Extra kaam) — 5 Nov 2026 */}
                 {selEst.billing_method !== "manual" && (

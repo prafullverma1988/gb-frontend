@@ -240,3 +240,15 @@ test("Client view: haath se complete line = 'Kaam hua'", async () => {
   expect(txt).toContain("Kaam hua");
 });
 
+// 24 Nov 2026: Payment Schedule (client) ka PDF + Excel — sirf export permission par, client view me
+test("Payment Schedule (client): Excel + PDF button sirf canExport par; Line-wise me nahi", async () => {
+  await mount(<StageLinesPanel kind="estimate" id={7} canEdit canApprove={false} projectId={70} canExport exportMeta={{ estimate_no: "EST-1" }} />);
+  expect(document.querySelector("[data-testid='sched-xls']").textContent).toBe("⬇ Excel");
+  expect(document.querySelector("[data-testid='sched-pdf']").textContent).toBe("⬇ PDF");
+  await act(async () => { btn(/^Line-wise$/).click(); });
+  expect(document.querySelector("[data-testid='sched-pdf']")).toBeNull();
+  act(() => root.unmount()); box.remove();
+  await mount(<StageLinesPanel kind="estimate" id={7} canEdit canApprove={false} projectId={70} />);
+  expect(document.querySelector("[data-testid='sched-xls']")).toBeNull();
+  noKeys();
+});

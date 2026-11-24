@@ -19,6 +19,7 @@ import api from "../../config/api";
 import { T } from "../shared/tokens";
 import { t } from "../../i18n";
 import { ScheduleMethods, MilestoneView, WoFromLinesModal, ClientScheduleView, ScheduleEditModal, partNameOf, workTaskOf } from "./ScheduleTools";
+import { scheduleCsv, schedulePdf } from "./scheduleExport";
 
 const num = (v) => { const n = parseFloat(v); return Number.isFinite(n) ? n : 0; };
 const r2 = (n) => Math.round(num(n) * 100) / 100;
@@ -241,7 +242,8 @@ export function StageBillGrid({ items, value, onChange, overBillMode }) {
 // Stage Board bhi yahin (5 Nov 2026, Prafull: "stage aur stage board 2 alag tab
 // ki need nahi"): line ke saath client aaj tak + thekedar ki WO line, line tick
 // karke "Bill banao" / "Subcon WO banao", Extra kaam.
-export function StageLinesPanel({ kind, id, canEdit, canApprove, projectId }) {
+// canExport + exportMeta { estimate_no, customer, project, company }: "Payment Schedule (client)" ka PDF / Excel (24 Nov 2026)
+export function StageLinesPanel({ kind, id, canEdit, canApprove, projectId, canExport, exportMeta }) {
   const base = kind === "wo" ? "/subcon/wo/" + id : "/customer-estimates/" + id;
   const [ledger, setLedger] = useState(null);
   const [sug, setSug] = useState(null);
@@ -836,6 +838,12 @@ export function StageLinesPanel({ kind, id, canEdit, canApprove, projectId }) {
         {[["client", t("schedule.view_client")], ["line", t("schedule.view_line")], ...(kind === "wo" ? [["milestone", t("schedule.view_milestone")]] : [])].map(([v, l]) => (
           <button key={v} type="button" onClick={() => setView(v)} style={{ ...btnS(view === v ? "primary" : "plain"), padding: "3px 10px" }}>{l}</button>
         ))}
+        {view === "client" && kind === "estimate" && canExport && (<>
+          <button type="button" data-testid="sched-xls" onClick={() => scheduleCsv(ledger.items, exportMeta || {})} title={t("schedule.x_excel_title")}
+            style={{ ...btnS("plain"), padding: "3px 10px", color: T.grn, borderColor: T.grn }}>⬇ {t("schedule.x_excel")}</button>
+          <button type="button" data-testid="sched-pdf" onClick={() => schedulePdf(ledger.items, exportMeta || {})} title={t("schedule.x_pdf_title")}
+            style={{ ...btnS("plain"), padding: "3px 10px", color: T.red, borderColor: T.red }}>⬇ {t("schedule.x_pdf")}</button>
+        </>)}
         <div style={{ flex: 1 }} />
         {boardActions}
       </div>

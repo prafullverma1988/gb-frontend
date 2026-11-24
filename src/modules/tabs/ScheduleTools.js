@@ -602,8 +602,8 @@ const workLocked = (w) => w.all.some(x => num(x.billed_qty) > 0 || num(x.opening
 export const workTaskOf = (x) => (x && x.manual_done
   ? { progress: num(x.manual_done.pct), trigger_pct: 100, eligible: num(x.manual_done.pct) >= 100, manual: true }
   : (x && x.linked_task) || null);
-export function ClientScheduleView({ items, canEdit, onEdit }) {
-  const { cards, together } = useMemo(() => {
+// Client schedule ki shakl — view aur PDF / Excel (24 Nov 2026) dono yahi se
+function groupClientSchedule(items) {
     const out = [], idx = {}, tg = [], tidx = {};
     for (const x of items || []) {
       if (x.item_type === "extra" || !(num(x.planned_qty) > 0)) continue;
@@ -619,25 +619,74 @@ export function ClientScheduleView({ items, canEdit, onEdit }) {
       G.stages[G.sidx[nm]].lines.push({ ...x, _where: c.category || c.name });
     }
     return { cards: out, together: tg };
-  }, [items]);
-  if (!cards.length) return <div style={{ padding: 14, fontSize: 12, color: T.t4 }}>{t("schedule.cl_empty")}</div>;
-  const isBilled = (x) => num(x.planned_qty) > 0 && num(x.billed_qty) >= num(x.planned_qty) - 0.0005;
-  const status = (x) => {
+}
+const isBilledLine = (x) => num(x.planned_qty) > 0 && num(x.billed_qty) >= num(x.planned_qty) - 0.0005;
+function clientStatus(x) {
+    const isBilled = isBilledLine;
     const tk = workTaskOf(x);
     if (isBilled(x)) return [T.grnL, T.grn, t("schedule.cl_st_billed")];
     if (tk && tk.eligible) return [T.grnL, T.grn, t("schedule.cl_st_done")];
     if (tk && num(tk.progress) > 0) return [T.ambL, T.amb, t("schedule.cl_st_prog", { pct: num(tk.progress) })];
     return null;   // baaki — chip nahi (har row par "Pending" bhari lagta tha)
-  };
-  // Kai floor ki ek stage: sab ka bill → "Bill bana"; sab ka kaam hua → "Kaam hua"; warna jo chal raha
-  const statusMany = (xs) => {
-    if (xs.every(isBilled)) return [T.grnL, T.grn, t("schedule.cl_st_billed")];
+}
+// Kai floor ki ek stage: sab ka bill → "Bill bana"; sab ka kaam hua → "Kaam hua"; warna jo chal raha
+function clientStatusMany(xs) {
+    if (xs.every(isBilledLine)) return [T.grnL, T.grn, t("schedule.cl_st_billed")];
     const tasks = xs.map(workTaskOf).filter(Boolean);
     if (tasks.length === xs.length && tasks.every(tk => tk.eligible)) return [T.grnL, T.grn, t("schedule.cl_st_done")];
     const going = tasks.map(tk => num(tk.progress)).filter(p => p > 0);
     if (going.length) return [T.ambL, T.amb, t("schedule.cl_st_prog", { pct: Math.min(...going) })];
     return null;
-  };
+}
+const workTitle = (c) => (c.category && String(c.category).trim().toLowerCase() !== String(c.name || "").trim().toLowerCase() ? c.category + " · " : "") + c.name;
+
+// PDF / Excel ke liye (24 Nov 2026, Prafull: "payment schedule ka bhi pdf and excel download"):
+// screen jaisa hi — har kaam ka card (qty × rate = ₹, har stage %, ₹, yahan tak, haal), phir "sab
+// floor ka ek saath" wale card, aur kul. Ek line wala kaam bhi ek row (100%).
+export function clientScheduleData(items) {
+  const { cards, together } = groupClientSchedule(items);
+  const amtOf = (xs) => xs.reduce((a, x) => a + num(x.planned_qty) * num(x.rate), 0);
+  const billedOf = (xs) => xs.reduce((a, x) => a + num(x.billed_qty) * num(x.rate), 0);
+  const label = (st) => (st ? st[2] : "");
+  let grand = 0, billed = 0;
+  const out = [];
+  for (const c of cards) {
+    const amt = amtOf(c.lines), rate = c.lines.reduce((a, x) => a + num(x.rate), 0);
+    grand += amt; billed += billedOf(c.lines);
+    const tgGroups = [...new Set(c.all.filter(x => x.part_of && x.part_together).map(x => x.part_group || t("schedule.cl_tg_default")))];
+    let cum = 0;
+    out.push({
+      key: c.key, title: workTitle(c), qty: num(c.all[0].planned_qty), unit: c.all[0].unit || "", rate, amount: amt, together: false,
+      note: tgGroups.length ? t(c.lines.length ? "schedule.cl_rest_together" : "schedule.cl_all_together", { groups: tgGroups.join(", ") }) : "",
+      rows: c.lines.map((x, i) => {
+        const a = num(x.planned_qty) * num(x.rate);
+        cum += a;
+        return { stage: x.part_of ? t("schedule.cl_stage", { n: i + 1, stage: partNameOf(x) }) : t("schedule.cl_stage_whole", { n: i + 1 }), where: "",
+          pct: rate > 0 ? r2(num(x.rate) / rate * 100) : 0, amount: a, cum, status: label(clientStatus(x)) };
+      }),
+    });
+  }
+  for (const G of together) {
+    const all = G.stages.flatMap(s => s.lines), gAmt = amtOf(all);
+    grand += gAmt; billed += billedOf(all);
+    let cum = 0;
+    out.push({
+      key: "tg¦" + G.group, title: t("schedule.cl_tg_title", { group: G.group || t("schedule.cl_tg_default") }), qty: null, unit: "", rate: null, amount: gAmt, together: true, note: "",
+      rows: G.stages.map((s, i) => {
+        const a = amtOf(s.lines);
+        cum += a;
+        return { stage: t("schedule.cl_stage", { n: i + 1, stage: s.name }), where: [...new Set(s.lines.map(x => x._where))].join(" + "),
+          pct: gAmt > 0 ? r2(a / gAmt * 100) : 0, amount: a, cum, status: label(clientStatusMany(s.lines)) };
+      }),
+    });
+  }
+  return { cards: out, billed, grand };
+}
+
+export function ClientScheduleView({ items, canEdit, onEdit }) {
+  const { cards, together } = useMemo(() => groupClientSchedule(items), [items]);
+  if (!cards.length) return <div style={{ padding: 14, fontSize: 12, color: T.t4 }}>{t("schedule.cl_empty")}</div>;
+  const status = clientStatus, statusMany = clientStatusMany;
   const stChip = (st) => st ? <span style={chip(st[0], st[1])}>{st[2]}</span> : null;
   const amtOf = (xs) => xs.reduce((a, x) => a + num(x.planned_qty) * num(x.rate), 0);
   const billedOf = (xs) => xs.reduce((a, x) => a + num(x.billed_qty) * num(x.rate), 0);
