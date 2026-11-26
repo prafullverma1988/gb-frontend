@@ -174,3 +174,42 @@ test("Accept ki permission nahi: Draft par aage nahi; 'Abhi final quote nahi' se
   await click(testid("cv-back"));
   expect(testid("cv-fq-none")).not.toBeNull();
 });
+
+// Entry Edit (26 Nov 2026): lead ki jaankari — samay ke baad 'manzoori se', 428 par wajah, manzoori me gaya to lead waisi hi.
+test("Lead edit: samay nikal gaya — wajah ke saath dobara, manzoori me gaya to screen nahi badli", async () => {
+  act(() => root.unmount()); box.remove();
+  api.get.mockImplementation(async (url) => {
+    if (url === "/crm/leads") return { success: true, data: [{ ...LEAD, stage: "lead" }] };
+    if (url === "/crm/leads/139") return { success: true, data: { ...LEAD, stage: "lead" } };
+    if (url.startsWith("/entry-edit/mode")) return { success: true, data: { mode: "request", why: "own_old", window: "2", window_label: "2 ghante", lock: null, pending: null } };
+    return { success: true, data: [] };
+  });
+  api.patch.mockReset();
+  api.patch
+    .mockResolvedValueOnce({ success: false, code: "EDIT_REASON_REQUIRED", message: "Wajah likho" })
+    .mockResolvedValueOnce({ success: true, data: { mode: "pending_approval" }, message: "Manzoori ke liye gaya" });
+  window.promptAsync = jest.fn(() => Promise.resolve("client ne budget badla"));
+  window.toast = { success: jest.fn() };
+  box = document.createElement("div"); document.body.appendChild(box); root = createRoot(box);
+  await act(async () => { root.render(<CRMModule onOpenProject={onOpenProject} />); });
+  await flush();
+  const card = [...document.querySelectorAll("div")].reverse().find((d) => /^ZZ Test Lead/.test(d.textContent.trim()) && d.textContent.length < 400);
+  let el = card;
+  for (let i = 0; i < 6 && el && !drawerOpen(); i++) { const node = el; await act(async () => { node.click(); }); el = node.parentElement; }
+  await flush();
+  expect(api.get.mock.calls.some((c) => c[0] === "/entry-edit/mode?entity=crm_lead&id=139")).toBe(true);
+  expect(testid("lead-edit-bar").textContent).toContain("Samay (2 ghante) nikal gaya");
+  await click(btnText(/^Edit \(manzoori se\)$/));
+  const budget = [...testid("lead-edit-form").querySelectorAll("input")].find((i) => i.value === "4000000");
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+  await act(async () => { setter.call(budget, "30-35L"); budget.dispatchEvent(new Event("input", { bubbles: true })); });
+  await click(btnText(/^Manzoori ke liye bhejo$/));
+  expect(api.patch).toHaveBeenCalledTimes(2);
+  expect(api.patch.mock.calls[0][1]).toEqual({ budget: "30-35L" });
+  expect(api.patch.mock.calls[1][1]).toEqual({ budget: "30-35L", _edit_reason: "client ne budget badla" });
+  expect(window.toast.success).toHaveBeenCalledWith("Manzoori ke liye gaya");
+  expect(testid("lead-edit-form")).toBeNull();
+  expect(document.body.textContent).not.toContain("30-35L");
+  delete window.toast; delete window.promptAsync;
+});
+

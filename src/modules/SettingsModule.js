@@ -2808,6 +2808,10 @@ function ApprovalSettings() {
     { id: 0,  module: "Bank Statement Change",       cat: "FINANCE",   enabled: true,  levels: [{ role: "Admin", limit: null }] },
     { id: 0,  module: "Company Expense",             cat: "FINANCE",   enabled: true,  levels: [{ role: "Admin", limit: null }] },
     { id: 0,  module: "Fuel Entry Delete",           cat: "FINANCE",   enabled: true,  levels: [{ role: "Admin", limit: null }] },
+    // Entry Edit (26 Nov 2026): banane wala apni entry company ke samay (Other
+    // Settings → "Entry edit") ke baad badle to ye manzoori. Band karne par bhi
+    // server chalu kar deta hai — samay ke baad bina manzoori badlav nahi.
+    { id: 0,  module: "Entry Edit",                  cat: "SITE",      enabled: true,  levels: [{ role: "Admin", limit: null }] },
   ];
 
   const [approvals, setApprovals] = useState(DEFAULTS);

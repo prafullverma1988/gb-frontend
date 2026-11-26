@@ -198,3 +198,41 @@ test("direct GRN (MR nahi) — ek line; MR wali GRN par line nahi", async () => 
   await mount({ grnId: 300 });
   expect(document.querySelector("[data-testid='trail-no-mr']")).toBeNull();
 });
+
+// Entry Edit (26 Nov 2026): server ka mode button tay karta hai.
+const withMode = (mode) => (url) => Promise.resolve(/cancel-info/.test(url) ? { success: true, data: { cancellable: false } }
+  : /entry-edit\/mode/.test(url) ? { success: true, data: mode } : { success: true, data: TRIP_DATA });
+
+test("Entry Edit: samay nikal gaya — 'manzoori se' button, likhi wajah hi _edit_reason, manzoori me gaya", async () => {
+  api.get.mockImplementation(withMode({ mode: "request", why: "own_old", window: "2", window_label: "2 ghante", lock: null, pending: null }));
+  api.put.mockResolvedValue({ success: true, data: { mode: "pending_approval" }, message: "Manzoori ke liye gaya" });
+  window.toast = { success: jest.fn() };
+  await mount({ grnId: 33 });
+  expect(api.get.mock.calls.some(c => c[0] === "/entry-edit/mode?entity=site_grn&id=33")).toBe(true);
+  expect(document.querySelector("[data-testid='grn-edit-note']").textContent).toContain("2 ghante");
+  const editBtn = [...document.querySelectorAll("button")].find(b => b.textContent === "Edit (manzoori se)");
+  expect(editBtn).toBeTruthy();
+  await act(async () => { editBtn.click(); });
+  const ta = document.querySelector("textarea");
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value").set;
+  await act(async () => { setter.call(ta, "qty galat"); ta.dispatchEvent(new Event("input", { bubbles: true })); });
+  const send = [...document.querySelectorAll("button")].find(b => b.textContent === "Manzoori ke liye bhejo");
+  await act(async () => { send.click(); });
+  expect(api.put.mock.calls[0][1]._edit_reason).toBe("qty galat");
+  expect(window.toast.success).toHaveBeenCalledWith("Manzoori ke liye gaya");
+  expect(document.querySelector("textarea")).toBeNull();
+  delete window.toast;
+});
+
+test("Entry Edit: badlav manzoori me — button band; mode none — button nahi, rok ka note", async () => {
+  api.get.mockImplementation(withMode({ mode: "request", window_label: "2 ghante", pending: { id: 4 } }));
+  await mount({ grnId: 33 });
+  const btn = [...document.querySelectorAll("button")].find(b => b.textContent === "Edit GRN");
+  expect(btn.disabled).toBe(true);
+  expect(text()).toContain("Ek badlav manzoori me hai");
+  act(() => root.unmount()); box.remove();
+  api.get.mockImplementation(withMode({ mode: "none", why: "locked", lock: "GRN TG-0033 ka bill ban chuka" }));
+  await mount({ grnId: 33 });
+  expect([...document.querySelectorAll("button")].some(b => b.textContent.startsWith("Edit"))).toBe(false);
+  expect(document.querySelector("[data-testid='grn-edit-note']").textContent).toBe("GRN TG-0033 ka bill ban chuka");
+});

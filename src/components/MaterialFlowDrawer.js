@@ -36,6 +36,7 @@ import { BackClose } from "../utils/backNav";
 import { cld } from "../utils/cloudinary";
 import { can, canAny, canEntry } from "../utils/perms";
 import { darjWhen } from "../utils/darjTime";
+import { fetchEditMode, editUi, saveWithEditRule } from "../utils/entryEdit";
 
 const T = {
   surface: "#FFFFFF", surfaceB: "#F8F9FB",
@@ -147,7 +148,15 @@ export default function MaterialFlowDrawer({ grnId, trail, onClose, onChanged, i
   const isGrn = kind === "grn";
   const mayIssue   = canEntry(["Procurement", "Material"]);
   const mayResolve = isAdmin && can("Procurement", "approve");
-  const mayEditGrn = isAdmin && canAny(["Procurement", "Material"], "edit");
+  // GRN sudhaar (Entry Edit, 26 Nov 2026): server batata hai — seedha (admin /
+  // Procurement-Material Edit tick / chadhane wala samay ke andar), manzoori se
+  // (samay nikal gaya), ya nahi (bill ban gaya / kisi aur ka). Jawab na mile to
+  // purana tick wala niyam.
+  const [ee, setEe] = useState(null);
+  const [eeRev, setEeRev] = useState(0);
+  const eeUi = ee ? editUi(ee, t("material_flow.edit_grn"))
+    : { show: canAny(["Procurement", "Material"], "edit"), disabled: false, label: t("material_flow.edit_grn"), hint: "", warn: "", note: "" };
+  const mayEditGrn = isAdmin && eeUi.show;
   const mayDelGrn  = isAdmin && can("Procurement", "delete");
   const mayEditMr  = isAdmin && can("Procurement", "edit");
   const [data, setData] = useState(null);
@@ -186,6 +195,14 @@ export default function MaterialFlowDrawer({ grnId, trail, onClose, onChanged, i
     setData(null); setZoom(null);
     reload();
   }, [kind, docId, trail?.material]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Entry Edit ka faisla (upar eeUi) — trail ke baad poochho.
+  useEffect(() => {
+    if (!isGrn || !docId) { setEe(null); return undefined; }
+    let dead = false;
+    fetchEditMode("site_grn", docId).then((m) => { if (!dead) setEe(m); });
+    return () => { dead = true; };
+  }, [isGrn, docId, eeRev]);
 
   const doc = data?.doc || null;
   // Reset edit form whenever GRN data loads
@@ -232,9 +249,20 @@ export default function MaterialFlowDrawer({ grnId, trail, onClose, onChanged, i
           unit:         it.unit || null,
         })),
       };
-      const res = await api.put("/procurement/grns/" + docId, payload);
+      // Samay nikal gaya — upar likhi wajah hi manzoori ki wajah (dobara mat poochho).
+      if (ee && ee.mode === "request") payload._edit_reason = grnEditNote.trim();
+      const res = await saveWithEditRule((b) => api.put("/procurement/grns/" + docId, b), payload);
+      if (res.cancelled) { setGrnSaving(false); return; }
+      if (res.pending) {
+        if (window.toast?.success) window.toast.success(res.message || t("entry_edit.sent"));
+        setGrnEditing(false); setGrnEditNote("");
+        setEeRev((x) => x + 1);
+        setGrnSaving(false);
+        return;
+      }
       if (res?.success === false) { setErr(res.message || t("mtrail.save_fail")); setGrnSaving(false); return; }
       setGrnEditing(false); setGrnEditNote("");
+      setEeRev((x) => x + 1);
       reload();
       onChanged && onChanged();
     } catch (e) { setErr(e?.message || t("mtrail.save_fail")); }
@@ -365,6 +393,12 @@ export default function MaterialFlowDrawer({ grnId, trail, onClose, onChanged, i
               <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 10 }}>
                 <span style={{ fontSize: 12, fontWeight: 700, color: T.grn }}>{t("material_flow.edit_grn_grn_number", { grn_number: grn.grn_number })}</span>
               </div>
+              {eeUi.hint && <div data-testid="grn-edit-hint" style={{ fontSize: 11.5, color: T.t3, marginBottom: 8 }}>{eeUi.hint}</div>}
+              {eeUi.warn && (
+                <div data-testid="grn-edit-warn" style={{ padding: "7px 10px", background: T.ambL, border: `1px solid ${T.ambM}`, borderRadius: 6, fontSize: 11.5, color: T.amb, fontWeight: 600, marginBottom: 8 }}>
+                  ⚠ {t("entry_edit.admin_lock", { lock: eeUi.warn })}
+                </div>
+              )}
               <div style={{ padding: "8px 10px", background: "#FFFBEB", border: `1px solid #FDE68A`, borderRadius: 7, marginBottom: 10 }}>
                 <div style={{ fontSize: 9.5, fontWeight: 700, color: "#92400E", textTransform: "uppercase", letterSpacing: ".4px", marginBottom: 4 }}>
                  {t("material_flow.edit_reason")} <span style={{ fontWeight: 500, textTransform: "none", letterSpacing: 0 }}>{t("material_flow.compulsory")}</span>
@@ -558,14 +592,19 @@ export default function MaterialFlowDrawer({ grnId, trail, onClose, onChanged, i
                 </button>
                 <button onClick={handleGrnSave} disabled={grnSaving}
                   style={{ flex: 2, padding: "9px", borderRadius: 7, background: grnSaving ? "#9CA3AF" : T.grn, border: "none", color: "#fff", fontSize: 12, fontWeight: 700, cursor: grnSaving ? "not-allowed" : "pointer" }}>
-                  {grnSaving ? t("common.saving") : t("material_flow.save_grn")}
+                  {grnSaving ? t("common.saving") : (ee && ee.mode === "request" ? t("entry_edit.send_approval") : t("material_flow.save_grn"))}
                 </button>
               </>
             ) : (
               <>
-                {mayEditGrn && !grnGone && <button onClick={() => setGrnEditing(true)}
-                  style={{ padding: "9px 12px", borderRadius: 7, background: T.grnL, border: `1px solid ${T.grnM}`, color: T.grn, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
-                 {t("material_flow.edit_grn")}
+                {!grnGone && isAdmin && (eeUi.hint || eeUi.note) && (
+                  <div data-testid="grn-edit-note" style={{ width: "100%", fontSize: 11.5, lineHeight: 1.45, color: eeUi.disabled ? T.amb : T.t3, fontWeight: eeUi.disabled ? 600 : 400 }}>
+                    {eeUi.hint || eeUi.note}
+                  </div>
+                )}
+                {mayEditGrn && !grnGone && <button onClick={() => setGrnEditing(true)} disabled={eeUi.disabled}
+                  style={{ padding: "9px 12px", borderRadius: 7, background: eeUi.disabled ? T.surfaceB : T.grnL, border: `1px solid ${eeUi.disabled ? T.b1 : T.grnM}`, color: eeUi.disabled ? T.t4 : T.grn, fontSize: 12, fontWeight: 700, cursor: eeUi.disabled ? "not-allowed" : "pointer" }}>
+                 {eeUi.label}
                 </button>}
                 {mayDelGrn && !grnGone && <button onClick={handleGrnDelete} disabled={grnDeleting}
                   style={{ padding: "9px 12px", borderRadius: 7, background: T.redL, border: `1px solid ${T.redM}`, color: T.red, fontSize: 12, fontWeight: 700, cursor: grnDeleting ? "not-allowed" : "pointer" }}>

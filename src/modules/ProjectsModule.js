@@ -555,6 +555,9 @@ function SitePulseDrawer({onClose,onSelectProject,initial}){
                     <div style={{fontSize:10.5,color:C.tl,marginTop:2}}>
                       📍 {it.project_name||"—"}{who?` · ${who}`:""}
                     </div>
+                    {it.module==="Entry Edit"&&it.notes&&(
+                      <div style={{fontSize:11,color:C.tl,marginTop:5,lineHeight:1.5,whiteSpace:"pre-line",wordBreak:"break-word"}}>{it.notes}</div>
+                    )}
                   </div>
                   {rejectId===id?(
                     <div style={{padding:"0 12px 10px",display:"flex",gap:6}}>
@@ -2785,6 +2788,13 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
               </div>
             )}
             {src==="salary_edit"&&item.notes&&<div style={{fontSize:11,color:T.t3,marginTop:4,fontStyle:"italic"}}>"{item.notes}"</div>}
+            {/* Entry Edit (26 Nov 2026): notes me "Wajah: …" + har badlav ek line (Budget: 25L → 30L) */}
+            {item.module==="Entry Edit"&&item.notes&&(
+              <div data-testid="entry-edit-notes" style={{marginTop:6,padding:"6px 10px",background:T.surfaceB,border:"1px solid "+T.b1,borderRadius:6,fontSize:11,color:T.t2,lineHeight:1.55,whiteSpace:"pre-line",wordBreak:"break-word"}}>
+                <span style={{fontSize:9.5,fontWeight:700,color:T.t4,letterSpacing:".3px",textTransform:"uppercase",display:"block",marginBottom:2}}>{t("entry_edit.notes_title")}</span>
+                {item.notes}
+              </div>
+            )}
             {item.module==="Subcon WO Amendment"&&(item._amend_new!=null||item._amend_reason)&&(<>
               {item._amend_old!=null&&item._amend_new!=null&&(
                 <div style={{display:"flex",gap:8,alignItems:"center",marginTop:6,padding:"6px 10px",background:T.bluL,borderRadius:6,border:"1px solid "+T.bluM,flexWrap:"wrap"}}>

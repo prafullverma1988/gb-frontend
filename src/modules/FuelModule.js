@@ -22,6 +22,7 @@ import { can, canAny, canEntry } from "../utils/perms";
 import { cld } from "../utils/cloudinary";
 import { loadPhotoPolicy, policyFor, fileInputProps } from "../utils/photoPolicy";
 import { darjRowSuffix, darjWhen } from "../utils/darjTime";
+import { fetchEditMode, editUi, saveWithEditRule } from "../utils/entryEdit";
 
 // ── ICONS ─────────────────────────────────────────────────────────
 const Ic = ({ d, size = 18, color = "currentColor", sw = 1.8, fill = "none" }) => (
@@ -373,6 +374,22 @@ function FuelEntryDrawer({ entry, onClose, onChanged }) {
     return () => { dead = true; };
   }, [entry, rev]);
 
+  // ── Pump entry badlo (Entry Edit, 26 Nov 2026) ──────────────────
+  // Sirf pump wali entry (fuel_purchase) — drum se diya (issue) nahi. Server
+  // batata hai: seedha (admin / Fuel Edit tick / daalne wala samay ke andar),
+  // manzoori se (samay nikal gaya), ya nahi. Jawab na mile to Fuel Edit tick.
+  const [ee, setEe] = useState(null);
+  const [ef, setEf] = useState(null);         // null = byora; object = edit form
+  const [efBusy, setEfBusy] = useState(false);
+  const [efErr, setEfErr] = useState("");
+  useEffect(() => {
+    setEf(null); setEfErr("");
+    if (!entry || entry.kind !== "purchase") { setEe(null); return undefined; }
+    let dead = false;
+    fetchEditMode("fuel_purchase", entry.id).then((m) => { if (!dead) setEe(m); });
+    return () => { dead = true; };
+  }, [entry, rev]);
+
   useEffect(() => {
     if (!entry) return undefined;
     const onKey = (e) => { if (e.key === "Escape") { if (shot) setShot(null); else onClose(); } };
@@ -385,6 +402,54 @@ function FuelEntryDrawer({ entry, onClose, onChanged }) {
   const pill = d && d.payable_status ? (PAYABLE_PILL[d.payable_status] || PAYABLE_PILL.unbilled)() : null;
   const dr = d && d.delete_request;
   const delPending = !!(dr && dr.status === "pending");
+  const isPump = !!(d && d.kind === "purchase");
+  const eeUi = ee ? editUi(ee, t("entry_edit.btn_edit"))
+    : { show: can("Fuel", "edit"), disabled: false, label: t("entry_edit.btn_edit"), hint: "", warn: "", note: "" };
+  // Server ka UTC samay → is browser ka "YYYY-MM-DDTHH:mm" (datetime-local). toISOString nahi — wo UTC deta hai.
+  const localDT = (v) => {
+    if (!v) return "";
+    const x = new Date(v);
+    if (isNaN(x)) return "";
+    const p = (n) => String(n).padStart(2, "0");
+    return `${x.getFullYear()}-${p(x.getMonth() + 1)}-${p(x.getDate())}T${p(x.getHours())}:${p(x.getMinutes())}`;
+  };
+  const efOrig = () => ({
+    litres: d.litres != null ? String(Number(d.litres)) : "", rate: d.rate != null ? String(Number(d.rate)) : "",
+    fuel_type: d.fuel_type || "diesel", slip_no: d.slip_no || "",
+    meter_reading: d.meter_reading != null ? String(Number(d.meter_reading)) : "",
+    filled_at: localDT(d.at), note: d.note || "",
+  });
+  const openEdit = () => { setEfErr(""); setEf(efOrig()); };
+  const saveEdit = async () => {
+    if (!ef || efBusy) return;
+    const L = Number(ef.litres), R = Number(ef.rate);
+    if (!(L > 0) || !(R > 0)) { setEfErr(t("entry_edit.litres_rate_required")); return; }
+    const o = efOrig(), body = {};
+    for (const k of Object.keys(o)) {
+      const v = String(ef[k] ?? "").trim();
+      if (v === String(o[k]).trim()) continue;
+      if (k === "litres" || k === "rate") body[k] = Number(v);
+      else if (k === "meter_reading") body[k] = v === "" ? "" : Number(v);
+      else if (k === "filled_at") { if (!v) continue; body[k] = toSqlDateTime(v); }
+      else body[k] = v;
+    }
+    if (!Object.keys(body).length) { setEfErr(t("entry_edit.no_change")); return; }
+    setEfBusy(true); setEfErr("");
+    const r = await saveWithEditRule((b) => api.put(`/fuel/purchases/${d.id}`, b), body);
+    setEfBusy(false);
+    if (r.cancelled) return;
+    if (!r.success) { setEfErr(r.message || t("entry_edit.save_failed")); return; }
+    const toast = window.toast;
+    if (r.pending) { if (toast?.success) toast.success(r.message || t("entry_edit.sent")); }
+    else {
+      const warn = r.data && r.data.edit_warning;
+      if (warn) { if (toast?.warning) toast.warning(warn); else window.alert(warn); }
+      else if (toast?.success) toast.success(t("entry_edit.saved"));
+      if (onChanged) onChanged();
+    }
+    setEf(null);
+    setRev((x) => x + 1);
+  };
 
   // Delete sirf entry ke andar se, wajah ke saath, aur Multi-Level Approval
   // ("Fuel Entry Delete") se (17 Oct 2026). Manzoor hone tak entry waisi hi;
@@ -465,7 +530,54 @@ function FuelEntryDrawer({ entry, onClose, onChanged }) {
         <div style={{ flex: 1, overflowY: "auto" }}>
           {!d && !fail && <Empty>{t("common.loading")}</Empty>}
           {fail && <div style={{ margin: 18, padding: "10px 12px", background: T.redL, color: T.red, borderRadius: 7, fontSize: 12, fontWeight: 600 }}>{fail}</div>}
-          {d && (
+          {d && ef && (
+            <div data-testid="fuel-edit-form" style={{ padding: "14px 18px" }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: T.t1, marginBottom: 4 }}>{t("entry_edit.fuel_title")}</div>
+              {eeUi.hint && <div style={{ fontSize: 11.5, color: T.t3, marginBottom: 8 }}>{eeUi.hint}</div>}
+              {eeUi.warn && (
+                <div style={{ padding: "7px 10px", background: T.ambL, color: T.amb, borderRadius: 6, fontSize: 11.5, fontWeight: 700, marginBottom: 10 }}>
+                  ⚠ {t("entry_edit.admin_lock", { lock: eeUi.warn })}
+                </div>
+              )}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                <Field label={t("entry_edit.f_litres")}>
+                  <input value={ef.litres} inputMode="decimal" style={inp}
+                    onChange={(e) => { const v = e.target.value.replace(/[^0-9.]/g, ""); setEf((p) => ({ ...p, litres: v })); }} />
+                </Field>
+                <Field label={t("entry_edit.f_rate")}>
+                  <input value={ef.rate} inputMode="decimal" style={inp}
+                    onChange={(e) => { const v = e.target.value.replace(/[^0-9.]/g, ""); setEf((p) => ({ ...p, rate: v })); }} />
+                </Field>
+                <Field label={t("entry_edit.f_amount")} span={2}>
+                  <div style={{ fontSize: 15, fontWeight: 800, color: T.t1 }}>{rsx((Number(ef.litres) || 0) * (Number(ef.rate) || 0))}</div>
+                </Field>
+                <Field label={t("entry_edit.f_fuel_type")}>
+                  <PickSelect value={ef.fuel_type} style={inp} disabled={d.route === "pump_store"}
+                    onChange={(e) => { const v = e.target.value; setEf((p) => ({ ...p, fuel_type: v })); }}>
+                    <option value="diesel">{t("fuel.diesel")}</option>
+                    <option value="petrol">{t("fuel.petrol")}</option>
+                  </PickSelect>
+                </Field>
+                <Field label={t("entry_edit.f_slip_no")}>
+                  <input value={ef.slip_no} style={inp} onChange={(e) => { const v = e.target.value; setEf((p) => ({ ...p, slip_no: v })); }} />
+                </Field>
+                <Field label={t("entry_edit.f_filled_at")} span={d.route === "pump_machine" ? undefined : 2}>
+                  <input type="datetime-local" value={ef.filled_at} style={inp} onChange={(e) => { const v = e.target.value; setEf((p) => ({ ...p, filled_at: v })); }} />
+                </Field>
+                {d.route === "pump_machine" && (
+                  <Field label={t("entry_edit.f_meter")}>
+                    <input value={ef.meter_reading} inputMode="decimal" style={inp}
+                      onChange={(e) => { const v = e.target.value.replace(/[^0-9.]/g, ""); setEf((p) => ({ ...p, meter_reading: v })); }} />
+                  </Field>
+                )}
+                <Field label={t("entry_edit.f_note")} span={2}>
+                  <textarea value={ef.note} rows={2} style={{ ...inp, resize: "vertical" }} onChange={(e) => { const v = e.target.value; setEf((p) => ({ ...p, note: v })); }} />
+                </Field>
+              </div>
+              {efErr && <div style={{ marginTop: 10, padding: "8px 10px", background: T.redL, color: T.red, borderRadius: 6, fontSize: 11.5, fontWeight: 600 }}>{efErr}</div>}
+            </div>
+          )}
+          {d && !ef && (
             <>
               <div style={{ padding: "14px 18px", borderBottom: `1px solid ${T.b1}` }}>
                 <div style={{ fontSize: 22, fontWeight: 800, color: T.t1 }}>{rsx(d.amount)}</div>
@@ -606,7 +718,28 @@ function FuelEntryDrawer({ entry, onClose, onChanged }) {
           )}
         </div>
 
-        {d && (delPending || can("Fuel", "delete")) && (
+        {isPump && (ef || eeUi.show || eeUi.note) && (
+          <div data-testid="fuel-edit-bar" style={{ padding: "10px 18px", borderTop: `1px solid ${T.b1}`, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            {ef ? (
+              <>
+                <div style={{ flex: 1 }} />
+                <Btn size="sm" ghost disabled={efBusy} onClick={() => { setEf(null); setEfErr(""); }}>{t("common.cancel")}</Btn>
+                <Btn size="sm" disabled={efBusy} onClick={saveEdit}>
+                  {efBusy ? t("common.saving") : (ee && ee.mode === "request" ? t("entry_edit.send_approval") : t("common.save"))}
+                </Btn>
+              </>
+            ) : (
+              <>
+                {(eeUi.hint || eeUi.note) && (
+                  <div style={{ flex: "1 1 200px", fontSize: 11.5, lineHeight: 1.45, color: eeUi.disabled ? T.amb : T.t3, fontWeight: eeUi.disabled ? 700 : 400 }}>{eeUi.hint || eeUi.note}</div>
+                )}
+                {eeUi.show && <Btn size="sm" ghost disabled={eeUi.disabled} onClick={openEdit}>{eeUi.label}</Btn>}
+              </>
+            )}
+          </div>
+        )}
+
+        {d && !ef && (delPending || can("Fuel", "delete")) && (
           <div style={{ padding: "10px 18px", borderTop: `1px solid ${T.b1}` }}>
             {delPending ? (
               <div style={{ padding: "8px 10px", background: T.ambL, color: T.amb, borderRadius: 6, fontSize: 11.5, fontWeight: 700 }}>
@@ -4301,3 +4434,5 @@ function FuelModule() {
 export default FuelModule;
 // Test ke liye (Cross-check machine wise + flags: FuelModule.tracking.test.js)
 export { CrossCheckTab, MachineWiseView, FlagsReportView };
+// Test ke liye (Entry Edit — pump entry badlo: EntryEdit.surfaces.test.js)
+export { FuelEntryDrawer };

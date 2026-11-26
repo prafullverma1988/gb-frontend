@@ -37,6 +37,7 @@ import { loadPhotoPolicy, policyFor, fileInputProps } from "../utils/photoPolicy
 import { cld } from "../utils/cloudinary";
 import { can, canAny, canEntry } from "../utils/perms";
 import { darjRowSuffix, darjWhen } from "../utils/darjTime";
+import { fetchEditMode, editUi, saveWithEditRule } from "../utils/entryEdit";
 
 // ── ICONS ─────────────────────────────────────────────────────────
 const Ic = ({ d, size = 18, color = "currentColor", sw = 1.8, fill = "none" }) => (
@@ -2529,6 +2530,52 @@ function VoucherDrawer({ id, me, onClose, onChanged }) {
   }, [id]);
   useEffect(() => { setV(null); setMode(null); setError(""); setReason(""); load(); }, [load]);
 
+  // ── Voucher ki upar ki jaankari badlo (Entry Edit, 26 Nov 2026) ──
+  // Sirf tareekh / remark / wapsi ki tareekh / invoice / repair ka kharch —
+  // item, matra, jagah nahi (server bhi nahi leta). Button server ke niyam se
+  // (GET /entry-edit/mode); jawab na mile to Assets Edit tick.
+  const [ee, setEe] = useState(null);
+  const [eeRev, setEeRev] = useState(0);
+  const [vf, setVf] = useState({});
+  useEffect(() => {
+    let dead = false;
+    fetchEditMode("asset_voucher", id).then((m) => { if (!dead) setEe(m); });
+    return () => { dead = true; };
+  }, [id, eeRev]);
+  const eeUi = ee ? editUi(ee, t("entry_edit.btn_edit"))
+    : { show: can("Assets", "edit"), disabled: false, label: t("entry_edit.btn_edit"), hint: "", warn: "", note: "" };
+  const vEditable = !!(v && !["cancelled", "rejected"].includes(v.status));
+  const showRet = !!(v && (["issue", "transfer"].includes(v.type) || v.expected_return_date));
+  const showInv = !!(v && (v.type === "grn" || isRepairType(v.type)));
+  const vfOrig = () => ({
+    date: isoDate(v.date), remarks: v.remarks || "",
+    ...(showRet ? { expected_return_date: isoDate(v.expected_return_date) } : {}),
+    ...(showInv ? { invoice_no: v.invoice_no || "" } : {}),
+    ...(v.type === "grn" ? { invoice_date: isoDate(v.invoice_date) } : {}),
+    ...(isRepairType(v.type) ? { repair_cost: v.repair_cost == null ? "" : String(Number(v.repair_cost)) } : {}),
+  });
+  const startEdit = () => { setVf(vfOrig()); setMode("edit"); setError(""); };
+  const doEdit = async () => {
+    setError("");
+    if (!vf.date) { setError(t("entry_edit.date_required")); return; }
+    const o = vfOrig(), body = {};
+    for (const k of Object.keys(o)) {
+      const val = String(vf[k] ?? "").trim();
+      if (val === String(o[k]).trim()) continue;
+      body[k] = k === "repair_cost" ? (val === "" ? "" : Number(val)) : val;
+    }
+    if (!Object.keys(body).length) { setError(t("entry_edit.no_change")); return; }
+    setBusy(true);
+    const r = await saveWithEditRule((b) => api.put(`/assets/vouchers/${v.id}`, b), body);
+    setBusy(false);
+    if (r.cancelled) return;
+    if (!r.success) { setError(r.message || t("entry_edit.save_failed")); return; }
+    if (r.pending) toast.success(r.message || t("entry_edit.sent"));
+    else { toast.success(r.message || t("entry_edit.saved")); load(); onChanged(); }
+    setMode(null);
+    setEeRev((x) => x + 1);
+  };
+
   const startAccept = () => {
     const m = {};
     for (const ln of v.items || []) m[ln.id] = { accepted_qty: String(ln.qty), accepted_condition: ln.item_condition || "good", remarks: "", photo_url: "" };
@@ -2594,9 +2641,11 @@ function VoucherDrawer({ id, me, onClose, onChanged }) {
   const footer = !v ? <Btn ghost onClick={onClose}>{t("assets.close")}</Btn>
     : mode === "accept" ? <><Btn ghost onClick={() => setMode(null)}>{t("assets.back")}</Btn><Btn c={T.grn} icon={IcChk} onClick={doAccept} disabled={busy}>{busy ? t("assets.working") : t("assets.accept_confirm")}</Btn></>
     : mode === "reject" ? <><Btn ghost onClick={() => setMode(null)}>{t("assets.back")}</Btn><Btn c={T.red} onClick={doReject} disabled={busy}>{busy ? t("assets.working") : t("assets.reject_confirm")}</Btn></>
+    : mode === "edit" ? <><Btn ghost onClick={() => { setMode(null); setError(""); }} disabled={busy}>{t("assets.back")}</Btn><Btn onClick={doEdit} disabled={busy}>{busy ? t("assets.working") : (ee && ee.mode === "request" ? t("entry_edit.send_approval") : t("common.save"))}</Btn></>
     : <>
         <Btn ghost onClick={onClose}>{t("assets.close")}</Btn>
         <Btn ghost icon={IcDoc} onClick={doChallan}>{t("assets.challan")}</Btn>
+        {vEditable && eeUi.show && <Btn ghost onClick={startEdit} disabled={eeUi.disabled || busy} title={eeUi.hint || undefined}>{eeUi.label}</Btn>}
         {v.can_cancel && <Btn ghost onClick={doCancel} disabled={busy} style={{ color: T.red }}>{t("assets.cancel_voucher")}</Btn>}
         {v.can_accept && <Btn c={T.red} ghost onClick={() => { setMode("reject"); setError(""); }} style={{ color: T.red, borderColor: "#F1C2C6" }}>{t("assets.reject")}</Btn>}
         {v.can_accept && <Btn c={T.grn} icon={IcChk} onClick={startAccept}>{t("assets.accept")}</Btn>}
@@ -2632,7 +2681,46 @@ function VoucherDrawer({ id, me, onClose, onChanged }) {
             </div>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, marginBottom: 14 }}>
+          {vEditable && !mode && (eeUi.hint || eeUi.note) && (
+            <div data-testid="voucher-edit-note" style={{ fontSize: 11.5, lineHeight: 1.45, marginBottom: 12, color: eeUi.disabled ? "#7A5306" : T.t3, fontWeight: eeUi.disabled ? 700 : 400 }}>{eeUi.hint || eeUi.note}</div>
+          )}
+          {mode === "edit" && (
+            <div data-testid="voucher-edit-form" style={{ border: `1px solid ${T.b1}`, borderRadius: 10, padding: "12px 14px", marginBottom: 14 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: T.t1, marginBottom: 4 }}>{t("entry_edit.voucher_title")}</div>
+              <div style={{ fontSize: 11.5, color: T.t3, marginBottom: 10 }}>{eeUi.hint ? eeUi.hint + " · " : ""}{t("entry_edit.voucher_hint")}</div>
+              {eeUi.warn && <Notice tone="warn">⚠ {t("entry_edit.admin_lock", { lock: eeUi.warn })}</Notice>}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10 }}>
+                <Field label={t("assets.date")}>
+                  <input type="date" value={vf.date || ""} style={inp} onChange={(e) => { const x = e.target.value; setVf((p) => ({ ...p, date: x })); }} />
+                </Field>
+                {showRet && (
+                  <Field label={t("assets.expected_return")}>
+                    <input type="date" value={vf.expected_return_date || ""} style={inp} onChange={(e) => { const x = e.target.value; setVf((p) => ({ ...p, expected_return_date: x })); }} />
+                  </Field>
+                )}
+                {showInv && (
+                  <Field label={t("assets.invoice_no")}>
+                    <input value={vf.invoice_no || ""} style={inp} onChange={(e) => { const x = e.target.value; setVf((p) => ({ ...p, invoice_no: x })); }} />
+                  </Field>
+                )}
+                {v.type === "grn" && (
+                  <Field label={t("assets.invoice_date")}>
+                    <input type="date" value={vf.invoice_date || ""} style={inp} onChange={(e) => { const x = e.target.value; setVf((p) => ({ ...p, invoice_date: x })); }} />
+                  </Field>
+                )}
+                {isRepairType(v.type) && (
+                  <Field label={t("assets.repair_cost")}>
+                    <input value={vf.repair_cost || ""} inputMode="decimal" style={inp} onChange={(e) => { const x = e.target.value.replace(/[^0-9.]/g, ""); setVf((p) => ({ ...p, repair_cost: x })); }} />
+                  </Field>
+                )}
+                <Field label={t("assets.remarks")} span={2}>
+                  <textarea value={vf.remarks || ""} style={{ ...inp, minHeight: 60, resize: "vertical" }} onChange={(e) => { const x = e.target.value; setVf((p) => ({ ...p, remarks: x })); }} />
+                </Field>
+              </div>
+            </div>
+          )}
+
+          {mode !== "edit" && <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, marginBottom: 14 }}>
             {darjWhen(v.created_at) && <KV k={t("darj.tag").charAt(0).toUpperCase() + t("darj.tag").slice(1)} v={darjWhen(v.created_at) + (v.created_by_name ? " — " + v.created_by_name : "")} />}
             {v.type === "grn" && <KV k={t("assets.vendor")} v={v.vendor_name} />}
             {v.type === "grn" && <KV k={t("assets.invoice")} v={[v.invoice_no, v.invoice_date ? fmtD(v.invoice_date) : null].filter(Boolean).join(" · ")} />}
@@ -2642,7 +2730,7 @@ function VoucherDrawer({ id, me, onClose, onChanged }) {
             {v.accepted_at && <KV k={t("assets.accepted_at")} v={fmtD(v.accepted_at)} />}
             <KV k={t("assets.remarks")} v={v.remarks} />
             {v.photo_url && !(v.type === "grn" && (v.grn_photos || []).length) && !(v.type !== "grn" && ((v.photos || []).length > 1 || N(v.photos_pending) > 0)) && <KV k={t("assets.photo")} v={<a href={v.photo_url} target="_blank" rel="noreferrer" style={{ color: T.ind }}>{t("assets.photo_view")}</a>} />}
-          </div>
+          </div>}
 
           <Panel title={t("assets.lines")}>
             <Scroll minWidth={mode === "accept" ? (photoCol ? 780 : 640) : 520}>
@@ -5481,3 +5569,5 @@ function AssetsModule({ deepLink, onDeepLinkDone }) {
 }
 
 export default AssetsModule;
+// Test ke liye (Entry Edit — voucher badlo: EntryEdit.surfaces.test.js)
+export { VoucherDrawer };

@@ -12,6 +12,7 @@ import { t } from "../i18n";
 import { companyName } from "../utils/companyName";
 import { todayISO, isoDate } from "../utils/today";
 import { can, currentUser } from "../utils/perms";
+import { fetchEditMode, editUi, saveWithEditRule } from "../utils/entryEdit";
 import uploadManager from "../utils/uploadManager";
 import ConvertFinalQuote from "./crm/ConvertFinalQuote";
 import { cld } from "../utils/cloudinary";
@@ -572,6 +573,40 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab,
       setBqEdit(null);
     } finally { setBqSaving(false); }
   };
+  // ── Lead ki jaankari badlo (Entry Edit, 26 Nov 2026) ──────────────
+  // Button server ke niyam se (GET /entry-edit/mode): CRM Edit tick / admin =
+  // seedha; lead banane wala samay ke andar seedha, baad me manzoori se.
+  // Server jawab na de to purana niyam (CRM Edit tick). Stage / assign jaise the.
+  const [ee,setEe]=useState(null);
+  const [eeRev,setEeRev]=useState(0);
+  const [leForm,setLeForm]=useState(null);   // null = dekhna; object = form khula
+  const [leSaving,setLeSaving]=useState(false);
+  const [leErr,setLeErr]=useState("");
+  useEffect(()=>{
+    let dead=false;
+    fetchEditMode("crm_lead",lead.id).then(m=>{ if(!dead) setEe(m); });
+    return ()=>{ dead=true; };
+  },[lead.id,eeRev]);
+  const eeUi=ee?editUi(ee,t("entry_edit.btn_edit")):{show:can("CRM","edit"),disabled:false,label:t("entry_edit.btn_edit"),hint:"",warn:"",note:""};
+  const leOrig=()=>({
+    name:lead.name||"", phone:lead.phone||"", email:lead.email||"",
+    budget:lead.budgetLabel||(Number(lead.budget)?String(lead.budget):""),
+    source:lead.source||"", referredBy:lead.referred_by||lead.referredBy||"", notes:lead.notes||"",
+  });
+  const openLeadEdit=()=>{ setLeErr(""); setLeForm(leOrig()); };
+  const saveLeadEdit=async()=>{
+    if(!leForm||leSaving) return;
+    if(!leForm.name.trim()||!leForm.phone.trim()){ setLeErr(t("crm.name_aur_phone_required")); return; }
+    const o=leOrig(), body={};
+    Object.keys(o).forEach(k=>{ const v=String(leForm[k]??"").trim(); if(v!==String(o[k]).trim()) body[k]=v; });
+    if(!Object.keys(body).length){ setLeErr(t("entry_edit.no_change")); return; }
+    setLeSaving(true); setLeErr("");
+    const r=await onUpdate(lead.id,body);
+    setLeSaving(false);
+    if(r===false) return;
+    setLeForm(null);
+    setEeRev(x=>x+1);
+  };
   const stage=STAGES.find(s=>s.id===lead.stage);
   const ps=PRIO_S[lead.priority]||PRIO_S["Medium"];
   const diff=daysDiff(lead.contactDate);
@@ -900,6 +935,57 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab,
         {/* OVERVIEW */}
         {tab==="overview"&&(
           <div>
+            {/* Lead ki jaankari badlo — server ka niyam (Entry Edit) */}
+            {!leForm&&(eeUi.show||eeUi.hint||eeUi.note)&&(
+              <div data-testid="lead-edit-bar" style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",marginBottom:10}}>
+                <div style={{flex:"1 1 200px",fontSize:11.5,color:eeUi.disabled?T.amb:T.t3,fontWeight:eeUi.disabled?600:400,lineHeight:1.45}}>{eeUi.hint||eeUi.note}</div>
+                {eeUi.show&&(
+                  <button onClick={openLeadEdit} disabled={eeUi.disabled}
+                    style={{padding:"7px 14px",borderRadius:7,background:eeUi.disabled?T.b1:T.surface,border:`1.5px solid ${eeUi.disabled?T.b1:T.blu}`,color:eeUi.disabled?T.t4:T.blu,fontSize:12,fontWeight:700,cursor:eeUi.disabled?"not-allowed":"pointer",fontFamily:"inherit"}}>
+                    {eeUi.label}
+                  </button>
+                )}
+              </div>
+            )}
+            {leForm&&(
+              <div data-testid="lead-edit-form" style={{padding:"12px 14px",background:T.surface,border:`1px solid ${T.b1}`,borderLeft:`3px solid ${T.blu}`,borderRadius:8,marginBottom:14}}>
+                <div style={{fontSize:12.5,fontWeight:700,color:T.t1,marginBottom:4}}>{t("entry_edit.lead_title")}</div>
+                {eeUi.hint&&<div style={{fontSize:11.5,color:T.t3,marginBottom:8}}>{eeUi.hint}</div>}
+                {eeUi.warn&&<div style={{padding:"7px 10px",background:T.ambL,border:`1px solid ${T.ambM}`,borderRadius:6,fontSize:11.5,color:T.amb,fontWeight:600,marginBottom:8}}>⚠ {t("entry_edit.admin_lock",{lock:eeUi.warn})}</div>}
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                  {[
+                    {k:"name",l:t("crm.full_name"),col:2},
+                    {k:"phone",l:t("crm.phone")},
+                    {k:"email",l:t("common.email")},
+                    {k:"budget",l:t("crm.budget"),ph:t("entry_edit.f_budget_ph")},
+                    {k:"source",l:t("crm.lead_source"),opts:SOURCES},
+                    {k:"referredBy",l:t("entry_edit.f_referred_by"),col:2},
+                  ].map(f=>(
+                    <div key={f.k} style={{gridColumn:f.col?`span ${f.col}`:undefined,minWidth:0}}>
+                      <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>{f.l}</label>
+                      {f.opts
+                        ?<SearchSelect value={leForm[f.k]} options={f.opts} onChange={v=>setLeForm(p=>({...p,[f.k]:v}))} placeholder={f.l}/>
+                        :<input value={leForm[f.k]} placeholder={f.ph||""} onChange={e=>{const v=e.target.value;setLeForm(p=>({...p,[f.k]:v}));}}
+                          style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>}
+                    </div>
+                  ))}
+                  <div style={{gridColumn:"span 2"}}>
+                    <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>{t("common.notes")}</label>
+                    <textarea value={leForm.notes} rows={3} onChange={e=>{const v=e.target.value;setLeForm(p=>({...p,notes:v}));}}
+                      style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",resize:"vertical"}}/>
+                  </div>
+                </div>
+                {leErr&&<div style={{marginTop:8,padding:"7px 10px",background:T.redL,border:`1px solid ${T.redM}`,borderRadius:6,fontSize:11.5,color:T.red,fontWeight:600}}>{leErr}</div>}
+                <div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:12}}>
+                  <button onClick={()=>{setLeForm(null);setLeErr("");}} disabled={leSaving}
+                    style={{padding:"8px 14px",borderRadius:7,background:T.surface,border:`1px solid ${T.b1}`,color:T.t3,fontSize:12,fontWeight:600,cursor:leSaving?"not-allowed":"pointer",fontFamily:"inherit"}}>{t("common.cancel")}</button>
+                  <button onClick={saveLeadEdit} disabled={leSaving}
+                    style={{padding:"8px 16px",borderRadius:7,background:leSaving?T.b2:T.blu,border:"none",color:"white",fontSize:12,fontWeight:700,cursor:leSaving?"not-allowed":"pointer",fontFamily:"inherit"}}>
+                    {leSaving?t("common.saving"):(ee&&ee.mode==="request"?t("entry_edit.send_approval"):t("common.save"))}
+                  </button>
+                </div>
+              </div>
+            )}
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
               {[{l:t("common.source"),v:lead.source},{l:t("crm.project_type"),v:lead.projType},{l:t("common.budget"),v:budTxt(lead)||`₹${fmtN(lead.budget)}`},{l:t("common.city"),v:lead.city},{l:t("common.email"),v:lead.email||"—"},{l:t("common.assigned_to"),v:lead.assignedTo},{l:t("common.created"),v:lead.createdAt},{l:t("crm.last_contact"),v:lead.followupHistory?.[lead.followupHistory.length-1]?.date||"—"}].map(({l,v})=>(
                 <div key={l} style={{padding:"8px 11px",background:T.surface,borderRadius:7,border:`1px solid ${T.b1}`}}>
@@ -4687,17 +4773,27 @@ function CRMModule({onOpenProject}={}){
     // below replaces them with authoritative server values + joined names.
     setLeads(p=>p.map(l=>l.id===id?{...l,...update}:l));
     setSelLead(p=>p&&p.id===id?{...p,...update}:p);
+    const undo=()=>{
+      if(!prev) return;
+      const back=Object.fromEntries(Object.keys(update).map(k=>[k,prev[k]]));
+      setLeads(p=>p.map(l=>l.id===id?{...l,...back}:l));
+      setSelLead(p=>p&&p.id===id?{...p,...back}:p);
+    };
     try{
-      const r=await api.patch("/crm/leads/"+id,update);
+      // Entry Edit (26 Nov 2026): samay ke baad apni lead ka badlav — server
+      // wajah maange (428) to poochh kar dobara; manzoori me gaya to lead
+      // abhi nahi badli, isliye screen bhi wapas.
+      const r=await saveWithEditRule(b=>api.patch("/crm/leads/"+id,b),update);
+      if(r.pending){
+        undo();
+        if(window.toast?.success) window.toast.success(r.message||t("entry_edit.sent")); else alert(r.message||t("entry_edit.sent"));
+        return "pending";
+      }
       // api client throw nahi karta — {success:false} par badlav wapas lo aur
       // wajah dikhao. Pehle card chupchaap laut jaata tha, koi sandesh nahi (CRM-07).
       if(!r?.success){
-        if(prev){
-          const back=Object.fromEntries(Object.keys(update).map(k=>[k,prev[k]]));
-          setLeads(p=>p.map(l=>l.id===id?{...l,...back}:l));
-          setSelLead(p=>p&&p.id===id?{...p,...back}:p);
-        }
-        alert(r?.message||t("crm.error_saving_lead"));
+        undo();
+        if(!r.cancelled) alert(r?.message||t("crm.error_saving_lead"));
         return false;
       }
       // Re-fetch authoritative state (with joined city_name +
@@ -4708,8 +4804,11 @@ function CRMModule({onOpenProject}={}){
       try {
         const fresh = await api.get("/crm/leads/" + id);
         if (fresh?.success && fresh.data) {
-          setLeads(p=>p.map(l=>l.id===id?{...l,...fresh.data}:l));
-          setSelLead(p=>p&&p.id===id?{...p,...fresh.data}:p);
+          // List jaisa hi roop — budget number + "20-30L" label (lead edit ke baad purana label na dikhe)
+          const fd={...fresh.data};
+          if(fd.budget!==undefined){ fd.budget=Number(fd.budget)||0; fd.budgetLabel=fd.budget_label||null; }
+          setLeads(p=>p.map(l=>l.id===id?{...l,...fd}:l));
+          setSelLead(p=>p&&p.id===id?{...p,...fd}:p);
         }
       } catch(_) {}
       // Stage change prompts (non-blocking — stage already changed)
