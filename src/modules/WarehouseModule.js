@@ -21,6 +21,7 @@ import { UnitPickOrLock, StockConvLine, cardUnitOptions, useUnitCards, stockQtyO
 import SiteStockLine, { useSiteStock, siteStockKey } from "../components/SiteStockLine";
 import { receiveWithSiteUnit } from "../utils/siteUnitAsk";
 import { darjRowSuffix, darjDetailLine } from "../utils/darjTime";
+import { fetchEditMode, editUi, saveWithEditRule } from "../utils/entryEdit";
 
 // ── ICONS ──────────────────────────────────────────────────────────────
 const Ic=({d,size=18,color="currentColor",sw=1.8,fill="none"})=>(
@@ -2705,8 +2706,91 @@ function GrnTab({grns,onNew,onVerify}){
   );
 }
 
+// ── UPAR KI JAANKARI BADLO (Entry Edit Phase 2, 26 Nov 2026) ─────────
+// Store ki GRN / issue / transfer: sirf tareekh, vendor / PO, remark, kisko /
+// driver. Matra / material / jagah nahi (stock aur zimmedari hilti hai) — wo
+// badalna ho to cancel karke dobara. Button server ke niyam se (GET
+// /entry-edit/mode): Store Edit tick / admin seedha, banane wala samay ke andar
+// seedha, baad me manzoori se. Jawab na mile to Store Edit tick.
+// fields: [{k, label, type: "date" | "text" | "tel" | "area"}]; values = abhi ki value.
+const ymdOf=(v)=>(v?String(v).slice(0,10):"");
+function StoreInfoEdit({entity,id,url,fields,values,cancelled,onSaved}){
+  const [ee,setEe]=useState(null);
+  const [rev,setRev]=useState(0);
+  const [form,setForm]=useState(null);
+  const [busy,setBusy]=useState(false);
+  const [err,setErr]=useState("");
+  useEffect(()=>{
+    setForm(null); setErr("");
+    if(!id||cancelled){ setEe(null); return undefined; }
+    let dead=false;
+    fetchEditMode(entity,id).then(m=>{ if(!dead) setEe(m); });
+    return ()=>{ dead=true; };
+  },[entity,id,rev,cancelled]);
+  if(cancelled) return null;
+  const ui=ee?editUi(ee,t("entry_edit.btn_edit")):{show:can("Warehouse","edit"),disabled:false,label:t("entry_edit.btn_edit"),hint:"",warn:"",note:""};
+  if(!form&&!ui.show&&!ui.hint&&!ui.note) return null;
+  const orig=()=>Object.fromEntries(fields.map(f=>[f.k,f.type==="date"?ymdOf(values[f.k]):(values[f.k]==null?"":String(values[f.k]))]));
+  const save=async()=>{
+    if(busy) return;
+    setErr("");
+    const o=orig(),body={};
+    for(const f of fields){ const v=String(form[f.k]??"").trim(); if(v!==String(o[f.k]).trim()) body[f.k]=v; }
+    if(body.date!==undefined&&!body.date){ setErr(t("entry_edit.date_required")); return; }
+    if(!Object.keys(body).length){ setErr(t("entry_edit.no_change")); return; }
+    setBusy(true);
+    const r=await saveWithEditRule(b=>api.put(url,b),body);
+    setBusy(false);
+    if(r.cancelled) return;
+    if(!r.success){ setErr(r.message||t("entry_edit.save_failed")); return; }
+    const toast=window.toast;
+    if(r.pending){ if(toast?.success) toast.success(r.message||t("entry_edit.sent")); else alert(r.message||t("entry_edit.sent")); }
+    else { if(toast?.success) toast.success(r.message||t("entry_edit.saved")); onSaved&&onSaved(r.data||null); }
+    setForm(null); setRev(x=>x+1);
+  };
+  const lbl={fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4};
+  if(!form) return (
+    <div data-testid="store-info-bar" style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",marginBottom:12}}>
+      <div style={{flex:"1 1 200px",fontSize:11.5,lineHeight:1.45,color:ui.disabled?T.amb:T.t3,fontWeight:ui.disabled?700:400}}>{ui.hint||ui.note}</div>
+      {ui.show&&(
+        <button onClick={()=>{ setErr(""); setForm(orig()); }} disabled={ui.disabled}
+          style={{padding:"7px 13px",borderRadius:7,background:T.surface,border:`1.5px solid ${ui.disabled?T.b1:T.blu}`,color:ui.disabled?T.t4:T.blu,fontSize:12,fontWeight:700,cursor:ui.disabled?"not-allowed":"pointer",fontFamily:"inherit"}}>
+          {ui.label}
+        </button>
+      )}
+    </div>
+  );
+  return (
+    <div data-testid="store-info-form" style={{padding:"12px 14px",background:T.surface,border:`1px solid ${T.b1}`,borderLeft:`3px solid ${T.blu}`,borderRadius:8,marginBottom:14}}>
+      <div style={{fontSize:12.5,fontWeight:700,color:T.t1,marginBottom:3}}>{t("entry_edit.store_title")}</div>
+      <div style={{fontSize:11.5,color:T.t3,marginBottom:10,lineHeight:1.45}}>{ui.hint?ui.hint+" · ":""}{t("entry_edit.store_hint")}</div>
+      {ui.warn&&<div style={{padding:"7px 10px",background:T.ambL,border:`1px solid ${T.ambM}`,borderRadius:6,fontSize:11.5,color:T.amb,fontWeight:600,marginBottom:10}}>⚠ {t("entry_edit.admin_lock",{lock:ui.warn})}</div>}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+        {fields.map(f=>(
+          <div key={f.k} style={{gridColumn:f.type==="area"?"span 2":undefined,minWidth:0}}>
+            <label style={lbl}>{f.label}</label>
+            {f.type==="area"
+              ?<textarea value={form[f.k]} rows={2} onChange={e=>{const v=e.target.value;setForm(p=>({...p,[f.k]:v}));}}
+                  style={{width:"100%",padding:"8px 11px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",resize:"vertical"}}/>
+              :<Input type={f.type||"text"} value={form[f.k]} onChange={e=>{const v=e.target.value;setForm(p=>({...p,[f.k]:v}));}}/>}
+          </div>
+        ))}
+      </div>
+      {err&&<div style={{marginTop:8,padding:"7px 10px",background:T.redL,border:`1px solid ${T.redM}`,borderRadius:6,fontSize:11.5,color:T.red,fontWeight:600}}>{err}</div>}
+      <div style={{display:"flex",justifyContent:"flex-end",gap:8,marginTop:12}}>
+        <GhostBtn onClick={()=>{ if(!busy){ setForm(null); setErr(""); } }}>{t("common.cancel")}</GhostBtn>
+        <Btn size="sm" onClick={save} disabled={busy}>{busy?t("common.saving"):(ee&&ee.mode==="request"?t("entry_edit.send_approval"):t("common.save"))}</Btn>
+      </div>
+    </div>
+  );
+}
+
 // ── GRN DETAIL DRAWER ─────────────────────────────────────────────
-function GRNDetailDrawer({grn,onClose,onVerify}){
+function GRNDetailDrawer({grn:grnIn,onClose,onVerify}){
+  // Upar ki jaankari badalne ke baad (StoreInfoEdit) wahi drawer naya dikhaye.
+  const [over,setOver]=useState({});
+  useEffect(()=>{ setOver({}); },[grnIn.dbId]);
+  const grn={...grnIn,...over};
   const STATUS_S={"Verified":{c:T.grn,bg:T.grnL,brd:T.grnM},"Partial":{c:T.amb,bg:T.ambL,brd:T.ambM},"Pending":{c:T.slt,bg:T.sltL,brd:T.b2},"Cancelled":{c:T.red,bg:T.redL,brd:T.red}};
   const ss=STATUS_S[grn.status]||STATUS_S["Pending"];
   const isReturn=grn.source==="Return";
@@ -2746,6 +2830,14 @@ function GRNDetailDrawer({grn,onClose,onVerify}){
           </div>
 
           <DarjLine at={grn.created_at} by={grn.created_by_name} style={{marginBottom:10}}/>
+          <StoreInfoEdit entity="wh_grn" id={grn.dbId} url={`/warehouse/grn/${grn.dbId}/info`} cancelled={!!grn.cancelled_at}
+            fields={[
+              {k:"date",label:t("common.date"),type:"date"},
+              ...(isReturn?[]:[{k:"vendor",label:t("common.vendor")},{k:"po_no",label:t("warehouse.po_no")}]),
+              {k:"remark",label:t("common.remark"),type:"area"},
+            ]}
+            values={{date:grn._biz,vendor:grn.vendor==="—"?"":grn.vendor,po_no:grn.poNo==="—"?"":grn.poNo,remark:grn.remark||""}}
+            onSaved={(d)=>{ if(d) setOver({_biz:d.date,date:fmtDate(d.date),vendor:d.vendor||"—",poNo:d.po_no||"—",remark:d.remark||""}); }}/>
           {/* Meta grid */}
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
             <div style={{padding:"9px 11px",background:T.surfaceB,borderRadius:7,border:`1px solid ${T.b1}`}}>
@@ -3135,6 +3227,17 @@ function IssueDetailDrawer({issue,onClose,canCancel,canReceive,onDeleted,onRecei
               </div>
             )}
             <DarjLine at={detail?.created_at} by={detail?.created_by_name} style={{marginBottom:10}}/>
+            {/* "Kisko diya" sirf tab jab wo naam likha gaya ho — user id (team ka aadmi) yahan nahi badalta */}
+            <StoreInfoEdit entity="wh_issue" id={detail?.dbId} url={`/warehouse/issues/${detail?.dbId}/info`} cancelled={isCancelled}
+              fields={[
+                {k:"date",label:t("common.date"),type:"date"},
+                ...(detail?.issued_to&&!/^\d+$/.test(String(detail.issued_to))?[{k:"issued_to",label:t("entry_edit.f_issued_to")},{k:"issued_to_phone",label:t("entry_edit.f_issued_to_phone"),type:"tel"}]:[]),
+                {k:"driver_name",label:t("entry_edit.f_driver_name")},
+                {k:"driver_phone",label:t("entry_edit.f_driver_phone"),type:"tel"},
+                {k:"remarks",label:t("common.remark"),type:"area"},
+              ]}
+              values={{date:detail?._biz,issued_to:detail?.issued_to,issued_to_phone:detail?.issued_to_phone,driver_name:detail?.driver_name,driver_phone:detail?.driver_phone,remarks:detail?.remarks}}
+              onSaved={()=>{ setReload(x=>x+1); onReceived&&onReceived(); }}/>
 
             <div style={{padding:"14px 16px",background:`linear-gradient(135deg, ${T.ambL} 0%, ${T.bluL} 100%)`,borderRadius:10,border:`1px solid ${T.ambM}`,marginBottom:14}}>
               <div style={{display:"grid",gridTemplateColumns:"1fr auto 1fr",gap:14,alignItems:"center"}}>
@@ -3802,6 +3905,7 @@ export function TransferDetailDrawer({transfer,onClose,canDelete,canReceive,onDe
   // (10 Oct 2026, E). Store me receive par GRN nahi banti: rok wahi lagti hai,
   // photo kahin judti nahi (server pehle bhi aisa hi tha).
   const phRef=useRef(null);
+  const [infoRev,setInfoRev]=useState(0);   // upar ki jaankari badli (StoreInfoEdit) → dobara laao
 
   useEffect(()=>{
     if(!transfer?.dbId)return;
@@ -3814,7 +3918,7 @@ export function TransferDetailDrawer({transfer,onClose,canDelete,canReceive,onDe
       }
       setLoading(false);
     }).catch(()=>setLoading(false));
-  },[transfer?.dbId]);
+  },[transfer?.dbId,infoRev]);
 
   const handleDelete=async()=>{
     // (MAT-17) Ab server store wale sire bhi ulte karta hai — text wahi bataye jo sach me hota hai.
@@ -3921,6 +4025,16 @@ export function TransferDetailDrawer({transfer,onClose,canDelete,canReceive,onDe
             </div>
 
             <DarjLine at={detail?.created_at} by={detail?.created_by_name} style={{marginBottom:10}}/>
+            <StoreInfoEdit entity="wh_transfer" id={detail?.dbId} url={`/warehouse/transfers/${detail?.dbId}/info`}
+              cancelled={!!detail?.cancelled_at||detail?.status==="Cancelled"}
+              fields={[
+                {k:"date",label:t("common.date"),type:"date"},
+                {k:"driver_name",label:t("entry_edit.f_driver_name")},
+                {k:"driver_phone",label:t("entry_edit.f_driver_phone"),type:"tel"},
+                {k:"notes",label:t("common.notes"),type:"area"},
+              ]}
+              values={{date:detail?._biz,driver_name:detail?.driver_name,driver_phone:detail?.driver_phone,notes:detail?.notes}}
+              onSaved={()=>{ setInfoRev(x=>x+1); onReceived&&onReceived(); }}/>
             {/* Meta grid */}
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:14}}>
               <div style={{padding:"9px 11px",background:T.surfaceB,borderRadius:7,border:`1px solid ${T.b1}`}}>

@@ -17994,6 +17994,13 @@ const dict = {
   "entry_edit.notes_title": "क्या बदलना है",
   "entry_edit.litres_rate_required": "लीटर और रेट 0 से ज़्यादा चाहिए",
   "entry_edit.date_required": "तारीख दो",
+  "entry_edit.request_hint_approved": "ये एंट्री मंज़ूर हो चुकी — बदलाव मंज़ूरी के लिए जाएगा",
+  "entry_edit.store_title": "जानकारी बदलो",
+  "entry_edit.store_hint": "मात्रा / जगह बदलनी हो तो कैंसल करके दोबारा बनाओ",
+  "entry_edit.f_issued_to": "किसको दिया",
+  "entry_edit.f_issued_to_phone": "उनका फ़ोन",
+  "entry_edit.f_driver_name": "ड्राइवर",
+  "entry_edit.f_driver_phone": "ड्राइवर का फ़ोन",
 };
 
 export default dict;

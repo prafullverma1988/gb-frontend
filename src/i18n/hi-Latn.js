@@ -17997,6 +17997,13 @@ const dict = {
   "entry_edit.notes_title": "Kya badalna hai",
   "entry_edit.litres_rate_required": "Litre aur rate 0 se zyada chahiye",
   "entry_edit.date_required": "Tareekh do",
+  "entry_edit.request_hint_approved": "Ye entry manzoor ho chuki — badlav manzoori ke liye jaayega",
+  "entry_edit.store_title": "Jaankari badlo",
+  "entry_edit.store_hint": "Matra / jagah badalni ho to cancel karke dobara banao",
+  "entry_edit.f_issued_to": "Kisko diya",
+  "entry_edit.f_issued_to_phone": "Unka phone",
+  "entry_edit.f_driver_name": "Driver",
+  "entry_edit.f_driver_phone": "Driver ka phone",
 };
 
 export default dict;

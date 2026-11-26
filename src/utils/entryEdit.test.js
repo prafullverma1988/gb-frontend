@@ -28,6 +28,7 @@ test("editUi: direct / request / pending / none / admin lock", () => {
   expect(editUi(null).show).toBe(false);
   const d = editUi({ mode: "direct", why: "own_fresh" }, "Edit GRN");
   expect(d).toMatchObject({ show: true, disabled: false, label: "Edit GRN", hint: "", warn: "" });
+  expect(editUi({ mode: "request", why: "approved_entry", window_label: "2 hours" }).hint).toBe("This entry is already approved — the change will go for approval");
   const r = editUi({ mode: "request", window_label: "2 hours" });
   expect(r.show).toBe(true);
   expect(r.label).toBe("Edit (with approval)");

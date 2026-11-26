@@ -17995,6 +17995,13 @@ const dict = {
   "entry_edit.notes_title": "Change asked",
   "entry_edit.litres_rate_required": "Litres and rate must be more than 0",
   "entry_edit.date_required": "Give the date",
+  "entry_edit.request_hint_approved": "This entry is already approved — the change will go for approval",
+  "entry_edit.store_title": "Edit details",
+  "entry_edit.store_hint": "To change qty / location, cancel and make it again",
+  "entry_edit.f_issued_to": "Given to",
+  "entry_edit.f_issued_to_phone": "Their phone",
+  "entry_edit.f_driver_name": "Driver",
+  "entry_edit.f_driver_phone": "Driver phone",
 };
 
 export default dict;

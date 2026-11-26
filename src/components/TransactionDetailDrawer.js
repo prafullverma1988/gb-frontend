@@ -25,6 +25,7 @@ import { BackClose } from "../utils/backNav";
 import { cld } from "../utils/cloudinary";
 import { can, canAny } from "../utils/perms";
 import { billDetailText } from "../utils/billDetailText";
+import { fetchEditMode, editUi, saveWithEditRule } from "../utils/entryEdit";
 
 // GRN issue ka type — wire value English hi rehti hai. "Weighbridge" (9 Oct
 // 2026) server khud banata hai: kaante / site ke nishaan (plate nahi dikhi, AI
@@ -219,6 +220,24 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
   // badalna = Finance EDIT, hatana = Finance DELETE (strict — row na ho to band).
   const canEditTxn = can("Finance", "edit");
   const canDeleteTxn = canAny("Finance", "delete", { strict: true });
+  // Entry Edit (Phase 2, 26 Nov 2026): Edit button server ke niyam se —
+  // admin / Finance Edit = seedha; banane wala samay ke andar seedha (type /
+  // status / khaata nahi), baad me ya manzoor ho chuki entry = manzoori se;
+  // manzoori chal rahi = band. Server jawab na de to purana Finance Edit tick.
+  const [ee, setEe] = useState(null);
+  const [eeRev, setEeRev] = useState(0);
+  const eeTxnId = txn?.id;
+  useEffect(() => {
+    setEe(null);
+    if (!eeTxnId) return undefined;
+    let dead = false;
+    fetchEditMode("fin_txn", eeTxnId).then((m) => { if (!dead) setEe(m); });
+    return () => { dead = true; };
+  }, [eeTxnId, eeRev]);
+  const eeUi = ee ? editUi(ee, t("common.edit"))
+    : { show: canEditTxn, disabled: false, label: t("common.edit"), hint: "", warn: "", note: "" };
+  // Status sirf Finance Edit / admin badle — banane wale ke liye server rokta hai.
+  const canStatus = canEditTxn || !!(ee && ee.why === "admin");
 
   // Company kharcha kis city ka — wahin dikhe, aur galat ho to wahin badle.
   // Finance ki list ke rows chune hue field ke saath map hote hain (city_id
@@ -412,7 +431,9 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
         // due_date only relevant for bills/invoices — clear it for
         // cash-event types so the column doesn't carry stale values.
         due_date: hasDueDate ? (form.due_date === isoDate(txn.due_date || txn.dueDateRaw) ? undefined : (form.due_date || null)) : null,
-        status: form.status,
+        // Status sirf badla ho to (server COALESCE rakhta hai) — banane wale ki
+        // entry par na badla status bhi "type/status nahi" niyam se na takraye.
+        status: form.status !== (txn.status || "paid") ? form.status : undefined,
         note: form.note,
         // party_id pehle — backend isi ko pehle dekhta hai. Isse "ek se zyada
         // party hai" wala error bhi nahi aata, kyunki naam se guess karne ki
@@ -447,7 +468,16 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
             ...(it.weight_source != null ? { weight_source: it.weight_source } : {}),
           }));
       }
-      const res = await api.put("/finance/transactions/" + txn.id, payload);
+      // Entry Edit: samay ke baad / manzoor ho chuki entry par server wajah maange
+      // (428) to poochh kar wahi payload dobara; manzoori me gaya to entry waisi hi.
+      const res = await saveWithEditRule((b) => api.put("/finance/transactions/" + txn.id, b), payload);
+      if (res.cancelled) { setSaving(false); return; }
+      if (res.pending) {
+        if (window.toast?.success) window.toast.success(res.message || t("entry_edit.sent"));
+        setEditing(false); setSaving(false);
+        setEeRev((x) => x + 1);
+        return;
+      }
       // Bina-GRN line ki unit site ke stock se alag — usi line ke neeche
       // "1 {unit} = kitne {stock}?" kholo; message server ka (10 Oct 2026, D.4).
       if (res?.success === false && res.code === "UNIT_NOT_STOCK_UNIT" && res.data?.stock_unit) {
@@ -465,6 +495,7 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
         setErr(res.message || "Save failed"); setSaving(false); return;
       }
       setEditing(false);
+      setEeRev((x) => x + 1);
       onChanged && onChanged();
     } catch (e) {
       if (/404|not found/i.test(e?.message || "")) {
@@ -631,6 +662,12 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
           {/* Edit form */}
           {editing && (
             <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 14 }}>
+              {eeUi.hint && <div data-testid="txn-edit-hint" style={{ fontSize: 11.5, color: T.t3, lineHeight: 1.45 }}>{eeUi.hint}</div>}
+              {eeUi.warn && (
+                <div style={{ padding: "7px 10px", background: T.ambL, border: `1px solid ${T.ambM}`, borderRadius: 6, fontSize: 11.5, color: T.amb, fontWeight: 600 }}>
+                  ⚠ {t("entry_edit.admin_lock", { lock: eeUi.warn })}
+                </div>
+              )}
               {isMaterialBill ? (
                 <>
                   {txn.status === "paid" && (
@@ -749,7 +786,7 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
               <Field label={t("common.reference_no")} value={form.reference_no} onChange={v => setForm(p => ({ ...p, reference_no: v }))}/>
               <div>
                 <label style={lblStyle}>{t("common.status")}</label>
-                <PickSelect value={form.status} onChange={e => setForm(p => ({ ...p, status: e.target.value }))} style={inpStyle}>
+                <PickSelect value={form.status} disabled={!canStatus} onChange={e => setForm(p => ({ ...p, status: e.target.value }))} style={inpStyle}>
                   <option value="paid">paid</option>
                   <option value="unpaid">unpaid</option>
                   <option value="approved">approved</option>
@@ -929,7 +966,7 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
               </button>
               <button onClick={handleSave} disabled={saving}
                 style={{ flex: 2, padding: "9px", borderRadius: 7, background: saving ? "#9CA3AF" : T.blu, border: "none", color: "#fff", fontSize: 12, fontWeight: 700, cursor: saving ? "not-allowed" : "pointer" }}>
-                {saving ? t("common.saving") : t("mrdetail.save_changes")}
+                {saving ? t("common.saving") : (ee && ee.mode === "request" ? t("entry_edit.send_approval") : t("mrdetail.save_changes"))}
               </button>
             </>
           ) : (
@@ -940,11 +977,13 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
                 {deleting ? t("common.deleting") : t("transaction_detail.delete")}
               </button>
               )}
-              <div style={{ flex: 1 }}/>
-              {canEditTxn && (
-              <button onClick={() => setEditing(true)}
-                style={{ padding: "9px 18px", borderRadius: 7, background: T.blu, border: "none", color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 5 }}>
-               {t("common.edit")}
+              <div data-testid="txn-edit-note" style={{ flex: 1, alignSelf: "center", fontSize: 11, lineHeight: 1.4, color: eeUi.disabled ? T.amb : T.t3, fontWeight: eeUi.disabled ? 700 : 400 }}>
+                {eeUi.hint || eeUi.note}
+              </div>
+              {eeUi.show && (
+              <button onClick={() => setEditing(true)} disabled={eeUi.disabled}
+                style={{ padding: "9px 18px", borderRadius: 7, background: eeUi.disabled ? T.b1 : T.blu, border: "none", color: eeUi.disabled ? T.t4 : "#fff", fontSize: 12, fontWeight: 700, cursor: eeUi.disabled ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: 5 }}>
+               {eeUi.label}
               </button>
               )}
             </>

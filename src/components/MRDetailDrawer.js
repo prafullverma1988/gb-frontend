@@ -24,6 +24,7 @@ import { cld } from "../utils/cloudinary";
 import { companyName } from "../utils/companyName";
 import { requirementText, waUrl, vendorPhone } from "../utils/vendorShare";
 import { can } from "../utils/perms";
+import { fetchEditMode, editUi, saveWithEditRule } from "../utils/entryEdit";
 
 const T = {
   surface: "#FFFFFF", surfaceB: "#F8F9FB",
@@ -95,6 +96,26 @@ export default function MRDetailDrawer({ mr, onClose, onChanged, isAdmin: allowE
     }
   }, [mr]);
 
+  // Entry Edit (Phase 2, 26 Nov 2026): Edit button server ke niyam se —
+  // Procurement Edit / admin = seedha (sab field); MR maangne wala apni MR ki
+  // cheez / matra / unit / tareekh / rakam / note samay ke andar seedha, baad me
+  // ya approve ho chuki MR = manzoori se; order / receive ho chuki = band.
+  // Server jawab na de to purana Procurement Edit tick.
+  const [ee, setEe] = useState(null);
+  const [eeRev, setEeRev] = useState(0);
+  const eeMrId = mr?.id;
+  useEffect(() => {
+    setEe(null);
+    if (!eeMrId) return undefined;
+    let dead = false;
+    fetchEditMode("site_mr", eeMrId).then((m) => { if (!dead) setEe(m); });
+    return () => { dead = true; };
+  }, [eeMrId, eeRev]);
+  const eeUi = ee ? editUi(ee, t("common.edit"))
+    : { show: isAdmin, disabled: false, label: t("common.edit"), hint: "", warn: "", note: "" };
+  // Apni MR wala (Edit tick nahi) — sirf apne field dikhte / jaate hain.
+  const ownOnly = !!(ee && ["own_fresh", "own_old", "approved_entry"].includes(ee.why));
+
   if (!open) return null;
 
   const stage = mr.mr_status === "Closed" ? "Closed"
@@ -130,11 +151,23 @@ export default function MRDetailDrawer({ mr, onClose, onChanged, isAdmin: allowE
         // (MAT-10). Band karna neeche ke "Close" se.
         edit_note: editNote.trim(),
       };
-      const res = await api.put("/procurement/mrs/" + mr.id, payload);
+      // Apni MR: maangne wala / vendor / delivery / challan nahi bhejte (server
+      // banane wale ko sirf apne field deta hai).
+      if (ownOnly) ["requested_by", "linked_vendor", "expected_delivery", "challan_no"].forEach((k) => { delete payload[k]; });
+      // Manzoori wala raasta — upar likhi wajah hi manzoori ki wajah.
+      if (ee && ee.mode === "request") payload._edit_reason = editNote.trim();
+      const res = await saveWithEditRule((b) => api.put("/procurement/mrs/" + mr.id, b), payload);
+      if (res.cancelled) { savingRef.current = false; setSavingState(false); return; }
+      if (res.pending) {
+        if (window.toast?.success) window.toast.success(res.message || t("entry_edit.sent"));
+        setEditing(false); setEeRev((x) => x + 1);
+        savingRef.current = false; setSavingState(false); return;
+      }
       if (res?.success === false) {
         setErr(res.message || "Save failed"); savingRef.current = false; setSavingState(false); return;
       }
       setEditing(false);
+      setEeRev((x) => x + 1);
       onChanged && onChanged();
     } catch (e) {
       setErr(e?.message || "Network error");
@@ -300,6 +333,12 @@ export default function MRDetailDrawer({ mr, onClose, onChanged, isAdmin: allowE
           ) : (
             // Edit form
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {eeUi.hint && <div data-testid="mr-edit-hint" style={{ fontSize: 11.5, color: T.t3, lineHeight: 1.45 }}>{eeUi.hint}</div>}
+              {eeUi.warn && (
+                <div style={{ padding: "7px 10px", background: "#FFFBEB", border: `1px solid #FDE68A`, borderRadius: 6, fontSize: 11.5, color: "#92400E", fontWeight: 600 }}>
+                  ⚠ {t("entry_edit.admin_lock", { lock: eeUi.warn })}
+                </div>
+              )}
               <div style={{ padding: "10px 12px", background: "#FFFBEB", border: `1px solid #FDE68A`, borderRadius: 8 }}>
                 <label style={{ ...lblStyle, color: "#92400E" }}>
                  {t("material_flow.edit_reason")} <span style={{ fontWeight: 500, textTransform: "none", letterSpacing: 0 }}>{t("mrdetail.compulsory_log_me_record_hoga")}</span>
@@ -325,6 +364,7 @@ export default function MRDetailDrawer({ mr, onClose, onChanged, isAdmin: allowE
                 <Field label={t("common.required_by")} type="date" value={form.required_date} onChange={v => setForm(p => ({ ...p, required_date: v }))}/>
                 <Field label={t("mrdetail.approx_amount")} type="number" value={form.approx_amount} onChange={v => setForm(p => ({ ...p, approx_amount: v }))}/>
               </div>
+              {!ownOnly && (<>
               <Field label={t("mrdetail.requested_by")} value={form.requested_by} onChange={v => setForm(p => ({ ...p, requested_by: v }))}/>
               <div>
                 <label style={lblStyle}>{t("mrdetail.vendor_material_supplier")}</label>
@@ -336,6 +376,7 @@ export default function MRDetailDrawer({ mr, onClose, onChanged, isAdmin: allowE
                 <Field label={t("common.expected_delivery")} type="date" value={form.expected_delivery} onChange={v => setForm(p => ({ ...p, expected_delivery: v }))}/>
                 <Field label={t("material_flow.challan_no")} value={form.challan_no} onChange={v => setForm(p => ({ ...p, challan_no: v }))}/>
               </div>
+              </>)}
               {/* Status ke select yahan nahi — approval bypass ho jaata tha (MAT-10) */}
               <div style={{ padding: "8px 10px", background: T.surfaceB, border: `1px solid ${T.b1}`, borderRadius: 6, fontSize: 11, color: T.t3, lineHeight: 1.5 }}>
                 {t("mrdetail.status_edit_se_nahi_badalta")}
@@ -386,7 +427,7 @@ export default function MRDetailDrawer({ mr, onClose, onChanged, isAdmin: allowE
               </button>
               <button onClick={handleSave} disabled={savingState}
                 style={{ flex: 2, padding: "9px", borderRadius: 7, background: savingState ? "#9CA3AF" : T.blu, border: "none", color: "#fff", fontSize: 12, fontWeight: 700, cursor: savingState ? "not-allowed" : "pointer" }}>
-                {savingState ? t("common.saving") : t("mrdetail.save_changes")}
+                {savingState ? t("common.saving") : (ee && ee.mode === "request" ? t("entry_edit.send_approval") : t("mrdetail.save_changes"))}
               </button>
             </>
           ) : (
@@ -411,10 +452,15 @@ export default function MRDetailDrawer({ mr, onClose, onChanged, isAdmin: allowE
                  {t("procurement.split_title")}
                 </button>
               )}
-              {isAdmin && (
-                <button onClick={() => setEditing(true)}
-                  style={{ padding: "9px 18px", borderRadius: 7, background: T.blu, border: "none", color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
-                 {t("common.edit")}
+              {allowEdit && !showCloseForm && (eeUi.hint || eeUi.note) && (
+                <div data-testid="mr-edit-note" style={{ alignSelf: "center", maxWidth: 220, fontSize: 11, lineHeight: 1.4, color: eeUi.disabled ? "#92400E" : T.t3, fontWeight: eeUi.disabled ? 700 : 400 }}>
+                  {eeUi.hint || eeUi.note}
+                </div>
+              )}
+              {allowEdit && eeUi.show && (
+                <button onClick={() => setEditing(true)} disabled={eeUi.disabled}
+                  style={{ padding: "9px 18px", borderRadius: 7, background: eeUi.disabled ? T.b1 : T.blu, border: "none", color: eeUi.disabled ? T.t3 : "#fff", fontSize: 12, fontWeight: 700, cursor: eeUi.disabled ? "not-allowed" : "pointer" }}>
+                 {eeUi.label}
                 </button>
               )}
             </>

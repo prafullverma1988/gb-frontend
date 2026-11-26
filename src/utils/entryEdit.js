@@ -40,8 +40,10 @@ export function editUi(m, fallbackLabel) {
     return { show: true, disabled: false, label: base, hint: "", warn: m.why === "admin" && m.lock ? m.lock : "", note: "" };
   }
   if (m.mode === "request") {
+    // approved_entry (Phase 2): entry manzoor ho chuki — samay ki baat nahi.
     return { show: true, disabled: false, label: t("entry_edit.btn_request"),
-      hint: t("entry_edit.request_hint", { win: m.window_label || "" }), warn: "", note: "" };
+      hint: m.why === "approved_entry" ? t("entry_edit.request_hint_approved") : t("entry_edit.request_hint", { win: m.window_label || "" }),
+      warn: "", note: "" };
   }
   return { show: false, disabled: false, label: base, hint: "", warn: "", note: m.lock || "" };
 }
