@@ -24,6 +24,7 @@ import StaffPayModal from "./tabs/StaffPayModal";
 import PartyChargeModal from "./tabs/PartyChargeModal";
 import LoanRegisterModal from "./tabs/LoanRegisterModal";
 import { cld } from "../utils/cloudinary";
+import uploadManager from "../utils/uploadManager";
 import { billDetailText } from "../utils/billDetailText";
 import { loadPartyCategories, defaultCategories, partyCategoryKeys, catLabel, selectionToPayload } from "../utils/partyCategories";
 
@@ -1594,6 +1595,18 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
   const [note,setNote]=useState("");
   // Pre-fill amount from settlesRef (e.g. "Pay" button on Pending Payments)
   const [payAmt,setPayAmt]=useState(settlesRef?.amount?String(settlesRef.amount):"");
+  // Petty Cash (28 Nov 2026) — mobile wallet ke "Site kharch" jaisa: Quick / Material
+  // tab, party Library se YA likha naam, material ki line (stock me jaati hain),
+  // "Actual paid" (round-off / discount) aur dukaan ki parchi ki photo se bharna.
+  const [peTab,setPeTab]=useState("quick");
+  const [pePartyMode,setPePartyMode]=useState("text");   // text = likha naam · lib = Library party
+  const [peLines,setPeLines]=useState(()=>[{k:1,material:"",material_id:null,qty:"",unit:"Nos",rate:""}]);
+  const [peActual,setPeActual]=useState("");
+  const [peSlip,setPeSlip]=useState({busy:false,msg:"",err:false});
+  const peSlipRef=useRef(null);
+  const peLive=peLines.filter(l=>String(l.material||"").trim()&&Number(l.qty)>0);
+  const peTotal=Math.round(peLive.reduce((a,l)=>a+(Number(l.qty)||0)*(Number(l.rate)||0),0)*100)/100;
+  const peMat=type==="Petty Cash Expense"&&peTab==="material";
   const [saved,setSaved]=useState(false);
 
   // ── Payment allocation (settle against outstanding bills) ─────
@@ -2025,7 +2038,9 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
     // sub-con bills use grandTotal. Reading grandTotal for an invoice always
     // gave 0 and blocked the save on "Amount required." while the footer
     // showed the correct figure.
-    const amt=isInvoice?invTotal:(isMaterial||isSubcon?grandTotal:Number(payAmt)||0);
+    // Petty Cash Material: diya hua = "Actual paid" warna line ka jod
+    const amt=isInvoice?invTotal:(isMaterial||isSubcon?grandTotal:peMat?(Number(peActual)||peTotal):Number(payAmt)||0);
+    if(peMat&&!peLive.length){setSaveErr(t("fin_pe.need_line"));return;}
     if(!(amt>0)){setSaveErr(isMaterial?"Rate enter karo — Grand Total 0 hai.":isInvoice?"Invoice me kam se kam ek line (qty + rate) bharein.":"Amount 0 se zyada honi chahiye.");return;}
     // Party COMPULSORY for supplier bills — no vendor, no material purchase.
     // (Site Expense is the exception; it has no party dropdown.)
@@ -2037,7 +2052,7 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
     // parties share this name (only possible via a force-override), block the
     // save rather than silently picking one — the entry would hit the wrong
     // ledger. The user must open the right party from Party Ledger and pay there.
-    if(party&&String(party).trim()){
+    if(party&&String(party).trim()&&!(isSiteExpense&&pePartyMode==="text")){
       const pl=String(party).toLowerCase().trim();
       const matches=(dbParties||[]).filter(p=>String(p.name||"").toLowerCase().trim()===pl);
       if(matches.length>1){
@@ -2140,7 +2155,9 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
         //   "Type — Party" or "Type — Party — Note"
         description:`${type} — ${party||"N/A"}${note?" — "+note:""}`,
         mop:mopMap[mop]||"cash",
-        party_id:partyObj?.id||null,
+        // Petty Cash: likha naam = sirf naam (kisi khaate me nahi); Library = party
+        party_id:isSiteExpense&&pePartyMode==="text"?null:(partyObj?.id||null),
+        ...(isSiteExpense&&pePartyMode==="text"?{party_name_text:party||null}:{}),
         party_name:party||null,
         account_id:accObj?.id||null,
         account_name:account||null,
@@ -2198,6 +2215,14 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
         if(grnIssueList.length) payload.flagged_issue_ids=[...flaggedIssues];
       }
 
+      // Petty Cash Material — line items (server stock me daalta hai)
+      if(peMat){
+        payload.line_items=peLive.map(l=>({
+          item:String(l.material).trim(), material_id:l.material_id||null,
+          qty:Number(l.qty)||0, unit:l.unit||"Nos", rate:Number(l.rate)||0,
+          amount:Math.round((Number(l.qty)||0)*(Number(l.rate)||0)*100)/100,
+        }));
+      }
       // Line items for material/subcon/invoice
       if(isMaterial&&rows?.length){
         payload.line_items=rows.filter(r=>r.material&&r.qty&&r.rate).map(r=>{
@@ -2349,7 +2374,7 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
     :isSubcon?"115px 1fr 130px"
     :isBankTransfer?"115px 1fr 22px 1fr"
     :isInvoice?"130px 115px 115px 1fr 130px"
-    :"110px 1fr 130px 130px 110px";
+    :"110px minmax(0,1fr) 130px 130px 110px";
 
   // ── subcon BOQ selector row ───────────────────────────────────
   const SubBoqRow=({b})=>{
@@ -2629,13 +2654,27 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
                     style={inp()} onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
                 </div>
                 <div>
-                  {lbl((type==="Payment Received"?"Received From *":type==="Payment Made"?"Paid To *":isSiteExpense?"Recipient (free text)":"Party *")+lockTag(partyLocked))}
+                  {lbl((type==="Payment Received"?"Received From *":type==="Payment Made"?"Paid To *":isSiteExpense?t("fin_pe.party_label"):"Party *")+lockTag(partyLocked))}
                   {partyLocked ? (
                     <div style={{height:32,padding:"0 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,background:T.surfaceB,fontSize:12.5,color:T.t2,fontWeight:600,display:"flex",alignItems:"center",gap:6}}><LockIc/>{party||"—"}</div>
                   ) : isSiteExpense ? (
-                    <input value={party} onChange={e=>setParty(e.target.value)}
-                      placeholder={t("finance.e_g_site_supervisor_transport_tea")}
-                      style={inp()} onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
+                    <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                      <div style={{flex:1,minWidth:0}}>
+                        {pePartyMode==="lib" ? (
+                          <SearchSelect options={(dbParties||[]).filter(p=>Number(p.is_staff)!==1).map(p=>p.name)} value={party} onChange={setParty}
+                            placeholder={t("fin_pe.lib_ph")}/>
+                        ) : (
+                          <input value={party} onChange={e=>setParty(e.target.value)}
+                            placeholder={t("fin_pe.text_ph")}
+                            style={inp()} onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
+                        )}
+                      </div>
+                      <button type="button" onClick={()=>{setPePartyMode(m=>m==="lib"?"text":"lib");setParty("");}}
+                        title={pePartyMode==="lib"?t("fin_pe.to_text_tip"):t("fin_pe.to_lib_tip")}
+                        style={{flexShrink:0,height:32,padding:"0 10px",borderRadius:6,border:`1px solid ${T.blu}`,background:pePartyMode==="lib"?T.blu:T.bluL,color:pePartyMode==="lib"?"#fff":T.blu,fontSize:11.5,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
+                        {pePartyMode==="lib"?t("fin_pe.btn_text"):t("fin_pe.btn_lib")}
+                      </button>
+                    </div>
                   ) : (type==="Payment Made"||type==="Advance Payment") ? (
                     <div style={{display:"flex",gap:6,alignItems:"center"}}>
                       <AddPartyBtn onClick={()=>setShowNewParty(true)}/>
@@ -2783,7 +2822,90 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
           {/* ════════════════════════════════════════════════════
               PAYMENT TYPES — amount + note
           ════════════════════════════════════════════════════ */}
-          {isPayment&&(
+          {isSiteExpense&&(
+            <div role="tablist" style={{display:"flex",gap:6,marginBottom:10}}>
+              {[["quick",t("fin_pe.tab_quick")],["material",t("fin_pe.tab_material")]].map(([k,l])=>(
+                <button key={k} type="button" role="tab" aria-selected={peTab===k} onClick={()=>setPeTab(k)}
+                  style={{flex:1,padding:"8px 10px",borderRadius:7,cursor:"pointer",fontFamily:"inherit",fontSize:12.5,fontWeight:700,
+                    border:`1.5px solid ${peTab===k?tc:T.b1}`,background:peTab===k?tc+"14":T.surface,color:peTab===k?tc:T.t3}}>{l}</button>
+              ))}
+            </div>
+          )}
+          {peMat&&(
+            <div style={{background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`,padding:"12px 14px",marginBottom:12}}>
+              {/* Dukaan ki parchi ki photo → line apne aap (mobile wala hi POST /wallets/read-slip) */}
+              <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap",marginBottom:10}}>
+                <input ref={peSlipRef} type="file" accept="image/*" style={{display:"none"}} onChange={e=>{
+                  const file=e.target.files&&e.target.files[0]; e.target.value=""; if(!file) return;
+                  setPeSlip({busy:true,msg:t("fin_pe.slip_uploading"),err:false});
+                  uploadManager.add({file,folder:"gb_buildcon/petty_slips",label:file.name,
+                    onError:()=>setPeSlip({busy:false,msg:t("fin_pe.slip_upload_fail"),err:true}),
+                    onDone:async(url)=>{
+                      setPeSlip({busy:true,msg:t("fin_pe.slip_reading"),err:false});
+                      const r=await api.post("/wallets/read-slip",{photo_url:url}).catch(()=>null);
+                      if(!r||!r.success||!r.data){setPeSlip({busy:false,msg:(r&&r.message)||t("fin_pe.slip_unread"),err:true});return;}
+                      const items=(r.data.items||[]).map((it,i)=>{const m=it.match||{};return {k:Date.now()+i,
+                        material:m.material_id?m.material_name:(it.name||it.text||""),material_id:m.material_id||null,
+                        qty:it.qty!=null?String(it.qty):"",unit:m.material_id?(m.unit||"Nos"):(it.unit_raw||it.unit_on_slip||"Nos"),rate:it.rate!=null?String(it.rate):""};});
+                      if(items.length) setPeLines(items);
+                      const shop=r.data.read&&r.data.read.shop_name;
+                      if(shop&&!String(party||"").trim()){setPePartyMode("text");setParty(shop);}
+                      const tot=r.data.totals&&r.data.totals.final_total;
+                      if(tot&&!peActual) setPeActual(String(tot));
+                      setPeSlip({busy:false,msg:t("fin_pe.slip_done",{n:items.length}),err:false});
+                    }});
+                }}/>
+                <button type="button" disabled={peSlip.busy} onClick={()=>peSlipRef.current&&peSlipRef.current.click()}
+                  style={{padding:"7px 12px",borderRadius:7,border:`1.5px solid ${T.blu}`,background:T.bluL,color:T.blu,fontSize:12,fontWeight:700,cursor:peSlip.busy?"wait":"pointer",fontFamily:"inherit"}}>
+                  {t("fin_pe.slip_btn")}
+                </button>
+                <span style={{fontSize:11.5,color:peSlip.err?T.red:T.t3,flex:1,minWidth:180}}>{peSlip.msg||t("fin_pe.slip_help")}</span>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"minmax(0,2.4fr) 80px 90px 100px 100px 28px",gap:6,alignItems:"center",fontSize:10.5,fontWeight:700,color:T.t4,textTransform:"uppercase",marginBottom:4}}>
+                <span>{t("fin_pe.c_mat")}</span><span>{t("fin_pe.c_qty")}</span><span>{t("fin_pe.c_unit")}</span><span>{t("fin_pe.c_rate")}</span><span style={{textAlign:"right"}}>{t("fin_pe.c_amt")}</span><span/>
+              </div>
+              {peLines.map(l=>{
+                const upd=(p)=>setPeLines(ls=>ls.map(x=>x.k===l.k?{...x,...p}:x));
+                const amtL=Math.round((Number(l.qty)||0)*(Number(l.rate)||0)*100)/100;
+                return (
+                  <div key={l.k} style={{display:"grid",gridTemplateColumns:"minmax(0,2.4fr) 80px 90px 100px 100px 28px",gap:6,alignItems:"center",marginBottom:6}}>
+                    <LibrarySelect type="material" value={l.material} onChange={v=>upd({material:v||"",material_id:null})} placeholder={t("common.search_material")} compact={true}/>
+                    <input type="number" min="0" step="any" value={l.qty} onChange={e=>upd({qty:e.target.value})} onWheel={e=>e.currentTarget.blur()} aria-label={t("fin_pe.c_qty")} style={inp()}/>
+                    <input value={l.unit} onChange={e=>upd({unit:e.target.value})} aria-label={t("fin_pe.c_unit")} style={inp()}/>
+                    <input type="number" min="0" step="any" value={l.rate} onChange={e=>upd({rate:e.target.value})} onWheel={e=>e.currentTarget.blur()} aria-label={t("fin_pe.c_rate")} style={inp()}
+                      onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();setPeLines(ls=>[...ls,{k:Date.now(),material:"",material_id:null,qty:"",unit:"Nos",rate:""}]);}}}/>
+                    <span style={{textAlign:"right",fontSize:12.5,fontWeight:700,color:T.t1}}>{amtL?"₹"+amtL.toLocaleString("en-IN"):"—"}</span>
+                    <button type="button" aria-label={t("fin_pe.remove")} onClick={()=>setPeLines(ls=>ls.length>1?ls.filter(x=>x.k!==l.k):[{k:Date.now(),material:"",material_id:null,qty:"",unit:"Nos",rate:""}])}
+                      style={{border:"none",background:"none",color:T.t4,cursor:"pointer",fontSize:16}}>×</button>
+                  </div>
+                );
+              })}
+              <button type="button" onClick={()=>setPeLines(ls=>[...ls,{k:Date.now(),material:"",material_id:null,qty:"",unit:"Nos",rate:""}])}
+                style={{width:"100%",padding:"7px",borderRadius:7,border:`1.5px dashed ${T.blu}`,background:T.surface,color:T.blu,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",marginBottom:10}}>
+                {t("fin_pe.add_line")}
+              </button>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1.4fr",gap:10,alignItems:"end"}}>
+                <div>
+                  {lbl(t("fin_pe.total"))}
+                  <div style={{height:32,display:"flex",alignItems:"center",fontSize:15,fontWeight:800,color:tc}}>₹{peTotal.toLocaleString("en-IN")}</div>
+                </div>
+                <div>
+                  {lbl(t("fin_pe.actual"))}
+                  <input type="number" min="0" step="any" value={peActual} onChange={e=>setPeActual(e.target.value)} onWheel={e=>e.currentTarget.blur()}
+                    placeholder={peTotal?String(peTotal):"0"} style={inp({fontWeight:700})}/>
+                </div>
+                <div>
+                  {lbl("Description / Note")}
+                  <input value={note} onChange={e=>setNote(e.target.value)} placeholder={t("fin_pe.note_ph")} style={inp()}/>
+                </div>
+              </div>
+              {Number(peActual)>0&&peTotal>0&&Math.abs(Number(peActual)-peTotal)>=0.01&&(
+                <div style={{marginTop:6,fontSize:11.5,color:T.amb}}>{t("fin_pe.actual_diff",{actual:"₹"+Number(peActual).toLocaleString("en-IN"),diff:"₹"+Math.abs(Number(peActual)-peTotal).toLocaleString("en-IN")})}</div>
+              )}
+              <div style={{marginTop:6,fontSize:11,color:T.t4}}>{t("fin_pe.stock_note")}</div>
+            </div>
+          )}
+          {isPayment&&!peMat&&(
             <div style={{background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`,padding:"12px 14px",marginBottom:12,display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
               <div>
                 {lbl("Amount (Rs.) *")}
