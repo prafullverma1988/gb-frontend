@@ -6344,6 +6344,7 @@ const dict = {
   "material_transfer.abhi_koi_transfer_nahi_new_transfer":     "Abhi koi transfer nahi. \"+ New Transfer\" se kisi aur project ko material bhejo.",
   "material_transfer.add_item":                                "+ Add item",
   "material_transfer.admin_transfer_directly_in_transit":      "Admin transfer — directly in-transit",
+  "material_transfer.date_not_future":                         "Date aaj ki ya pehle ki honi chahiye — aage ki date nahi chalegi.",
   "material_transfer.approve_transfer_no_from_project_name":   "Approve {transfer_no}? {from_project_name} se stock minus ho jayega.",
   "material_transfer.approving":                               "Approving…",
   "material_transfer.completed":                               "Completed",

@@ -25,6 +25,7 @@ import PickSelect from "./PickSelect";
 import api from "../config/api";
 import { t } from "../i18n";
 import { can, canEntry, currentUser } from "../utils/perms";
+import { todayISO } from "../utils/today";
 
 const T = {
   surface: "#FFFFFF", surfaceB: "#F8F9FB",
@@ -226,6 +227,10 @@ function NewTransferModal({ projectId, projectName, isAdmin, onClose, onSaved })
   const [toProject, setToProject] = useState("");
   const [rows, setRows]           = useState([{ material: "", qty: "", unit: "", available: 0 }]);
   const [notes, setNotes]         = useState("");
+  // Transfer ki tareekh (28 Nov 2026) — pehle hamesha aaj ki lagti thi; kal
+  // bheja maal aaj chadhane par bhi. Purani tareekh par Back-Date Control
+  // (material_issue) server par lagta hai, wajah ka box api.js kholta hai.
+  const [date, setDate]           = useState(todayISO());
   const [saving, setSaving]       = useState(false);
   const [err, setErr]             = useState("");
 
@@ -251,6 +256,7 @@ function NewTransferModal({ projectId, projectName, isAdmin, onClose, onSaved })
     if (saving) return;
     setErr("");
     if (!toProject) { setErr(t("material_transfer.destination_project_select_karo")); return; }
+    if (!date || date > todayISO()) { setErr(t("material_transfer.date_not_future")); return; }
     const validRows = rows.filter(r => r.material && Number(r.qty) > 0);
     if (validRows.length === 0) { setErr(t("material_transfer.kam_se_kam_ek_item_add")); return; }
     // Stock guard — can't transfer more than available
@@ -263,6 +269,7 @@ function NewTransferModal({ projectId, projectName, isAdmin, onClose, onSaved })
     setSaving(true);
     try {
       const res = await api.post("/warehouse/transfers", {
+        date,
         from_project_id: projectId,
         to_project_id: Number(toProject),
         requires_approval: !isAdmin,   // site team → approval; admin → direct
@@ -313,6 +320,10 @@ function NewTransferModal({ projectId, projectName, isAdmin, onClose, onSaved })
                 <option value="">{t("material_transfer.select_destination")}</option>
                 {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
               </PickSelect>
+            </div>
+            <div>
+              <label style={lbl}>{t("common.date")}</label>
+              <input type="date" value={date} max={todayISO()} onChange={e => setDate(e.target.value)} style={inp}/>
             </div>
           </div>
 

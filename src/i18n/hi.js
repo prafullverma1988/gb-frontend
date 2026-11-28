@@ -6341,6 +6341,7 @@ const dict = {
   "material_transfer.abhi_koi_transfer_nahi_new_transfer":     "अभी कोई ट्रांसफर नहीं। \"+ न्यू ट्रांसफर\" से किसी और प्रोजेक्ट को मटेरियल भेजो।",
   "material_transfer.add_item":                                "+ आइटम ऐड करो",
   "material_transfer.admin_transfer_directly_in_transit":      "एडमिन ट्रांसफर — सीधा इन-ट्रांज़िट",
+  "material_transfer.date_not_future":                         "डेट आज की या पहले की होनी चाहिए — आगे की डेट नहीं चलेगी।",
   "material_transfer.approve_transfer_no_from_project_name":   "{transfer_no} अप्रूव करो? {from_project_name} से स्टॉक माइनस हो जाएगा।",
   "material_transfer.approving":                               "अप्रूव हो रहा है…",
   "material_transfer.completed":                               "कम्प्लीटेड",

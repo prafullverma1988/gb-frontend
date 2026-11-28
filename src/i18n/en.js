@@ -6342,6 +6342,7 @@ const dict = {
   "material_transfer.abhi_koi_transfer_nahi_new_transfer":     "No transfers yet. Send material to another project using \"+ New Transfer\".",
   "material_transfer.add_item":                                "+ Add item",
   "material_transfer.admin_transfer_directly_in_transit":      "Admin transfer — directly in-transit",
+  "material_transfer.date_not_future":                         "Date must be today or earlier — a future date is not allowed.",
   "material_transfer.approve_transfer_no_from_project_name":   "Approve {transfer_no}? Stock will be deducted from {from_project_name}.",
   "material_transfer.approving":                               "Approving…",
   "material_transfer.completed":                               "Completed",
